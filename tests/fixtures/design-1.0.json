@@ -1,0 +1,907 @@
+{
+ "hello_result": {
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+   "version": "1.0",
+   "epoch": "e7f3",
+   "engine": {
+    "build": "0.9.1-1234-gabc",
+    "mods": [
+     "bn"
+    ]
+   },
+   "limits": {
+    "frame_bytes": 1048576,
+    "cells_per_part": 1000,
+    "cells_per_query": 4096
+   }
+  }
+ },
+ "subscribe_result": {
+  "jsonrpc": "2.0",
+  "id": 2,
+  "result": {
+   "at": {
+    "epoch": "e7f3",
+    "sequence": "40",
+    "revision": "31"
+   },
+   "coverage": {
+    "min": {
+     "dim": "",
+     "x": 0,
+     "y": 0,
+     "z": 0
+    },
+    "max": {
+     "dim": "",
+     "x": 10,
+     "y": 8,
+     "z": 0
+    }
+   },
+   "interaction": {
+    "boundary_id": "b:12",
+    "readiness": {
+     "phase": "playing",
+     "game_ready": true
+    },
+    "actions": [
+     {
+      "id": "move_east",
+      "name": "Move east"
+     },
+     {
+      "id": "move_west",
+      "name": "Move west"
+     },
+     {
+      "id": "move_north",
+      "name": "Move north"
+     },
+     {
+      "id": "move_south",
+      "name": "Move south"
+     },
+     {
+      "id": "pickup",
+      "name": "Pick up"
+     }
+    ],
+    "interaction": null
+   },
+   "avatar": {
+    "id": "e:avatar",
+    "at": {
+     "dim": "",
+     "x": 3,
+     "y": 4,
+     "z": 0
+    },
+    "name": "Ada",
+    "stats": [],
+    "inventory": [
+     {
+      "kind": "item",
+      "id": "flashlight",
+      "glyph": "/",
+      "color": "white"
+     }
+    ]
+   },
+   "environment": {
+    "turn": "5184000",
+    "time": "2026-04-01T08:00:00Z",
+    "weather": "clear"
+   },
+   "entities": [
+    {
+     "id": "e:12",
+     "at": {
+      "dim": "",
+      "x": 6,
+      "y": 4,
+      "z": 0
+     },
+     "known": "visible",
+     "look": {
+      "kind": "monster",
+      "id": "mon_zombie",
+      "glyph": "Z",
+      "color": "light_green"
+     }
+    }
+   ],
+   "parts": 2
+  }
+ },
+ "snapshot_part_0": {
+  "jsonrpc": "2.0",
+  "method": "bn.snapshot.part",
+  "params": {
+   "epoch": "e7f3",
+   "at": {
+    "epoch": "e7f3",
+    "sequence": "40",
+    "revision": "31"
+   },
+   "index": 0,
+   "last": false,
+   "cells": [
+    {
+     "at": {
+      "dim": "",
+      "x": 1,
+      "y": 2,
+      "z": 0
+     },
+     "known": "visible",
+     "terrain": {
+      "kind": "terrain",
+      "id": "t_dirt",
+      "glyph": ".",
+      "color": "brown"
+     }
+    },
+    {
+     "at": {
+      "dim": "",
+      "x": 2,
+      "y": 2,
+      "z": 0
+     },
+     "known": "visible",
+     "terrain": {
+      "kind": "terrain",
+      "id": "t_dirt",
+      "glyph": ".",
+      "color": "brown"
+     }
+    },
+    {
+     "at": {
+      "dim": "",
+      "x": 3,
+      "y": 2,
+      "z": 0
+     },
+     "known": "visible",
+     "terrain": {
+      "kind": "terrain",
+      "id": "t_dirt",
+      "glyph": ".",
+      "color": "brown"
+     }
+    },
+    {
+     "at": {
+      "dim": "",
+      "x": 4,
+      "y": 2,
+      "z": 0
+     },
+     "known": "visible",
+     "terrain": {
+      "kind": "terrain",
+      "id": "t_dirt",
+      "glyph": ".",
+      "color": "brown"
+     }
+    },
+    {
+     "at": {
+      "dim": "",
+      "x": 5,
+      "y": 2,
+      "z": 0
+     },
+     "known": "visible",
+     "terrain": {
+      "kind": "terrain",
+      "id": "t_dirt",
+      "glyph": ".",
+      "color": "brown"
+     }
+    },
+    {
+     "at": {
+      "dim": "",
+      "x": 6,
+      "y": 2,
+      "z": 0
+     },
+     "known": "visible",
+     "terrain": {
+      "kind": "terrain",
+      "id": "t_dirt",
+      "glyph": ".",
+      "color": "brown"
+     }
+    },
+    {
+     "at": {
+      "dim": "",
+      "x": 7,
+      "y": 2,
+      "z": 0
+     },
+     "known": "visible",
+     "terrain": {
+      "kind": "terrain",
+      "id": "t_dirt",
+      "glyph": ".",
+      "color": "brown"
+     }
+    },
+    {
+     "at": {
+      "dim": "",
+      "x": 1,
+      "y": 3,
+      "z": 0
+     },
+     "known": "visible",
+     "terrain": {
+      "kind": "terrain",
+      "id": "t_dirt",
+      "glyph": ".",
+      "color": "brown"
+     }
+    },
+    {
+     "at": {
+      "dim": "",
+      "x": 2,
+      "y": 3,
+      "z": 0
+     },
+     "known": "visible",
+     "terrain": {
+      "kind": "terrain",
+      "id": "t_dirt",
+      "glyph": ".",
+      "color": "brown"
+     }
+    },
+    {
+     "at": {
+      "dim": "",
+      "x": 3,
+      "y": 3,
+      "z": 0
+     },
+     "known": "visible",
+     "terrain": {
+      "kind": "terrain",
+      "id": "t_dirt",
+      "glyph": ".",
+      "color": "brown"
+     }
+    },
+    {
+     "at": {
+      "dim": "",
+      "x": 4,
+      "y": 3,
+      "z": 0
+     },
+     "known": "visible",
+     "terrain": {
+      "kind": "terrain",
+      "id": "t_wall",
+      "glyph": "#",
+      "color": "light_gray"
+     }
+    },
+    {
+     "at": {
+      "dim": "",
+      "x": 5,
+      "y": 3,
+      "z": 0
+     },
+     "known": "visible",
+     "terrain": {
+      "kind": "terrain",
+      "id": "t_dirt",
+      "glyph": ".",
+      "color": "brown"
+     }
+    },
+    {
+     "at": {
+      "dim": "",
+      "x": 6,
+      "y": 3,
+      "z": 0
+     },
+     "known": "visible",
+     "terrain": {
+      "kind": "terrain",
+      "id": "t_dirt",
+      "glyph": ".",
+      "color": "brown"
+     }
+    },
+    {
+     "at": {
+      "dim": "",
+      "x": 7,
+      "y": 3,
+      "z": 0
+     },
+     "known": "visible",
+     "terrain": {
+      "kind": "terrain",
+      "id": "t_dirt",
+      "glyph": ".",
+      "color": "brown"
+     }
+    },
+    {
+     "at": {
+      "dim": "",
+      "x": 1,
+      "y": 4,
+      "z": 0
+     },
+     "known": "visible",
+     "terrain": {
+      "kind": "terrain",
+      "id": "t_dirt",
+      "glyph": ".",
+      "color": "brown"
+     }
+    },
+    {
+     "at": {
+      "dim": "",
+      "x": 2,
+      "y": 4,
+      "z": 0
+     },
+     "known": "visible",
+     "terrain": {
+      "kind": "terrain",
+      "id": "t_dirt",
+      "glyph": ".",
+      "color": "brown"
+     }
+    },
+    {
+     "at": {
+      "dim": "",
+      "x": 3,
+      "y": 4,
+      "z": 0
+     },
+     "known": "visible",
+     "terrain": {
+      "kind": "terrain",
+      "id": "t_dirt",
+      "glyph": ".",
+      "color": "brown"
+     },
+     "items": [
+      {
+       "kind": "item",
+       "id": "knife_combat",
+       "glyph": "(",
+       "color": "light_gray"
+      },
+      {
+       "kind": "item",
+       "id": "tin_can",
+       "glyph": "%",
+       "color": "light_gray"
+      }
+     ]
+    },
+    {
+     "at": {
+      "dim": "",
+      "x": 4,
+      "y": 4,
+      "z": 0
+     },
+     "known": "visible",
+     "terrain": {
+      "kind": "terrain",
+      "id": "t_dirt",
+      "glyph": ".",
+      "color": "brown"
+     }
+    },
+    {
+     "at": {
+      "dim": "",
+      "x": 5,
+      "y": 4,
+      "z": 0
+     },
+     "known": "visible",
+     "terrain": {
+      "kind": "terrain",
+      "id": "t_dirt",
+      "glyph": ".",
+      "color": "brown"
+     }
+    },
+    {
+     "at": {
+      "dim": "",
+      "x": 6,
+      "y": 4,
+      "z": 0
+     },
+     "known": "visible",
+     "terrain": {
+      "kind": "terrain",
+      "id": "t_dirt",
+      "glyph": ".",
+      "color": "brown"
+     }
+    }
+   ]
+  }
+ },
+ "snapshot_part_1": {
+  "jsonrpc": "2.0",
+  "method": "bn.snapshot.part",
+  "params": {
+   "epoch": "e7f3",
+   "at": {
+    "epoch": "e7f3",
+    "sequence": "40",
+    "revision": "31"
+   },
+   "index": 1,
+   "last": true,
+   "cells": [
+    {
+     "at": {
+      "dim": "",
+      "x": 7,
+      "y": 4,
+      "z": 0
+     },
+     "known": "visible",
+     "terrain": {
+      "kind": "terrain",
+      "id": "t_dirt",
+      "glyph": ".",
+      "color": "brown"
+     }
+    },
+    {
+     "at": {
+      "dim": "",
+      "x": 1,
+      "y": 5,
+      "z": 0
+     },
+     "known": "visible",
+     "terrain": {
+      "kind": "terrain",
+      "id": "t_dirt",
+      "glyph": ".",
+      "color": "brown"
+     }
+    },
+    {
+     "at": {
+      "dim": "",
+      "x": 2,
+      "y": 5,
+      "z": 0
+     },
+     "known": "visible",
+     "terrain": {
+      "kind": "terrain",
+      "id": "t_dirt",
+      "glyph": ".",
+      "color": "brown"
+     }
+    },
+    {
+     "at": {
+      "dim": "",
+      "x": 3,
+      "y": 5,
+      "z": 0
+     },
+     "known": "visible",
+     "terrain": {
+      "kind": "terrain",
+      "id": "t_dirt",
+      "glyph": ".",
+      "color": "brown"
+     }
+    },
+    {
+     "at": {
+      "dim": "",
+      "x": 4,
+      "y": 5,
+      "z": 0
+     },
+     "known": "visible",
+     "terrain": {
+      "kind": "terrain",
+      "id": "t_dirt",
+      "glyph": ".",
+      "color": "brown"
+     }
+    },
+    {
+     "at": {
+      "dim": "",
+      "x": 5,
+      "y": 5,
+      "z": 0
+     },
+     "known": "visible",
+     "terrain": {
+      "kind": "terrain",
+      "id": "t_dirt",
+      "glyph": ".",
+      "color": "brown"
+     }
+    },
+    {
+     "at": {
+      "dim": "",
+      "x": 6,
+      "y": 5,
+      "z": 0
+     },
+     "known": "visible",
+     "terrain": {
+      "kind": "terrain",
+      "id": "t_dirt",
+      "glyph": ".",
+      "color": "brown"
+     }
+    },
+    {
+     "at": {
+      "dim": "",
+      "x": 7,
+      "y": 5,
+      "z": 0
+     },
+     "known": "visible",
+     "terrain": {
+      "kind": "terrain",
+      "id": "t_dirt",
+      "glyph": ".",
+      "color": "brown"
+     }
+    },
+    {
+     "at": {
+      "dim": "",
+      "x": 1,
+      "y": 6,
+      "z": 0
+     },
+     "known": "visible",
+     "terrain": {
+      "kind": "terrain",
+      "id": "t_dirt",
+      "glyph": ".",
+      "color": "brown"
+     }
+    },
+    {
+     "at": {
+      "dim": "",
+      "x": 2,
+      "y": 6,
+      "z": 0
+     },
+     "known": "visible",
+     "terrain": {
+      "kind": "terrain",
+      "id": "t_dirt",
+      "glyph": ".",
+      "color": "brown"
+     }
+    },
+    {
+     "at": {
+      "dim": "",
+      "x": 3,
+      "y": 6,
+      "z": 0
+     },
+     "known": "visible",
+     "terrain": {
+      "kind": "terrain",
+      "id": "t_dirt",
+      "glyph": ".",
+      "color": "brown"
+     }
+    },
+    {
+     "at": {
+      "dim": "",
+      "x": 4,
+      "y": 6,
+      "z": 0
+     },
+     "known": "visible",
+     "terrain": {
+      "kind": "terrain",
+      "id": "t_dirt",
+      "glyph": ".",
+      "color": "brown"
+     }
+    },
+    {
+     "at": {
+      "dim": "",
+      "x": 5,
+      "y": 6,
+      "z": 0
+     },
+     "known": "visible",
+     "terrain": {
+      "kind": "terrain",
+      "id": "t_dirt",
+      "glyph": ".",
+      "color": "brown"
+     }
+    },
+    {
+     "at": {
+      "dim": "",
+      "x": 6,
+      "y": 6,
+      "z": 0
+     },
+     "known": "visible",
+     "terrain": {
+      "kind": "terrain",
+      "id": "t_dirt",
+      "glyph": ".",
+      "color": "brown"
+     }
+    },
+    {
+     "at": {
+      "dim": "",
+      "x": 7,
+      "y": 6,
+      "z": 0
+     },
+     "known": "visible",
+     "terrain": {
+      "kind": "terrain",
+      "id": "t_dirt",
+      "glyph": ".",
+      "color": "brown"
+     }
+    }
+   ]
+  }
+ },
+ "events_41_walk": {
+  "jsonrpc": "2.0",
+  "method": "bn.events",
+  "params": {
+   "epoch": "e7f3",
+   "events": [
+    {
+     "sequence": "41",
+     "revision": "32",
+     "type": "entity.moved",
+     "command": "c:5",
+     "data": {
+      "id": "e:avatar",
+      "from": {
+       "dim": "",
+       "x": 3,
+       "y": 4,
+       "z": 0
+      },
+      "to": {
+       "dim": "",
+       "x": 4,
+       "y": 4,
+       "z": 0
+      },
+      "mode": "walk"
+     },
+     "changes": {
+      "avatar": {
+       "id": "e:avatar",
+       "at": {
+        "dim": "",
+        "x": 4,
+        "y": 4,
+        "z": 0
+       },
+       "name": "Ada",
+       "stats": [],
+       "inventory": [
+        {
+         "kind": "item",
+         "id": "flashlight",
+         "glyph": "/",
+         "color": "white"
+        }
+       ]
+      }
+     }
+    }
+   ]
+  }
+ },
+ "events_42_message": {
+  "jsonrpc": "2.0",
+  "method": "bn.events",
+  "params": {
+   "epoch": "e7f3",
+   "events": [
+    {
+     "sequence": "42",
+     "revision": "32",
+     "type": "message.logged",
+     "data": {
+      "text": "You walk east.",
+      "kind": "info"
+     }
+    }
+   ]
+  }
+ },
+ "events_43_menu": {
+  "jsonrpc": "2.0",
+  "method": "bn.events",
+  "params": {
+   "epoch": "e7f3",
+   "events": [
+    {
+     "sequence": "43",
+     "revision": "33",
+     "type": "interaction.changed",
+     "changes": {
+      "interaction": {
+       "boundary_id": "b:13",
+       "readiness": {
+        "phase": "playing",
+        "game_ready": true
+       },
+       "actions": [
+        {
+         "id": "move_east",
+         "name": "Move east"
+        },
+        {
+         "id": "move_west",
+         "name": "Move west"
+        },
+        {
+         "id": "move_north",
+         "name": "Move north"
+        },
+        {
+         "id": "move_south",
+         "name": "Move south"
+        },
+        {
+         "id": "pickup",
+         "name": "Pick up"
+        }
+       ],
+       "interaction": {
+        "schema_id": "s:pickup",
+        "kind": "choices",
+        "context": "pickup",
+        "title": "Pick up",
+        "message": "Choose an item",
+        "allow_cancel": true,
+        "choices": [
+         {
+          "id": "c:1",
+          "label": "combat knife",
+          "enabled": true
+         },
+         {
+          "id": "c:2",
+          "label": "tin can",
+          "enabled": false,
+          "denial": "Too heavy"
+         }
+        ],
+        "choice_total": 2
+       }
+      }
+     }
+    }
+   ]
+  }
+ },
+ "events_45_gap": {
+  "jsonrpc": "2.0",
+  "method": "bn.events",
+  "params": {
+   "epoch": "e7f3",
+   "events": [
+    {
+     "sequence": "45",
+     "revision": "34",
+     "type": "message.logged",
+     "data": {
+      "text": "gap",
+      "kind": "info"
+     }
+    }
+   ]
+  }
+ },
+ "events_other_epoch": {
+  "jsonrpc": "2.0",
+  "method": "bn.events",
+  "params": {
+   "epoch": "e9",
+   "events": [
+    {
+     "sequence": "1",
+     "revision": "1",
+     "type": "message.logged",
+     "data": {
+      "text": "new world",
+      "kind": "info"
+     }
+    }
+   ]
+  }
+ },
+ "submit_result": {
+  "jsonrpc": "2.0",
+  "id": 3,
+  "result": {
+   "epoch": "e7f3",
+   "command_id": "c:5",
+   "stage": "received"
+  }
+ },
+ "command_completed": {
+  "jsonrpc": "2.0",
+  "method": "bn.command",
+  "params": {
+   "epoch": "e7f3",
+   "command_id": "c:5",
+   "stage": "completed",
+   "at": {
+    "epoch": "e7f3",
+    "sequence": "41",
+    "revision": "32"
+   }
+  }
+ },
+ "command_rejected": {
+  "jsonrpc": "2.0",
+  "method": "bn.command",
+  "params": {
+   "epoch": "e7f3",
+   "command_id": "c:5",
+   "stage": "rejected",
+   "error": {
+    "kind": "stale_revision"
+   }
+  }
+ },
+ "resync": {
+  "jsonrpc": "2.0",
+  "method": "bn.resync",
+  "params": {
+   "epoch": "e7f3",
+   "reason": "overflow",
+   "lost_after": "977"
+  }
+ }
+}
