@@ -39,14 +39,24 @@ fn click_cell(h: &mut H, at: Pos, button: egui::PointerButton) {
 fn clicking_a_map_cell_walks_the_player_there() {
     let mut h = harness();
     let target = Pos { x: 12, y: 9 };
-    let start = h.state().model.player();
     click_cell(&mut h, target, egui::PointerButton::Primary);
-    h.run_steps(1);
-    let after_one = h.state().model.player();
-    assert!(
-        (after_one.x - start.x).abs() <= 2 && after_one != target,
-        "one step per tick"
-    );
+    for _ in 0..30 {
+        let before = h.state().model.player();
+        h.run_steps(1);
+        let after = h.state().model.player();
+        let expected = if before == target {
+            before
+        } else {
+            Pos {
+                x: before.x + (target.x - before.x).signum(),
+                y: before.y + (target.y - before.y).signum(),
+            }
+        };
+        assert_eq!(
+            after, expected,
+            "exactly one step toward the target per tick"
+        );
+    }
     h.run_steps(60);
     assert_eq!(h.state().model.player(), target);
 }
@@ -64,11 +74,9 @@ fn pick_up_button_moves_item_to_inventory() {
     assert_eq!(h.state().model.ground(), ["Rusty knife", "Flashlight"]);
 }
 
-#[test]
-fn dragging_between_columns_moves_item() {
-    let mut h = harness();
-    let from = h.get_by_label("Rusty knife").rect().center();
-    let to = h.get_by_label("Inventory").rect().center() + egui::vec2(0.0, 60.0);
+fn drag_item(h: &mut H, item: &str, to_column: &str) {
+    let from = h.get_by_label(item).rect().center();
+    let to = h.get_by_label(to_column).rect().center() + egui::vec2(0.0, 60.0);
     h.hover_at(from);
     h.run_steps(2);
     h.drag_at(from);
@@ -79,7 +87,25 @@ fn dragging_between_columns_moves_item() {
     }
     h.drop_at(to);
     h.run_steps(3);
+}
+
+#[test]
+fn dragging_ground_item_to_inventory_moves_it() {
+    let mut h = harness();
+    drag_item(&mut h, "Rusty knife", "Inventory");
     assert_eq!(h.state().model.inventory(), ["Flashlight", "Rusty knife"]);
+    assert_eq!(h.state().model.ground(), ["Tin can"]);
+}
+
+#[test]
+fn dragging_inventory_item_to_ground_moves_it() {
+    let mut h = harness();
+    drag_item(&mut h, "Flashlight", "Ground");
+    assert_eq!(h.state().model.inventory(), [] as [String; 0]);
+    assert_eq!(
+        h.state().model.ground(),
+        ["Rusty knife", "Tin can", "Flashlight"]
+    );
 }
 
 #[test]
@@ -99,14 +125,9 @@ fn context_menu_look_logs_cell_description() {
     click_cell(&mut h, Pos { x: 3, y: 3 }, egui::PointerButton::Secondary);
     h.get_by_label("Look").click();
     h.run_steps(3);
-    let expected = h.state().model.cell(Pos { x: 3, y: 3 }).desc;
-    assert!(
-        h.state()
-            .model
-            .messages()
-            .iter()
-            .any(|m| m.contains(&expected))
-    );
+    let desc = h.state().model.cell(Pos { x: 3, y: 3 }).desc;
+    let last = h.state().model.messages().last().cloned().unwrap();
+    assert_eq!(last, format!("You see {desc} at (3, 3)."));
 }
 
 #[test]
@@ -165,7 +186,8 @@ fn no_interactive_node_lacks_a_label() {
                 || k.data().supports_action(egui::accesskit::Action::Focus);
             (interactive.contains(&k.role()) || supports_action)
                 && k.label().is_none_or(|l| l.trim().is_empty())
-                && k.value().is_none_or(|v| v.trim().is_empty())
+                // Text labels are named by their own text, which AccessKit stores as value.
+                && !(k.role() == Role::Label && k.value().is_some_and(|v| !v.trim().is_empty()))
         })
         .map(|n| format!("{:?}", n.accesskit_node().data()))
         .collect();
