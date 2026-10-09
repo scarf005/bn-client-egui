@@ -22,6 +22,7 @@ pub struct App<M: GameModel> {
     cursor: Pos,
     menu_cell: Pos,
     destination: Option<Pos>,
+    last_hover: Option<egui::Pos2>,
 }
 
 impl<M: GameModel> App<M> {
@@ -32,6 +33,7 @@ impl<M: GameModel> App<M> {
             cursor,
             menu_cell: cursor,
             destination: None,
+            last_hover: None,
         }
     }
 
@@ -85,9 +87,12 @@ impl<M: GameModel> App<M> {
                 y: (v.y as i32).clamp(0, size.y - 1),
             }
         };
-        if let Some(p) = response.hover_pos() {
+        // Only a moving pointer moves the cursor, so it cannot undo keyboard navigation.
+        let hover = response.hover_pos();
+        if let Some(p) = hover.filter(|p| self.last_hover != Some(*p)) {
             self.cursor = cell_at(p);
         }
+        self.last_hover = hover;
         if response.clicked_by(egui::PointerButton::Primary) {
             self.destination = Some(self.cursor);
         }

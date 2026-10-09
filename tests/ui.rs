@@ -206,3 +206,20 @@ fn hovering_a_cell_shows_tooltip_with_its_description() {
     h.run_steps(10);
     h.get_by_label(&desc);
 }
+
+#[test]
+fn stationary_pointer_does_not_override_keyboard_cursor() {
+    let mut h = harness();
+    h.hover_at(cell_center(&h, Pos { x: 10, y: 10 }));
+    h.run_steps(3);
+    h.get_by_label("Map").focus();
+    h.run_steps(2);
+    for _ in 0..2 {
+        h.key_press(egui::Key::ArrowRight);
+        h.run_steps(2);
+    }
+    h.get_by_label_contains("Cursor (12, 10)");
+    h.key_press(egui::Key::Enter);
+    h.run_steps(60);
+    assert_eq!(h.state().model.player(), Pos { x: 12, y: 10 });
+}
