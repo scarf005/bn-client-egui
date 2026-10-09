@@ -66,6 +66,15 @@ impl<M: GameModel> App<M> {
 
     fn map(&mut self, ui: &mut egui::Ui) {
         let size = self.model.size();
+        if size.x <= 0 || size.y <= 0 {
+            ui.label("No map loaded");
+            return;
+        }
+        // The map may have been replaced by a smaller one since the cursor was set.
+        self.cursor = Pos {
+            x: self.cursor.x.clamp(0, size.x - 1),
+            y: self.cursor.y.clamp(0, size.y - 1),
+        };
         let player = self.model.player();
         let status = format!(
             "Player at ({}, {}). Cursor ({}, {}): {}.",

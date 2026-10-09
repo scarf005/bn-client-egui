@@ -271,3 +271,22 @@ fn map_node_has_role_and_describes_cursor_and_status_is_live() {
     let status = h.get_by_label_contains("Cursor (7, 5)");
     assert_eq!(status.accesskit_node().live(), Live::Polite);
 }
+
+#[test]
+fn empty_map_does_not_panic() {
+    let mut h = harness();
+    h.state_mut().model.size = Pos { x: 0, y: 0 };
+    h.run_steps(3);
+    h.get_by_label("No map loaded");
+}
+
+#[test]
+fn shrinking_map_clamps_stale_cursor() {
+    let mut h = harness();
+    h.hover_at(cell_center(&h, Pos { x: 30, y: 20 }));
+    h.run_steps(3);
+    h.remove_cursor();
+    h.state_mut().model.size = Pos { x: 10, y: 10 };
+    h.run_steps(3);
+    h.get_by_label_contains("Cursor (9, 9)");
+}

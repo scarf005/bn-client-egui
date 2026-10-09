@@ -28,6 +28,8 @@ pub trait GameModel {
 }
 
 pub struct FakeModel {
+    /// Map size; tests shrink it to emulate loading or a replaced map.
+    pub size: Pos,
     player: Pos,
     ground: Vec<String>,
     inventory: Vec<String>,
@@ -37,6 +39,7 @@ pub struct FakeModel {
 impl Default for FakeModel {
     fn default() -> Self {
         Self {
+            size: Pos { x: 40, y: 25 },
             player: Pos { x: 5, y: 5 },
             ground: vec!["Rusty knife".into(), "Tin can".into()],
             inventory: vec!["Flashlight".into()],
@@ -47,7 +50,7 @@ impl Default for FakeModel {
 
 impl GameModel for FakeModel {
     fn size(&self) -> Pos {
-        Pos { x: 40, y: 25 }
+        self.size
     }
 
     fn cell(&self, at: Pos) -> Cell {
