@@ -12,8 +12,38 @@ pub struct Cell {
     pub desc: String,
 }
 
-/// What the UI needs from the game. The engine protocol will replace `FakeModel` behind this.
+/// One selectable row of the engine's current interaction menu.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MenuChoice {
+    pub id: String,
+    pub label: String,
+    pub enabled: bool,
+    /// Why the row cannot be chosen; empty when enabled.
+    pub denial: String,
+}
+
+/// The engine's current interaction, rendered generically.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Menu {
+    pub title: String,
+    pub message: String,
+    pub choices: Vec<MenuChoice>,
+    pub can_cancel: bool,
+}
+
+/// What the UI needs from the game: `FakeModel` in tests, `EngineModel` against a real engine.
 pub trait GameModel {
+    /// Called once per frame: drain engine messages. No-op for synchronous models.
+    fn poll(&mut self) {}
+    /// True while the model keeps changing on its own and needs periodic repaints.
+    fn live(&self) -> bool {
+        false
+    }
+    fn menu(&self) -> Option<Menu> {
+        None
+    }
+    fn choose(&mut self, _choice_id: &str) {}
+    fn cancel_menu(&mut self) {}
     fn size(&self) -> Pos;
     fn cell(&self, at: Pos) -> Cell;
     fn player(&self) -> Pos;

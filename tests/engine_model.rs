@@ -1,0 +1,261 @@
+mod common;
+use bn_client_egui::transport::ScriptedTransport;
+use bn_client_egui::{EngineModel, GameModel, Pos};
+use common::{connected, fixture, session, subscribe_reply};
+use serde_json::{Value, json};
+
+fn submits(h: &bn_client_egui::transport::ScriptHandle) -> Vec<Value> {
+    h.sent()
+        .into_iter()
+        .filter(|m| m["method"] == "bn.command.submit")
+        .collect()
+}
+
+fn walk_reply() -> Vec<Value> {
+    vec![fixture("submit_result")]
+}
+
+#[test]
+fn connects_with_hello_then_subscribe_and_exposes_the_map() {
+    let (t, h) = session();
+    let m = connected(t);
+    assert_eq!(h.sent_methods(), ["bn.hello", "bn.subscribe"]);
+    assert_eq!(h.sent()[0]["params"]["versions"], json!(["1.0"]));
+    assert_eq!(m.size(), Pos { x: 40, y: 25 });
+    assert_eq!(m.player(), Pos { x: 20, y: 12 });
+    assert_eq!(m.cell(Pos { x: 21, y: 11 }).glyph, '#');
+    assert_eq!(m.cell(Pos { x: 21, y: 11 }).desc, "t_wall");
+    assert_eq!(
+        m.cell(Pos { x: 23, y: 12 }).glyph,
+        'Z',
+        "entities draw over terrain"
+    );
+    assert_eq!(m.cell(Pos { x: 0, y: 0 }).desc, "unknown");
+    assert_eq!(m.ground(), ["knife_combat", "tin_can"]);
+    assert_eq!(m.inventory(), ["flashlight"]);
+}
+
+#[test]
+fn model_is_not_ready_until_the_last_snapshot_part() {
+    let (t, h) = ScriptedTransport::new();
+    let t = t.on("bn.hello", vec![fixture("hello_result")]).on(
+        "bn.subscribe",
+        vec![fixture("subscribe_result"), fixture("snapshot_part_0")],
+    );
+    let mut m = EngineModel::new(Box::new(t));
+    m.poll();
+    assert_eq!(m.size(), Pos { x: 0, y: 0 });
+    h.push(fixture("snapshot_part_1"));
+    m.poll();
+    assert_eq!(m.size(), Pos { x: 40, y: 25 });
+}
+
+#[test]
+fn step_submits_a_move_action_against_the_current_boundary() {
+    let (t, h) = session();
+    let mut m = connected(t.on("bn.command.submit", walk_reply()));
+    assert!(m.step_toward(Pos { x: 30, y: 12 }));
+    let sent = submits(&h);
+    assert_eq!(sent.len(), 1);
+    assert_eq!(
+        sent[0]["params"],
+        json!({
+            "epoch": "e7f3",
+            "expect": { "revision": "31", "boundary_id": "b:12", "schema_id": null },
+            "operation": { "kind": "action", "action_id": "move_east" }
+        })
+    );
+}
+
+#[test]
+fn diagonal_without_a_matching_action_does_not_submit() {
+    let (t, h) = session();
+    let mut m = connected(t);
+    assert!(!m.step_toward(Pos { x: 25, y: 5 }));
+    assert!(submits(&h).is_empty());
+    assert!(m.messages().last().unwrap().contains("northeast"));
+}
+
+#[test]
+fn second_step_waits_for_the_first_command_to_finish() {
+    let (t, h) = session();
+    let mut m = connected(
+        t.on("bn.command.submit", walk_reply())
+            .on("bn.command.submit", walk_reply()),
+    );
+    m.step_toward(Pos { x: 30, y: 12 });
+    m.poll();
+    assert!(m.step_toward(Pos { x: 30, y: 12 }), "still walking");
+    assert_eq!(submits(&h).len(), 1, "busy: no second submit");
+    h.push(fixture("events_41_walk"));
+    h.push(fixture("command_completed"));
+    m.poll();
+    assert_eq!(
+        m.player(),
+        Pos { x: 21, y: 12 },
+        "view stays put until the avatar nears the edge"
+    );
+    assert_eq!(m.cell(Pos { x: 21, y: 12 }).glyph, '.');
+    m.step_toward(Pos { x: 30, y: 12 });
+    let sent = submits(&h);
+    assert_eq!(sent.len(), 2);
+    assert_eq!(sent[1]["params"]["expect"]["revision"], "32");
+}
+
+#[test]
+fn rejected_command_is_reported_and_blocks_the_walk_once() {
+    let (t, h) = session();
+    let mut m = connected(t.on("bn.command.submit", walk_reply()));
+    m.step_toward(Pos { x: 30, y: 12 });
+    h.push(fixture("command_rejected"));
+    m.poll();
+    assert!(m.messages().last().unwrap().contains("stale_revision"));
+    assert!(
+        !m.step_toward(Pos { x: 30, y: 12 }),
+        "walk stops after a rejection"
+    );
+    assert!(
+        m.step_toward(Pos { x: 30, y: 12 }),
+        "next attempt submits again"
+    );
+}
+
+#[test]
+fn error_response_to_submit_frees_the_queue_and_reports_the_kind() {
+    let (t, _h) = session();
+    let err = json!({"jsonrpc":"2.0","id":null,"error":{"code":1000,"message":"busy","data":{"kind":"command_busy"}}});
+    let mut m = connected(t.on("bn.command.submit", vec![err]));
+    m.step_toward(Pos { x: 30, y: 12 });
+    m.poll();
+    assert!(m.messages().last().unwrap().contains("command_busy"));
+}
+
+#[test]
+fn gap_triggers_a_second_subscribe_and_state_is_rebuilt() {
+    let (t, h) = session();
+    let mut m = connected(t.on("bn.subscribe", subscribe_reply()));
+    h.push(fixture("events_45_gap"));
+    m.poll();
+    assert_eq!(
+        h.sent_methods(),
+        ["bn.hello", "bn.subscribe", "bn.subscribe"]
+    );
+    assert_eq!(m.size(), Pos { x: 40, y: 25 });
+    assert_eq!(m.player(), Pos { x: 20, y: 12 });
+}
+
+#[test]
+fn events_arriving_while_resubscribing_are_ignored() {
+    let (t, h) = session();
+    let mut m = connected(t.on("bn.subscribe", subscribe_reply()));
+    h.push(fixture("events_45_gap"));
+    h.push(fixture("events_45_gap"));
+    m.poll();
+    assert_eq!(
+        h.sent_methods()
+            .iter()
+            .filter(|s| *s == "bn.subscribe")
+            .count(),
+        2
+    );
+}
+
+#[test]
+fn epoch_mismatch_and_resync_resubscribe() {
+    for notice in ["events_other_epoch", "resync"] {
+        let (t, h) = session();
+        let mut m = connected(t.on("bn.subscribe", subscribe_reply()));
+        h.push(fixture(notice));
+        m.poll();
+        assert_eq!(h.sent_methods().last().unwrap(), "bn.subscribe", "{notice}");
+        assert_eq!(h.sent_methods().len(), 3, "{notice}");
+    }
+}
+
+#[test]
+fn duplicate_events_do_not_resubscribe_or_duplicate_messages() {
+    let (t, h) = session();
+    let mut m = connected(t);
+    h.push(fixture("events_41_walk"));
+    h.push(fixture("events_42_message"));
+    h.push(fixture("events_42_message"));
+    m.poll();
+    assert_eq!(h.sent_methods().len(), 2);
+    assert_eq!(m.messages(), ["You walk east."]);
+}
+
+#[test]
+fn interaction_menu_lists_choices_and_choose_cancel_go_through_submit() {
+    let (t, h) = session();
+    let mut m = connected(t.on("bn.command.submit", walk_reply()));
+    assert!(m.menu().is_none());
+    h.push(fixture("events_41_walk"));
+    h.push(fixture("events_42_message"));
+    h.push(fixture("events_43_menu"));
+    m.poll();
+    let menu = m.menu().unwrap();
+    assert_eq!(menu.title, "Pick up");
+    assert!(menu.can_cancel);
+    assert_eq!(menu.choices.len(), 2);
+    assert_eq!(
+        (menu.choices[1].enabled, menu.choices[1].denial.as_str()),
+        (false, "Too heavy")
+    );
+
+    m.choose("c:2");
+    assert!(
+        submits(&h).is_empty(),
+        "disabled choices are never submitted"
+    );
+    m.choose("c:1");
+    let sent = submits(&h);
+    assert_eq!(
+        sent[0]["params"]["operation"],
+        json!({"kind":"choose","choice_id":"c:1"})
+    );
+    assert_eq!(sent[0]["params"]["expect"]["schema_id"], "s:pickup");
+    assert_eq!(sent[0]["params"]["expect"]["boundary_id"], "b:13");
+}
+
+#[test]
+fn cancel_menu_submits_cancel_only_when_allowed() {
+    let (t, h) = session();
+    let mut m = connected(t.on("bn.command.submit", walk_reply()));
+    m.cancel_menu();
+    assert!(submits(&h).is_empty(), "no menu, nothing to cancel");
+    h.push(fixture("events_41_walk"));
+    h.push(fixture("events_42_message"));
+    h.push(fixture("events_43_menu"));
+    m.poll();
+    m.cancel_menu();
+    assert_eq!(
+        submits(&h)[0]["params"]["operation"],
+        json!({"kind":"cancel"})
+    );
+}
+
+#[test]
+fn pick_up_and_drop_invoke_registered_actions() {
+    let (t, h) = session();
+    let mut m = connected(t.on("bn.command.submit", walk_reply()));
+    m.drop_item(0);
+    assert!(
+        m.messages().last().unwrap().contains("drop"),
+        "missing action is reported"
+    );
+    assert!(submits(&h).is_empty());
+    m.pick_up(0);
+    assert_eq!(
+        submits(&h)[0]["params"]["operation"],
+        json!({"kind":"action","action_id":"pickup"})
+    );
+}
+
+#[test]
+fn unknown_notifications_are_ignored() {
+    let (t, h) = session();
+    let mut m = connected(t);
+    h.push(json!({"jsonrpc":"2.0","method":"bn.future","params":{}}));
+    m.poll();
+    assert!(m.live(), "unknown notifications are ignored");
+}
