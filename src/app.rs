@@ -46,12 +46,51 @@ impl<M: GameModel> App<M> {
     }
 
     pub fn show(&mut self, ui: &mut egui::Ui) {
+        self.model.poll();
+        if self.model.live() {
+            ui.ctx()
+                .request_repaint_after(std::time::Duration::from_millis(100));
+        }
         self.walk(ui.ctx());
         egui::Panel::bottom("log").show(ui, |ui| self.log(ui));
         egui::Panel::right("items")
             .resizable(false)
             .show(ui, |ui| self.items(ui));
         self.map(ui);
+        self.menu(ui.ctx());
+    }
+
+    /// The engine's current interaction, drawn generically: title, message, choices, cancel.
+    fn menu(&mut self, ctx: &egui::Context) {
+        let Some(menu) = self.model.menu() else {
+            return;
+        };
+        let mut chosen = None;
+        let mut cancel = ctx.input(|i| i.key_pressed(egui::Key::Escape)) && menu.can_cancel;
+        egui::Window::new(&menu.title).show(ctx, |ui| {
+            if !menu.message.is_empty() {
+                ui.label(&menu.message);
+            }
+            for choice in &menu.choices {
+                let button = ui.add_enabled(choice.enabled, egui::Button::new(&choice.label));
+                ui.ctx()
+                    .accesskit_node_builder(button.id, |b| b.set_role(accesskit::Role::MenuItem));
+                if !choice.enabled && !choice.denial.is_empty() {
+                    ui.label(&choice.denial);
+                }
+                if button.clicked() {
+                    chosen = Some(choice.id.clone());
+                }
+            }
+            if menu.can_cancel && ui.button("Cancel").clicked() {
+                cancel = true;
+            }
+        });
+        if let Some(id) = chosen {
+            self.model.choose(&id);
+        } else if cancel {
+            self.model.cancel_menu();
+        }
     }
 
     /// One step per frame toward the destination.

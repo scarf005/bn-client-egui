@@ -1,13 +1,23 @@
 # bn-client-egui
 
 Prototype of a mouse-first, screen-reader-accessible desktop client for
-Cataclysm: Bright Nights, built on egui/eframe (AccessKit). There is no engine
-connection yet: the UI talks to a `GameModel` trait backed by an in-memory `FakeModel`.
+Cataclysm: Bright Nights, built on egui/eframe (AccessKit). The UI talks to a
+`GameModel` trait with two implementations: `FakeModel` (in-memory, used by most tests) and
+`EngineModel` (unified engine protocol 1.0 over the engine's stdio, newline-delimited JSON-RPC).
 
 License: undecided (no LICENSE file yet).
 
-    cargo run     # open the window
-    cargo test    # egui_kittest UI tests (clicks, context menu, drag/drop, labels)
+    cargo run                                  # fake model
+    cargo run -- --engine /path/to/cataclysm-bn-tiles   # or BN_ENGINE=...; real engine
+    cargo test    # egui_kittest UI tests, protocol fixtures, reconstruction, scripted engine
+
+The engine is started as `<engine> --client mcp --userdir <tmp> --configdir <tmp>` with private
+temporary directories. Live integration test (ignored by default, needs an engine build):
+
+    BN_ENGINE=/path/to/cataclysm-bn-tiles cargo test --test live_engine -- --ignored
+
+`tests/fixtures/design-1.0.json` is written from the design doc, not captured from an engine;
+replace it with the contract lane's `1.0.examples.json` when that exists.
 
 Mouse: left-click walks, right-click opens Look / Move here, hover shows a tooltip,
 items drag between Ground and Inventory. Keyboard: focus the map, arrows move the
@@ -19,7 +29,9 @@ cursor, Enter walks there, L looks; per-item Pick up / Drop buttons replace drag
   and the live message log are read correctly.
 - Map cells are painted, not individual accessibility nodes; only the status line
   describes the cursor cell.
-- Replace `FakeModel` with the engine protocol.
+- Verify `EngineModel` against a live engine: action ids (`move_<dir>`, `pickup`, `drop`) and
+  the avatar `inventory` field are assumptions; menu paging beyond `choices` is not implemented;
+  the map shows a 40x25 window that re-centres near its edge (a walk target is view-relative).
 - Engine: movement needs engine-owned travel with completion/blocked events (or a
   pending/blocked step result) and cancel; the fake model only returns `moved`.
 - Engine: item commands use list indices; switch to stable item ids plus source
