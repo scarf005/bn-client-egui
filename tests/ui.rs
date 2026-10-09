@@ -223,3 +223,17 @@ fn stationary_pointer_does_not_override_keyboard_cursor() {
     h.run_steps(60);
     assert_eq!(h.state().model.player(), Pos { x: 12, y: 10 });
 }
+
+#[test]
+fn accessibility_click_on_map_travels_to_cursor() {
+    let mut h = harness();
+    h.get_by_label("Map").focus();
+    h.run_steps(2);
+    for _ in 0..2 {
+        h.key_press(egui::Key::ArrowDown);
+        h.run_steps(2);
+    }
+    h.get_by_label("Map").click_accesskit();
+    h.run_steps(30);
+    assert_eq!(h.state().model.player(), Pos { x: 5, y: 7 });
+}

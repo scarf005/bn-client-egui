@@ -93,7 +93,7 @@ impl<M: GameModel> App<M> {
             self.cursor = cell_at(p);
         }
         self.last_hover = hover;
-        if response.clicked_by(egui::PointerButton::Primary) {
+        if response.clicked() {
             self.destination = Some(self.cursor);
         }
         if response.secondary_clicked() {
@@ -111,12 +111,11 @@ impl<M: GameModel> App<M> {
                     },
                 )
             });
-            let (dx, dy, enter, look) = ui.input(|i| {
+            let (dx, dy, look) = ui.input(|i| {
                 let k = |key| i.key_pressed(key) as i32;
                 (
                     k(egui::Key::ArrowRight) - k(egui::Key::ArrowLeft),
                     k(egui::Key::ArrowDown) - k(egui::Key::ArrowUp),
-                    i.key_pressed(egui::Key::Enter),
                     i.key_pressed(egui::Key::L),
                 )
             });
@@ -124,9 +123,6 @@ impl<M: GameModel> App<M> {
                 x: (self.cursor.x + dx).clamp(0, size.x - 1),
                 y: (self.cursor.y + dy).clamp(0, size.y - 1),
             };
-            if enter {
-                self.destination = Some(self.cursor);
-            }
             if look {
                 self.look(self.cursor);
             }
