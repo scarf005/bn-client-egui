@@ -67,19 +67,26 @@ impl<M: GameModel> App<M> {
     fn map(&mut self, ui: &mut egui::Ui) {
         let size = self.model.size();
         let player = self.model.player();
-        ui.label(format!(
+        let status = format!(
             "Player at ({}, {}). Cursor ({}, {}): {}.",
             player.x,
             player.y,
             self.cursor.x,
             self.cursor.y,
             self.model.cell(self.cursor).desc
-        ));
+        );
+        let status_label = ui.label(&status);
+        ui.ctx()
+            .accesskit_node_builder(status_label.id, |b| b.set_live(accesskit::Live::Polite));
         let (response, painter) = ui.allocate_painter(
             egui::vec2(size.x as f32 * CELL, size.y as f32 * CELL),
             egui::Sense::click().union(egui::Sense::focusable_noninteractive()),
         );
         response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Other, true, "Map"));
+        ui.ctx().accesskit_node_builder(response.id, |b| {
+            b.set_role(accesskit::Role::Canvas);
+            b.set_description(status.as_str());
+        });
         let cell_at = |p: egui::Pos2| {
             let v = (p - response.rect.min) / CELL;
             Pos {

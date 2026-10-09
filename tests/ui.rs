@@ -237,3 +237,21 @@ fn accessibility_click_on_map_travels_to_cursor() {
     h.run_steps(30);
     assert_eq!(h.state().model.player(), Pos { x: 5, y: 7 });
 }
+
+#[test]
+fn map_node_has_role_and_describes_cursor_and_status_is_live() {
+    use egui::accesskit::{Live, Role};
+    let mut h = harness();
+    h.get_by_label("Map").focus();
+    h.run_steps(2);
+    for _ in 0..2 {
+        h.key_press(egui::Key::ArrowRight);
+        h.run_steps(2);
+    }
+    let map = h.get_by_label("Map");
+    assert_ne!(map.accesskit_node().role(), Role::Unknown);
+    let description = map.accesskit_node().description().unwrap_or_default();
+    assert!(description.contains("Cursor (7, 5)"), "{description}");
+    let status = h.get_by_label_contains("Cursor (7, 5)");
+    assert_eq!(status.accesskit_node().live(), Live::Polite);
+}
