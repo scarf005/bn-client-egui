@@ -128,6 +128,8 @@ pub struct Coverage {
 pub struct Readiness {
     pub phase: String,
     pub game_ready: bool,
+    pub accepts_interaction_commands: bool,
+    pub accepts_registered_actions: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -140,27 +142,32 @@ pub struct Action {
 pub struct Choice {
     pub id: String,
     pub label: String,
-    #[serde(default, skip_serializing_if = "is_default")]
     pub description: String,
-    #[serde(default, skip_serializing_if = "is_default")]
     pub denial: String,
-    pub enabled: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub selectable: Option<bool>,
+    pub pane_id: Option<String>,
+    pub enabled: bool,
+    pub selectable: bool,
+    pub selected: bool,
+    pub columns: Vec<Column>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub available_count: Option<u64>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Column {
+    pub label: String,
+    pub value: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Interaction {
     pub schema_id: String,
     pub kind: String,
-    #[serde(default, skip_serializing_if = "is_default")]
     pub context: String,
-    #[serde(default, skip_serializing_if = "is_default")]
     pub title: String,
-    #[serde(default, skip_serializing_if = "is_default")]
     pub message: String,
     pub allow_cancel: bool,
-    #[serde(default, skip_serializing_if = "is_default")]
     pub allow_set_count: bool,
     pub choices: Vec<Choice>,
     pub choice_total: u64,
@@ -230,10 +237,14 @@ pub struct Event {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Snapshot {
     pub at: At,
-    pub coverage: Coverage,
+    /// Absent, with `avatar` and `environment`, while no world is loaded (menus).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub coverage: Option<Coverage>,
     pub interaction: Boundary,
-    pub avatar: Avatar,
-    pub environment: Environment,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub avatar: Option<Avatar>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub environment: Option<Environment>,
     pub entities: Vec<Entity>,
     pub parts: u32,
 }
@@ -329,8 +340,74 @@ pub struct Submit {
     pub operation: Operation,
 }
 
-pub fn hello_params(client: &str) -> Value {
-    serde_json::json!({ "versions": [VERSION], "client": { "name": client, "version": env!("CARGO_PKG_VERSION") } })
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ClientInfo {
+    pub name: String,
+    pub version: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HelloParams {
+    pub versions: Vec<String>,
+    pub client: ClientInfo,
+}
+
+impl HelloParams {
+    pub fn new(client: &str) -> Self {
+        Self {
+            versions: vec![VERSION.into()],
+            client: ClientInfo {
+                name: client.into(),
+                version: env!("CARGO_PKG_VERSION").into(),
+            },
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChoicesParams {
+    pub epoch: String,
+    pub boundary_id: String,
+    pub offset: u64,
+    pub limit: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ChoicesResult {
+    pub boundary_id: String,
+    pub total: u64,
+    pub choices: Vec<Choice>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorldCellsParams {
+    pub epoch: String,
+    pub min: WorldPos,
+    pub max: WorldPos,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct WorldCellsResult {
+    pub at: At,
+    pub cells: Vec<Cell>,
+    pub forgotten: Vec<WorldPos>,
+}
+
+/// Params of `bn.command.result`; its result is a `CommandNotice`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ResultParams {
+    pub epoch: String,
+    pub command_id: String,
+}
+
+/// `error.data` of an application error (code 1000).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ApplicationError {
+    pub kind: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub action: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub at: Option<At>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

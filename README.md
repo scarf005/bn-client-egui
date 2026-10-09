@@ -16,8 +16,9 @@ temporary directories. Live integration test (ignored by default, needs an engin
 
     BN_ENGINE=/path/to/cataclysm-bn-tiles cargo test --test live_engine -- --ignored
 
-`tests/fixtures/design-1.0.json` is written from the design doc, not captured from an engine;
-replace it with the contract lane's `1.0.examples.json` when that exists.
+`tests/fixtures/1.0.examples.json` is the contract lane's file (round-trip tested exactly);
+`tests/fixtures/design-1.0.json` is a hand-written session from the design doc, not captured from an engine;
+replace it with a recorded session once an engine can produce one.
 
 Mouse: left-click walks, right-click opens Look / Move here, hover shows a tooltip,
 items drag between Ground and Inventory. Keyboard: focus the map, arrows move the
@@ -29,7 +30,7 @@ cursor, Enter walks there, L looks; per-item Pick up / Drop buttons replace drag
   and the live message log are read correctly.
 - Map cells are painted, not individual accessibility nodes; only the status line
   describes the cursor cell.
-- Verify `EngineModel` against a live engine: action ids (`move_<dir>`, `pickup`, `drop`) and
+- Verify `EngineModel` against a live engine: action ids (`UP`..`LEFTUP`, `pickup`, `drop`) and
   the avatar `inventory` field are assumptions; menu paging beyond `choices` is not implemented;
   the map shows a 40x25 window that re-centres near its edge (a walk target is view-relative).
 - Engine: movement needs engine-owned travel with completion/blocked events (or a

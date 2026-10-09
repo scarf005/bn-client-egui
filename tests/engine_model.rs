@@ -62,7 +62,7 @@ fn step_submits_a_move_action_against_the_current_boundary() {
         json!({
             "epoch": "e7f3",
             "expect": { "revision": "31", "boundary_id": "b:12", "schema_id": null },
-            "operation": { "kind": "action", "action_id": "move_east" }
+            "operation": { "kind": "action", "action_id": "RIGHT" }
         })
     );
 }
@@ -73,7 +73,7 @@ fn diagonal_without_a_matching_action_does_not_submit() {
     let mut m = connected(t);
     assert!(!m.step_toward(Pos { x: 25, y: 5 }));
     assert!(submits(&h).is_empty());
-    assert!(m.messages().last().unwrap().contains("northeast"));
+    assert!(m.messages().last().unwrap().contains("RIGHTUP"));
 }
 
 #[test]
@@ -258,4 +258,31 @@ fn unknown_notifications_are_ignored() {
     h.push(json!({"jsonrpc":"2.0","method":"bn.future","params":{}}));
     m.poll();
     assert!(m.live(), "unknown notifications are ignored");
+}
+
+#[test]
+fn main_menu_snapshot_without_a_world_shows_the_menu_and_no_map() {
+    let text = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/1.0.examples.json"
+    ))
+    .unwrap();
+    let examples: Value = serde_json::from_str(&text).unwrap();
+    let menu = examples["valid"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["name"] == "subscribe result at a menu")
+        .unwrap()["value"]
+        .clone();
+    let (t, _h) = ScriptedTransport::new();
+    let t = t.on("bn.hello", vec![fixture("hello_result")]).on(
+        "bn.subscribe",
+        vec![json!({"jsonrpc":"2.0","id":0,"result":menu})],
+    );
+    let m = connected(t);
+    assert_eq!(m.size(), Pos { x: 0, y: 0 });
+    let menu = m.menu().unwrap();
+    assert_eq!(menu.title, "Cataclysm: Bright Nights");
+    assert_eq!(menu.choices[0].label, "New Game");
 }

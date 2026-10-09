@@ -108,3 +108,77 @@ fn operations_serialize_with_the_kind_tag() {
     );
     assert_eq!(to_value(&Cancel), json!({"kind":"cancel"}));
 }
+
+fn examples() -> Value {
+    let text = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/1.0.examples.json"
+    ))
+    .unwrap();
+    serde_json::from_str(&text).unwrap()
+}
+
+fn round_trip<T: serde::Serialize + serde::de::DeserializeOwned>(
+    v: &Value,
+) -> Result<Value, String> {
+    let typed: T = serde_json::from_value(v.clone()).map_err(|e| e.to_string())?;
+    Ok(to_value(&typed))
+}
+
+fn by_def(def: &str, v: &Value) -> Result<Value, String> {
+    use protocol::*;
+    match def {
+        "hello_params" => round_trip::<HelloParams>(v),
+        "hello_result" => round_trip::<Hello>(v),
+        "empty_params" => round_trip::<std::collections::BTreeMap<String, Value>>(v),
+        "subscribe_result" => round_trip::<Snapshot>(v),
+        "choices_params" => round_trip::<ChoicesParams>(v),
+        "choices_result" => round_trip::<ChoicesResult>(v),
+        "world_cells_params" => round_trip::<WorldCellsParams>(v),
+        "world_cells_result" => round_trip::<WorldCellsResult>(v),
+        "submit_params" => round_trip::<Submit>(v),
+        "submit_result" | "command_result" | "command_notification" => {
+            round_trip::<CommandNotice>(v)
+        }
+        "result_params" => round_trip::<ResultParams>(v),
+        "snapshot_part" => round_trip::<SnapshotPart>(v),
+        "events_notification" => round_trip::<EventsParams>(v),
+        "resync_notification" => round_trip::<Resync>(v),
+        "application_error" => round_trip::<ApplicationError>(v),
+        "pos" => round_trip::<WorldPos>(v),
+        other => Err(format!("no type for {other}")),
+    }
+}
+
+#[test]
+fn contract_examples_round_trip_exactly() {
+    let all = examples();
+    let valid = all["valid"].as_array().unwrap();
+    assert!(valid.len() >= 20);
+    for ex in valid {
+        let (name, def, value) = (&ex["name"], ex["def"].as_str().unwrap(), &ex["value"]);
+        // Requests that this client never sends or parses still have to be well typed.
+        assert_eq!(by_def(def, value).as_ref(), Ok(value), "{name} ({def})");
+    }
+}
+
+#[test]
+fn contract_invalid_examples_the_types_can_reject_are_rejected() {
+    // Structural checks only the JSON schema enforces (closed event catalogue) are not repeated here.
+    let all = examples();
+    let rejected = all["invalid"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|ex| by_def(ex["def"].as_str().unwrap(), &ex["value"]).is_err())
+        .map(|ex| ex["name"].as_str().unwrap().to_string())
+        .collect::<Vec<_>>();
+    assert!(
+        rejected.contains(&"bubble coordinate in a target".to_string()),
+        "{rejected:?}"
+    );
+    assert!(
+        rejected.contains(&"position without a dimension".to_string()),
+        "{rejected:?}"
+    );
+}

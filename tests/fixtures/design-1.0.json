@@ -45,24 +45,26 @@
     "boundary_id": "b:12",
     "readiness": {
      "phase": "playing",
-     "game_ready": true
+     "game_ready": true,
+     "accepts_interaction_commands": true,
+     "accepts_registered_actions": true
     },
     "actions": [
      {
-      "id": "move_east",
-      "name": "Move east"
+      "id": "RIGHT",
+      "name": "Move right"
      },
      {
-      "id": "move_west",
-      "name": "Move west"
+      "id": "LEFT",
+      "name": "Move left"
      },
      {
-      "id": "move_north",
-      "name": "Move north"
+      "id": "UP",
+      "name": "Move up"
      },
      {
-      "id": "move_south",
-      "name": "Move south"
+      "id": "DOWN",
+      "name": "Move down"
      },
      {
       "id": "pickup",
@@ -772,24 +774,26 @@
        "boundary_id": "b:13",
        "readiness": {
         "phase": "playing",
-        "game_ready": true
+        "game_ready": true,
+        "accepts_interaction_commands": true,
+        "accepts_registered_actions": true
        },
        "actions": [
         {
-         "id": "move_east",
-         "name": "Move east"
+         "id": "RIGHT",
+         "name": "Move right"
         },
         {
-         "id": "move_west",
-         "name": "Move west"
+         "id": "LEFT",
+         "name": "Move left"
         },
         {
-         "id": "move_north",
-         "name": "Move north"
+         "id": "UP",
+         "name": "Move up"
         },
         {
-         "id": "move_south",
-         "name": "Move south"
+         "id": "DOWN",
+         "name": "Move down"
         },
         {
          "id": "pickup",
@@ -807,16 +811,26 @@
          {
           "id": "c:1",
           "label": "combat knife",
-          "enabled": true
+          "enabled": true,
+          "description": "",
+          "denial": "",
+          "selectable": true,
+          "selected": false,
+          "columns": []
          },
          {
           "id": "c:2",
           "label": "tin can",
           "enabled": false,
-          "denial": "Too heavy"
+          "denial": "Too heavy",
+          "description": "",
+          "selectable": false,
+          "selected": false,
+          "columns": []
          }
         ],
-        "choice_total": 2
+        "choice_total": 2,
+        "allow_set_count": false
        }
       }
      }
@@ -890,9 +904,7 @@
    "epoch": "e7f3",
    "command_id": "c:5",
    "stage": "rejected",
-   "error": {
-    "kind": "stale_revision"
-   }
+   "error": "stale_revision"
   }
  },
  "resync": {

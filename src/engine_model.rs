@@ -81,16 +81,17 @@ fn top_look(c: &WorldCell) -> Option<&Look> {
         .or(c.memory.as_ref().map(|m| &m.terrain))
 }
 
-fn direction(dx: i32, dy: i32) -> Option<[&'static str; 2]> {
+/// Native registered-action id for a one-square move.
+fn direction(dx: i32, dy: i32) -> Option<&'static str> {
     Some(match (dx, dy) {
-        (0, -1) => ["north", "n"],
-        (1, -1) => ["northeast", "ne"],
-        (1, 0) => ["east", "e"],
-        (1, 1) => ["southeast", "se"],
-        (0, 1) => ["south", "s"],
-        (-1, 1) => ["southwest", "sw"],
-        (-1, 0) => ["west", "w"],
-        (-1, -1) => ["northwest", "nw"],
+        (0, -1) => "UP",
+        (1, -1) => "RIGHTUP",
+        (1, 0) => "RIGHT",
+        (1, 1) => "RIGHTDOWN",
+        (0, 1) => "DOWN",
+        (-1, 1) => "LEFTDOWN",
+        (-1, 0) => "LEFT",
+        (-1, -1) => "LEFTUP",
         _ => return None,
     })
 }
@@ -114,7 +115,7 @@ impl EngineModel {
         };
         m.call(
             "bn.hello",
-            protocol::hello_params("bn-client-egui"),
+            json!(protocol::HelloParams::new("bn-client-egui")),
             Pending::Hello,
         );
         m
@@ -374,11 +375,10 @@ impl GameModel for EngineModel {
         if self.busy || (dx, dy) == (0, 0) {
             return true;
         }
-        let Some(names) = direction(dx, dy) else {
+        let Some(id) = direction(dx, dy) else {
             return false;
         };
-        let ids = names.map(|n| format!("move_{n}"));
-        self.invoke(&ids)
+        self.invoke(&[id.into()])
     }
 
     fn ground(&self) -> &[String] {
@@ -423,7 +423,7 @@ impl GameModel for EngineModel {
                 .map(|c| MenuChoice {
                     id: c.id.clone(),
                     label: c.label.clone(),
-                    enabled: c.enabled && c.selectable.unwrap_or(true),
+                    enabled: c.enabled && c.selectable,
                     denial: c.denial.clone(),
                 })
                 .collect(),

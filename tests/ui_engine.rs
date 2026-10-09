@@ -54,7 +54,7 @@ fn engine_map_renders_and_a_click_submits_a_move_through_the_protocol() {
     assert_eq!(sent.len(), 1, "one step in flight at a time");
     assert_eq!(
         sent[0]["params"]["operation"],
-        json!({"kind":"action","action_id":"move_east"})
+        json!({"kind":"action","action_id":"RIGHT"})
     );
 }
 

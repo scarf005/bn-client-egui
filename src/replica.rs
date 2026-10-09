@@ -47,10 +47,10 @@ impl Replica {
     pub fn begin(&mut self, s: Snapshot) {
         *self = Self {
             at: Some(s.at),
-            coverage: Some(s.coverage),
+            coverage: s.coverage,
             boundary: Some(s.interaction),
-            avatar: Some(s.avatar),
-            environment: Some(s.environment),
+            avatar: s.avatar,
+            environment: s.environment,
             entities: s.entities.into_iter().map(|e| (e.id.clone(), e)).collect(),
             loading: (s.parts > 0).then_some((s.parts, 0)),
             ..Self::default()
