@@ -17,6 +17,14 @@ struct Dragged {
     index: usize,
 }
 
+/// A menu button that screen readers announce as a menu item.
+fn menu_item(ui: &mut egui::Ui, text: &str) -> bool {
+    let button = ui.button(text);
+    ui.ctx()
+        .accesskit_node_builder(button.id, |b| b.set_role(accesskit::Role::MenuItem));
+    button.clicked()
+}
+
 pub struct App<M: GameModel> {
     pub model: M,
     cursor: Pos,
@@ -148,11 +156,11 @@ impl<M: GameModel> App<M> {
         });
         let menu = response.context_menu(|ui| {
             let at = self.menu_cell;
-            if ui.button("Look").clicked() {
+            if menu_item(ui, "Look") {
                 self.look(at);
                 ui.close();
             }
-            if ui.button("Move here").clicked() {
+            if menu_item(ui, "Move here") {
                 self.destination = Some(at);
                 ui.close();
             }

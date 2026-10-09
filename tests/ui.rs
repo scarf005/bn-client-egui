@@ -290,3 +290,16 @@ fn shrinking_map_clamps_stale_cursor() {
     h.run_steps(3);
     h.get_by_label_contains("Cursor (9, 9)");
 }
+
+#[test]
+fn context_menu_entries_have_menu_item_role() {
+    use egui::accesskit::Role;
+    let mut h = harness();
+    click_cell(&mut h, Pos { x: 9, y: 5 }, egui::PointerButton::Secondary);
+    for label in ["Look", "Move here"] {
+        assert_eq!(
+            h.get_by_label(label).accesskit_node().role(),
+            Role::MenuItem
+        );
+    }
+}
