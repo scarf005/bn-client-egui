@@ -243,15 +243,20 @@ impl<M: GameModel> App<M> {
 
     fn log(&mut self, ui: &mut egui::Ui) {
         ui.heading("Message log");
+        // Only the newest message is live, so history is never re-announced.
+        if let Some(latest) = self.model.messages().last() {
+            let live = ui.label(latest);
+            ui.ctx()
+                .accesskit_node_builder(live.id, |b| b.set_live(accesskit::Live::Polite));
+        }
         egui::ScrollArea::vertical()
             .max_height(100.0)
             .stick_to_bottom(true)
             .show(ui, |ui| {
                 let messages = self.model.messages();
-                let text = messages[messages.len().saturating_sub(50)..].join("\n");
-                let log = ui.label(text);
-                ui.ctx()
-                    .accesskit_node_builder(log.id, |b| b.set_live(accesskit::Live::Polite));
+                for message in &messages[messages.len().saturating_sub(50)..] {
+                    ui.label(message);
+                }
             });
     }
 }

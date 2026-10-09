@@ -140,11 +140,27 @@ fn map_status_text_reports_player_and_hovered_cell() {
 }
 
 #[test]
-fn message_log_is_a_live_region_with_messages() {
+fn live_region_announces_only_the_newest_message() {
     let mut h = harness();
-    h.run_steps(2);
-    let log = h.get_by_label_contains("Welcome to the prototype.");
-    assert_eq!(log.accesskit_node().live(), egui::accesskit::Live::Polite);
+    h.state_mut().model.say("Second message.".into());
+    h.run_steps(3);
+    h.state_mut().model.say("Third message.".into());
+    h.run_steps(3);
+    let live: Vec<String> = h
+        .root()
+        .children_recursive()
+        .filter(|n| n.accesskit_node().live() == egui::accesskit::Live::Polite)
+        .filter_map(|n| n.accesskit_node().value())
+        .collect();
+    assert!(live.iter().any(|v| v == "Third message."), "{live:?}");
+    assert!(
+        !live
+            .iter()
+            .any(|v| v.contains("Welcome") || v.contains("Second")),
+        "{live:?}"
+    );
+    // History stays readable outside the live region.
+    h.get_by_label_contains("Welcome to the prototype.");
 }
 
 #[test]
