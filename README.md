@@ -20,3 +20,10 @@ cursor, Enter walks there, L looks; per-item Pick up / Drop buttons replace drag
 - Map cells are painted, not individual accessibility nodes; only the status line
   describes the cursor cell.
 - Replace `FakeModel` with the engine protocol.
+- Engine: movement needs engine-owned travel with completion/blocked events (or a
+  pending/blocked step result) and cancel; the fake model only returns `moved`.
+- Engine: item commands use list indices; switch to stable item ids plus source
+  location so reordering during a drag cannot move the wrong item.
+- Context menu opens only by secondary click; add a keyboard opener (Shift+F10/Menu).
+- Live announcement of identical consecutive messages is not distinguishable.
+- Add a model readiness/coordinate-validity contract for loading and disconnects.
