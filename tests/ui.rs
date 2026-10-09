@@ -303,3 +303,17 @@ fn context_menu_entries_have_menu_item_role() {
         );
     }
 }
+
+#[test]
+fn blocked_destination_stops_instead_of_retrying_forever() {
+    let mut h = harness();
+    click_cell(&mut h, Pos { x: 22, y: 5 }, egui::PointerButton::Primary);
+    h.run_steps(40);
+    assert_eq!(h.state().model.player(), Pos { x: 19, y: 5 });
+    assert!(
+        h.try_run().is_ok(),
+        "no repaint requested once the walk stops"
+    );
+    let last = h.state().model.messages().last().unwrap().clone();
+    assert!(last.contains("blocks"), "{last}");
+}

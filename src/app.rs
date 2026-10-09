@@ -59,11 +59,15 @@ impl<M: GameModel> App<M> {
         let Some(target) = self.destination else {
             return;
         };
-        self.model.step_toward(target);
-        if self.model.player() == target {
-            self.destination = None;
+        let moved = self.model.step_toward(target);
+        if !moved {
+            self.model.say("Something blocks the way.".into());
         }
-        ctx.request_repaint();
+        if !moved || self.model.player() == target {
+            self.destination = None;
+        } else {
+            ctx.request_repaint();
+        }
     }
 
     fn look(&mut self, at: Pos) {

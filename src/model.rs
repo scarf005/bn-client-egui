@@ -17,8 +17,8 @@ pub trait GameModel {
     fn size(&self) -> Pos;
     fn cell(&self, at: Pos) -> Cell;
     fn player(&self) -> Pos;
-    /// Moves the player one step toward `target` (diagonals allowed).
-    fn step_toward(&mut self, target: Pos);
+    /// Moves the player one step toward `target` (diagonals allowed); false if blocked.
+    fn step_toward(&mut self, target: Pos) -> bool;
     fn ground(&self) -> &[String];
     fn inventory(&self) -> &[String];
     fn pick_up(&mut self, index: usize);
@@ -54,6 +54,13 @@ impl GameModel for FakeModel {
     }
 
     fn cell(&self, at: Pos) -> Cell {
+        if at.x == 20 && at.y != 12 {
+            return Cell {
+                glyph: '#',
+                color: Color32::from_rgb(180, 180, 180),
+                desc: "a wall".into(),
+            };
+        }
         let (glyph, color, desc) = match (at.x * 7 + at.y * 13) % 11 {
             0 => ('T', Color32::from_rgb(40, 160, 60), "a tree"),
             1 => ('~', Color32::from_rgb(70, 120, 220), "shallow water"),
@@ -70,9 +77,16 @@ impl GameModel for FakeModel {
         self.player
     }
 
-    fn step_toward(&mut self, target: Pos) {
-        self.player.x += (target.x - self.player.x).signum();
-        self.player.y += (target.y - self.player.y).signum();
+    fn step_toward(&mut self, target: Pos) -> bool {
+        let next = Pos {
+            x: self.player.x + (target.x - self.player.x).signum(),
+            y: self.player.y + (target.y - self.player.y).signum(),
+        };
+        let blocked = self.cell(next).glyph == '#';
+        if !blocked {
+            self.player = next;
+        }
+        !blocked
     }
 
     fn ground(&self) -> &[String] {
