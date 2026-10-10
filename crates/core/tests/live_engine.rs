@@ -1,14 +1,15 @@
 //! Needs a real engine build: `BN_ENGINE=/path/to/cataclysm-bn-tiles cargo test --test live_engine -- --ignored`
 use bn_client_core::keys::KeyMap;
-use bn_client_core::transport::StdioTransport;
+use bn_client_core::transport::{Profile, StdioTransport};
+use bn_client_core::watchdog::Watchdog;
 use bn_client_core::{EngineModel, GameModel, Pos};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 fn wait_for(model: &mut EngineModel, what: &str, mut done: impl FnMut(&EngineModel) -> bool) {
-    let deadline = Instant::now() + Duration::from_secs(90);
+    let mut watchdog = Watchdog::live();
     while !done(model) {
         assert!(
-            Instant::now() < deadline,
+            !watchdog.expired(model.received()),
             "timed out waiting for {what}: {:?}",
             model.messages()
         );
@@ -55,7 +56,7 @@ fn dismiss_popups(model: &mut EngineModel) {
 #[ignore = "requires BN_ENGINE pointing at an engine binary"]
 fn live_engine_starts_the_tutorial_and_walks_one_step() {
     let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
-    let transport = StdioTransport::spawn(engine.as_ref()).expect("engine starts");
+    let transport = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
     let mut model = EngineModel::new(Box::new(transport));
 
     wait_for(&mut model, "subscription", |m| m.live());
@@ -82,7 +83,7 @@ fn live_engine_starts_the_tutorial_and_walks_one_step() {
 #[ignore = "requires BN_ENGINE pointing at an engine binary"]
 fn live_engine_non_movement_action_opens_a_menu_that_can_be_cancelled() {
     let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
-    let transport = StdioTransport::spawn(engine.as_ref()).expect("engine starts");
+    let transport = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
     let root = bn_client_core::transport::game_root(engine.as_ref(), None);
     let keys = root.as_deref().map_or_else(KeyMap::default, KeyMap::load);
     let mut model = EngineModel::new(Box::new(transport)).with_keys(keys);
@@ -117,7 +118,7 @@ fn live_engine_non_movement_action_opens_a_menu_that_can_be_cancelled() {
 #[ignore = "requires BN_ENGINE built with bn.loading support"]
 fn live_engine_shows_a_loading_screen_while_the_tutorial_loads() {
     let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
-    let transport = StdioTransport::spawn(engine.as_ref()).expect("engine starts");
+    let transport = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
     let mut model = EngineModel::new(Box::new(transport));
     wait_for(&mut model, "subscription", |m| m.live());
     choose_label(&mut model, "New Game");
@@ -154,7 +155,7 @@ fn live_engine_shows_a_loading_screen_while_the_tutorial_loads() {
 #[ignore = "requires BN_ENGINE built with the travel operation"]
 fn live_engine_travel_click_plans_a_route_and_a_second_click_walks_it() {
     let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
-    let transport = StdioTransport::spawn(engine.as_ref()).expect("engine starts");
+    let transport = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
     let mut model = EngineModel::new(Box::new(transport));
 
     wait_for(&mut model, "subscription", |m| m.live());
@@ -230,7 +231,7 @@ fn live_engine_travel_click_plans_a_route_and_a_second_click_walks_it() {
 #[ignore = "requires BN_ENGINE built with remembered furniture overlays"]
 fn live_engine_remembered_furniture_stays_drawn_after_walking_past_it() {
     let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
-    let transport = StdioTransport::spawn(engine.as_ref()).expect("engine starts");
+    let transport = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
     let mut model = EngineModel::new(Box::new(transport));
 
     wait_for(&mut model, "subscription", |m| m.live());
@@ -277,7 +278,7 @@ fn live_engine_remembered_furniture_stays_drawn_after_walking_past_it() {
 #[ignore = "requires BN_ENGINE that sizes its terrain window from the client's viewport"]
 fn live_engine_map_follows_the_declared_viewport_and_accepts_clicks_across_it() {
     let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
-    let transport = StdioTransport::spawn(engine.as_ref()).expect("engine starts");
+    let transport = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
     let mut model = EngineModel::new(Box::new(transport));
 
     wait_for(&mut model, "subscription", |m| m.live());
@@ -304,4 +305,75 @@ fn live_engine_map_follows_the_declared_viewport_and_accepts_clicks_across_it() 
         "{:?}",
         model.messages()
     );
+}
+
+#[test]
+#[ignore = "requires BN_ENGINE; plays in a temp profile and never touches the real one"]
+fn live_engine_saved_character_is_listed_on_the_load_tab_and_loads_after_relaunch() {
+    let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
+    let dir = std::env::temp_dir().join(format!("bn-saves-test-{}", std::process::id()));
+    let profile = Profile {
+        userdir: Some(dir.join("user")),
+        configdir: Some(dir.join("config")),
+        ..Profile::default()
+    };
+    for d in [&profile.userdir, &profile.configdir] {
+        std::fs::create_dir_all(d.as_ref().unwrap()).unwrap();
+    }
+    let launch = || {
+        let t = StdioTransport::spawn_with(engine.as_ref(), &profile).expect("engine starts");
+        EngineModel::new(Box::new(t))
+    };
+
+    let mut model = launch();
+    wait_for(&mut model, "subscription", |m| m.live());
+    choose_label(&mut model, "New Game");
+    choose_label(&mut model, "Play Now!");
+    wait_for(&mut model, "the map", |m| m.size().x > 0);
+    wait_for(&mut model, "idle", |m| !m.busy());
+    dismiss_popups(&mut model);
+    assert!(
+        model.invoke_action("save"),
+        "the native save action is offered"
+    );
+    wait_for(&mut model, "the save prompt", |m| m.menu().is_some());
+    println!("prompt: {:?}", model.menu());
+    choose_label(&mut model, "Yes");
+    wait_for(&mut model, "the main menu again", |m| {
+        m.menu()
+            .is_some_and(|menu| menu.choices.iter().any(|c| c.label.contains("Load")))
+    });
+    drop(model);
+
+    let mut model = launch();
+    wait_for(&mut model, "subscription", |m| m.live());
+    choose_label(&mut model, "Load");
+    wait_for(&mut model, "the saved world", |m| {
+        m.menu()
+            .is_some_and(|menu| menu.choices.iter().any(|c| c.id.starts_with("load:")))
+    });
+    println!("load tab: {:?}", model.menu());
+    let id = model
+        .menu()
+        .unwrap()
+        .choices
+        .iter()
+        .find(|c| c.id.starts_with("load:"))
+        .unwrap()
+        .id
+        .clone();
+    wait_for(&mut model, "idle", |m| !m.busy());
+    model.choose(&id);
+    wait_for(&mut model, "the character list", |m| {
+        m.menu()
+            .is_some_and(|menu| menu.message.contains("Load character"))
+    });
+    println!("characters: {:?}", model.menu());
+    let id = model.menu().unwrap().choices[0].id.clone();
+    assert_eq!(id, "entry:0", "the saved character is the first entry");
+    wait_for(&mut model, "idle", |m| !m.busy());
+    model.choose(&id);
+    wait_for(&mut model, "the loaded map", |m| m.size().x > 0);
+    drop(model);
+    std::fs::remove_dir_all(dir).unwrap();
 }

@@ -56,6 +56,7 @@ pub struct EngineModel {
     ground: Vec<String>,
     inventory: Vec<String>,
     trace: Vec<(Instant, &'static str)>,
+    received: u64,
     colors: ColorMap,
     keys: KeyMap,
     loading: Option<Loading>,
@@ -125,6 +126,7 @@ impl EngineModel {
             ground: vec![],
             inventory: vec![],
             trace: vec![],
+            received: 0,
             colors: ColorMap::default(),
             keys: KeyMap::default(),
             loading: None,
@@ -158,6 +160,11 @@ impl EngineModel {
     }
 
     /// Timestamped protocol milestones (`submit`, `received`, stage names, `events`) since the last call.
+    /// How many engine messages have arrived so far; live tests use it to tell progress from a stall.
+    pub fn received(&self) -> u64 {
+        self.received
+    }
+
     pub fn take_trace(&mut self) -> Vec<(Instant, &'static str)> {
         std::mem::take(&mut self.trace)
     }
@@ -539,6 +546,7 @@ impl EngineModel {
 impl GameModel for EngineModel {
     fn poll(&mut self) {
         while let Some(msg) = self.transport.recv() {
+            self.received += 1;
             self.handle(msg);
         }
         self.messages.extend(self.replica.take_log());

@@ -11,8 +11,11 @@ License: undecided (no LICENSE file yet).
     cargo run -p bn-client-egui -- --engine /path/to/cataclysm-bn-tiles   # or BN_ENGINE=...; real engine
     cargo test    # egui_kittest UI tests, protocol fixtures, reconstruction, scripted engine
 
-The engine is started as `<engine> --client mcp --userdir <tmp> --configdir <tmp>` with private
-temporary directories. Terminal client over the same model (`Ctrl-C` quits; arrows/vi-keys/game keys walk and act; main menu tabs on Left/Right, entries on Up/Down/Enter/Esc;
+The engine is started as `<engine> --client mcp` on its own default user and config directories, so your
+saves, options and keybindings are used (Load tab, Save and Quit work as in Tiles). `--userdir PATH` /
+`--configdir PATH` override them; `--fresh-profile` (or `BN_FRESH_PROFILE=1`) uses a private throwaway profile.
+Live tests always use one.
+Terminal client over the same model (`Ctrl-C` quits; arrows/vi-keys/game keys walk and act; main menu tabs on Left/Right, entries on Up/Down/Enter/Esc;
 `x` or `;` starts a look cursor: move it, Enter shows the route, Enter again walks, Esc leaves; left click travels the same way;
 `Tab` lists the actions, PageUp/PageDown scroll the message log; the terminal size is declared to the engine as the map viewport):
 

@@ -2,22 +2,23 @@
 //! `BN_ENGINE=... cargo test -p bn-client-tui --test live_tui -- --ignored --nocapture`
 use bn_client_core::keys::KeyMap;
 use bn_client_core::transport::{StdioTransport, game_root};
+use bn_client_core::watchdog::Watchdog;
 use bn_client_core::{EngineModel, GameModel};
 use bn_client_tui::TuiApp;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 type App = TuiApp<EngineModel>;
 
 fn wait(app: &mut App, what: &str, done: impl Fn(&mut App) -> bool) {
-    let deadline = Instant::now() + Duration::from_secs(240);
+    let mut watchdog = Watchdog::live();
     loop {
         app.model.poll();
         if done(app) {
             return;
         }
         assert!(
-            Instant::now() < deadline,
+            !watchdog.expired(app.model.received()),
             "timed out waiting for {what}: {:?} {:?}",
             app.model.messages(),
             app.model.command()
@@ -73,7 +74,7 @@ fn tab(app: &mut App, label: &str) {
 #[ignore = "requires BN_ENGINE pointing at an engine binary"]
 fn live_tui_starts_the_tutorial_opens_the_inventory_and_closes_it() {
     let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
-    let transport = StdioTransport::spawn(engine.as_ref()).expect("engine starts");
+    let transport = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
     let root = game_root(engine.as_ref(), None);
     let keys = root.as_deref().map_or_else(KeyMap::default, KeyMap::load);
     let mut app = TuiApp::new(EngineModel::new(Box::new(transport)).with_keys(keys));

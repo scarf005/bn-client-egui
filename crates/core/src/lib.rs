@@ -6,6 +6,7 @@ pub mod model;
 pub mod protocol;
 pub mod replica;
 pub mod transport;
+pub mod watchdog;
 
 pub use engine_model::EngineModel;
 pub use model::{
