@@ -130,10 +130,12 @@ impl<M: GameModel> TuiApp<M> {
         // The engine's own cursor is the highlight; its navigation keys move it. The crafting
         // screen keeps its own list.
         if let Some(menu) = menu.as_ref().filter(|m| m.context != "CRAFTING") {
-            let at = menu
-                .entries()
+            let entries = menu.entries();
+            // A cursor on a tab header, or none, leaves the row marked selected as the one it is on.
+            let at = entries
                 .iter()
-                .position(|c| menu.focus.as_deref() == Some(c.id.as_str()));
+                .position(|c| menu.focus.as_deref() == Some(c.id.as_str()))
+                .or_else(|| entries.iter().position(|c| c.selected));
             self.selected = at.unwrap_or(self.selected);
         }
         menu
