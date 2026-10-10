@@ -4,7 +4,9 @@ pub mod display;
 pub mod editor;
 pub mod fonts;
 pub mod setup;
+pub mod sidebar;
 pub mod text;
+pub mod theme;
 pub mod tileset;
 pub mod tint;
 

@@ -1,0 +1,78 @@
+{
+ "pickup": {
+  "boundary_id": "b:30",
+  "readiness": {
+   "phase": "playing",
+   "game_ready": true,
+   "accepts_interaction_commands": true,
+   "accepts_registered_actions": true
+  },
+  "actions": [
+   {
+    "id": "CONFIRM",
+    "name": "Confirm Choice",
+    "keys": [
+     "RETURN"
+    ]
+   },
+   {
+    "id": "WIELD",
+    "name": "Wield",
+    "keys": [
+     "w"
+    ]
+   }
+  ],
+  "interaction": {
+   "schema_id": "s:pickup",
+   "kind": "inventory",
+   "context": "PICKUP",
+   "title": "Pick up",
+   "message": "PICK Wgt 0.2/45.0  Vol 0.30/0.00",
+   "allow_cancel": true,
+   "allow_set_count": true,
+   "choice_total": 2,
+   "choices": [
+    {
+     "id": "pickup:a",
+     "label": "lighter (17/25)",
+     "enabled": true,
+     "description": "Volume: 0.025 L  Weight: 0.01 kg\nThis is a disposable plastic lighter.",
+     "denial": "",
+     "selectable": true,
+     "selected": false,
+     "columns": [
+      {
+       "label": "Type",
+       "value": "lighter"
+      }
+     ],
+     "available_count": 1
+    },
+    {
+     "id": "pickup:b",
+     "label": "tin can",
+     "enabled": true,
+     "description": "A battered tin can.",
+     "denial": "",
+     "selectable": true,
+     "selected": true,
+     "columns": [
+      {
+       "label": "Type",
+       "value": "can_food"
+      }
+     ],
+     "available_count": 3,
+     "selected_count": 2
+    }
+   ],
+   "compat": {
+    "focus": {
+     "choice_id": "pickup:b"
+    },
+    "panes": []
+   }
+  }
+ }
+}

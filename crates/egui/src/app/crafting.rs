@@ -31,7 +31,7 @@ fn labelled(ui: &egui::Ui, response: &egui::Response, label: &str) {
 impl<M: GameModel> App<M> {
     /// Draws the menu; true when it took keyboard focus (on `entered`) this frame.
     pub(super) fn crafting(&mut self, ctx: &egui::Context, menu: &Menu, entered: bool) -> bool {
-        a11y::trap_tab(ctx, &self.menu_ids);
+        a11y::trap_tab(ctx, self.trapped_by_menu());
         let mut ids = Vec::new();
         let rows = recipes(menu);
         if self.crafting.engine_filter != menu.field.as_ref().map_or("", |f| &f.value) {
@@ -50,7 +50,9 @@ impl<M: GameModel> App<M> {
             .collect::<Vec<_>>();
         let mut chosen = None;
         let mut craft = false;
-        let mut cancel = ctx.input(|i| i.key_pressed(egui::Key::Escape)) && menu.can_cancel;
+        let mut cancel = self.palette.is_none()
+            && ctx.input(|i| i.key_pressed(egui::Key::Escape))
+            && menu.can_cancel;
         let mut selected = current.map(|c| c.id.clone());
 
         if !self.crafting.editing && !self.model.busy() {
@@ -136,6 +138,7 @@ impl<M: GameModel> App<M> {
                         .desired_width(f32::INFINITY);
                     let response = ui.add(edit);
                     labelled(ui, &response, hint);
+                    a11y::text_field(ui.ctx(), response.id);
                     ids.push(response.id);
                     editing |= response.has_focus();
                     if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {

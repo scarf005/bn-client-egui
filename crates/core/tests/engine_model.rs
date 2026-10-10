@@ -1397,6 +1397,44 @@ mod failures {
     }
 
     #[test]
+    fn heartbeats_keep_a_long_activity_from_counting_as_stalled() {
+        let (t, h) = session();
+        let (mut m, clock) = with_clock(t.on("bn.command.submit", walk_reply()));
+        assert!(m.step_toward(Pos { x: 30, y: 12 }));
+        m.poll();
+        // Ten minutes of activity, with a heartbeat every two seconds.
+        for _ in 0..300 {
+            clock.advance(Duration::from_secs(2));
+            h.push(json!({"jsonrpc":"2.0","method":"bn.progress","params":{"epoch":"e7f3"}}));
+            m.poll();
+            assert!(m.failure().is_none(), "alive engines are not stalled");
+        }
+        assert!(m.busy(), "the command is still running");
+        // Then the heartbeats stop.
+        clock.advance(Duration::from_secs(119));
+        m.poll();
+        assert!(m.failure().is_none());
+        clock.advance(Duration::from_secs(2));
+        m.poll();
+        assert_eq!(m.failure().unwrap().kind, FailureKind::Stalled);
+    }
+
+    #[test]
+    fn loading_notifications_also_count_as_signs_of_life() {
+        let (t, h) = session();
+        let (mut m, clock) = with_clock(t.on("bn.command.submit", walk_reply()));
+        assert!(m.step_toward(Pos { x: 30, y: 12 }));
+        m.poll();
+        for _ in 0..100 {
+            clock.advance(Duration::from_secs(60));
+            h.push(json!({"jsonrpc":"2.0","method":"bn.loading","params":{
+                "epoch":"e7f3","title":"Loading","entries":["a"],"index":0}}));
+            m.poll();
+            assert!(m.failure().is_none());
+        }
+    }
+
+    #[test]
     fn an_idle_engine_may_stay_quiet() {
         let (t, _h) = session();
         let (mut m, clock) = with_clock(t);
@@ -1458,4 +1496,109 @@ fn a_square_in_sight_below_open_air_is_drawn_with_its_depth_and_only_when_in_sig
     assert!(at(9, 5).layers.is_empty());
     assert_eq!(at(9, 8).depth, 0);
     assert_eq!(at(3, 4).depth, 0);
+}
+
+#[test]
+fn returning_to_the_main_menu_clears_the_previous_games_log_and_command_lines() {
+    let (t, h) = session();
+    let mut m = connected(t);
+    h.push(fixture("events_41_walk"));
+    h.push(logged(42, "7", "You open the door.", 1));
+    m.poll();
+    m.say("Something blocks the way.".into());
+    assert_eq!(m.native_log().len(), 1);
+    let mut menu = crafting("favorites");
+    menu["interaction"]["context"] = json!("MAIN_MENU");
+    h.push(change(43, json!({"interaction": menu})));
+    m.poll();
+    assert!(
+        m.native_log().is_empty(),
+        "the game's own lines belong to that game"
+    );
+    assert!(m.messages().is_empty(), "so do the client's command lines");
+    h.push(logged(44, "8", "Welcome back.", 1));
+    m.poll();
+    assert_eq!(m.native_log().len(), 1, "a later game logs again");
+}
+
+#[test]
+fn pickup_rows_carry_the_native_highlight_marks_and_counts() {
+    let text = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/pickup.json"
+    ))
+    .unwrap();
+    let boundary = serde_json::from_str::<Value>(&text).unwrap()["pickup"].clone();
+    let (t, h) = session();
+    let mut m = connected(t);
+    h.push(change(41, json!({"interaction": boundary})));
+    m.poll();
+    let menu = m.menu().unwrap();
+    assert_eq!(menu.context, "PICKUP");
+    let rows = menu
+        .choices
+        .iter()
+        .map(|c| {
+            (
+                c.highlighted,
+                c.selected,
+                c.selected_count,
+                c.available_count,
+            )
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        rows,
+        [
+            (false, false, None, Some(1)),
+            (true, true, Some(2), Some(3))
+        ]
+    );
+}
+
+#[test]
+fn a_client_line_repeating_the_newest_one_is_not_added_again() {
+    let (t, _h) = session();
+    let mut m = connected(t);
+    m.say("You see a wall at (4, 5).".into());
+    m.say("You see a wall at (4, 5).".into());
+    m.say("You see a door at (5, 5).".into());
+    m.say("You see a wall at (4, 5).".into());
+    assert_eq!(m.messages().len(), 3, "{:?}", m.messages());
+}
+
+#[test]
+fn query_popup_rows_do_not_carry_the_action_id_as_a_description() {
+    let mut menu = crafting("favorites");
+    menu["actions"] = json!([{"id": "YES", "name": "Yes", "keys": ["y"]}, {"id": "NO", "name": "No", "keys": ["n"]}]);
+    let rows = ["Yes", "No"].map(|label| {
+        let id = label.to_uppercase();
+        json!({"id": format!("option:{id}"), "label": label, "description": id, "denial": "",
+            "enabled": true, "selectable": true, "selected": false, "columns": []})
+    });
+    menu["interaction"]["context"] = json!("YESNO");
+    menu["interaction"]["choices"] = json!(rows);
+    let (t, h) = session();
+    let mut m = connected(t);
+    h.push(change(41, json!({"interaction": menu})));
+    m.poll();
+    let menu = m.menu().unwrap();
+    assert!(
+        menu.choices.iter().all(|c| c.description.is_empty()),
+        "{:?}",
+        menu.choices
+    );
+    // Text that is not an action id stays.
+    let mut real = crafting("weapon");
+    real["actions"] = json!([{"id": "YES", "name": "Yes"}]);
+    h.push(change(42, json!({"interaction": real})));
+    m.poll();
+    let kept = m
+        .menu()
+        .unwrap()
+        .choices
+        .into_iter()
+        .find(|c| c.id == "recipe:aa")
+        .unwrap();
+    assert!(kept.description.starts_with("Time to complete"));
 }

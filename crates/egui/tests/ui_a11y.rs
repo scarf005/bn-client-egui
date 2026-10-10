@@ -1,7 +1,7 @@
 //! What a screen reader gets from the AccessKit tree: names, roles, selection and focus.
 mod common;
 use bn_client_egui::transport::ScriptHandle;
-use bn_client_egui::{App, EngineModel};
+use bn_client_egui::{App, EngineModel, GameModel};
 use common::{fixture, session};
 use eframe::egui::{self, accesskit};
 use egui_kittest::Harness;
@@ -12,6 +12,7 @@ type H<'a> = Harness<'a, App<EngineModel>>;
 
 fn harness<'a>() -> (H<'a>, ScriptHandle) {
     let (t, h) = session();
+    let t = t.on("bn.command.submit", vec![fixture("submit_result")]);
     let model = EngineModel::new(Box::new(t));
     let harness = Harness::builder()
         .with_size(egui::vec2(1100.0, 800.0))
@@ -128,11 +129,19 @@ fn tabs_are_selectable_tabs_not_toggle_buttons() {
 }
 
 #[test]
-fn actions_are_plain_buttons_not_toggle_buttons() {
+fn palette_actions_are_menu_items_not_toggle_buttons() {
     let (mut h, _script) = harness();
     h.run_steps(3);
+    h.event(egui::Event::Key {
+        key: egui::Key::P,
+        physical_key: None,
+        pressed: true,
+        repeat: false,
+        modifiers: egui::Modifiers::COMMAND,
+    });
+    h.run_steps(3);
     let action = h.get_by_label("Move right (RIGHT, l)");
-    assert_eq!(action.accesskit_node().role(), accesskit::Role::Button);
+    assert_eq!(action.accesskit_node().role(), accesskit::Role::MenuItem);
     assert_eq!(action.accesskit_node().toggled(), None);
 }
 
@@ -280,4 +289,132 @@ fn messages_arriving_in_one_frame_are_announced_together_and_only_once() {
     let live = announced(&h);
     assert!(live.iter().any(|v| v == "Crash!"), "{live:?}");
     assert!(!live.iter().any(|v| v.contains("door")), "{live:?}");
+}
+
+#[test]
+fn a_live_announcement_is_not_drawn_as_a_second_copy_of_the_message() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    script.push(fixture("events_41_walk"));
+    log_line(&script, 42, "7", "You open the door.", 1);
+    h.run_steps(3);
+    let with_text = || {
+        h.root()
+            .children_recursive()
+            .filter(|n| n.accesskit_node().value().as_deref() == Some("You open the door."))
+            .map(|n| {
+                let node = n.accesskit_node();
+                (node.id(), (node.live(), node.raw_bounds().is_some()))
+            })
+            .collect::<std::collections::HashMap<_, _>>()
+            .into_values()
+            .collect::<Vec<_>>()
+    };
+    let nodes = with_text();
+    let live = nodes.iter().filter(|(l, _)| *l == accesskit::Live::Polite);
+    assert!(
+        live.clone().count() == 1 && live.clone().all(|(_, drawn)| !drawn),
+        "the announcement exists for screen readers and paints nothing: {nodes:?}"
+    );
+}
+
+#[test]
+fn stages_reached_within_one_frame_are_announced_together() {
+    let (mut h, script) = harness();
+    open_menu(&mut h, &script);
+    h.get_by_label("combat knife").click();
+    h.run_steps(2);
+    for stage in ["executing", "completed"] {
+        script.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{
+            "epoch":"e7f3","command_id":"c:5","stage":stage}}));
+    }
+    h.run_steps(1);
+    let live = announced(&h);
+    assert!(
+        live.iter().any(|v| v == "combat knife: executing, done"),
+        "{live:?}"
+    );
+}
+
+fn open_palette(h: &mut H) {
+    h.run_steps(3);
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::P);
+    h.run_steps(3);
+}
+
+#[test]
+fn the_action_palette_is_a_dialog_with_a_focused_search_and_menu_item_results() {
+    let (mut h, _script) = harness();
+    open_palette(&mut h);
+    let dialog = h
+        .get_all_by_label("Actions")
+        .find(|n| n.accesskit_node().role() == accesskit::Role::Dialog);
+    assert!(dialog.is_some(), "Actions dialog");
+    assert_eq!(focused_label(&h).as_deref(), Some("Search actions"));
+    let result = h.get_by_label("Move right (RIGHT, l)");
+    assert_eq!(result.accesskit_node().role(), accesskit::Role::MenuItem);
+}
+
+#[test]
+fn tab_walks_the_palette_results_and_wraps_instead_of_leaving() {
+    let (mut h, _script) = harness();
+    open_palette(&mut h);
+    h.key_press(egui::Key::Tab);
+    h.run_steps(3);
+    let first = focused_label(&h);
+    assert_ne!(first.as_deref(), Some("Search actions"));
+    h.key_press_modifiers(egui::Modifiers::SHIFT, egui::Key::Tab);
+    h.run_steps(3);
+    assert_eq!(focused_label(&h).as_deref(), Some("Search actions"));
+    h.key_press_modifiers(egui::Modifiers::SHIFT, egui::Key::Tab);
+    h.run_steps(3);
+    let last = focused_label(&h).expect("focus stays in the palette");
+    assert!(
+        h.get_all_by_label(&last).count() > 0 && last != "Search actions",
+        "{last}"
+    );
+}
+
+#[test]
+fn closing_the_palette_returns_focus_to_the_map() {
+    let (mut h, _script) = harness();
+    open_palette(&mut h);
+    h.key_press(egui::Key::Escape);
+    h.run_steps(4);
+    assert_eq!(focused_label(&h).as_deref(), Some("Map"));
+}
+
+#[test]
+fn escape_closes_only_the_palette_opened_over_a_menu() {
+    let (mut h, script) = harness();
+    open_menu(&mut h, &script);
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::P);
+    h.run_steps(3);
+    h.key_press(egui::Key::Escape);
+    h.run_steps(4);
+    assert!(h.state().model.menu().is_some());
+    assert!(
+        script
+            .sent()
+            .iter()
+            .all(|m| m["method"] != "bn.command.submit"),
+        "no cancel was submitted"
+    );
+}
+
+#[test]
+fn tab_in_a_palette_opened_over_a_menu_stays_in_the_palette() {
+    let (mut h, script) = harness();
+    open_menu(&mut h, &script);
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::P);
+    h.run_steps(3);
+    for _ in 0..3 {
+        h.key_press(egui::Key::Tab);
+        h.run_steps(3);
+        let at = focused_label(&h).expect("something is focused");
+        assert!(
+            at == "Search actions" || at.contains('(') || at.starts_with("Move"),
+            "focus left the palette: {at}"
+        );
+    }
 }

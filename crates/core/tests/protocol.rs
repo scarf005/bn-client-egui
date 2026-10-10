@@ -147,11 +147,26 @@ fn by_def(def: &str, v: &Value) -> Result<Value, String> {
         "resync_notification" => round_trip::<Resync>(v),
         "application_error" => round_trip::<ApplicationError>(v),
         "pos" => round_trip::<WorldPos>(v),
+        "avatar" => round_trip::<Avatar>(v),
         "loading_notification" => round_trip::<LoadingNotice>(v),
         "choice" => round_trip::<Choice>(v),
         // The world values are typed by the replica tests; here they only have to be valid JSON.
-        "avatar" | "entity" | "field" | "look" | "cell" => Ok(v.clone()),
+        "entity" | "field" | "look" | "cell" => Ok(v.clone()),
         other => Err(format!("no type for {other}")),
+    }
+}
+
+/// The schema makes `changes` optional, so an event's empty `{}` and an omitted one are the same message.
+fn without_empty_changes(v: &Value) -> Value {
+    match v {
+        Value::Object(m) => Value::Object(
+            m.iter()
+                .filter(|(k, v)| !(*k == "changes" && v.as_object().is_some_and(|c| c.is_empty())))
+                .map(|(k, v)| (k.clone(), without_empty_changes(v)))
+                .collect(),
+        ),
+        Value::Array(a) => Value::Array(a.iter().map(without_empty_changes).collect()),
+        other => other.clone(),
     }
 }
 
@@ -163,7 +178,9 @@ fn contract_examples_round_trip_exactly() {
     for ex in valid {
         let (name, def, value) = (&ex["name"], ex["def"].as_str().unwrap(), &ex["value"]);
         // Requests that this client never sends or parses still have to be well typed.
-        assert_eq!(by_def(def, value).as_ref(), Ok(value), "{name} ({def})");
+        let want = without_empty_changes(value);
+        let got = by_def(def, value).map(|v| without_empty_changes(&v));
+        assert_eq!(got.as_ref(), Ok(&want), "{name} ({def})");
     }
 }
 

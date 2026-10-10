@@ -8,6 +8,7 @@ pub mod markup;
 pub mod model;
 pub mod protocol;
 pub mod replica;
+pub mod sidebar;
 pub mod transport;
 pub mod watchdog;
 
