@@ -16,6 +16,6 @@ pub use clock::Clock;
 pub use engine_model::EngineModel;
 pub use model::{
     ActionEntry, Cell, CommandStatus, Effect, Failure, FailureKind, FakeModel, GameModel, Layer,
-    Loading, LogLine, Menu, MenuChoice, MenuPane, Overmap, OvermapCell, OvermapTile, Pos, Rgb,
-    Shape, action_hint,
+    Loading, LogLine, Menu, MenuChoice, MenuPane, Mutation, Overmap, OvermapCell, OvermapTile, Pos,
+    Rgb, Shape, action_hint,
 };

@@ -168,13 +168,29 @@ impl<M: GameModel> App<M> {
                                 } else {
                                     self.rich(ui, &choice.label)
                                 };
-                                let button = self.control(
-                                    ui,
-                                    text,
-                                    &choice.id,
-                                    choice.enabled,
-                                    choice.selected,
-                                );
+                                // Native list menus highlight the whole row; the title screen's entries,
+                                // a popup's dismiss button and rows with values or a denial beside them
+                                // keep their own width.
+                                let whole_row = menu.context != "MAIN_MENU"
+                                    && choice.id != "acknowledge"
+                                    && choice.columns.is_empty()
+                                    && choice.denial.is_empty();
+                                let layout = if whole_row {
+                                    egui::Layout::top_down_justified(egui::Align::Min)
+                                } else {
+                                    *ui.layout()
+                                };
+                                let button = ui
+                                    .with_layout(layout, |ui| {
+                                        self.control(
+                                            ui,
+                                            text,
+                                            &choice.id,
+                                            choice.enabled,
+                                            choice.selected,
+                                        )
+                                    })
+                                    .inner;
                                 ids.extend(button.enabled().then_some(button.id));
                                 if choice.id.starts_with("action:") {
                                     action_ids.push(button.id);
@@ -231,7 +247,10 @@ impl<M: GameModel> App<M> {
                             self.menu_message(ui, &menu);
                         }
                     });
-                if self.model.actions().iter().any(|a| a.id == "FILTER") && menu.field.is_none() {
+                if self.model.actions().iter().any(|a| a.id == "FILTER")
+                    && menu.field.is_none()
+                    && menu.total > FILTER_MIN_ROWS
+                {
                     let filter = ui.add_enabled(!self.model.busy(), egui::Button::new("Filter"));
                     ids.extend(filter.enabled().then_some(filter.id));
                     filter_clicked = filter.clicked();
@@ -381,6 +400,9 @@ fn dismiss_text(engine_label: &str) -> &str {
         "OK"
     }
 }
+
+/// A list this short is read at a glance; the engine's filter is offered from here on.
+const FILTER_MIN_ROWS: usize = 10;
 
 #[cfg(test)]
 mod tests {

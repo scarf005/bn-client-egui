@@ -18,10 +18,12 @@ const SETTLE: std::time::Duration = std::time::Duration::from_millis(150);
 
 /// The sidebar's initial share of the window width, and its limits in points; independent of its content.
 const SIDEBAR_SHARE: f32 = 0.28;
-/// 360 pt holds the longest status line (stamina) on one line; a small window gives up at most 40%.
-const SIDEBAR_WIDTH: (f32, f32) = (360.0, 520.0);
+/// 430 pt holds the longest status line (R LEG ... Stm 10000/10000) on one line; a small window gives up at most 40%.
+const SIDEBAR_WIDTH: (f32, f32) = (430.0, 600.0);
 /// The most of the window width the sidebar's minimum may take.
 const SIDEBAR_MIN_SHARE: f32 = 0.4;
+/// The most of the window width the sidebar may be dragged to; a saved wider size shrinks to it.
+const SIDEBAR_MAX_SHARE: f32 = 0.4;
 
 /// After a popup closes, Space is held back until it has been quiet this long: the player is still dismissing.
 const POPUP_SPACE_HOLD: std::time::Duration = std::time::Duration::from_millis(500);
@@ -307,6 +309,7 @@ impl<M: GameModel> App<M> {
         }
         self.model.poll();
         self.display.follow_engine(self.model.display_default());
+        self.display.follow_mods(self.model.mod_tilesets());
         self.model.set_tiles(self.display.tiles());
         a11y::name_window(ui.ctx(), "Cataclysm: Bright Nights client");
         self.pending_since = self
@@ -375,9 +378,11 @@ impl<M: GameModel> App<M> {
         }
         let room = ui.available_width();
         let narrowest = SIDEBAR_WIDTH.0.min(room * SIDEBAR_MIN_SHARE);
+        // Never narrower than its minimum, and never more than the share that leaves the map most of the window.
+        let widest = (room * SIDEBAR_MAX_SHARE).clamp(narrowest, SIDEBAR_WIDTH.1);
         egui::Panel::right("sidebar")
-            .default_size((room * SIDEBAR_SHARE).clamp(narrowest, SIDEBAR_WIDTH.1))
-            .size_range(narrowest..=SIDEBAR_WIDTH.1)
+            .default_size((room * SIDEBAR_SHARE).clamp(narrowest, widest))
+            .size_range(narrowest..=widest)
             .show(ui, |ui| {
                 profiling::scope!("sidebar");
                 ui.set_min_width(ui.available_width());

@@ -850,7 +850,12 @@ fn tiled_session() -> EngineModel {
     subscribe["result"]["avatar"]["overlays"] = json!([{
         "kind": "overlay", "id": "worn_jacket", "glyph": "", "color": "",
         "tile": "overlay_female_worn_jacket", "looks_like": ["overlay_worn_jacket"]
+    }, {
+        "kind": "overlay", "id": "mutation_hair_long", "glyph": "", "color": "",
+        "tile": "overlay_female_mutation_hair_long",
+        "mutation": {"id": "hair_long", "types": ["hair_style"], "flags": []}
     }]);
+    subscribe["result"]["avatar"]["traits"] = json!({"hair_color": ["hair_black"]});
     subscribe["result"]["entities"][0]["look"]
         .as_object_mut()
         .unwrap()
@@ -867,7 +872,7 @@ fn tiled_session() -> EngineModel {
         json!({"at": {"dim": "", "x": 9, "y": 8, "z": 0}, "known": "visible", "light": 1,
             "terrain": {"kind": "terrain", "id": "t_wall", "glyph": "|", "color": "light_gray",
                 "looks_like": ["t_wall_base"], "subtile": "edge", "rotation": 1},
-            "reviving": true,
+            "reviving": true, "cargo": true,
             "vehicle": {"kind": "vehicle_part", "id": "door", "glyph": "+", "color": "white",
                 "tile": "vp_door", "tint": {"fg": "#445566"}},
             "items": [
@@ -910,7 +915,8 @@ fn a_cell_lists_its_sprites_bottom_first_with_the_engines_tile_selection() {
         .collect::<Vec<_>>();
     // The item is named by its sprite id, the corpse of the monster, not the item type.
     // A pile of two is highlighted over its displayed item, with a sprite that has no glyph.
-    // The paint of a vehicle part reaches its foreground sprite only; a corpse that can rise is marked last.
+    // The paint of a vehicle part reaches its foreground sprite only; a loaded cargo part is highlighted over it
+    // and a corpse that can rise is marked last.
     assert_eq!(
         layers,
         [
@@ -918,6 +924,7 @@ fn a_cell_lists_its_sprites_bottom_first_with_the_engines_tile_selection() {
             "corpse_mon_zombie",
             "highlight_item",
             "vp_door",
+            "highlight_item",
             "zombie_revival_indicator"
         ]
     );
@@ -927,6 +934,7 @@ fn a_cell_lists_its_sprites_bottom_first_with_the_engines_tile_selection() {
     );
     assert_eq!(cell.layers[3].tint_bg, None);
     assert_eq!(cell.layers[0].tint_fg, None);
+    assert_eq!(cell.layers[5].glyph, '\0');
     assert_eq!(cell.layers[4].glyph, '\0');
     assert_eq!(cell.layers[2].glyph, '\0');
     let wall = &cell.layers[0];
@@ -993,9 +1001,18 @@ fn creatures_and_the_avatar_draw_over_the_terrain_with_their_overlays() {
             "t_dirt",
             "tin_can",
             "player_female",
-            "overlay_female_worn_jacket"
+            "overlay_female_worn_jacket",
+            "overlay_female_mutation_hair_long"
         ]
     );
+    // A mutation overlay carries what the tileset picks its paint by; a worn item does not.
+    let hair = me.layers[4].mutation.as_ref().unwrap();
+    assert_eq!(
+        (hair.id.as_str(), hair.types.as_slice()),
+        ("hair_long", ["hair_style".to_string()].as_slice())
+    );
+    assert_eq!(hair.traits["hair_color"], ["hair_black"]);
+    assert!(me.layers[3].mutation.is_none());
     assert!(!me.layers[2].mirrored && me.layers[2].creature);
     assert_eq!(me.layers[2].glyph, '@');
     assert_eq!(me.layers[3].glyph, '\0');

@@ -920,6 +920,24 @@ fn a_popups_dismiss_button_tells_screen_readers_which_keys_close_it() {
     assert_eq!(hint, "Space or Enter closes this popup");
 }
 
+#[test]
+fn list_menu_rows_fill_the_window_like_the_native_highlight_bar() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    script.push(show(
+        41,
+        json!([]),
+        choices_menu(vec![choice("a", "Alpha"), choice("b", "Longer beta row")]),
+    ));
+    h.run_steps(4);
+    let (alpha, beta) = (
+        h.get_by_label("Alpha").rect(),
+        h.get_by_label("Longer beta row").rect(),
+    );
+    assert_eq!(alpha.width(), beta.width(), "{alpha:?} {beta:?}");
+    assert!(alpha.width() >= 500.0, "{alpha:?}");
+}
+
 fn finished_command(h: &mut H, script: &ScriptHandle) {
     script.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{
         "epoch":"e7f3","command_id":"c:5","stage":"completed"}}));
@@ -1004,4 +1022,24 @@ fn an_action_row_of_a_tabbed_screen_shows_its_key_and_alt_down_then_enter_sends_
         [json!({"kind":"choose","choice_id":"action:NEXT_TAB"})],
         "Enter on the focused row sends the action, not CONFIRM"
     );
+||||||| ea3c791
+
+fn list_with(rows: usize) -> Value {
+    let choices = (0..rows)
+        .map(|i| choice(&format!("r:{i}"), &format!("row {i}")))
+        .collect::<Vec<_>>();
+    json!({"schema_id":"s:list","kind":"choices","context":"UILIST","title":"","message":"Pick",
+        "allow_cancel":true,"choices":choices,"choice_total":rows,"allow_set_count":false})
+}
+
+#[test]
+fn the_filter_button_is_for_long_lists_not_for_a_two_row_question() {
+    let filter = json!([{"id":"FILTER","name":"Filter","keys":["/"]}]);
+    for (rows, shown) in [(2, false), (9, false), (30, true)] {
+        let (mut h, script) = harness();
+        h.run_steps(3);
+        script.push(show(41, filter.clone(), list_with(rows)));
+        h.run_steps(4);
+        assert_eq!(h.query_by_label("Filter").is_some(), shown, "{rows} rows");
+    }
 }
