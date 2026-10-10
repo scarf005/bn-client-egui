@@ -4,8 +4,8 @@ use crate::clock::Clock;
 use crate::colors::ColorMap;
 use crate::keys::KeyMap;
 use crate::model::{
-    ActionEntry, Cell, CommandStatus, GameModel, Layer, Loading, LogLine, Menu, MenuChoice, Pos,
-    Rgb,
+    ActionEntry, Cell, CommandStatus, GameModel, Layer, Loading, LogLine, Menu, MenuChoice,
+    MenuField, Pos, Rgb,
 };
 use crate::protocol::{
     self, Cell as WorldCell, Expect, Incoming, Known, LoadingNotice, Look, Operation, Snapshot,
@@ -907,7 +907,19 @@ impl GameModel for EngineModel {
         let title = [&i.title, &i.context, &i.kind]
             .into_iter()
             .find(|s| !s.is_empty());
+        let text = |k: &str| {
+            let v = i.field.as_ref()?.get(k)?.as_str();
+            v.map(String::from)
+        };
+        let field = text("id").map(|id| MenuField {
+            id,
+            label: text("label").unwrap_or_default(),
+            value: text("value").unwrap_or_default(),
+        });
         Some(Menu {
+            context: i.context.clone(),
+            field,
+            can_set_count: i.allow_set_count,
             title: title.cloned().unwrap_or_default(),
             message: i.message.clone(),
             choices: i
@@ -920,6 +932,12 @@ impl GameModel for EngineModel {
                     denial: c.denial.clone(),
                     selected: c.selected,
                     group: c.pane_id.clone(),
+                    description: c.description.clone(),
+                    columns: c
+                        .columns
+                        .iter()
+                        .map(|c| (c.label.clone(), c.value.clone()))
+                        .collect(),
                 })
                 .collect(),
             can_cancel: i.allow_cancel,
@@ -940,6 +958,31 @@ impl GameModel for EngineModel {
     fn cancel_menu(&mut self) {
         if self.menu().is_some_and(|m| m.can_cancel) && !self.busy {
             self.submit(Operation::Cancel);
+        }
+    }
+
+    fn fill(&mut self, field_id: &str, value: &str, submit: bool) {
+        let has_field = self
+            .menu()
+            .is_some_and(|m| m.field.is_some_and(|f| f.id == field_id));
+        if has_field && !self.busy {
+            self.submit(Operation::Fill {
+                field_id: field_id.into(),
+                value: value.into(),
+                submit,
+            });
+        }
+    }
+
+    fn set_count(&mut self, choice_id: &str, count: u64) {
+        let allowed = self.menu().is_some_and(|m| {
+            m.can_set_count && m.choices.iter().any(|c| c.id == choice_id && c.enabled)
+        });
+        if allowed && !self.busy {
+            self.submit(Operation::SetCount {
+                choice_id: choice_id.into(),
+                count,
+            });
         }
     }
 }

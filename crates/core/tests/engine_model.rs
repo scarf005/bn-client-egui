@@ -984,3 +984,61 @@ fn a_look_with_a_display_name_is_described_by_it_instead_of_its_id() {
     m.poll();
     assert_eq!(m.cell(Pos { x: 22, y: 12 }).desc, "floor");
 }
+
+fn crafting(name: &str) -> Value {
+    let text = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/crafting.json"
+    ))
+    .unwrap();
+    serde_json::from_str::<Value>(&text).unwrap()[name].clone()
+}
+
+#[test]
+fn crafting_menu_exposes_context_field_details_and_sends_fill_and_set_count() {
+    let (t, h) = session();
+    let mut m = connected(t.on("bn.command.submit", walk_reply()));
+    h.push(change(41, json!({"interaction": crafting("weapon")})));
+    m.poll();
+    let menu = m.menu().unwrap();
+    assert_eq!(menu.context, "CRAFTING");
+    assert!(menu.can_set_count);
+    let field = menu.field.unwrap();
+    assert_eq!((field.id.as_str(), field.value.as_str()), ("filter", ""));
+    let club = menu.choices.iter().find(|c| c.id == "recipe:aa").unwrap();
+    assert!(club.description.starts_with("Time to complete"));
+    assert_eq!(
+        club.columns,
+        [("Skill".to_string(), "fabrication 1".into())]
+    );
+
+    m.fill("nope", "club", true);
+    assert!(submits(&h).is_empty(), "unknown fields are never submitted");
+    m.set_count("recipe:bb", 2);
+    assert!(submits(&h).is_empty(), "disabled recipes take no count");
+    m.fill("filter", "club", true);
+    assert_eq!(
+        submits(&h)[0]["params"]["operation"],
+        json!({"kind":"fill","field_id":"filter","value":"club","submit":true})
+    );
+}
+
+#[test]
+fn set_count_submits_for_an_enabled_recipe_and_batch_mode_has_no_field() {
+    let (t, h) = session();
+    let mut m = connected(t.on("bn.command.submit", walk_reply()));
+    h.push(change(41, json!({"interaction": crafting("weapon")})));
+    m.poll();
+    m.set_count("recipe:aa", 3);
+    assert_eq!(
+        submits(&h)[0]["params"]["operation"],
+        json!({"kind":"set_count","choice_id":"recipe:aa","count":3})
+    );
+    let (t, h) = session();
+    let mut m = connected(t.on("bn.command.submit", walk_reply()));
+    h.push(change(41, json!({"interaction": crafting("batch")})));
+    m.poll();
+    assert!(m.menu().unwrap().field.is_none());
+    m.fill("filter", "x", true);
+    assert!(submits(&h).is_empty());
+}
