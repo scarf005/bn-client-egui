@@ -937,18 +937,20 @@ impl<M: GameModel> App<M> {
         self.cursor = to_abs(cursor);
         // A dialog on top owns the pointer; the tooltip would hang over it.
         let tip = self.model.menu().is_none() && self.palette.is_none();
+        // The tooltip is about the square under the pointer; keyboard moves of the cursor leave it alone.
+        let under = response.hover_pos().map_or(cursor, cell_at);
         response.clone().on_hover_ui_at_pointer(|ui| {
             if !tip {
                 return;
             }
             // The engine's own mouse-view text when it has answered for this square.
-            if let Some(lines) = self.model.hover_text(cursor) {
+            if let Some(lines) = self.model.hover_text(under) {
                 for line in lines {
                     // A tooltip at the pointer gets almost no width to wrap in; one line never wraps.
                     ui.add(egui::Label::new(line).wrap_mode(egui::TextWrapMode::Extend));
                 }
             } else {
-                let desc = self.model.cell(cursor).desc;
+                let desc = self.model.cell(under).desc;
                 if desc != "unknown" {
                     ui.add(egui::Label::new(desc).wrap_mode(egui::TextWrapMode::Extend));
                 }
