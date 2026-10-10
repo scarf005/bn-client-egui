@@ -54,6 +54,17 @@ pub struct Look {
     /// Items on the square when there are several, on the displayed item.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stack: Option<u32>,
+    /// Paint of a vehicle part, as `#rrggbb`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tint: Option<Tint>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Tint {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bg: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fg: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -87,6 +98,9 @@ pub struct Cell {
     pub furniture: Option<Look>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub fields: Vec<FieldLook>,
+    /// A corpse here can rise.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub reviving: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub traps: Vec<Look>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

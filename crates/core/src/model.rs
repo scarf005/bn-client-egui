@@ -30,6 +30,9 @@ pub struct Layer {
     pub creature: bool,
     /// Picks between the weighted variants of a sprite, like the game's per-tile seed.
     pub seed: u32,
+    /// Paint the tileset blends into the background and the foreground sprite.
+    pub tint_bg: Option<Rgb>,
+    pub tint_fg: Option<Rgb>,
     /// What stands in for the sprite when the tileset has none; NUL for an overlay, which then draws nothing.
     pub glyph: char,
     pub color: Rgb,
@@ -49,6 +52,8 @@ pub struct Cell {
     pub remembered: bool,
     /// The game's light level of a square in sight: 0 dark, 1 low, 2 bright only, 3 lit, 4 bright.
     pub light: Option<u8>,
+    /// How many levels down the layers lie, seen through open air; 0 on the avatar's own level.
+    pub depth: u8,
     /// The game's per-square seed for weighted sprite variants, also for squares nothing is known about.
     pub square: u32,
 }

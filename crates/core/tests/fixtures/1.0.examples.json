@@ -491,8 +491,12 @@
                 "vp_frame"
               ],
               "subtile": "open",
-              "rotation": 3
-            }
+              "rotation": 3,
+              "tint": {
+                "fg": "#445566"
+              }
+            },
+            "reviving": true
           },
           {
             "at": {
@@ -2101,6 +2105,19 @@
         "glyph": "*",
         "color": "light_gray",
         "stack": 1
+      }
+    },
+    {
+      "name": "vehicle tint that is not a hex color",
+      "def": "look",
+      "value": {
+        "kind": "vehicle_part",
+        "id": "door",
+        "glyph": "+",
+        "color": "white",
+        "tint": {
+          "fg": "gray"
+        }
       }
     }
   ]

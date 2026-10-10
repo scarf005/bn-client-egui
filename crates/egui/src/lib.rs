@@ -6,6 +6,7 @@ pub mod fonts;
 pub mod setup;
 pub mod text;
 pub mod tileset;
+pub mod tint;
 
 pub use app::App;
 pub use bn_client_core::*;

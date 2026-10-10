@@ -861,10 +861,17 @@ fn tiled_session() -> EngineModel {
         json!({"at": {"dim": "", "x": 9, "y": 8, "z": 0}, "known": "visible", "light": 1,
             "terrain": {"kind": "terrain", "id": "t_wall", "glyph": "|", "color": "light_gray",
                 "looks_like": ["t_wall_base"], "subtile": "edge", "rotation": 1},
+            "reviving": true,
+            "vehicle": {"kind": "vehicle_part", "id": "door", "glyph": "+", "color": "white",
+                "tile": "vp_door", "tint": {"fg": "#445566"}},
             "items": [
                 {"kind": "item", "id": "corpse", "glyph": "%", "color": "red", "tile": "corpse_mon_zombie",
                  "looks_like": ["corpse"], "stack": 2}
             ]}),
+        json!({"at": {"dim": "", "x": 9, "y": 6, "z": -1}, "known": "visible", "light": 3,
+            "terrain": {"kind": "terrain", "id": "t_dirt", "glyph": ".", "color": "brown"}}),
+        json!({"at": {"dim": "", "x": 9, "y": 5, "z": -1}, "known": "remembered",
+            "memory": {"terrain": {"kind": "terrain", "id": "t_grass", "glyph": "\"", "color": "green"}}}),
         json!({"at": {"dim": "", "x": 9, "y": 7, "z": 0}, "known": "remembered",
             "memory": {"terrain": {"kind": "terrain", "id": "t_grass", "glyph": "\"", "color": "green",
                 "subtile": "center", "rotation": 0},
@@ -894,7 +901,24 @@ fn a_cell_lists_its_sprites_bottom_first_with_the_engines_tile_selection() {
         .collect::<Vec<_>>();
     // The item is named by its sprite id, the corpse of the monster, not the item type.
     // A pile of two is highlighted over its displayed item, with a sprite that has no glyph.
-    assert_eq!(layers, ["t_wall", "corpse_mon_zombie", "highlight_item"]);
+    // The paint of a vehicle part reaches its foreground sprite only; a corpse that can rise is marked last.
+    assert_eq!(
+        layers,
+        [
+            "t_wall",
+            "corpse_mon_zombie",
+            "highlight_item",
+            "vp_door",
+            "zombie_revival_indicator"
+        ]
+    );
+    assert_eq!(
+        cell.layers[3].tint_fg,
+        Some(bn_client_core::Rgb(0x44, 0x55, 0x66))
+    );
+    assert_eq!(cell.layers[3].tint_bg, None);
+    assert_eq!(cell.layers[0].tint_fg, None);
+    assert_eq!(cell.layers[4].glyph, '\0');
     assert_eq!(cell.layers[2].glyph, '\0');
     let wall = &cell.layers[0];
     assert_eq!((wall.subtile.as_deref(), wall.rotation), (Some("edge"), 1));
@@ -1410,4 +1434,28 @@ mod failures {
         assert!(!m.restart());
         assert!(m.failure().is_some());
     }
+}
+
+#[test]
+fn a_square_in_sight_below_open_air_is_drawn_with_its_depth_and_only_when_in_sight() {
+    let m = tiled_session();
+    let origin = m.origin();
+    let at = |x: i32, y: i32| {
+        m.cell(Pos {
+            x: x - origin.x,
+            y: y - origin.y,
+        })
+    };
+    // Nothing is published on the avatar's level at (9, 6), but the level below is in sight there.
+    let open = at(9, 6);
+    let layers = open
+        .layers
+        .iter()
+        .map(|l| l.id.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!((layers, open.depth), (vec!["t_dirt"], 1));
+    // A level below that is only remembered stays hidden, and the avatar's own level has no depth.
+    assert!(at(9, 5).layers.is_empty());
+    assert_eq!(at(9, 8).depth, 0);
+    assert_eq!(at(3, 4).depth, 0);
 }
