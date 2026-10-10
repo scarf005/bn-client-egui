@@ -59,7 +59,21 @@ pub struct Look {
     /// Paint of a vehicle part, as `#rrggbb`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tint: Option<Tint>,
+    /// Set on the overlay of a mutation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mutation: Option<LookMutation>,
 }
+
+/// What a tileset's `tint_pairs` are keyed by to tint the sprite of a mutation.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LookMutation {
+    pub id: String,
+    pub types: Vec<String>,
+    pub flags: Vec<String>,
+}
+
+/// The ids of a character's mutations by mutation type.
+pub type Traits = std::collections::BTreeMap<String, Vec<String>>;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Tint {
@@ -103,6 +117,9 @@ pub struct Cell {
     /// A corpse here can rise.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub reviving: bool,
+    /// A cargo part of a vehicle here holds items.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub cargo: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub traps: Vec<Look>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -163,6 +180,9 @@ pub struct Entity {
     /// Sprites drawn over a character, bottom first.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub overlays: Vec<Look>,
+    /// The ids of its mutations by mutation type, which tint the mutation overlays.
+    #[serde(default, skip_serializing_if = "Traits::is_empty")]
+    pub traits: Traits,
     /// `hostile`, `friendly`, `neutral` or `any`: how the creature regards the avatar.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub attitude: Option<String>,
@@ -195,6 +215,9 @@ pub struct Avatar {
     /// Sprites drawn over the avatar, bottom first.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub overlays: Vec<Look>,
+    /// The ids of its mutations by mutation type, which tint the mutation overlays.
+    #[serde(default, skip_serializing_if = "Traits::is_empty")]
+    pub traits: Traits,
     pub stats: Vec<Stat>,
     /// Carried items; optional on the wire (absent and empty both mean nothing carried).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -224,6 +247,20 @@ pub struct Environment {
     pub weather: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub season: Option<String>,
+    /// The files of game data that add sprites to tilesets, in the engine's load order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub mod_tilesets: Vec<ModTileset>,
+}
+
+/// A file of game data that adds sprites to the tilesets its `compatibility` names.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ModTileset {
+    pub path: String,
+    /// The folder the sheet files of the file are named from.
+    pub base: String,
+    /// Which `mod_tileset` of the file this is, counting from 1.
+    pub index: u32,
+    pub compatibility: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
