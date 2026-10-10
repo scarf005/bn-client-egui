@@ -363,7 +363,9 @@ impl<M: GameModel> App<M> {
         // Menus with a text field keep the keyboard for typing.
         let focused = ctx.memory(|m| m.focused()).is_some();
         let toolkit = |token: &str| match &menu {
+            // A composed screen has no widgets: every key, Tab included, is the engine's.
             None => false,
+            Some(m) if m.screen => false,
             Some(_) => {
                 token == "TAB"
                     || token == "BACKTAB"
@@ -552,10 +554,21 @@ impl<M: GameModel> App<M> {
                 });
                 // The entry under the pointer explains itself, else the engine's selected one.
                 let mut described = None;
-                egui::ScrollArea::vertical()
-                    .max_height(ctx.content_rect().height() * 0.6)
+                // A composed screen is as wide as the engine's terminal: it scrolls sideways too.
+                let area = if menu.screen {
+                    egui::ScrollArea::both()
+                } else {
+                    egui::ScrollArea::vertical()
+                };
+                area.max_height(ctx.content_rect().height() * 0.6)
                     .show(ui, |ui| {
-                        if !menu.message.is_empty() {
+                        if menu.screen {
+                            // A composed screen: columns line up only in a fixed-width font.
+                            ui.add(
+                                egui::Label::new(egui::RichText::new(&menu.message).monospace())
+                                    .wrap_mode(egui::TextWrapMode::Extend),
+                            );
+                        } else if !menu.message.is_empty() {
                             ui.label(self.rich(ui, &menu.message));
                         }
                         if menu.field.as_ref().is_some_and(|f| f.kind == "key") {
