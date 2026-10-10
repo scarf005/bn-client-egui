@@ -77,7 +77,10 @@ fn clicking_a_tab_a_subtab_or_a_recipe_chooses_it_and_a_disabled_recipe_is_inert
         let (mut h, script) = harness("weapon");
         h.get_by_label(label).click();
         h.run_steps(3);
-        assert_eq!(operations(&script), [json!({"kind":"choose","choice_id":id})]);
+        assert_eq!(
+            operations(&script),
+            [json!({"kind":"choose","choice_id":id})]
+        );
     }
     let (mut h, script) = harness("weapon");
     h.get_by_label("knife spear").click();
