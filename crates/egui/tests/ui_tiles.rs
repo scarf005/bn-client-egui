@@ -97,7 +97,10 @@ fn switching_to_ascii_draws_glyphs_again_and_the_choice_survives_a_restart() {
     h.run_steps(3);
     assert!(!h.state().display().tiles());
     assert_eq!(h.state().display().drawn(), 0);
-    assert_eq!(saved(&settings), json!({"tiles": false, "tileset": null}));
+    assert_eq!(
+        saved(&settings),
+        json!({"tiles": false, "tileset": null, "reduced_motion": false})
+    );
 
     // A new run reads the file and starts in ASCII without loading the tileset.
     let again = harness(&root, settings.clone());

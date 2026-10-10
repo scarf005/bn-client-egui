@@ -25,7 +25,7 @@ fn connects_with_hello_then_subscribe_and_exposes_the_map() {
     assert_eq!(m.size(), Pos { x: 40, y: 25 });
     assert_eq!(m.player(), Pos { x: 20, y: 12 });
     assert_eq!(m.cell(Pos { x: 21, y: 11 }).glyph, '#');
-    assert_eq!(m.cell(Pos { x: 21, y: 11 }).desc, "t_wall");
+    assert_eq!(m.cell(Pos { x: 21, y: 11 }).desc, "plastered wooden wall");
     assert_eq!(
         m.cell(Pos { x: 23, y: 12 }).glyph,
         'Z',
@@ -603,14 +603,14 @@ fn clicking_a_distant_closed_door_still_asks_the_engine_for_a_route() {
 }
 
 #[test]
-fn travel_that_plans_nothing_and_moves_nothing_says_there_is_no_route() {
+fn travel_that_plans_nothing_and_moves_nothing_says_the_native_cant_travel_message() {
     let (t, h) = session();
     let mut m = connected(t.on("bn.command.submit", walk_reply()));
     assert!(m.travel(Pos { x: 22, y: 12 }));
     h.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{
         "epoch":"e7f3","command_id":"c:5","stage":"completed"}}));
     m.poll();
-    assert_eq!(m.command().unwrap().stage, "done: no route there");
+    assert_eq!(m.command().unwrap().stage, "done: You can't travel there.");
 }
 
 #[test]
@@ -1451,6 +1451,89 @@ mod failures {
     }
 }
 
+fn fact_event(kind: &str, data: Value, duration_ms: u64) -> Value {
+    json!({"jsonrpc": "2.0", "method": "bn.events", "params": {"epoch": "e7f3", "events": [
+        {"sequence": "41", "revision": "32", "type": kind, "data": data, "display": {"duration_ms": duration_ms}}
+    ]}})
+}
+
+fn square(x: i32, y: i32, z: i32) -> Value {
+    json!({"dim": "", "x": x, "y": y, "z": z})
+}
+
+#[test]
+fn animation_facts_become_effects_in_view_coordinates() {
+    use bn_client_core::{Pos, Shape};
+    let (t, h) = session();
+    let mut m = connected(t);
+    let me = m.player();
+    h.push(fact_event(
+        "projectile.moved",
+        json!({"projectile": "projectile:1", "path": [square(4, 4, 0), square(5, 4, 0), square(5, 4, 1)],
+            "look": {"kind": "projectile", "id": null, "glyph": "*", "color": "red"}}),
+        30,
+    ));
+    m.poll();
+    let effects = m.take_effects();
+    assert_eq!(effects.len(), 1);
+    assert_eq!(effects[0].duration_ms, 30);
+    let Shape::Projectile { path, glyph, .. } = &effects[0].shape else {
+        panic!("{:?}", effects[0]);
+    };
+    assert_eq!(*glyph, '*');
+    assert_eq!(
+        *path,
+        [
+            Pos {
+                x: me.x + 1,
+                y: me.y
+            },
+            Pos {
+                x: me.x + 2,
+                y: me.y
+            }
+        ],
+        "squares on another level are dropped"
+    );
+    assert!(m.take_effects().is_empty(), "each fact is handed out once");
+}
+
+#[test]
+fn explosion_and_floating_text_facts_carry_their_colors() {
+    use bn_client_core::Shape;
+    let (t, h) = session();
+    let mut m = connected(t);
+    h.push(fact_event(
+        "explosion.started",
+        json!({"explosion": "explosion:1", "at": square(3, 4, 0), "radius": 3, "color": "c_red"}),
+        40,
+    ));
+    m.poll();
+    let effects = m.take_effects();
+    let Shape::Burst { radius, color, .. } = &effects[0].shape else {
+        panic!("{:?}", effects[0]);
+    };
+    assert_eq!(*radius, 3);
+    assert_eq!(
+        *color,
+        bn_client_core::Rgb(170, 40, 40),
+        "c_red resolves to the game's red"
+    );
+    let mut text = fact_event(
+        "combat_text.shown",
+        json!({"at": square(3, 4, 0), "segments": [{"text": "-12", "color": "light_red"}]}),
+        80,
+    );
+    text["params"]["events"][0]["sequence"] = json!("42");
+    h.push(text);
+    m.poll();
+    let effects = m.take_effects();
+    let Shape::Text { segments, .. } = &effects[0].shape else {
+        panic!("{:?}", effects[0]);
+    };
+    assert_eq!(segments[0].0, "-12");
+}
+
 #[test]
 fn returning_to_the_main_menu_clears_the_previous_games_log_and_command_lines() {
     let (t, h) = session();
@@ -1554,4 +1637,18 @@ fn query_popup_rows_do_not_carry_the_action_id_as_a_description() {
         .find(|c| c.id == "recipe:aa")
         .unwrap();
     assert!(kept.description.starts_with("Time to complete"));
+}
+
+#[test]
+fn a_menu_banner_is_published_line_by_line() {
+    let mut menu = crafting("favorites");
+    menu["interaction"]["banner"] = json!(["<color_light_cyan>art</color>", "", "Version: x"]);
+    let (t, h) = session();
+    let mut m = connected(t);
+    h.push(change(41, json!({"interaction": menu})));
+    m.poll();
+    assert_eq!(
+        m.menu().unwrap().banner,
+        ["<color_light_cyan>art</color>", "", "Version: x"]
+    );
 }

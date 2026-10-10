@@ -36,31 +36,47 @@ pub fn connected(script: ScriptedTransport) -> EngineModel {
     m
 }
 
-/// A 4x3 overmap centred on (100, 200, 0) with the player two squares west of the cursor.
+/// A 4x3 overmap centred on (cursor_x, 200, 0) with the player two squares west of the cursor.
 pub fn overmap_event(cursor_x: i32) -> Value {
-    let cell = |g: &str, fg: u8| json!([g, fg, 0]);
-    let row = |g: &str| json!([cell(g, 7), cell(g, 2), cell("@", 11), cell(g, 1)]);
-    json!({"jsonrpc":"2.0","method":"bn.events","params":{"epoch":"e7f3","events":[{
-    "sequence":"41","revision":"32","type":"interaction.changed","changes":{"interaction":{
-    "boundary_id":"b:60",
-    "readiness":{"phase":"playing","game_ready":true,"accepts_interaction_commands":true,"accepts_registered_actions":true},
-    "actions":[{"id":"CHOOSE_DESTINATION","name":"Travel","keys":["_"]},{"id":"QUIT","name":"Quit","keys":["ESC"]}],
-    "interaction":{
-        "schema_id":format!("s:om{cursor_x}"),"kind":"target","context":"OVERMAP","title":"Overmap",
-        "message":"","allow_cancel":true,"allow_set_count":false,"choices":[],"choice_total":0,
-        "target":{"source":{"dim":"","x":98,"y":200,"z":0},"current":{"dim":"","x":cursor_x,"y":200,"z":0},
-            "range":100,"distance_metric":"square","unit":"omt","status":"","candidates":[]},
-        "overmap":{
-            "origin":{"dim":"","x":cursor_x - 2,"y":199,"z":0},
-            "player":{"dim":"","x":98,"y":200,"z":0},
-            "cols":4,"rows":3,
-            "cells":[row("F"), row("f"), row("r")],
-            "legend":["Overmap","  forest"],
-            "notes":[{"pos":{"dim":"","x":cursor_x - 1,"y":200,"z":0},"text":"cache"}],
-                "path":[{"dim":"","x":cursor_x + 1,"y":200,"z":0},{"dim":"","x":cursor_x + 2,"y":200,"z":0}]
-        },
-        "compat":{"panes":[]}
-    }}}}]}})
+    let cell = |g: &str, fg: u8| format!(r#"["{g}",{fg},0]"#);
+    let row = |g: &str| {
+        format!(
+            "[{},{},{},{}]",
+            cell(g, 7),
+            cell(g, 2),
+            cell("@", 11),
+            cell(g, 1)
+        )
+    };
+    let text = format!(
+        r#"{{"jsonrpc":"2.0","method":"bn.events","params":{{"epoch":"e7f3","events":[{{
+        "sequence":"41","revision":"32","type":"interaction.changed","changes":{{"interaction":{{
+        "boundary_id":"b:60",
+        "readiness":{{"phase":"playing","game_ready":true,"accepts_interaction_commands":true,"accepts_registered_actions":true}},
+        "actions":[{{"id":"CHOOSE_DESTINATION","name":"Travel","keys":["_"]}},{{"id":"QUIT","name":"Quit","keys":["ESC"]}}],
+        "interaction":{{
+            "schema_id":"s:om{cursor_x}","kind":"target","context":"OVERMAP","title":"Overmap",
+            "message":"","allow_cancel":true,"allow_set_count":false,"choices":[],"choice_total":0,
+            "target":{{"source":{{"dim":"","x":98,"y":200,"z":0}},"current":{{"dim":"","x":{cursor_x},"y":200,"z":0}},
+                "range":100,"distance_metric":"square","unit":"omt","status":"","candidates":[]}},
+            "overmap":{{
+                "origin":{{"dim":"","x":{origin_x},"y":199,"z":0}},
+                "player":{{"dim":"","x":98,"y":200,"z":0}},
+                "cols":4,"rows":3,
+                "cells":[{rows}],
+                "legend":["Overmap","  forest"],
+                "notes":[{{"pos":{{"dim":"","x":{note_x},"y":200,"z":0}},"text":"cache"}}],
+                "path":[{{"dim":"","x":{p1},"y":200,"z":0}},{{"dim":"","x":{p2},"y":200,"z":0}}]
+            }},
+            "compat":{{"panes":[]}}
+        }}}}}}}}]}}}}"#,
+        origin_x = cursor_x - 2,
+        rows = [row("F"), row("f"), row("r")].join(","),
+        note_x = cursor_x - 1,
+        p1 = cursor_x + 1,
+        p2 = cursor_x + 2,
+    );
+    serde_json::from_str(&text).unwrap()
 }
 
 /// The overmap event for a client that said it draws tiles: every square is `t_floor` but the

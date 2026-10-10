@@ -1,6 +1,6 @@
 //! Searchable list of everything the engine accepts, opened from the top bar or with Ctrl+P.
 
-use super::{App, Queued};
+use super::{App, QUEUE, Queued};
 use crate::a11y;
 use bn_client_core::{GameModel, markup};
 use eframe::egui::{self, accesskit};
@@ -103,7 +103,7 @@ impl<M: GameModel> App<M> {
             Some(id) => {
                 ctx.request_repaint();
                 match self.model.busy() {
-                    true => self.queued = Some(Queued::Action(id)),
+                    true => self.enqueue(Queued::Action(id)),
                     false => {
                         self.model.invoke_action(&id);
                     }
@@ -114,16 +114,28 @@ impl<M: GameModel> App<M> {
         }
     }
 
-    /// Runs the click that waited for the engine to finish its previous command.
+    pub(super) fn enqueue(&mut self, input: Queued) {
+        if self.queued.len() < QUEUE {
+            self.queued.push_back(input);
+        }
+    }
+
+    /// Sends the waiting input once the command in flight is done; a menu that has opened meanwhile
+    /// ends the wait, since the input was meant for the map.
     pub(super) fn run_queued(&mut self) {
-        if self.model.busy() {
+        if self.model.busy() || self.queued.is_empty() {
             return;
         }
-        match self.queued.take() {
-            Some(Queued::Action(id)) => {
-                self.model.invoke_action(&id);
-            }
-            None => {}
+        if self.model.menu().is_some() {
+            self.queued.clear();
+        }
+        while !self.model.busy()
+            && let Some(input) = self.queued.pop_front()
+        {
+            match input {
+                Queued::Action(id) => self.model.invoke_action(&id),
+                Queued::Key(key) => self.model.press(&key),
+            };
         }
     }
 }

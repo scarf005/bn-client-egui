@@ -732,3 +732,24 @@ fn the_title_screen_is_only_its_menu() {
         );
     }
 }
+
+#[test]
+fn the_title_screen_draws_the_engines_banner_above_its_menu() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    let mut menu = fixture("events_43_menu");
+    let interaction = &mut menu["params"]["events"][0]["changes"]["interaction"]["interaction"];
+    interaction["context"] = json!("MAIN_MENU");
+    interaction["banner"] = json!([
+        "<color_light_cyan> _ART_ </color>",
+        "",
+        "Version: HEAD-HASH"
+    ]);
+    script.push(fixture("events_41_walk"));
+    script.push(fixture("events_42_message"));
+    script.push(menu);
+    h.run_steps(4);
+    h.get_by_label(" _ART_ ");
+    h.get_by_label("Version: HEAD-HASH");
+    h.get_by_label("combat knife");
+}

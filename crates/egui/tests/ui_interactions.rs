@@ -522,3 +522,161 @@ fn a_composed_screen_is_shown_as_text_and_every_key_including_tab_is_the_engines
         [json!({"kind":"action","action_id":"NEXT_TAB"})]
     );
 }
+
+#[test]
+fn leaving_look_mode_puts_the_cursor_back_on_the_player() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    script.push(look_mode(41, 9));
+    h.run_steps(3);
+    script.push(show(42, json!([]), Value::Null));
+    h.run_steps(3);
+    let me = h.state().model.player();
+    let status = format!("Cursor ({}, {})", me.x, me.y);
+    let map = h.get_by_label("Map");
+    let description = map.accesskit_node().description().unwrap_or_default();
+    assert!(description.contains(&status), "{status} in {description}");
+}
+
+fn text_prompt(value: &str) -> Value {
+    json!({"schema_id":"s:filter","kind":"field","context":"STRING_INPUT","title":"Set filter",
+        "message":"","allow_cancel":true,"choices":[],"choice_total":0,"allow_set_count":false,
+        "field":{"id":"field:text","label":"Filter:","description":"","value":value,
+            "type":"text","max_length":30,"printable":false}})
+}
+
+#[test]
+fn a_text_prompt_is_typed_into_a_box_and_enter_sends_it() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    script.push(show(41, json!([]), text_prompt("old")));
+    h.run_steps(3);
+    let edit = h.get_by_label("Filter:");
+    edit.click();
+    h.run_steps(2);
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+    h.run_steps(1);
+    h.get_by_label("Filter:").type_text("shirt");
+    h.run_steps(2);
+    // Every change is sent as a fill that keeps the prompt open; the engine takes the next one once
+    // the command in flight is done, and Enter submits the newest text.
+    let typed = submits(&script);
+    assert!(!typed.is_empty());
+    assert!(
+        typed
+            .iter()
+            .all(|s| s["kind"] == "fill" && s["submit"] == false),
+        "{typed:?}"
+    );
+    script.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{
+        "epoch":"e7f3","command_id":"c:5","stage":"completed"}}));
+    h.run_steps(2);
+    h.key_press(egui::Key::Enter);
+    h.run_steps(3);
+    let last = submits(&script).pop().unwrap();
+    assert_eq!(
+        last,
+        json!({"kind":"fill","field_id":"field:text","value":"shirt","submit":true})
+    );
+}
+
+#[test]
+fn typing_in_a_text_prompt_runs_no_game_action() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    script.push(show(
+        41,
+        json!([{"id":"WIELD","name":"Wield","keys":["w"]}]),
+        text_prompt(""),
+    ));
+    h.run_steps(3);
+    h.get_by_label("Filter:").click();
+    h.get_by_label("Filter:").type_text("w");
+    h.run_steps(3);
+    assert!(
+        submits(&script).iter().all(|s| s["kind"] == "fill"),
+        "typing sends fills, never the game's own action"
+    );
+}
+
+fn popup_with(message: &str) -> Value {
+    let mut ack = choice("acknowledge", "Cancel popup");
+    ack["description"] = "QUIT".into();
+    popup(true, message, ack)
+}
+
+#[test]
+fn a_popups_confirm_button_is_where_it_was_whatever_its_text_length() {
+    let mut tops = vec![];
+    for message in [
+        "Short.",
+        "A much longer popup.\nIt has\nmany\nlines\nof text.",
+    ] {
+        let (mut h, script) = harness();
+        h.run_steps(3);
+        script.push(show(
+            41,
+            json!([{"id":"QUIT","name":"Cancel popup","keys":["ESC"]}]),
+            popup_with(message),
+        ));
+        h.run_steps(4);
+        let button = h
+            .get_all_by_role_and_label(egui::accesskit::Role::MenuItem, "Cancel popup")
+            .next()
+            .expect("the confirm row");
+        tops.push(button.rect().min.y);
+    }
+    assert_eq!(tops[0], tops[1], "{tops:?}");
+}
+
+#[test]
+fn space_right_after_a_popup_closes_does_not_reach_the_game_until_the_hold_ends() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    script.push(show(
+        41,
+        json!([{"id":"jump","name":"Jump","keys":["SPACE"]}]),
+        popup_with("Welcome."),
+    ));
+    h.run_steps(3);
+    h.key_press(egui::Key::Space);
+    h.run_steps(2);
+    assert_eq!(submits(&script).len(), 1, "the popup took the Space");
+    script.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{
+        "epoch":"e7f3","command_id":"c:5","stage":"completed"}}));
+    script.push(show(
+        42,
+        json!([{"id":"jump","name":"Jump","keys":["SPACE"]}]),
+        Value::Null,
+    ));
+    h.run_steps(3);
+    h.event(egui::Event::Text(" ".into()));
+    h.run_steps(2);
+    assert_eq!(
+        submits(&script).len(),
+        1,
+        "held back while the player is still dismissing"
+    );
+    // A burst keeps the hold alive: each Space within 500 ms of the last held one is held too.
+    for _ in 0..4 {
+        h.state()
+            .clock()
+            .advance(std::time::Duration::from_millis(300));
+        h.event(egui::Event::Text(" ".into()));
+        h.run_steps(2);
+    }
+    assert_eq!(
+        submits(&script).len(),
+        1,
+        "a steady burst never reaches the game"
+    );
+    h.state()
+        .clock()
+        .advance(std::time::Duration::from_millis(600));
+    h.event(egui::Event::Text(" ".into()));
+    h.run_steps(2);
+    assert_eq!(
+        submits(&script).last(),
+        Some(&json!({"kind":"action","action_id":"jump"}))
+    );
+}
