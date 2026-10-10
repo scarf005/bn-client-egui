@@ -67,6 +67,8 @@ pub struct App<M: GameModel> {
     keys_consumed: bool,
     /// The action palette's search text while it is open.
     palette: Option<String>,
+    /// The message log's height once the user has dragged its edge.
+    log_height: Option<f32>,
     /// Title of the menu that last took focus, so a menu is entered once, not on every frame.
     menu_title: Option<String>,
     /// A menu opened and its first control has not taken focus yet (it may be disabled for a frame).
@@ -114,6 +116,7 @@ impl<M: GameModel> App<M> {
             display: Display::new(None, None),
             keys_consumed: false,
             palette: None,
+            log_height: None,
             menu_title: None,
             focus_menu: false,
             refocus_map: false,
@@ -310,7 +313,10 @@ impl<M: GameModel> App<M> {
                 (ui.available_width() * SIDEBAR_SHARE).clamp(SIDEBAR_WIDTH.0, SIDEBAR_WIDTH.1),
             )
             .size_range(SIDEBAR_WIDTH.0..=SIDEBAR_WIDTH.1)
-            .show(ui, |ui| self.sidebar_panel(ui));
+            .show(ui, |ui| {
+                ui.set_min_width(ui.available_width());
+                self.sidebar_panel(ui)
+            });
         label_resize_handle(ui.ctx(), "sidebar", "Resize sidebar");
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE.fill(egui::Color32::BLACK))
