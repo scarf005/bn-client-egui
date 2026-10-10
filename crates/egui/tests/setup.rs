@@ -74,3 +74,41 @@ fn an_executable_path_starts_the_engine() {
     assert_eq!(*calls.borrow(), vec![engine]);
     assert!(harness.state().is_running());
 }
+
+fn with_config<'a>(tag: &str) -> (Harness<'a, Launcher>, PathBuf, PathBuf) {
+    let dir = std::env::temp_dir().join(format!("bn-setup-cfg-{tag}-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let config = dir.join("cfg/config.json");
+    let start: Starter = Box::new(|_, _| Ok(Box::new(App::new(FakeModel::default()))));
+    let launcher = Launcher::new(String::new(), start).with_config(config.clone());
+    let harness = Harness::builder()
+        .with_size(egui::vec2(600.0, 300.0))
+        .build_ui_state(|ui, l: &mut Launcher| l.show(ui), launcher);
+    (harness, config, dir)
+}
+
+#[test]
+fn the_engine_path_is_remembered_only_when_the_user_picks_it_here() {
+    let (mut harness, config, dir) = with_config("remember");
+    harness.run_steps(3);
+    assert!(!config.exists(), "showing the window writes nothing");
+    type_and_use(&mut harness, dir.join("missing").to_str().unwrap());
+    assert!(!config.exists(), "a rejected path is not remembered");
+    let engine = dir.join("engine");
+    std::fs::write(&engine, "").unwrap();
+    std::fs::set_permissions(&engine, std::fs::Permissions::from_mode(0o755)).unwrap();
+    harness
+        .get_by_role(egui::accesskit::Role::TextInput)
+        .focus();
+    harness.run();
+    harness.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+    harness.run();
+    harness
+        .get_by_role(egui::accesskit::Role::TextInput)
+        .type_text(engine.to_str().unwrap());
+    harness.run();
+    harness.get_by_label("Use").click();
+    harness.run();
+    let saved = std::fs::read_to_string(&config).unwrap();
+    assert!(saved.contains("engine"), "{saved}");
+}

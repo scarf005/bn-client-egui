@@ -41,6 +41,8 @@ pub struct TuiApp<M: GameModel> {
     log_back: usize,
     /// The crafting search or batch count being typed.
     input: Option<crafting::Input>,
+    /// The map square the mouse last hovered, in absolute coordinates.
+    hovered: Option<Pos>,
     /// A settings value being typed.
     edit: Option<settings::Edit>,
 }
@@ -107,6 +109,7 @@ impl<M: GameModel> TuiApp<M> {
             log_back: 0,
             input: None,
             edit: None,
+            hovered: None,
         }
     }
 
@@ -371,8 +374,24 @@ impl<M: GameModel> TuiApp<M> {
         }
     }
 
-    /// Left click on a map cell moves the look cursor there and travels; the first click shows the route.
+    /// The mouse as the game reads it: the wheel steps an engine menu, hovering a map cell asks for its
+    /// native description (or moves the engine's own cursor), the left click moves the look cursor there
+    /// and travels (the first click shows the route), the right click is the engine's context click.
     pub fn handle_mouse(&mut self, ev: MouseEvent) {
+        if self.model.loading().is_some() {
+            return;
+        }
+        let wheel = match ev.kind {
+            MouseEventKind::ScrollUp => Some(true),
+            MouseEventKind::ScrollDown => Some(false),
+            _ => None,
+        };
+        if let Some(up) = wheel {
+            // Only a list the engine scrolls natively (it registers SCROLL_UP/SCROLL_DOWN) takes the
+            // wheel; the highlight is the engine's own cursor, so any other menu ignores it, as native.
+            self.model.scroll_menu(up);
+            return;
+        }
         if let Some(om) = self
             .overmap_shown
             .clone()
@@ -383,16 +402,31 @@ impl<M: GameModel> TuiApp<M> {
         let area = self.map_cells;
         let inside = (area.x..area.x + area.width).contains(&ev.column)
             && (area.y..area.y + area.height).contains(&ev.row);
-        let click = ev.kind == MouseEventKind::Down(MouseButton::Left);
-        if !click || !inside || self.model.loading().is_some() || self.model.menu().is_some() {
+        if !inside || self.model.menu().is_some() {
             return;
         }
         let view = Pos {
             x: self.map_first.x + i32::from(ev.column - area.x),
             y: self.map_first.y + i32::from(ev.row - area.y),
         };
-        self.cursor = Some(self.absolute(view));
-        self.go_to(view);
+        match ev.kind {
+            MouseEventKind::Moved => {
+                self.hovered = Some(self.absolute(view));
+                if !self.model.aim(view) {
+                    self.model.hover(view);
+                }
+            }
+            MouseEventKind::Down(MouseButton::Left) => {
+                self.cursor = Some(self.absolute(view));
+                if !self.model.aim(view) {
+                    self.go_to(view);
+                }
+            }
+            MouseEventKind::Down(MouseButton::Right) => {
+                self.model.context_click(view);
+            }
+            _ => {}
+        }
     }
 
     /// A click moves the overmap cursor to the square; a click on the cursor travels there.
@@ -554,6 +588,13 @@ impl<M: GameModel> TuiApp<M> {
             true => format!("{command} [Esc: interrupt]"),
             false => command,
         };
+        // What the engine's mouse view prints for the hovered square, once it has answered.
+        let hover = self
+            .hovered
+            .and_then(|at| self.model.hover_text(self.view(at)))
+            .map(|lines| format!(" | {}", lines.join(" / ")))
+            .unwrap_or_default();
+        let command = format!("{command}{hover}");
         let Some(at) = self.cursor else {
             return command;
         };

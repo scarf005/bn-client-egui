@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+use bn_client_core::transport::Profile;
 use bn_client_core::transport::{ScriptHandle, ScriptedTransport};
 use bn_client_core::{EngineModel, GameModel};
 use serde_json::{Value, json};
@@ -96,4 +97,29 @@ pub fn with_tiles(mut event: Value) -> Value {
     event["params"]["events"][0]["changes"]["interaction"]["interaction"]["overmap"]["tiles"] =
         json!({"cells": rows, "looks_like": {"forest": ["t_dirt"], "t_floor": []}});
     event
+}
+
+/// A private profile for live engine tests: English, no animation or autosave, and the CPU compute
+/// path, which needs no GPU shaders and does not stall in a headless session. Put `TMPDIR` under
+/// `$HOME` to keep the scratch off `/tmp`.
+pub fn cpu_profile() -> Profile {
+    static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let id = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let dir = std::env::temp_dir().join(format!("bn-tui-live-{}-{id}", std::process::id()));
+    std::fs::create_dir_all(dir.join("config")).unwrap();
+    std::fs::write(
+        dir.join("config/options.json"),
+        r#"[{"name":"USE_LANG","value":"en_US"},{"name":"ANIMATIONS","value":"false"},{"name":"AUTOSAVE","value":"false"},{"name":"COMPUTE_ACCELERATION","value":"cpu"}]"#,
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("config/preload.json"),
+        r#"{"compute_acceleration":"cpu"}"#,
+    )
+    .unwrap();
+    Profile {
+        userdir: Some(dir.clone()),
+        configdir: Some(dir.join("config")),
+        ..Profile::default()
+    }
 }

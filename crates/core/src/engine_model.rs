@@ -6,7 +6,8 @@ use crate::keys;
 use crate::markup::{self, Run};
 use crate::model::{
     ActionEntry, Cell, CommandStatus, Effect, Failure, FailureKind, GameModel, Layer, Loading,
-    LogLine, Menu, MenuChoice, MenuField, Overmap, OvermapCell, OvermapTile, Pos, Rgb, Shape,
+    LogLine, Menu, MenuChoice, MenuField, MenuPane, Overmap, OvermapCell, OvermapTile, Pos, Rgb,
+    Shape,
 };
 use crate::protocol::{
     self, Cell as WorldCell, Entity, Expect, Incoming, Known, LoadingNotice, Look, Operation,
@@ -62,6 +63,8 @@ pub struct EngineModel {
     /// Whether the client draws tiles now, and what the engine was last told.
     tiles: bool,
     tiles_told: bool,
+    /// The engine's `USE_TILES` and `TILES` options from its hello.
+    display: Option<(bool, String)>,
     /// The earliest time to tell the engine again after it refused.
     tiles_retry: Duration,
     transport: Box<dyn Transport>,
@@ -155,6 +158,22 @@ fn top_look(c: &WorldCell) -> Option<&Look> {
             .as_ref()
             .map(|m| m.overlay.as_ref().unwrap_or(&m.terrain)))
 }
+
+/// One channel of a look's paint.
+fn paint(look: &Look, pick: impl Fn(&protocol::Tint) -> Option<&str>) -> Option<Rgb> {
+    let [r, g, b] = parse_hex(pick(look.tint.as_ref()?)?)?;
+    Some(Rgb(r, g, b))
+}
+
+/// `#rrggbb` to its channels.
+fn parse_hex(text: &str) -> Option<[u8; 3]> {
+    let digits = text.strip_prefix('#').filter(|d| d.len() == 6)?;
+    let channel = |i: usize| u8::from_str_radix(digits.get(i..i + 2)?, 16).ok();
+    Some([channel(0)?, channel(2)?, channel(4)?])
+}
+
+/// How many levels down open air is looked through.
+const MAX_DEPTH: u8 = 10;
 
 /// The game's per-tile seed for weighted sprite variants: the square's coordinates mixed into an integer.
 fn square_seed(p: &WorldPos) -> u32 {
@@ -272,6 +291,7 @@ impl EngineModel {
         let mut m = Self {
             tiles,
             tiles_told: tiles,
+            display: None,
             tiles_retry: Duration::ZERO,
             transport,
             respawn: None,
@@ -474,9 +494,13 @@ impl EngineModel {
                 self.connected = false;
                 self.busy = false;
                 self.messages.push("Engine connection closed.".into());
+                let message = match self.transport.exit_reason() {
+                    Some(reason) => format!("The engine stopped ({reason})."),
+                    None => "The engine stopped.".into(),
+                };
                 self.failure = Some(Failure {
                     kind: FailureKind::Exited,
-                    message: "The engine stopped.".into(),
+                    message,
                     stderr: self.transport.stderr_tail(),
                 });
             }
@@ -541,6 +565,12 @@ impl EngineModel {
         };
         match kind {
             Pending::Hello => {
+                self.display = value["engine"]["display"].as_object().and_then(|d| {
+                    Some((
+                        d.get("tiles")?.as_bool()?,
+                        d.get("tileset")?.as_str()?.to_string(),
+                    ))
+                });
                 self.mark("hello");
                 self.subscribe();
             }
@@ -898,6 +928,8 @@ impl EngineModel {
             mirrored: look.facing.as_deref() == Some("left"),
             creature: matches!(look.kind.as_str(), "monster" | "npc" | "avatar"),
             seed,
+            tint_bg: paint(look, |t| t.bg.as_deref()),
+            tint_fg: paint(look, |t| t.fg.as_deref()),
             glyph: glyph(look),
             color,
             bg,
@@ -929,7 +961,11 @@ impl EngineModel {
             return unknown;
         };
         let world = self.replica.cell(&p.dim, p.x, p.y, p.z);
-        let mut layers = world.map_or(vec![], |c| self.layers(c));
+        // Nothing published here but a square in sight below: open air, through which the game draws it.
+        let lower = (world.is_none()).then(|| self.below(&p)).flatten();
+        let mut layers = world
+            .or(lower.map(|(c, _)| c))
+            .map_or(vec![], |c| self.layers(c));
         if self.avatar_pos() == Some(&p)
             && let Some(avatar) = self.replica.avatar()
             && let Some(look) = &avatar.look
@@ -948,6 +984,7 @@ impl EngineModel {
             layers.push(self.layer(look, id_seed(&e.id)));
             layers.extend(self.overlays(look, &e.overlays, id_seed(&e.id)));
             layers.extend(self.attitude(e));
+            layers.extend(self.revival(world));
             return Cell {
                 layers,
                 remembered: false,
@@ -957,6 +994,7 @@ impl EngineModel {
                 ..self.styled(look, desc)
             };
         }
+        layers.extend(self.revival(world));
         match world {
             Some(c) => match top_look(c) {
                 Some(l) => Cell {
@@ -972,7 +1010,12 @@ impl EngineModel {
                     ..Cell::default()
                 },
             },
-            None => unknown,
+            None => Cell {
+                layers,
+                depth: lower.map_or(0, |(_, depth)| depth),
+                light: lower.and_then(|(c, _)| c.light.as_ref()?.as_u64().map(|l| l as u8)),
+                ..unknown
+            },
         }
     }
 
@@ -1015,6 +1058,25 @@ impl EngineModel {
             id: id.into(),
             ..Layer::default()
         }
+    }
+
+    /// The nearest square in sight under `p`, with how far down it is.
+    fn below(&self, p: &WorldPos) -> Option<(&WorldCell, u8)> {
+        (1..=MAX_DEPTH).find_map(|depth| {
+            let cell = self
+                .replica
+                .cell(&p.dim, p.x, p.y, p.z - i32::from(depth))?;
+            // A roof seen from above a vehicle has no terrain published, only the part.
+            (cell.known == Known::Visible && (cell.terrain.is_some() || cell.vehicle.is_some()))
+                .then_some((cell, depth))
+        })
+    }
+
+    /// The mark over a square holding a corpse that can rise: the last thing the native view draws.
+    fn revival(&self, world: Option<&WorldCell>) -> Option<Layer> {
+        world
+            .is_some_and(|c| c.reviving)
+            .then(|| self.marker("zombie_revival_indicator"))
     }
 
     /// The overlay the native view puts over a monster or NPC for how it regards the avatar.
@@ -1066,16 +1128,21 @@ impl GameModel for EngineModel {
                 text: line.text,
                 count: line.count,
             };
-            // A repeat replaces the line it counts; ids are never reused, so search the tail only.
-            match self
+            // Ids only grow and are never reused. A line past the newest one is new; any other is a
+            // repeat, or a line a fresh snapshot carries again, and replaces its own line.
+            let id = line.id.parse::<u64>().ok();
+            let newest = self.native.last().and_then(|l| l.id.parse::<u64>().ok());
+            if id.is_some() && id > newest {
+                self.native.push(line);
+            } else if let Some(old) = self
                 .native
                 .iter_mut()
                 .rev()
-                .take(8)
                 .find(|l| !line.id.is_empty() && l.id == line.id)
             {
-                Some(old) => *old = line,
-                None => self.native.push(line),
+                *old = line;
+            } else if id.is_none() || newest.is_none() {
+                self.native.push(line);
             }
         }
         let at_main_menu = self.menu().is_some_and(|m| m.context == "MAIN_MENU");
@@ -1095,6 +1162,10 @@ impl GameModel for EngineModel {
     fn set_waker(&mut self, waker: crate::transport::Waker) {
         self.transport.set_waker(waker.clone());
         self.waker = Some(waker);
+    }
+
+    fn display_default(&self) -> Option<(bool, String)> {
+        self.display.clone()
     }
 
     fn set_tiles(&mut self, tiles: bool) {
@@ -1444,6 +1515,21 @@ impl GameModel for EngineModel {
                         .map(|col| (col.label.clone(), col.value.clone()))
                         .collect(),
                     editor: c.editor.clone(),
+                })
+                .collect(),
+            panes: pane_labels
+                .iter()
+                .filter(|p| p["area_label"].as_str().is_some_and(|a| !a.is_empty()))
+                .map(|p| {
+                    let text = |k: &str| p[k].as_str().unwrap_or_default().to_string();
+                    MenuPane {
+                        id: text("id"),
+                        label: text("label"),
+                        role: text("role"),
+                        area: text("area_label"),
+                        storage: text("storage_kind"),
+                        filter: text("filter"),
+                    }
                 })
                 .collect(),
             can_cancel: i.allow_cancel,

@@ -79,6 +79,17 @@ impl Replica {
             route: s.route,
             entities: s.entities.into_iter().map(|e| (e.id.clone(), e)).collect(),
             loading: (s.parts > 0).then_some((s.parts, 0)),
+            // The log the engine already holds, as if each line had just been published.
+            lines: s
+                .messages
+                .into_iter()
+                .map(|m| LoggedLine {
+                    id: m.id,
+                    text: m.text,
+                    color: Some(m.color),
+                    count: m.count.max(1),
+                })
+                .collect(),
             ..Self::default()
         };
     }
