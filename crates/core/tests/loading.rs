@@ -1,6 +1,6 @@
 mod common;
 use bn_client_core::GameModel;
-use bn_client_core::protocol::{self, Incoming};
+use bn_client_core::protocol::{self, Incoming, LoadingNotice};
 use common::{connected, session};
 use serde_json::{Value, json};
 
@@ -26,7 +26,7 @@ fn loading_notifications_round_trip_exactly() {
 fn progress_without_image_parses() {
     let msg = json!({"jsonrpc":"2.0","method":"bn.loading","params":{"epoch":"e","title":"T","entries":[],"index":0}});
     assert!(
-        matches!(protocol::parse_message(&msg).unwrap(), Incoming::Loading(n) if n.image.is_none())
+        matches!(protocol::parse_message(&msg).unwrap(), Incoming::Loading(LoadingNotice::Progress(p)) if p.image.is_none())
     );
 }
 
@@ -62,4 +62,27 @@ fn a_later_progress_replaces_the_earlier_one() {
     let l = m.loading().unwrap();
     assert_eq!(l.index, 2);
     assert!(l.image.is_none());
+}
+
+#[test]
+fn repeated_index_and_repeated_context_titles_keep_a_steady_screen() {
+    let (t, h) = session();
+    let mut m = connected(t);
+    let mut seen = vec![];
+    for index in [0, 1, 1, 2] {
+        let mut p = progress();
+        p["params"]["title"] = "Loading files".into();
+        p["params"]["index"] = json!(index);
+        h.push(p);
+        m.poll();
+        seen.push(m.loading().unwrap().index);
+    }
+    assert_eq!(seen, [0, 1, 1, 2]);
+    // The context appears a second time with a fresh list.
+    let mut again = progress();
+    again["params"]["title"] = "Loading files".into();
+    again["params"]["index"] = json!(0);
+    h.push(again);
+    m.poll();
+    assert_eq!(m.loading().unwrap().index, 0);
 }

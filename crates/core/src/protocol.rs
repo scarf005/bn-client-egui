@@ -427,26 +427,37 @@ pub struct RpcError {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct LoadingImage {
-    /// Relative to the game root.
+    /// Relative to the engine's base path (the game root).
     pub path: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub author: Option<String>,
 }
 
-/// `bn.loading`: either progress (`title`, `entries`, `index`, `image`) or `done: true`.
+/// `bn.loading`: progress of the engine's loading screen, or its end.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct LoadingNotice {
+#[serde(untagged)]
+pub enum LoadingNotice {
+    Progress(LoadingProgress),
+    Done(LoadingDone),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LoadingProgress {
     pub epoch: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub title: Option<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub title: String,
     pub entries: Vec<String>,
-    #[serde(default, skip_serializing_if = "is_default")]
     pub index: usize,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub image: Option<LoadingImage>,
-    #[serde(default, skip_serializing_if = "is_default")]
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LoadingDone {
+    pub epoch: String,
     pub done: bool,
 }
 

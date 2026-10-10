@@ -4,7 +4,8 @@ use crate::colors::ColorMap;
 use crate::keys::KeyMap;
 use crate::model::{ActionEntry, Cell, GameModel, Loading, Menu, MenuChoice, Pos, Rgb};
 use crate::protocol::{
-    self, Cell as WorldCell, Expect, Incoming, Look, Operation, Snapshot, Submit, WorldPos,
+    self, Cell as WorldCell, Expect, Incoming, LoadingNotice, Look, Operation, Snapshot, Submit,
+    WorldPos,
 };
 use crate::replica::{Outcome, Replica};
 use crate::transport::{Transport, request};
@@ -189,12 +190,15 @@ impl EngineModel {
                 self.resubscribe_on(outcome);
             }
             Incoming::Loading(n) => {
-                self.loading = (!n.done).then(|| Loading {
-                    title: n.title.unwrap_or_default(),
-                    entries: n.entries,
-                    index: n.index,
-                    image: n.image.map(|i| i.path),
-                });
+                self.loading = match n {
+                    LoadingNotice::Progress(p) => Some(Loading {
+                        title: p.title,
+                        entries: p.entries,
+                        index: p.index,
+                        image: p.image.map(|i| i.path),
+                    }),
+                    LoadingNotice::Done(_) => None,
+                };
             }
             Incoming::Unknown(_) => {}
             Incoming::Malformed(e) => self.messages.push(format!("Bad engine message: {e}")),
