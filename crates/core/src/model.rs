@@ -291,6 +291,32 @@ pub trait GameModel {
         markup::runs(text, &ColorMap::default())
     }
     fn choose(&mut self, _choice_id: &str) {}
+    /// Asks for the native description of the hovered view square; it arrives with later polls.
+    fn hover(&mut self, _at: Pos) {}
+    /// The native description lines of view square `at`, once the engine has answered for it.
+    fn hover_text(&self, _at: Pos) -> Option<Vec<String>> {
+        None
+    }
+    /// The model answers a right click itself, so the client offers no menu of its own.
+    fn native_context(&self) -> bool {
+        false
+    }
+    /// The right click on a view square, as the engine's own SEC_SELECT; false when the model has none.
+    fn context_click(&mut self, _at: Pos) -> bool {
+        false
+    }
+    /// The engine's cursor (look mode, aiming) moves to view square `at`, or confirms it when already there.
+    fn aim(&mut self, _at: Pos) -> bool {
+        false
+    }
+    /// Whether the open menu scrolls by the mouse wheel in the engine, as a native list does.
+    fn can_scroll_menu(&self) -> bool {
+        false
+    }
+    /// One wheel step in the open menu; `up` moves the engine's cursor three rows up.
+    fn scroll_menu(&mut self, _up: bool) -> bool {
+        false
+    }
     fn cancel_menu(&mut self) {}
     /// Season of the game calendar (`spring`, `summer`, `autumn`, `winter`), which picks seasonal sprites.
     fn season(&self) -> Option<String> {

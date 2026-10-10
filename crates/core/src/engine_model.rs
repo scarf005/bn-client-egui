@@ -34,6 +34,7 @@ enum Pending {
     Submit,
     Viewport,
     Interrupt,
+    Describe,
 }
 
 /// Starts the engine again on the same profile.
@@ -89,6 +90,15 @@ pub struct EngineModel {
     chore: Option<Chore>,
     /// The main menu was showing at the last poll; coming back to it ends the game whose lines are kept.
     at_main_menu: bool,
+    /// The square whose description was asked for or received, the revision it is valid for and its lines.
+    hovered: Option<Hover>,
+}
+
+struct Hover {
+    pos: WorldPos,
+    revision: String,
+    /// None while the answer is outstanding.
+    lines: Option<Vec<String>>,
 }
 
 /// One panel button press, carried through the native selection menu it opens.
@@ -186,6 +196,7 @@ impl EngineModel {
             travel_from: None,
             chore: None,
             at_main_menu: false,
+            hovered: None,
         };
         m.call(
             "bn.hello",
@@ -373,6 +384,18 @@ impl EngineModel {
                 s.set_stage(format!("rejected: {}", explain(&kind)), true);
             }
         }
+        if matches!(kind, Pending::Describe) {
+            // A square outside the engine's window has no description; the cell's own name stands.
+            let lines = result
+                .ok()
+                .and_then(|v| serde_json::from_value::<protocol::DescribeResult>(v).ok())
+                .map(|d| d.lines)
+                .unwrap_or_default();
+            if let Some(h) = self.hovered.as_mut() {
+                h.lines = Some(lines);
+            }
+            return;
+        }
         if matches!(kind, Pending::Interrupt) {
             // The engine had no activity running; say so once, not per key press.
             if result.is_err() {
@@ -401,7 +424,7 @@ impl EngineModel {
                 Ok(s) => self.replica.begin(s),
                 Err(e) => self.messages.push(format!("Bad snapshot: {e}")),
             },
-            Pending::Viewport | Pending::Interrupt => {}
+            Pending::Viewport | Pending::Interrupt | Pending::Describe => {}
             Pending::Submit => {
                 self.mark("received");
                 self.command_id = value["command_id"].as_str().map(String::from);
@@ -492,6 +515,7 @@ impl EngineModel {
                 )
             }
             Operation::Travel { .. } => (Some("Travel".into()), None),
+            Operation::Context { .. } => (Some("Right click".into()), None),
             Operation::Cancel => (Some("Cancel".into()), None),
             _ => (None, None),
         };
@@ -1275,6 +1299,91 @@ impl GameModel for EngineModel {
                 choice_id: choice_id.into(),
             });
         }
+    }
+
+    fn hover(&mut self, at: Pos) {
+        let (Some(pos), Some(boundary), Some(now)) =
+            (self.abs(at), self.replica.boundary(), self.replica.at())
+        else {
+            return;
+        };
+        let asked = self
+            .hovered
+            .as_ref()
+            .is_some_and(|h| h.pos == pos && h.revision == now.revision);
+        if asked || boundary.interaction.is_some() {
+            return;
+        }
+        let params = serde_json::to_value(protocol::DescribeParams {
+            epoch: now.epoch.clone(),
+            boundary_id: boundary.boundary_id.clone(),
+            pos: pos.clone(),
+        })
+        .expect("describe params serialize");
+        self.hovered = Some(Hover {
+            pos,
+            revision: now.revision.clone(),
+            lines: None,
+        });
+        self.call("bn.world.describe", params, Pending::Describe);
+    }
+
+    fn hover_text(&self, at: Pos) -> Option<Vec<String>> {
+        let (pos, now) = (self.abs(at)?, self.replica.at()?);
+        let h = self.hovered.as_ref()?;
+        (h.pos == pos && h.revision == now.revision)
+            .then(|| h.lines.clone())
+            .flatten()
+            .filter(|l| !l.is_empty())
+    }
+
+    fn native_context(&self) -> bool {
+        true
+    }
+
+    fn context_click(&mut self, at: Pos) -> bool {
+        let free = self
+            .replica
+            .boundary()
+            .is_some_and(|b| b.interaction.is_none());
+        if let (false, true, Some(pos)) = (self.busy, free, self.abs(at)) {
+            self.submit(Operation::Context { pos });
+        }
+        true
+    }
+
+    fn aim(&mut self, at: Pos) -> bool {
+        let Some(here) = self.focus() else {
+            return false;
+        };
+        if self.busy {
+            return true;
+        }
+        match (here == at, self.abs(at)) {
+            // The cursor is already there: the second click confirms it, as Enter does.
+            (true, _) => {
+                self.invoke(&["CONFIRM".into()]);
+            }
+            (false, Some(pos)) => {
+                self.submit(Operation::SetTarget {
+                    candidate_id: None,
+                    pos: Some(pos),
+                });
+            }
+            _ => {}
+        }
+        true
+    }
+
+    fn can_scroll_menu(&self) -> bool {
+        self.replica.boundary().is_some_and(|b| {
+            b.interaction.is_some() && b.actions.iter().any(|a| a.id == "SCROLL_UP")
+        })
+    }
+
+    fn scroll_menu(&mut self, up: bool) -> bool {
+        let id = if up { "SCROLL_UP" } else { "SCROLL_DOWN" };
+        self.can_scroll_menu() && !self.busy && self.invoke(&[id.into()])
     }
 
     fn cancel_menu(&mut self) {
