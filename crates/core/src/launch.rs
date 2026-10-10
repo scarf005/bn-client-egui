@@ -3,7 +3,10 @@
 //! Order: `--engine` flag, `BN_ENGINE` (both via clap), a binary next to the client executable or in its
 //! parent directory, the path saved in the client's config file, then `PATH`.
 
-use crate::transport::Profile;
+use crate::colors::ColorMap;
+use crate::engine_model::EngineModel;
+use crate::keys::KeyMap;
+use crate::transport::{Profile, StdioTransport, game_root};
 use clap::Args;
 use serde_json::{Value, json};
 use std::ffi::{OsStr, OsString};
@@ -61,6 +64,17 @@ impl Search {
 pub fn config_file() -> Option<PathBuf> {
     let dirs = directories::ProjectDirs::from("", "", "bn-client")?;
     Some(dirs.config_dir().join("config.json"))
+}
+
+/// A regular file that may be executed (any execute bit on Unix).
+pub fn is_executable(path: &Path) -> bool {
+    #[cfg(unix)]
+    let mode_ok = path
+        .metadata()
+        .is_ok_and(|m| std::os::unix::fs::PermissionsExt::mode(&m.permissions()) & 0o111 != 0);
+    #[cfg(not(unix))]
+    let mode_ok = true;
+    path.is_file() && mode_ok
 }
 
 fn is_file(path: &Path) -> bool {
@@ -147,6 +161,30 @@ pub fn resolve(flag: Option<&Path>, search: &Search) -> Result<PathBuf, NotFound
         path.to_string_lossy()
     ));
     Err(NotFound(searched))
+}
+
+/// A started engine with the data loaded from its game root.
+pub struct Opened {
+    pub model: EngineModel,
+    pub root: Option<PathBuf>,
+}
+
+/// Starts the engine, remembers its path in the config file and loads colours and keys from its game root.
+pub fn open_engine(engine: &Path, profile: &Profile) -> Result<Opened, String> {
+    let transport = StdioTransport::spawn_with(engine, profile)
+        .map_err(|e| format!("cannot start engine {}: {e}", engine.display()))?;
+    if let Some(file) = config_file() {
+        let _ = save_engine(&file, engine);
+    }
+    let root = game_root(engine, std::env::var_os("BN_ROOT").map(PathBuf::from));
+    let colors = root
+        .as_deref()
+        .map_or_else(ColorMap::default, ColorMap::load);
+    let keys = root.as_deref().map_or_else(KeyMap::default, KeyMap::load);
+    let model = EngineModel::new(Box::new(transport))
+        .with_colors(colors)
+        .with_keys(keys);
+    Ok(Opened { model, root })
 }
 
 #[cfg(test)]

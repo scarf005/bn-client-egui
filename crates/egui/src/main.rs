@@ -1,10 +1,10 @@
-use bn_client_egui::colors::ColorMap;
 use bn_client_egui::fonts;
-use bn_client_egui::keys::KeyMap;
-use bn_client_egui::launch::{LaunchArgs, Search, resolve, save_engine};
-use bn_client_egui::transport::{StdioTransport, game_root};
-use bn_client_egui::{App, EngineModel, FakeModel, GameModel};
+use bn_client_egui::launch::{LaunchArgs, Opened, Search, open_engine, resolve};
+use bn_client_egui::setup::{Launcher, Starter};
+use bn_client_egui::transport::Profile;
+use bn_client_egui::{App, FakeModel, GameModel};
 use clap::Parser;
+use eframe::egui;
 use std::path::PathBuf;
 
 fn run(model: impl GameModel + 'static, root: Option<PathBuf>) -> eframe::Result {
@@ -34,36 +34,49 @@ struct Cli {
     launch: LaunchArgs,
 }
 
+/// Starts the engine and builds the running app.
+fn start_engine(
+    ctx: &egui::Context,
+    engine: PathBuf,
+    profile: &Profile,
+) -> Result<Box<dyn eframe::App>, String> {
+    let Opened { model, root } = open_engine(&engine, profile)?;
+    if let Some(root) = &root {
+        fonts::install(ctx, root);
+    }
+    let app = App::new(model);
+    Ok(Box::new(match root {
+        Some(root) => app.with_root(root),
+        None => app,
+    }))
+}
+
 fn main() -> eframe::Result {
     let cli = Cli::parse();
     if cli.launch.fake {
         return run(FakeModel::default(), None);
     }
-    let search = Search::from_env();
-    let engine = resolve(cli.launch.engine.as_deref(), &search).unwrap_or_else(|e| {
-        eprintln!("{e}");
-        std::process::exit(1);
-    });
-    match StdioTransport::spawn_with(&engine, &cli.launch.profile) {
-        Ok(t) => {
-            if let Some(file) = &search.config_file {
-                let _ = save_engine(file, &engine);
-            }
-            let root = game_root(&engine, std::env::var_os("BN_ROOT").map(PathBuf::from));
-            let colors = root
-                .as_deref()
-                .map_or_else(ColorMap::default, ColorMap::load);
-            let keys = root.as_deref().map_or_else(KeyMap::default, KeyMap::load);
-            run(
-                EngineModel::new(Box::new(t))
-                    .with_colors(colors)
-                    .with_keys(keys),
-                root,
-            )
-        }
-        Err(e) => {
-            eprintln!("cannot start engine {}: {e}", engine.display());
-            std::process::exit(1);
-        }
-    }
+    let profile = cli.launch.profile.clone();
+    let found = resolve(cli.launch.engine.as_deref(), &Search::from_env());
+    eframe::run_native(
+        "Cataclysm: Bright Nights client",
+        eframe::NativeOptions::default(),
+        Box::new(move |cc| {
+            let starter = profile.clone();
+            let start: Starter = Box::new(move |ctx, engine| start_engine(ctx, engine, &starter));
+            Ok(Box::new(match found {
+                Ok(engine) => match start_engine(&cc.egui_ctx, engine, &profile) {
+                    Ok(app) => Launcher::running(app, start),
+                    Err(e) => {
+                        eprintln!("{e}");
+                        Launcher::new(String::new(), start).with_error(e)
+                    }
+                },
+                Err(not_found) => {
+                    eprintln!("{not_found}");
+                    Launcher::new(not_found.to_string(), start)
+                }
+            }))
+        }),
+    )
 }

@@ -1,13 +1,9 @@
-use bn_client_core::colors::ColorMap;
-use bn_client_core::keys::KeyMap;
-use bn_client_core::launch::{LaunchArgs, Search, resolve, save_engine};
-use bn_client_core::transport::{StdioTransport, game_root};
-use bn_client_core::{EngineModel, FakeModel, GameModel};
+use bn_client_core::launch::{LaunchArgs, Search, open_engine, resolve};
+use bn_client_core::{FakeModel, GameModel};
 use bn_client_tui::TuiApp;
 use clap::Parser;
 use crossterm::event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyEventKind};
 use crossterm::execute;
-use std::path::PathBuf;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -85,19 +81,9 @@ fn main() -> std::io::Result<()> {
         eprintln!("{e}");
         std::process::exit(1);
     });
-    let transport = StdioTransport::spawn_with(&engine, &cli.launch.profile).unwrap_or_else(|e| {
-        eprintln!("cannot start engine {}: {e}", engine.display());
+    let opened = open_engine(&engine, &cli.launch.profile).unwrap_or_else(|e| {
+        eprintln!("{e}");
         std::process::exit(1);
     });
-    if let Some(file) = &search.config_file {
-        let _ = save_engine(file, &engine);
-    }
-    let root = game_root(&engine, std::env::var_os("BN_ROOT").map(PathBuf::from));
-    let colors = root
-        .as_deref()
-        .map_or_else(ColorMap::default, ColorMap::load);
-    let keys = root.as_deref().map_or_else(KeyMap::default, KeyMap::load);
-    run(EngineModel::new(Box::new(transport))
-        .with_colors(colors)
-        .with_keys(keys))
+    run(opened.model)
 }
