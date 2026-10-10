@@ -161,13 +161,27 @@ impl<M: GameModel> App<M> {
                             }
                             ui.horizontal(|ui| {
                                 let text = self.rich(ui, &choice.label);
-                                let button = self.control(
-                                    ui,
-                                    text,
-                                    &choice.id,
-                                    choice.enabled,
-                                    choice.selected,
-                                );
+                                // Native list menus highlight the whole row; the title screen's entries
+                                // and rows with values or a denial beside them keep their own width.
+                                let whole_row = menu.context != "MAIN_MENU"
+                                    && choice.columns.is_empty()
+                                    && choice.denial.is_empty();
+                                let layout = if whole_row {
+                                    egui::Layout::top_down_justified(egui::Align::Min)
+                                } else {
+                                    *ui.layout()
+                                };
+                                let button = ui
+                                    .with_layout(layout, |ui| {
+                                        self.control(
+                                            ui,
+                                            text,
+                                            &choice.id,
+                                            choice.enabled,
+                                            choice.selected,
+                                        )
+                                    })
+                                    .inner;
                                 ids.extend(button.enabled().then_some(button.id));
                                 if choice.selected {
                                     cursor_seen = Some(choice.id.clone());

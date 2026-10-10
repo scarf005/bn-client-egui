@@ -900,3 +900,21 @@ fn a_popup_right_after_another_takes_the_focus_too() {
         .unwrap();
     assert!(button.accesskit_node().is_focused());
 }
+
+#[test]
+fn list_menu_rows_fill_the_window_like_the_native_highlight_bar() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    script.push(show(
+        41,
+        json!([]),
+        choices_menu(vec![choice("a", "Alpha"), choice("b", "Longer beta row")]),
+    ));
+    h.run_steps(4);
+    let (alpha, beta) = (
+        h.get_by_label("Alpha").rect(),
+        h.get_by_label("Longer beta row").rect(),
+    );
+    assert_eq!(alpha.width(), beta.width(), "{alpha:?} {beta:?}");
+    assert!(alpha.width() >= 500.0, "{alpha:?}");
+}
