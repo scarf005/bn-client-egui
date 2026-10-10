@@ -207,7 +207,7 @@ impl<M: GameModel> TuiApp<M> {
         if let Some(menu) = self.menu() {
             return match menu.context.as_str() {
                 "CRAFTING" => self.crafting_key(&menu, key),
-                _ if self.settings_key(&menu, key) => {}
+                _ if !menu.screen && self.settings_key(&menu, key) => {}
                 _ => self.menu_key(&menu, key),
             };
         }

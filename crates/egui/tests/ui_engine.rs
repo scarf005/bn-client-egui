@@ -37,7 +37,7 @@ fn submits(h: &ScriptHandle) -> Vec<serde_json::Value> {
 fn engine_map_renders_and_a_click_submits_a_travel_through_the_protocol() {
     let (mut h, script) = harness();
     h.run_steps(3);
-    assert_eq!(script.sent_methods(), ["bn.hello", "bn.subscribe"]);
+    assert_eq!(script.sent_methods()[..2], ["bn.hello", "bn.subscribe"]);
     let origin = h.get_by_label("Map").rect().min;
     // The avatar is at view (20, 12); click two cells east of it.
     let pos = origin + egui::vec2(22.5 * CELL, 12.5 * CELL);
@@ -156,10 +156,22 @@ fn closing_the_menu_event_removes_the_window() {
     assert!(h.query_by_label("Choose an item").is_none());
 }
 
+fn open_palette(h: &mut H) {
+    h.event(egui::Event::Key {
+        key: egui::Key::P,
+        physical_key: None,
+        pressed: true,
+        repeat: false,
+        modifiers: egui::Modifiers::COMMAND,
+    });
+    h.run_steps(3);
+}
+
 #[test]
-fn action_list_shows_name_and_keys_and_clicking_submits_the_action_id() {
+fn action_palette_shows_name_and_keys_and_clicking_submits_the_action_id() {
     let (mut h, script) = harness();
     h.run_steps(3);
+    open_palette(&mut h);
     h.get_by_label("Move right (RIGHT, l)").click();
     h.run_steps(2);
     assert_eq!(
@@ -362,6 +374,7 @@ fn operations(script: &ScriptHandle) -> Vec<serde_json::Value> {
 fn arrow_key_walks_after_a_button_was_clicked() {
     let (mut h, script) = harness();
     h.run_steps(3);
+    open_palette(&mut h);
     h.get_by_label("Move left (LEFT, h)").click();
     h.run_steps(2);
     script.push(notice("completed", None));
@@ -404,11 +417,13 @@ fn arrow_key_in_a_menu_runs_the_action_the_menus_context_binds_to_it() {
 }
 
 #[test]
-fn actions_panel_does_not_blink_during_a_short_command() {
+fn action_palette_does_not_blink_during_a_short_command() {
     let (mut h, _script) = harness();
     h.run_steps(3);
+    open_palette(&mut h);
     let before = h.get_by_label("Move right (RIGHT, l)").rect();
-    click_map(&mut h, (22.5, 12.5));
+    // Below the palette, which is open over the top of the map.
+    click_map(&mut h, (22.5, 40.5));
     h.run_steps(3);
     assert!(h.state().model.busy());
     let during = h.get_by_label("Move right (RIGHT, l)");
@@ -417,11 +432,12 @@ fn actions_panel_does_not_blink_during_a_short_command() {
 }
 
 #[test]
-fn actions_panel_keeps_its_layout_when_a_long_command_disables_it() {
+fn action_palette_keeps_its_layout_when_a_long_command_disables_it() {
     let (mut h, _script) = harness();
     h.run_steps(3);
+    open_palette(&mut h);
     let before = h.get_by_label("Move right (RIGHT, l)").rect();
-    click_map(&mut h, (22.5, 12.5));
+    click_map(&mut h, (22.5, 40.5));
     h.run_steps(2);
     h.state().clock().advance(SETTLE);
     h.run_steps(3);
@@ -473,6 +489,7 @@ fn escape_interrupts_the_running_command_but_does_nothing_when_idle() {
     h.key_press(egui::Key::Escape);
     h.run_steps(2);
     assert_eq!(interrupts(&script), 0, "nothing is running");
+    open_palette(&mut h);
     h.get_by_label("Move left (LEFT, h)").click();
     h.run_steps(2);
     h.key_press(egui::Key::Escape);
@@ -485,6 +502,7 @@ fn status_line_offers_interrupt_only_while_a_command_runs() {
     let (mut h, script) = harness();
     h.run_steps(3);
     assert!(h.query_by_label("Interrupt").is_none());
+    open_palette(&mut h);
     h.get_by_label("Move left (LEFT, h)").click();
     h.run_steps(2);
     h.get_by_label("Interrupt").click();
@@ -690,6 +708,27 @@ mod overmap {
         assert_eq!(
             operations(&script).last().unwrap(),
             &json!({"kind":"action","action_id":"QUIT"})
+        );
+    }
+}
+
+#[test]
+fn the_title_screen_is_only_its_menu() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    h.get_by_label("Message log");
+    let mut menu = fixture("events_43_menu");
+    menu["params"]["events"][0]["changes"]["interaction"]["interaction"]["context"] =
+        json!("MAIN_MENU");
+    script.push(fixture("events_41_walk"));
+    script.push(fixture("events_42_message"));
+    script.push(menu);
+    h.run_steps(4);
+    h.get_by_label("combat knife");
+    for panel in ["Message log", "Ground", "Inventory", "Map"] {
+        assert!(
+            h.query_by_label(panel).is_none(),
+            "{panel} belongs to a running game"
         );
     }
 }

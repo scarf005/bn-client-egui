@@ -55,8 +55,12 @@ fn the_list_shows_marks_the_predicted_carry_header_and_the_cursor_rows_descripti
     h.get_by_label("[ ] lighter (17/25)");
     h.get_by_label("[x] tin can");
     h.get_by_label("PICK Wgt 0.2/45.0  Vol 0.30/0.00");
-    h.get_by_label_contains("Weight: 0.01 kg");
-    h.get_by_label_contains("This is a disposable plastic lighter.");
+    // The native cursor row is the tin can: its description is shown, not the first row's.
+    h.get_by_label_contains("A battered tin can.");
+    assert!(
+        h.query_by_label_contains("disposable plastic lighter")
+            .is_none()
+    );
 }
 
 #[test]

@@ -11,17 +11,30 @@ use serde_json::{Value, json};
 
 type H<'a> = Harness<'a, App<EngineModel>>;
 
+fn open_palette(h: &mut H) {
+    h.event(egui::Event::Key {
+        key: egui::Key::P,
+        physical_key: None,
+        pressed: true,
+        repeat: false,
+        modifiers: egui::Modifiers::COMMAND,
+    });
+    h.run_steps(3);
+}
+
 fn harness<'a>() -> (H<'a>, ScriptHandle) {
     let (t, h) = session();
     let t = (0..6).fold(t, |t, _| {
         t.on("bn.command.submit", vec![fixture("submit_result")])
     });
-    let model = EngineModel::new(Box::new(t));
+    // A manual clock: the settle delay never elapses on a loaded machine.
+    let clock = bn_client_core::Clock::manual();
+    let model = EngineModel::new(Box::new(t)).with_clock(clock.clone());
     let harness = Harness::builder()
         .with_size(egui::vec2(1100.0, 800.0))
         .build_ui_state(
             |ui, app: &mut App<EngineModel>| app.show(ui),
-            App::new(model),
+            App::new(model).with_clock(clock),
         );
     (harness, h)
 }
@@ -123,6 +136,7 @@ fn a_popup_shows_one_dismiss_control_and_no_context_name_as_title() {
         popup(true, "Welcome to the tutorial!", ack),
     ));
     h.run_steps(3);
+    open_palette(&mut h);
     h.get_by_label("Welcome to the tutorial!");
     assert!(h.query_by_label("POPUP_WAIT").is_none());
     assert!(
@@ -186,6 +200,7 @@ fn actions_the_engine_gives_no_key_are_not_listed() {
         Value::Null,
     ));
     h.run_steps(3);
+    open_palette(&mut h);
     h.get_by_label("Pick up (g)");
     assert!(h.query_by_label("COORDINATE").is_none());
 }
@@ -340,6 +355,7 @@ fn a_click_during_a_command_is_sent_when_it_finishes_instead_of_being_lost() {
     h.run_steps(3);
     h.event(egui::Event::Text("k".into()));
     h.run_steps(1);
+    open_palette(&mut h);
     h.get_by_label("Ascend Stairs (<)").click();
     h.run_steps(2);
     assert_eq!(submits(&script).len(), 1, "the engine is still busy");
@@ -477,5 +493,32 @@ fn a_menus_rebound_keys_move_and_confirm_through_the_engine_and_focus_follows_it
     assert_eq!(
         submits(&script),
         ["DOWN", "CONFIRM"].map(|id| json!({"kind":"action","action_id":id}))
+    );
+}
+
+fn screen(sequence: u32) -> Value {
+    show(
+        sequence,
+        json!([{"id":"NEXT_TAB","name":"Next tab","keys":["TAB"]},
+               {"id":"QUIT","name":"Cancel","keys":["ESC"]}]),
+        json!({"schema_id":"s:screen","kind":"custom","context":"NEW_CHAR_STATS","title":"",
+            "message":"Strength:    8\nDexterity:   8","allow_cancel":false,"choices":[],
+            "choice_total":0,"allow_set_count":false}),
+    )
+}
+
+#[test]
+fn a_composed_screen_is_shown_as_text_and_every_key_including_tab_is_the_engines() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    script.push(screen(41));
+    h.run_steps(4);
+    assert!(h.state().model.menu().unwrap().screen);
+    h.get_by_label_contains("Strength:    8");
+    h.key_press(egui::Key::Tab);
+    h.run_steps(2);
+    assert_eq!(
+        submits(&script),
+        [json!({"kind":"action","action_id":"NEXT_TAB"})]
     );
 }

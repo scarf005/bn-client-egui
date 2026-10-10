@@ -6,6 +6,7 @@ pub mod fonts;
 pub mod setup;
 pub mod sidebar;
 pub mod text;
+pub mod theme;
 pub mod tileset;
 
 pub use app::App;

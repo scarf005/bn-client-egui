@@ -128,6 +128,9 @@ pub struct Menu {
     pub pane: Option<String>,
     /// The row the engine's own cursor is on, which its navigation keys move.
     pub focus: Option<String>,
+    /// The engine's composed screen of a view it has no structured interaction for: only text to
+    /// show, driven by the keys of the view's actions.
+    pub screen: bool,
 }
 
 impl Menu {
@@ -169,6 +172,16 @@ pub struct CommandStatus {
     pub stage: String,
     /// The command reached a terminal stage.
     pub finished: bool,
+    /// Every stage the command went through, oldest first, so ones that pass within a frame are kept.
+    pub history: Vec<String>,
+}
+
+impl CommandStatus {
+    pub fn set_stage(&mut self, stage: String, finished: bool) {
+        self.history.push(stage.clone());
+        self.stage = stage;
+        self.finished = finished;
+    }
 }
 
 /// Engine loading screen: a title, the steps seen so far and the one in progress.
