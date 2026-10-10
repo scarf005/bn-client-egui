@@ -482,7 +482,11 @@
        "volume_unit": "L",
        "over_weight": false,
        "over_volume": false
-      }
+      },
+      "blocked_areas": [
+       "ITEMS_CONTAINER",
+       "ITEMS_UP"
+      ]
      },
      {
       "id": "pane:2",

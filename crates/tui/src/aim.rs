@@ -25,30 +25,30 @@ const HEADER_ROWS: u16 = 5;
 const GRID_WIDTH: u16 = 20;
 
 /// The native area markers as the curses screen lays them out, each with the action it presses and
-/// its column offset in the grid: Container and Grabbed Vehicle over Surrounding area and Worn Items
+/// the area it names and its column offset in the grid: Container and Grabbed Vehicle over Surrounding area and Worn Items
 /// beside the compass, Inventory level with the middle row, Above and Below at the right edge.
-const MARKERS: [&[(&str, &str, u16)]; 3] = [
+const MARKERS: [&[(&str, &str, &str, u16)]; 3] = [
     &[
-        ("C", "ITEMS_CONTAINER", 0),
-        ("D", "ITEMS_DRAGGED_CONTAINER", 3),
-        ("7", "ITEMS_NW", 8),
-        ("8", "ITEMS_N", 11),
-        ("9", "ITEMS_NE", 14),
-        ("<", "ITEMS_UP", 17),
+        ("C", "ITEMS_CONTAINER", "Container", 0),
+        ("D", "ITEMS_DRAGGED_CONTAINER", "Grabbed Vehicle", 3),
+        ("7", "ITEMS_NW", "North West", 8),
+        ("8", "ITEMS_N", "North", 11),
+        ("9", "ITEMS_NE", "North East", 14),
+        ("<", "ITEMS_UP", "Above", 17),
     ],
     &[
-        ("I", "ITEMS_INVENTORY", 3),
-        ("4", "ITEMS_W", 8),
-        ("5", "ITEMS_CE", 11),
-        ("6", "ITEMS_E", 14),
-        (">", "ITEMS_DOWN", 17),
+        ("I", "ITEMS_INVENTORY", "Inventory", 3),
+        ("4", "ITEMS_W", "West", 8),
+        ("5", "ITEMS_CE", "Directly below you", 11),
+        ("6", "ITEMS_E", "East", 14),
+        (">", "ITEMS_DOWN", "Below", 17),
     ],
     &[
-        ("A", "ITEMS_AROUND", 0),
-        ("W", "ITEMS_WORN", 3),
-        ("1", "ITEMS_SW", 8),
-        ("2", "ITEMS_S", 11),
-        ("3", "ITEMS_SE", 14),
+        ("A", "ITEMS_AROUND", "Surrounding area", 0),
+        ("W", "ITEMS_WORN", "Worn Items", 3),
+        ("1", "ITEMS_SW", "South West", 8),
+        ("2", "ITEMS_S", "South", 11),
+        ("3", "ITEMS_SE", "South East", 14),
     ],
 ];
 
@@ -213,12 +213,17 @@ impl<M: GameModel> TuiApp<M> {
                     )));
                 }
                 let mut at = 0;
-                for &(label, action, offset) in *cells {
+                for &(label, action, area, offset) in *cells {
                     line.push(Span::raw(" ".repeat(usize::from(offset - at))));
                     let on = offered.iter().any(|a| a == action);
-                    let style = match on {
-                        true => Style::new(),
-                        false => Style::new().fg(Color::DarkGray),
+                    // As the native picker: red where the pane cannot put items, white for its own
+                    // area, grey for the rest, and dimmed when the engine offers no such action.
+                    let style = match (pane.blocked.iter().any(|b| b == action), pane.area == area)
+                    {
+                        _ if !on => Style::new().fg(Color::DarkGray),
+                        (true, _) => Style::new().fg(Color::Red),
+                        (false, true) => Style::new().fg(Color::White).add_modifier(Modifier::BOLD),
+                        (false, false) => Style::new().fg(Color::Gray),
                     };
                     line.push(Span::styled(format!("[{label}]"), style));
                     at = offset + 3;

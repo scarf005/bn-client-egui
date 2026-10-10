@@ -174,6 +174,8 @@ pub struct MenuPane {
     pub sort: String,
     /// The header totals the native pane prints; absent from engines that predate them.
     pub totals: Option<PaneTotals>,
+    /// Actions of the areas this pane cannot put items in; the native picker draws them red.
+    pub blocked: Vec<String>,
 }
 
 /// The weight and volume line of a pane header: `weight`/`volume` against an optional maximum.

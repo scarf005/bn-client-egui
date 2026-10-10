@@ -54,7 +54,7 @@ fn the_map_gets_most_of_the_window_and_the_sidebar_sits_beside_it() {
         assert!(map.max.x <= ground.min.x, "sidebar is beside the map");
         let sidebar_width = size.x - ground.min.x;
         assert!(
-            (240.0..=size.x * 0.3).contains(&sidebar_width),
+            (size.x * 0.25..=size.x * 0.4).contains(&sidebar_width),
             "sidebar {sidebar_width} of {size:?}"
         );
         assert!(map.min.x < 20.0, "map starts at the left edge: {map:?}");
@@ -248,4 +248,13 @@ fn dragging_the_log_edge_resizes_it_and_the_size_sticks() {
     h.run_steps(5);
     let after = h.get_by_label("Message log").rect().min.y;
     assert!(after < before - 60.0, "{before} -> {after}");
+}
+
+#[test]
+fn the_sidebar_is_wide_enough_for_the_longest_status_line_on_one_line() {
+    let (mut h, _script) = harness(egui::vec2(1280.0, 800.0));
+    h.run_steps(5);
+    let ground = h.get_by_label("Ground").rect();
+    // The text starts inside the panel margin.
+    assert!(1280.0 - ground.min.x >= 340.0, "{ground:?}");
 }

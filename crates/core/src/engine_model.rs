@@ -1545,6 +1545,12 @@ impl GameModel for EngineModel {
                                 over_volume: b("over_volume"),
                             }
                         }),
+                        blocked: p["blocked_areas"]
+                            .as_array()
+                            .into_iter()
+                            .flatten()
+                            .filter_map(|a| a.as_str().map(String::from))
+                            .collect(),
                     }
                 })
                 .collect(),

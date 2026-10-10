@@ -165,7 +165,12 @@ fn area_markers_follow_the_native_grid_and_dim_the_areas_the_engine_does_not_off
     let (x, y) = find(&t, "[7]");
     assert_eq!(t.backend().buffer()[(x, y)].fg, Color::DarkGray);
     let (x, y) = find(&t, "[8]");
-    assert_ne!(t.backend().buffer()[(x, y)].fg, Color::DarkGray);
+    assert_eq!(t.backend().buffer()[(x, y)].fg, Color::Gray);
+    // The pane's own area is white and one it cannot put items in is red.
+    let (x, y) = find(&t, "[5]");
+    assert_eq!(t.backend().buffer()[(x, y)].fg, Color::White);
+    let (x, y) = find(&t, "[C]");
+    assert_eq!(t.backend().buffer()[(x, y)].fg, Color::Red);
 }
 
 #[test]
