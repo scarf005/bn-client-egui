@@ -272,6 +272,8 @@ pub struct Display {
     drawn: usize,
     /// Squares of the last map paint that lie on the hidden-lighting sprite.
     hidden: usize,
+    /// Squares of the last map paint drawn as a lowlight overlay instead of their terrain.
+    dimmed: usize,
 }
 
 impl Display {
@@ -292,6 +294,7 @@ impl Display {
             engine: None,
             drawn: 0,
             hidden: 0,
+            dimmed: 0,
         };
         display.open();
         display
@@ -380,6 +383,11 @@ impl Display {
         self.hidden
     }
 
+    /// Squares of the last map paint shown as a lowlight overlay: dark or only known to be bright.
+    pub fn dimmed(&self) -> usize {
+        self.dimmed
+    }
+
     /// Whether every sheet of the tileset is ready to draw.
     pub fn ready(&self) -> bool {
         self.atlas
@@ -456,6 +464,7 @@ impl Display {
     pub fn begin(&mut self) {
         self.drawn = 0;
         self.hidden = 0;
+        self.dimmed = 0;
     }
 
     /// Draws an overmap square's tile into `rect`; false when no tileset is in use or it has no sprite
@@ -564,6 +573,34 @@ impl Display {
         self.hidden += usize::from(backdrop);
         if cell.layers.is_empty() {
             return backdrop;
+        }
+        // The game cannot see a dark square at all and can only tell a bright-only one is bright: it draws
+        // the lowlight overlay in place of the square's terrain.
+        let overlay = match (cell.remembered, cell.light) {
+            (false, Some(0)) => Some("lighting_lowlight_dark"),
+            (false, Some(2)) => Some("lighting_lowlight_light"),
+            _ => None,
+        };
+        if let Some(id) = overlay {
+            let query = Query {
+                id,
+                fallbacks: &[],
+                subtile: None,
+                rotation: 0,
+                mirrored: false,
+                creature: false,
+                seed: cell.square,
+                season,
+            };
+            let sprites = atlas.tileset.choose(&query);
+            let mut any = false;
+            for placed in sprites.iter().flat_map(|c| [c.bg, c.fg]).flatten() {
+                any |= draw_sprite(painter, atlas, rect, (sx, sy), placed, Fx::Plain);
+            }
+            if any {
+                self.dimmed += 1;
+                return true;
+            }
         }
         let mut drawn = 0;
         for layer in &cell.layers {
