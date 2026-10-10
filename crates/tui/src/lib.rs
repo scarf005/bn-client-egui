@@ -1,5 +1,6 @@
 //! Terminal client over the same `GameModel` as the egui client.
 
+mod aim;
 mod crafting;
 mod settings;
 
@@ -45,6 +46,8 @@ pub struct TuiApp<M: GameModel> {
     hovered: Option<Pos>,
     /// A settings value being typed.
     edit: Option<settings::Edit>,
+    /// The advanced inventory's drawn rows and queued inputs.
+    aim: aim::Aim,
 }
 
 fn color(c: Rgb) -> Color {
@@ -110,6 +113,7 @@ impl<M: GameModel> TuiApp<M> {
             input: None,
             edit: None,
             hovered: None,
+            aim: Default::default(),
         }
     }
 
@@ -163,6 +167,7 @@ impl<M: GameModel> TuiApp<M> {
 
     /// One step of our own walk (models without engine travel); call between frames.
     pub fn tick(&mut self) {
+        self.run_aim_steps();
         let Some(dest) = self.destination else {
             return;
         };
@@ -217,6 +222,8 @@ impl<M: GameModel> TuiApp<M> {
         if let Some(menu) = self.menu() {
             return match menu.context.as_str() {
                 "CRAFTING" => self.crafting_key(&menu, key),
+                // Every key of the advanced inventory is the engine's, Tab included (it swaps panes).
+                "ADVANCED_INVENTORY" => self.menu_key(&menu, key),
                 _ if !menu.screen && self.settings_key(&menu, key) => {}
                 _ => self.menu_key(&menu, key),
             };
@@ -269,6 +276,13 @@ impl<M: GameModel> TuiApp<M> {
     /// are whatever the player bound in it, and the engine moves its own cursor.
     fn menu_key(&mut self, menu: &Menu, key: KeyEvent) {
         if token(key).is_some_and(|t| self.model.press(&t)) {
+            return;
+        }
+        // A menu the engine binds no confirm key in still acts on the row under its cursor.
+        if key.code == KeyCode::Enter
+            && let Some(row) = menu.entries().get(self.selected).filter(|c| c.enabled)
+        {
+            self.model.choose(&row.id);
             return;
         }
         // A menu the engine gives no cancel key still closes with Esc.
@@ -380,6 +394,13 @@ impl<M: GameModel> TuiApp<M> {
     pub fn handle_mouse(&mut self, ev: MouseEvent) {
         if self.model.loading().is_some() {
             return;
+        }
+        if let Some(menu) = self
+            .model
+            .menu()
+            .filter(|m| m.context == "ADVANCED_INVENTORY")
+        {
+            return self.aim_mouse(&menu, ev);
         }
         let wheel = match ev.kind {
             MouseEventKind::ScrollUp => Some(true),
@@ -570,6 +591,7 @@ impl<M: GameModel> TuiApp<M> {
         if let Some(menu) = self.menu() {
             match menu.context.as_str() {
                 "CRAFTING" => self.draw_crafting(f, &menu),
+                "ADVANCED_INVENTORY" => self.draw_aim(f, &menu),
                 _ => self.draw_menu(f, &menu),
             }
         }

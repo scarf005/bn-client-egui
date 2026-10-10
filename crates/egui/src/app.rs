@@ -17,8 +17,11 @@ mod sidebar;
 const SETTLE: std::time::Duration = std::time::Duration::from_millis(150);
 
 /// The sidebar's initial share of the window width, and its limits in points; independent of its content.
-const SIDEBAR_SHARE: f32 = 0.25;
-const SIDEBAR_WIDTH: (f32, f32) = (280.0, 480.0);
+const SIDEBAR_SHARE: f32 = 0.28;
+/// 360 pt holds the longest status line (stamina) on one line; a small window gives up at most 40%.
+const SIDEBAR_WIDTH: (f32, f32) = (360.0, 520.0);
+/// The most of the window width the sidebar's minimum may take.
+const SIDEBAR_MIN_SHARE: f32 = 0.4;
 
 /// After a popup closes, Space is held back until it has been quiet this long: the player is still dismissing.
 const POPUP_SPACE_HOLD: std::time::Duration = std::time::Duration::from_millis(500);
@@ -365,11 +368,11 @@ impl<M: GameModel> App<M> {
             self.menu(ui.ctx());
             return;
         }
+        let room = ui.available_width();
+        let narrowest = SIDEBAR_WIDTH.0.min(room * SIDEBAR_MIN_SHARE);
         egui::Panel::right("sidebar")
-            .default_size(
-                (ui.available_width() * SIDEBAR_SHARE).clamp(SIDEBAR_WIDTH.0, SIDEBAR_WIDTH.1),
-            )
-            .size_range(SIDEBAR_WIDTH.0..=SIDEBAR_WIDTH.1)
+            .default_size((room * SIDEBAR_SHARE).clamp(narrowest, SIDEBAR_WIDTH.1))
+            .size_range(narrowest..=SIDEBAR_WIDTH.1)
             .show(ui, |ui| {
                 profiling::scope!("sidebar");
                 ui.set_min_width(ui.available_width());
@@ -935,18 +938,20 @@ impl<M: GameModel> App<M> {
         self.cursor = to_abs(cursor);
         // A dialog on top owns the pointer; the tooltip would hang over it.
         let tip = self.model.menu().is_none() && self.palette.is_none();
+        // The tooltip is about the square under the pointer; keyboard moves of the cursor leave it alone.
+        let under = response.hover_pos().map_or(cursor, cell_at);
         response.clone().on_hover_ui_at_pointer(|ui| {
             if !tip {
                 return;
             }
             // The engine's own mouse-view text when it has answered for this square.
-            if let Some(lines) = self.model.hover_text(cursor) {
+            if let Some(lines) = self.model.hover_text(under) {
                 for line in lines {
                     // A tooltip at the pointer gets almost no width to wrap in; one line never wraps.
                     ui.add(egui::Label::new(line).wrap_mode(egui::TextWrapMode::Extend));
                 }
             } else {
-                let desc = self.model.cell(cursor).desc;
+                let desc = self.model.cell(under).desc;
                 if desc != "unknown" {
                     ui.add(egui::Label::new(desc).wrap_mode(egui::TextWrapMode::Extend));
                 }

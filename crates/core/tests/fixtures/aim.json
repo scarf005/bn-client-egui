@@ -471,7 +471,11 @@
       "area_label": "Directly below you",
       "area_description": "",
       "filter": "",
-      "storage_kind": "ground"
+      "storage_kind": "ground",
+      "blocked_areas": [
+       "ITEMS_CONTAINER",
+       "ITEMS_UP"
+      ]
      },
      {
       "id": "pane:2",

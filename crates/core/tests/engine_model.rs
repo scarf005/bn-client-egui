@@ -1850,4 +1850,6 @@ fn a_two_pane_menu_publishes_its_panes_with_area_role_and_filter() {
         .count();
     assert_eq!(in_left, 2);
     assert!(m.actions().iter().any(|a| a.id == "ITEMS_CE"));
+    assert_eq!(menu.panes[0].blocked, ["ITEMS_CONTAINER", "ITEMS_UP"]);
+    assert!(menu.panes[1].blocked.is_empty());
 }
