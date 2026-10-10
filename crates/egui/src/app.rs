@@ -828,7 +828,8 @@ impl<M: GameModel> App<M> {
         response.clone().on_hover_ui_at_pointer(|ui| {
             let desc = self.model.cell(cursor).desc;
             if desc != "unknown" {
-                ui.label(desc);
+                // A tooltip at the pointer gets almost no width to wrap in; one line never wraps.
+                ui.add(egui::Label::new(desc).wrap_mode(egui::TextWrapMode::Extend));
             }
         });
         let menu = response.context_menu(|ui| {
