@@ -5,7 +5,7 @@
 //! Measures the CPU time of one frame (UI pass, tessellation, accessibility tree); GPU work is not included.
 use bn_client_egui::transport::{StdioTransport, game_root};
 use bn_client_egui::watchdog::Watchdog;
-use bn_client_egui::{App, EngineModel, GameModel, keys::KeyMap};
+use bn_client_egui::{App, EngineModel, GameModel};
 use cpu_time::{ProcessTime, ThreadTime};
 use eframe::egui;
 use egui_kittest::Harness;
@@ -228,7 +228,7 @@ fn frame_cost_idle_and_while_stepping() {
     let settings = dir.join("settings.json");
     std::fs::write(&settings, format!(r#"{{"tiles":{tiles},"tileset":null}}"#)).unwrap();
     let transport = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
-    let model = EngineModel::new(Box::new(transport)).with_keys(KeyMap::load(&root));
+    let model = EngineModel::new(Box::new(transport));
     let app = App::new(model)
         .with_settings(settings)
         .with_root(root.clone());
