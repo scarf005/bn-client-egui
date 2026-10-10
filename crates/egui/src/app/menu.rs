@@ -200,13 +200,15 @@ impl<M: GameModel> App<M> {
                     filter_clicked = filter.clicked();
                 }
                 if menu.total > menu.choices.len() {
-                    // The rest of a long list comes one page per click, so a huge list never floods the window.
+                    // A character creation list is all there is to pick from, so its pages are fetched
+                    // as they are missing; any other long list comes one page per click.
+                    more = menu.context.starts_with("NEW_CHAR_");
                     let rest = ui.button(format!(
                         "Load more ({} of {})",
                         menu.choices.len(),
                         menu.total
                     ));
-                    more = rest.clicked();
+                    more |= rest.clicked();
                 }
                 if let Some(description) = described.filter(|d| is_prose(d)) {
                     ui.separator();
