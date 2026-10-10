@@ -8,4 +8,6 @@ pub mod replica;
 pub mod transport;
 
 pub use engine_model::EngineModel;
-pub use model::{ActionEntry, Cell, FakeModel, GameModel, Loading, Menu, MenuChoice, Pos, Rgb};
+pub use model::{
+    ActionEntry, Cell, CommandStatus, FakeModel, GameModel, Loading, Menu, MenuChoice, Pos, Rgb,
+};

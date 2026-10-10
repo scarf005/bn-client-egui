@@ -2,7 +2,9 @@
 
 use crate::colors::ColorMap;
 use crate::keys::KeyMap;
-use crate::model::{ActionEntry, Cell, GameModel, Loading, Menu, MenuChoice, Pos, Rgb};
+use crate::model::{
+    ActionEntry, Cell, CommandStatus, GameModel, Loading, Menu, MenuChoice, Pos, Rgb,
+};
 use crate::protocol::{
     self, Cell as WorldCell, Expect, Incoming, LoadingNotice, Look, Operation, Snapshot, Submit,
     WorldPos,
@@ -49,6 +51,7 @@ pub struct EngineModel {
     loading: Option<Loading>,
     /// Actions on show: between auto-move steps the engine offers none, which must not flicker the list.
     shown: Vec<ActionEntry>,
+    status: Option<CommandStatus>,
 }
 
 fn look_name(l: &Look) -> String {
@@ -107,6 +110,7 @@ impl EngineModel {
             keys: KeyMap::default(),
             loading: None,
             shown: vec![],
+            status: None,
         };
         m.call(
             "bn.hello",
@@ -178,6 +182,24 @@ impl EngineModel {
                     "completed" => "completed",
                     _ => "stage",
                 });
+                if self.command_id.as_deref() == Some(&n.command_id) {
+                    let reason = n.error.as_ref().map(error_kind);
+                    let swap = reason.as_deref() == Some("stale_epoch");
+                    let stage = match n.stage.as_str() {
+                        "validated" => "accepted".into(),
+                        "completed" => "done".into(),
+                        _ if swap => "done".into(),
+                        "rejected" | "interrupted" => {
+                            let why = reason.as_deref().map_or("no reason given", explain);
+                            format!("{}: {why}", n.stage)
+                        }
+                        other => other.into(),
+                    };
+                    if let Some(s) = &mut self.status {
+                        s.stage = stage;
+                        s.finished = n.is_terminal();
+                    }
+                }
                 if n.is_terminal() && self.command_id.as_deref() == Some(&n.command_id) {
                     self.busy = false;
                     self.command_id = None;
@@ -224,8 +246,15 @@ impl EngineModel {
             self.mark("subscribed");
             self.subscribing = false;
         }
-        if matches!(kind, Pending::Submit) && result.is_err() {
+        if matches!(kind, Pending::Submit)
+            && let Err(e) = &result
+        {
             self.busy = false;
+            let kind = e.data.as_ref().map_or(e.message.clone(), error_kind);
+            if let Some(s) = &mut self.status {
+                s.stage = format!("rejected: {}", explain(&kind));
+                s.finished = true;
+            }
         }
         let value = match result {
             Ok(v) => v,
@@ -248,6 +277,9 @@ impl EngineModel {
             Pending::Submit => {
                 self.mark("received");
                 self.command_id = value["command_id"].as_str().map(String::from);
+                if let Some(s) = self.status.as_mut().filter(|s| s.stage == "sent") {
+                    s.stage = "accepted".into();
+                }
             }
         }
     }
@@ -265,6 +297,7 @@ impl EngineModel {
             },
             operation,
         };
+        self.status = Some(self.describe(&submit.operation));
         self.busy = true;
         self.rejected = false;
         self.walking = false;
@@ -272,6 +305,33 @@ impl EngineModel {
         self.mark("submit");
         self.call("bn.command.submit", params, Pending::Submit);
         true
+    }
+
+    /// What the user pressed, named from the boundary the command was sent against.
+    fn describe(&self, operation: &Operation) -> CommandStatus {
+        let boundary = self.replica.boundary();
+        let (label, target) = match operation {
+            Operation::Choose { choice_id } => {
+                let choices = boundary
+                    .and_then(|b| b.interaction.as_ref())
+                    .map(|i| &i.choices);
+                let found = choices.and_then(|c| c.iter().find(|c| &c.id == choice_id));
+                (found.map(|c| c.label.clone()), Some(choice_id.clone()))
+            }
+            Operation::Action { action_id } => {
+                let found = boundary.and_then(|b| b.actions.iter().find(|a| &a.id == action_id));
+                (found.map(|a| a.name.clone()), Some(action_id.clone()))
+            }
+            Operation::Travel { .. } => (Some("Travel".into()), None),
+            Operation::Cancel => (Some("Cancel".into()), None),
+            _ => (None, None),
+        };
+        CommandStatus {
+            label: label.unwrap_or_else(|| "Command".into()),
+            target,
+            stage: "sent".into(),
+            finished: false,
+        }
     }
 
     /// Submits a registered action whose id is one of `ids`; reports when the engine has none.
@@ -351,6 +411,19 @@ impl EngineModel {
                 })
                 .collect()
         });
+    }
+}
+
+/// Engine command errors in words a player can act on.
+fn explain(kind: &str) -> &str {
+    match kind {
+        "stale_epoch" => "the world changed",
+        "stale_revision" | "stale_boundary" | "stale_interaction_schema" => {
+            "the screen changed, try again"
+        }
+        "validation_failed" => "not possible here",
+        "not_ready" => "the game is not ready",
+        other => other,
     }
 }
 
@@ -503,6 +576,10 @@ impl GameModel for EngineModel {
 
     fn actions(&self) -> Vec<ActionEntry> {
         self.shown.clone()
+    }
+
+    fn command(&self) -> Option<CommandStatus> {
+        self.status.clone()
     }
 
     fn travel(&mut self, at: Pos) -> bool {

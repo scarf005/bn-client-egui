@@ -43,6 +43,19 @@ pub struct ActionEntry {
     pub keys: Vec<String>,
 }
 
+/// The command in flight, or the last one's outcome, for the status line and the pressed control.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CommandStatus {
+    /// What the user asked for: a choice or action name, `Travel`, `Cancel`.
+    pub label: String,
+    /// Id of the choice or action that was pressed, to mark it pending.
+    pub target: Option<String>,
+    /// `sent`, `accepted`, `executing`, `done`, or the failure in words.
+    pub stage: String,
+    /// The command reached a terminal stage.
+    pub finished: bool,
+}
+
 /// Engine loading screen: a title, the steps seen so far and the one in progress.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Loading {
@@ -70,6 +83,10 @@ pub trait GameModel {
     /// True while a submitted command has not finished; input is ignored until then.
     fn busy(&self) -> bool {
         false
+    }
+    /// The command in flight or the last one's outcome; none before the first submit.
+    fn command(&self) -> Option<CommandStatus> {
+        None
     }
     /// Actions the engine accepts right now.
     fn actions(&self) -> Vec<ActionEntry> {
