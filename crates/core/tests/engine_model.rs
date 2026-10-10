@@ -1554,3 +1554,17 @@ fn query_popup_rows_do_not_carry_the_action_id_as_a_description() {
         .unwrap();
     assert!(kept.description.starts_with("Time to complete"));
 }
+
+#[test]
+fn a_menu_banner_is_published_line_by_line() {
+    let mut menu = crafting("favorites");
+    menu["interaction"]["banner"] = json!(["<color_light_cyan>art</color>", "", "Version: x"]);
+    let (t, h) = session();
+    let mut m = connected(t);
+    h.push(change(41, json!({"interaction": menu})));
+    m.poll();
+    assert_eq!(
+        m.menu().unwrap().banner,
+        ["<color_light_cyan>art</color>", "", "Version: x"]
+    );
+}
