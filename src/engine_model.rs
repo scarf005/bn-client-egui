@@ -1,7 +1,8 @@
 //! `GameModel` backed by a live engine connection.
 
 use crate::colors::ColorMap;
-use crate::model::{Cell, GameModel, Menu, MenuChoice, Pos};
+use crate::keys::KeyMap;
+use crate::model::{ActionEntry, Cell, GameModel, Menu, MenuChoice, Pos};
 use crate::protocol::{
     self, Cell as WorldCell, Expect, Incoming, Look, Operation, Snapshot, Submit, WorldPos,
 };
@@ -44,6 +45,7 @@ pub struct EngineModel {
     inventory: Vec<String>,
     trace: Vec<(Instant, &'static str)>,
     colors: ColorMap,
+    keys: KeyMap,
 }
 
 fn look_name(l: &Look) -> String {
@@ -99,6 +101,7 @@ impl EngineModel {
             inventory: vec![],
             trace: vec![],
             colors: ColorMap::default(),
+            keys: KeyMap::default(),
         };
         m.call(
             "bn.hello",
@@ -111,6 +114,12 @@ impl EngineModel {
     /// Uses the game's own palette for look colours.
     pub fn with_colors(mut self, colors: ColorMap) -> Self {
         self.colors = colors;
+        self
+    }
+
+    /// Uses the game's key settings to label and trigger actions.
+    pub fn with_keys(mut self, keys: KeyMap) -> Self {
+        self.keys = keys;
         self
     }
 
@@ -452,6 +461,32 @@ impl GameModel for EngineModel {
 
     fn say(&mut self, text: String) {
         self.messages.push(text);
+    }
+
+    fn actions(&self) -> Vec<ActionEntry> {
+        let actions = self.replica.boundary().map(|b| b.actions.as_slice());
+        actions
+            .unwrap_or_default()
+            .iter()
+            .map(|a| ActionEntry {
+                id: a.id.clone(),
+                name: a.name.clone(),
+                keys: self.keys.keys(&a.id).to_vec(),
+            })
+            .collect()
+    }
+
+    fn invoke_action(&mut self, id: &str) -> bool {
+        !self.busy && self.invoke(&[id.into()])
+    }
+
+    fn press(&mut self, key: &str) -> bool {
+        let offered = self.replica.boundary().and_then(|b| {
+            let bound = self.keys.actions_for(key);
+            b.actions.iter().find(|a| bound.contains(&a.id.as_str()))
+        });
+        let id = offered.map(|a| a.id.clone());
+        id.is_some_and(|id| self.invoke_action(&id))
     }
 
     fn menu(&self) -> Option<Menu> {

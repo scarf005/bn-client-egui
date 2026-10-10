@@ -74,7 +74,6 @@ fn engine_menu_renders_choices_denials_and_submits_choose_and_cancel() {
         script.push(fixture(name));
     }
     h.run_steps(3);
-    h.get_by_label("Pick up");
     h.get_by_label("Choose an item");
     h.get_by_label("Too heavy");
     h.get_by_label("tin can").click();
@@ -125,4 +124,37 @@ fn closing_the_menu_event_removes_the_window() {
     h.run_steps(3);
     assert!(h.state().model.menu().is_none());
     assert!(h.query_by_label("Choose an item").is_none());
+}
+
+#[test]
+fn action_list_shows_name_and_keys_and_clicking_submits_the_action_id() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    h.get_by_label("Move right (RIGHT, l)").click();
+    h.run_steps(2);
+    assert_eq!(
+        submits(&script)[0]["params"]["operation"],
+        json!({"kind":"action","action_id":"RIGHT"})
+    );
+}
+
+#[test]
+fn typing_a_game_key_submits_its_action() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    h.event(egui::Event::Text("k".into()));
+    h.run_steps(2);
+    assert_eq!(
+        submits(&script)[0]["params"]["operation"],
+        json!({"kind":"action","action_id":"UP"})
+    );
+}
+
+#[test]
+fn typed_key_with_no_offered_action_submits_nothing() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    h.event(egui::Event::Text("q".into()));
+    h.run_steps(2);
+    assert!(submits(&script).is_empty(), "q is bound to nothing offered");
 }

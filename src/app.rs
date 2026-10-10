@@ -32,6 +32,8 @@ pub struct App<M: GameModel> {
     destination: Option<Pos>,
     last_hover: Option<egui::Pos2>,
     wired: bool,
+    /// A typed key already ran an engine action this frame.
+    keys_consumed: bool,
 }
 
 impl<M: GameModel> App<M> {
@@ -44,6 +46,7 @@ impl<M: GameModel> App<M> {
             destination: None,
             last_hover: None,
             wired: false,
+            keys_consumed: false,
         }
     }
 
@@ -61,12 +64,56 @@ impl<M: GameModel> App<M> {
                 .request_repaint_after(std::time::Duration::from_secs(1));
         }
         self.walk(ui.ctx());
+        self.game_keys(ui.ctx());
+        egui::Panel::left("actions")
+            .resizable(false)
+            .show(ui, |ui| self.actions(ui));
         egui::Panel::bottom("log").show(ui, |ui| self.log(ui));
         egui::Panel::right("items")
             .resizable(false)
             .show(ui, |ui| self.items(ui));
         self.map(ui);
         self.menu(ui.ctx());
+    }
+
+    /// Typed characters and special keys are game keys; the first one that runs an action wins.
+    fn game_keys(&mut self, ctx: &egui::Context) {
+        let typed = ctx.input(|i| {
+            i.events
+                .iter()
+                .filter_map(|e| match e {
+                    egui::Event::Text(t) => Some(if t == " " { "SPACE".into() } else { t.clone() }),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+        });
+        self.keys_consumed = false;
+        for key in typed {
+            if self.model.press(&key) {
+                self.keys_consumed = true;
+            }
+        }
+    }
+
+    /// Everything the engine accepts right now, each with its game key, clickable.
+    fn actions(&mut self, ui: &mut egui::Ui) {
+        ui.heading("Actions");
+        let mut invoke = None;
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            for a in self.model.actions() {
+                let label = if a.keys.is_empty() {
+                    a.name.clone()
+                } else {
+                    format!("{} ({})", a.name, a.keys.join(", "))
+                };
+                if ui.button(label).clicked() {
+                    invoke = Some(a.id);
+                }
+            }
+        });
+        if let Some(id) = invoke {
+            self.model.invoke_action(&id);
+        }
     }
 
     /// The engine's current interaction, drawn generically: title, message, choices, cancel.
@@ -213,7 +260,7 @@ impl<M: GameModel> App<M> {
                 x: (self.cursor.x + dx).clamp(0, size.x - 1),
                 y: (self.cursor.y + dy).clamp(0, size.y - 1),
             };
-            if look {
+            if look && !self.keys_consumed {
                 self.look(self.cursor);
             }
         }

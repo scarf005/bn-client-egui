@@ -33,6 +33,14 @@ pub struct Menu {
     pub can_cancel: bool,
 }
 
+/// A registered action the engine currently accepts, with the keys the game binds to it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ActionEntry {
+    pub id: String,
+    pub name: String,
+    pub keys: Vec<String>,
+}
+
 /// What the UI needs from the game: `FakeModel` in tests, `EngineModel` against a real engine.
 pub trait GameModel {
     /// Called once per frame: drain engine messages. No-op for synchronous models.
@@ -49,6 +57,18 @@ pub trait GameModel {
     }
     /// True while a submitted command has not finished; input is ignored until then.
     fn busy(&self) -> bool {
+        false
+    }
+    /// Actions the engine accepts right now.
+    fn actions(&self) -> Vec<ActionEntry> {
+        vec![]
+    }
+    /// Runs the action with this id; false if it is not offered or the model is busy.
+    fn invoke_action(&mut self, _id: &str) -> bool {
+        false
+    }
+    /// A game key token (`g`, `SPACE`, `UP`); true if it ran an action.
+    fn press(&mut self, _key: &str) -> bool {
         false
     }
     fn menu(&self) -> Option<Menu> {

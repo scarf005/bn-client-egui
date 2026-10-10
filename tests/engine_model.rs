@@ -327,3 +327,65 @@ fn cell_colors_come_from_the_game_palette() {
         eframe::egui::Color32::from_rgb(10, 0, 0)
     );
 }
+
+fn with_keys(t: ScriptedTransport) -> EngineModel {
+    use bn_client_egui::keys::KeyMap;
+    let json = r#"[{"id":"pickup","category":"DEFAULTMODE","bindings":[{"input_method":"keyboard","key":"g"}]}]"#;
+    let mut m =
+        EngineModel::new(Box::new(t)).with_keys(KeyMap::from_json(json, "DEFAULTMODE").unwrap());
+    m.poll();
+    m
+}
+
+#[test]
+fn actions_list_names_ids_and_keys_from_the_boundary() {
+    let (t, _h) = session();
+    let m = with_keys(t);
+    let a = m.actions();
+    let right = a.iter().find(|a| a.id == "RIGHT").unwrap();
+    assert_eq!(
+        (right.name.as_str(), right.keys.as_slice()),
+        (
+            "Move right",
+            ["RIGHT".to_string(), "l".to_string()].as_slice()
+        )
+    );
+    assert_eq!(a.iter().find(|a| a.id == "pickup").unwrap().keys, ["g"]);
+}
+
+#[test]
+fn pressing_a_bound_key_submits_the_same_action_id() {
+    let (t, h) = session();
+    let mut m = with_keys(t.on("bn.command.submit", walk_reply()));
+    assert!(m.press("g"));
+    assert_eq!(
+        submits(&h)[0]["params"]["operation"],
+        json!({"kind":"action","action_id":"pickup"})
+    );
+    assert!(!m.press("l"), "busy: the key is not consumed");
+    assert_eq!(submits(&h).len(), 1);
+}
+
+#[test]
+fn keys_without_an_offered_action_are_not_consumed() {
+    let (t, h) = session();
+    let mut m = with_keys(t);
+    assert!(!m.press("q"));
+    assert!(
+        !m.press("x"),
+        "bound in the game but not offered by this boundary"
+    );
+    assert!(submits(&h).is_empty());
+}
+
+#[test]
+fn clicking_an_action_invokes_it_by_id_and_unknown_ids_are_refused() {
+    let (t, h) = session();
+    let mut m = with_keys(t.on("bn.command.submit", walk_reply()));
+    assert!(!m.invoke_action("nope"));
+    assert!(m.invoke_action("LEFT"));
+    assert_eq!(
+        submits(&h)[0]["params"]["operation"],
+        json!({"kind":"action","action_id":"LEFT"})
+    );
+}

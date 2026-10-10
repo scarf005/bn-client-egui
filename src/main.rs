@@ -1,5 +1,6 @@
 use bn_client_egui::colors::ColorMap;
 use bn_client_egui::fonts;
+use bn_client_egui::keys::KeyMap;
 use bn_client_egui::transport::{StdioTransport, game_root};
 use bn_client_egui::{App, EngineModel, FakeModel, GameModel};
 use std::path::PathBuf;
@@ -41,7 +42,13 @@ fn main() -> eframe::Result {
             let colors = root
                 .as_deref()
                 .map_or_else(ColorMap::default, ColorMap::load);
-            run(EngineModel::new(Box::new(t)).with_colors(colors), root)
+            let keys = root.as_deref().map_or_else(KeyMap::default, KeyMap::load);
+            run(
+                EngineModel::new(Box::new(t))
+                    .with_colors(colors)
+                    .with_keys(keys),
+                root,
+            )
         }
         Err(e) => {
             eprintln!("cannot start engine {}: {e}", engine.display());
