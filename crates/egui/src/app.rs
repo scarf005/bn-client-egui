@@ -1038,8 +1038,9 @@ impl<M: GameModel> App<M> {
             egui::Stroke::new(1.0, egui::Color32::WHITE),
             egui::StrokeKind::Inside,
         );
+        let ascii = !self.display.tiles();
         self.effects
-            .paint(&painter, now, cell_px, rect, &mut self.display);
+            .paint(&painter, now, cell_px, rect, &mut self.display, ascii);
         if self.effects.active() {
             ui.ctx().request_repaint();
         }

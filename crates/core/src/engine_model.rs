@@ -249,6 +249,11 @@ impl EngineModel {
                         )
                     })
                     .collect(),
+                scroll: Pos {
+                    x: d["scroll"]["x"].as_i64().unwrap_or(0) as i32,
+                    y: d["scroll"]["y"].as_i64().unwrap_or(-1) as i32,
+                },
+                hp: d["kind"] == "hp",
             },
             _ => return None,
         };
