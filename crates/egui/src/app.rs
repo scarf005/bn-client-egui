@@ -1,6 +1,7 @@
 use crate::a11y;
 use crate::display::Display;
-use bn_client_core::{GameModel, Loading, LogLine, Pos};
+use crate::text;
+use bn_client_core::{GameModel, Loading, LogLine, Pos, markup};
 use eframe::egui::{self, accesskit};
 
 mod crafting;
@@ -70,6 +71,12 @@ pub struct App<M: GameModel> {
     /// The cursor has been put on the player since the map first appeared.
     cursor_placed: bool,
     crafting: crafting::Crafting,
+    /// A click that arrived while a command was in flight, sent when the engine is free again.
+    queued: Option<Queued>,
+}
+
+enum Queued {
+    Action(String),
 }
 
 impl<M: GameModel> App<M> {
@@ -98,6 +105,7 @@ impl<M: GameModel> App<M> {
             native_live: a11y::Announcer::default(),
             command_live: a11y::Announcer::default(),
             crafting: Default::default(),
+            queued: None,
         }
     }
 
@@ -137,6 +145,12 @@ impl<M: GameModel> App<M> {
     /// The map display: tiles or ASCII, and the tileset.
     pub fn display(&self) -> &Display {
         &self.display
+    }
+
+    /// `text` with its colour tags drawn as colours.
+    fn rich(&self, ui: &egui::Ui, text: &str) -> egui::WidgetText {
+        let font = egui::TextStyle::Body.resolve(ui.style());
+        text::job(&self.model.styled(text), &font).into()
     }
 
     /// Native-style loading screen: splash image, current step as live text, the step list.
@@ -209,11 +223,13 @@ impl<M: GameModel> App<M> {
         if self.pending_since.is_some() && !self.settled() {
             ui.ctx().request_repaint_after(SETTLE);
         }
-        if ui.ctx().input(|i| i.key_pressed(egui::Key::Escape)) {
-            self.model.interrupt();
-        }
+        self.run_queued();
+        // Esc interrupts a running activity; with none running it goes to the game like any key
+        // (leaves look mode, acknowledges a popup, else opens the main menu).
+        let interrupted =
+            ui.ctx().input(|i| i.key_pressed(egui::Key::Escape)) && self.model.interrupt();
         self.walk(ui.ctx());
-        self.game_keys(ui.ctx());
+        self.game_keys(ui.ctx(), interrupted);
         if self.model.menu().is_none() {
             // Arrow keys belong to the game, whichever widget was clicked last; Tab still moves focus.
             let ctx = ui.ctx();
@@ -243,7 +259,24 @@ impl<M: GameModel> App<M> {
     }
 
     /// Typed characters and special keys are game keys; the first one that runs an action wins.
-    fn game_keys(&mut self, ctx: &egui::Context) {
+    /// Named like the engine's key names (`SPACE`, `ESC`, `RETURN`, `UP`, `PPAGE`).
+    fn game_keys(&mut self, ctx: &egui::Context, interrupted: bool) {
+        use egui::Key;
+        const NAMED: [(Key, &str); 13] = [
+            (Key::ArrowUp, "UP"),
+            (Key::ArrowDown, "DOWN"),
+            (Key::ArrowLeft, "LEFT"),
+            (Key::ArrowRight, "RIGHT"),
+            (Key::Escape, "ESC"),
+            (Key::Enter, "RETURN"),
+            (Key::Tab, "TAB"),
+            (Key::Backspace, "BACKSPACE"),
+            (Key::Delete, "DELETE"),
+            (Key::Home, "HOME"),
+            (Key::End, "END"),
+            (Key::PageUp, "PPAGE"),
+            (Key::PageDown, "NPAGE"),
+        ];
         let typed = ctx.input(|i| {
             i.events
                 .iter()
@@ -253,26 +286,25 @@ impl<M: GameModel> App<M> {
                 })
                 .collect::<Vec<_>>()
         });
-        let arrows = ctx.input(|i| {
-            [
-                (egui::Key::ArrowUp, "UP"),
-                (egui::Key::ArrowDown, "DOWN"),
-                (egui::Key::ArrowLeft, "LEFT"),
-                (egui::Key::ArrowRight, "RIGHT"),
-            ]
-            .into_iter()
-            .filter(|(key, _)| i.key_pressed(*key))
-            .map(|(_, token)| token.to_string())
-            .collect::<Vec<_>>()
-        });
-        // Menus own the keyboard: typing in their text fields must not run game actions.
-        let (typed, arrows) = if self.model.menu().is_none() {
-            (typed, arrows)
-        } else {
-            (vec![], vec![])
+        let menu = self.model.menu();
+        // Menus own the keyboard (typing in their text fields must not run game actions), except a
+        // "press any key" or acknowledge popup, which takes every key.
+        let typed = match &menu {
+            Some(menu) if !menu.acknowledges() => vec![],
+            _ => typed,
+        };
+        let named = match &menu {
+            Some(menu) if !menu.acknowledges() || menu.can_cancel => vec![],
+            _ => ctx.input(|i| {
+                NAMED
+                    .into_iter()
+                    .filter(|(key, _)| i.key_pressed(*key) && !(interrupted && *key == Key::Escape))
+                    .map(|(_, token)| token.to_string())
+                    .collect::<Vec<_>>()
+            }),
         };
         self.keys_consumed = false;
-        for key in typed.into_iter().chain(arrows) {
+        for key in typed.into_iter().chain(named) {
             if self.model.press(&key) {
                 self.keys_consumed = true;
             }
@@ -281,9 +313,11 @@ impl<M: GameModel> App<M> {
 
     /// The pressed control's name and stage, announced politely; stays until the next command.
     fn status(&mut self, ui: &mut egui::Ui) {
+        // A command that went well is over; only one still going or one that failed is worth showing.
         let text = self
             .model
             .command()
+            .filter(|s| !(s.finished && s.stage == "done"))
             .map_or_else(|| "Ready".into(), |s| format!("{}: {}", s.label, s.stage));
         ui.horizontal(|ui| {
             let label = ui.label(text);
@@ -307,7 +341,7 @@ impl<M: GameModel> App<M> {
     fn control(
         &self,
         ui: &mut egui::Ui,
-        text: String,
+        text: impl Into<egui::WidgetText>,
         id: &str,
         enabled: bool,
         highlighted: bool,
@@ -324,6 +358,10 @@ impl<M: GameModel> App<M> {
             egui::Button::new(text).selected(pending || highlighted),
         );
         a11y::button(ui.ctx(), button.id, pending);
+        // A clicked button must not keep the focus ring, nor Enter and Space for itself, once it has run.
+        if button.clicked() {
+            button.surrender_focus();
+        }
         button
     }
 
@@ -334,9 +372,9 @@ impl<M: GameModel> App<M> {
         egui::ScrollArea::vertical().show(ui, |ui| {
             for a in self.model.actions() {
                 let label = if a.keys.is_empty() {
-                    a.name.clone()
+                    markup::plain(&a.name)
                 } else {
-                    format!("{} ({})", a.name, a.keys.join(", "))
+                    format!("{} ({})", markup::plain(&a.name), a.keys.join(", "))
                 };
                 if self.control(ui, label, &a.id, true, false).clicked() {
                     invoke = Some(a.id);
@@ -345,11 +383,28 @@ impl<M: GameModel> App<M> {
         });
         if let Some(id) = invoke {
             ui.ctx().request_repaint();
-            self.model.invoke_action(&id);
+            if self.model.busy() {
+                self.queued = Some(Queued::Action(id));
+            } else {
+                self.model.invoke_action(&id);
+            }
         }
     }
 
-    /// The engine's current interaction, drawn generically: title, message, choices, cancel.
+    /// Runs the click that waited for the engine to finish its previous command.
+    fn run_queued(&mut self) {
+        if self.model.busy() {
+            return;
+        }
+        match self.queued.take() {
+            Some(Queued::Action(id)) => {
+                self.model.invoke_action(&id);
+            }
+            None => {}
+        }
+    }
+
+    /// The engine's current interaction, drawn generically: title, message, tabs, choices, cancel.
     fn menu(&mut self, ctx: &egui::Context) {
         let Some(menu) = self.model.menu() else {
             self.focus_menu = false;
@@ -369,17 +424,16 @@ impl<M: GameModel> App<M> {
         let mut focused = false;
         let mut chosen = None;
         let mut cancel = ctx.input(|i| i.key_pressed(egui::Key::Escape)) && menu.can_cancel;
-        egui::Window::new(&menu.title)
-            .id(a11y::dialog_id(&menu.title))
+        let title = markup::plain(&menu.title);
+        egui::Window::new(&title)
+            .id(a11y::dialog_id(&title))
+            .title_bar(!title.is_empty())
             .show(ctx, |ui| {
-                if !menu.message.is_empty() {
-                    ui.label(&menu.message);
-                }
                 let tabs = menu.tabs();
                 ui.horizontal_wrapped(|ui| {
                     for tab in &tabs {
-                        let button =
-                            self.control(ui, tab.label.clone(), &tab.id, tab.enabled, tab.selected);
+                        let text = self.rich(ui, &tab.label);
+                        let button = self.control(ui, text, &tab.id, tab.enabled, tab.selected);
                         a11y::tab(ui.ctx(), button.id, tab.selected);
                         ids.extend(button.enabled().then_some(button.id));
                         if entered && tab.selected {
@@ -391,25 +445,53 @@ impl<M: GameModel> App<M> {
                         }
                     }
                 });
-                for (i, choice) in menu.entries().into_iter().enumerate() {
-                    let button =
-                        self.control(ui, choice.label.clone(), &choice.id, choice.enabled, false);
-                    ids.extend(button.enabled().then_some(button.id));
-                    if entered && i == 0 && tabs.is_empty() {
-                        button.request_focus();
-                        focused = button.has_focus();
-                    }
-                    ui.ctx().accesskit_node_builder(button.id, |b| {
-                        b.set_role(accesskit::Role::MenuItem)
+                // The entry under the pointer explains itself, else the engine's selected one.
+                let mut described = None;
+                egui::ScrollArea::vertical()
+                    .max_height(ctx.content_rect().height() * 0.6)
+                    .show(ui, |ui| {
+                        if !menu.message.is_empty() {
+                            ui.label(self.rich(ui, &menu.message));
+                        }
+                        for (i, choice) in menu.entries().into_iter().enumerate() {
+                            ui.horizontal(|ui| {
+                                let text = self.rich(ui, &choice.label);
+                                let button = self.control(
+                                    ui,
+                                    text,
+                                    &choice.id,
+                                    choice.enabled,
+                                    choice.selected,
+                                );
+                                ids.extend(button.enabled().then_some(button.id));
+                                if entered && i == 0 && tabs.is_empty() {
+                                    button.request_focus();
+                                    focused = button.has_focus();
+                                }
+                                ui.ctx().accesskit_node_builder(button.id, |b| {
+                                    b.set_role(accesskit::Role::MenuItem)
+                                });
+                                if choice.id != "acknowledge"
+                                    && (button.hovered()
+                                        || (choice.selected && described.is_none()))
+                                {
+                                    described = Some(&choice.description);
+                                }
+                                self.columns(ui, &choice.label, &choice.columns);
+                                if !choice.enabled && !choice.denial.is_empty() {
+                                    ui.label(self.rich(ui, &choice.denial));
+                                }
+                                if button.clicked() {
+                                    chosen = Some(choice.id.clone());
+                                }
+                            });
+                        }
                     });
-                    if !choice.enabled && !choice.denial.is_empty() {
-                        ui.label(&choice.denial);
-                    }
-                    if button.clicked() {
-                        chosen = Some(choice.id.clone());
-                    }
+                if let Some(description) = described.filter(|d| !d.is_empty()) {
+                    ui.separator();
+                    ui.label(self.rich(ui, description));
                 }
-                if menu.can_cancel {
+                if menu.can_cancel && !menu.acknowledges() {
                     let button = ui.add_enabled(!self.model.busy(), egui::Button::new("Cancel"));
                     ids.extend(button.enabled().then_some(button.id));
                     cancel |= button.clicked();
@@ -417,12 +499,38 @@ impl<M: GameModel> App<M> {
             });
         self.menu_ids = ids;
         self.focus_menu = entered && !focused;
-        a11y::dialog(ctx, &menu.title, &menu.message);
+        a11y::dialog(ctx, &title, &menu.message);
         if let Some(id) = chosen {
             ctx.request_repaint();
             self.model.choose(&id);
         } else if cancel {
             self.model.cancel_menu();
+        }
+    }
+
+    /// An entry's labelled values; a `<name> color` column colours the value of `<name>`, and a column
+    /// named like the entry itself is just its value.
+    fn columns(&self, ui: &mut egui::Ui, entry: &str, columns: &[(String, String)]) {
+        let tint = |name: &str| {
+            columns
+                .iter()
+                .find(|(label, _)| label.strip_suffix(" color") == Some(name))
+                .map(|(_, color)| color.as_str())
+        };
+        let shown = columns
+            .iter()
+            .filter(|(label, value)| !label.ends_with(" color") && !value.is_empty());
+        for (label, value) in shown {
+            let value = match tint(label) {
+                Some(color) => format!("<color_{color}>{value}</color>"),
+                None => value.clone(),
+            };
+            let text = if label.is_empty() || label == entry {
+                value
+            } else {
+                format!("{}: {value}", label.trim_end_matches(':'))
+            };
+            ui.label(self.rich(ui, &text));
         }
     }
 
@@ -491,11 +599,21 @@ impl<M: GameModel> App<M> {
             ui.label("No map loaded");
             return;
         }
-        // The map may have been replaced by a smaller one since the cursor was set.
-        self.cursor = Pos {
-            x: self.cursor.x.clamp(0, size.x - 1),
-            y: self.cursor.y.clamp(0, size.y - 1),
+        // The cursor is kept on a map square, so it stays there when the view scrolls; the engine's own
+        // cursor (look mode) wins. The map may also have been replaced by a smaller one since it was set.
+        let origin = self.model.origin();
+        let at_view = |abs: Pos| Pos {
+            x: (abs.x - origin.x).clamp(0, size.x - 1),
+            y: (abs.y - origin.y).clamp(0, size.y - 1),
         };
+        let to_abs = |view: Pos| Pos {
+            x: view.x + origin.x,
+            y: view.y + origin.y,
+        };
+        if let Some(focus) = self.model.focus() {
+            self.cursor = to_abs(focus);
+        }
+        let mut cursor = at_view(self.cursor);
         let player = self.model.player();
         if !std::mem::replace(&mut self.cursor_placed, true) {
             self.cursor = player;
@@ -505,9 +623,9 @@ impl<M: GameModel> App<M> {
             "Player at ({}, {}). Cursor ({}, {}): {}.",
             player.x,
             player.y,
-            self.cursor.x,
-            self.cursor.y,
-            self.model.cell(self.cursor).desc
+            cursor.x,
+            cursor.y,
+            self.model.cell(cursor).desc
         );
         if let Some(end) = route.last() {
             status += &format!(
@@ -539,15 +657,15 @@ impl<M: GameModel> App<M> {
         // Only a moving pointer moves the cursor, so it cannot undo keyboard navigation.
         let hover = response.hover_pos();
         if let Some(p) = hover.filter(|p| self.last_hover != Some(*p)) {
-            self.cursor = cell_at(p);
+            cursor = cell_at(p);
         }
         self.last_hover = hover;
         if response.clicked() {
-            self.go_to(self.cursor);
+            self.go_to(cursor);
             ui.ctx().request_repaint();
         }
         if response.secondary_clicked() {
-            self.menu_cell = self.cursor;
+            self.menu_cell = cursor;
         }
         if self.refocus_map && self.model.menu().is_none() {
             self.refocus_map = false;
@@ -573,16 +691,23 @@ impl<M: GameModel> App<M> {
                     i.key_pressed(egui::Key::L),
                 )
             });
-            self.cursor = Pos {
-                x: (self.cursor.x + dx).clamp(0, size.x - 1),
-                y: (self.cursor.y + dy).clamp(0, size.y - 1),
-            };
+            // While the engine owns the cursor its own arrow handling moves it.
+            if self.model.focus().is_none() {
+                cursor = Pos {
+                    x: (cursor.x + dx).clamp(0, size.x - 1),
+                    y: (cursor.y + dy).clamp(0, size.y - 1),
+                };
+            }
             if look && !self.keys_consumed {
-                self.look(self.cursor);
+                self.look(cursor);
             }
         }
+        self.cursor = to_abs(cursor);
         response.clone().on_hover_ui_at_pointer(|ui| {
-            ui.label(self.model.cell(self.cursor).desc);
+            let desc = self.model.cell(cursor).desc;
+            if desc != "unknown" {
+                ui.label(desc);
+            }
         });
         let menu = response.context_menu(|ui| {
             let at = self.menu_cell;
@@ -649,7 +774,6 @@ impl<M: GameModel> App<M> {
                 );
             }
         }
-        let origin = self.model.origin();
         if let Some(m) = self.marker.filter(|_| self.model.busy()) {
             painter.rect_stroke(
                 rect(Pos {
@@ -674,7 +798,7 @@ impl<M: GameModel> App<M> {
             );
         }
         painter.rect_stroke(
-            rect(self.cursor),
+            rect(cursor),
             0.0,
             egui::Stroke::new(1.0, egui::Color32::WHITE),
             egui::StrokeKind::Inside,
@@ -696,14 +820,16 @@ impl<M: GameModel> App<M> {
                         for (index, name) in items.iter().enumerate() {
                             ui.horizontal(|ui| {
                                 // Drag only: the button after it is the row's one keyboard stop.
-                                let grip = ui.add(egui::Label::new(name).sense(egui::Sense::DRAG));
+                                let grip = ui.add(
+                                    egui::Label::new(self.rich(ui, name)).sense(egui::Sense::DRAG),
+                                );
                                 grip.dnd_set_drag_payload(Dragged {
                                     from: column,
                                     index,
                                 });
                                 let button = ui.button(verb);
                                 ui.ctx().accesskit_node_builder(button.id, |b| {
-                                    b.set_label(format!("{verb} {name}"))
+                                    b.set_label(format!("{verb} {}", markup::plain(name)))
                                 });
                                 if button.clicked() {
                                     moved = Some(Dragged {

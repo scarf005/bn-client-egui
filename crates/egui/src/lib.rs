@@ -3,6 +3,7 @@ pub mod app;
 pub mod display;
 pub mod fonts;
 pub mod setup;
+pub mod text;
 pub mod tileset;
 
 pub use app::App;
