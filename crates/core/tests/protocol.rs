@@ -182,4 +182,10 @@ fn contract_invalid_examples_the_types_can_reject_are_rejected() {
         rejected.contains(&"position without a dimension".to_string()),
         "{rejected:?}"
     );
+    for name in [
+        "travel with a bubble coordinate",
+        "travel without a position",
+    ] {
+        assert!(rejected.contains(&name.to_string()), "{name}: {rejected:?}");
+    }
 }

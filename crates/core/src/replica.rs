@@ -24,6 +24,7 @@ pub struct Replica {
     boundary: Option<Boundary>,
     avatar: Option<Avatar>,
     environment: Option<Environment>,
+    route: Vec<WorldPos>,
     entities: HashMap<String, Entity>,
     cells: HashMap<String, HashMap<(i32, i32, i32), Cell>>,
     /// `(parts expected, next part index)` while a snapshot is loading.
@@ -51,6 +52,7 @@ impl Replica {
             boundary: Some(s.interaction),
             avatar: s.avatar,
             environment: s.environment,
+            route: s.route,
             entities: s.entities.into_iter().map(|e| (e.id.clone(), e)).collect(),
             loading: (s.parts > 0).then_some((s.parts, 0)),
             ..Self::default()
@@ -159,6 +161,9 @@ impl Replica {
         }
         self.avatar = c.avatar.or(self.avatar.take());
         self.environment = c.environment.or(self.environment.take());
+        if let Some(route) = c.route {
+            self.route = route;
+        }
         self.boundary = c.interaction.or(self.boundary.take());
     }
 
@@ -184,6 +189,11 @@ impl Replica {
 
     pub fn environment(&self) -> Option<&Environment> {
         self.environment.as_ref()
+    }
+
+    /// The engine's planned route, nearest square first; empty when none.
+    pub fn route(&self) -> &[WorldPos] {
+        &self.route
     }
 
     pub fn entities(&self) -> impl Iterator<Item = &Entity> {

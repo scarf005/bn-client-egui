@@ -386,3 +386,106 @@ fn clicking_an_action_invokes_it_by_id_and_unknown_ids_are_refused() {
         json!({"kind":"action","action_id":"LEFT"})
     );
 }
+
+fn pos(x: i32, y: i32) -> Value {
+    json!({"dim": "", "x": x, "y": y, "z": 0})
+}
+
+/// An event carrying only `changes`, numbered after the fixture session (sequence 40).
+fn change(sequence: u32, changes: Value) -> Value {
+    json!({"jsonrpc":"2.0","method":"bn.events","params":{"epoch":"e7f3","events":[{
+        "sequence": sequence.to_string(), "revision": (sequence - 9).to_string(),
+        "type": "cells.seen", "command": "c:5", "changes": changes}]}})
+}
+
+fn boundary_without_actions() -> Value {
+    let mut b = fixture("subscribe_result")["result"]["interaction"].clone();
+    b["actions"] = json!([]);
+    b
+}
+
+#[test]
+fn travel_click_submits_the_absolute_square_at_a_free_boundary() {
+    let (t, h) = session();
+    let mut m = connected(t.on("bn.command.submit", walk_reply()));
+    // Avatar (3, 4) is drawn at view (20, 12).
+    assert!(m.travel(Pos { x: 22, y: 12 }));
+    let sent = submits(&h);
+    assert_eq!(
+        sent[0]["params"]["operation"],
+        json!({"kind":"travel","pos":pos(5, 4)})
+    );
+    assert_eq!(sent[0]["params"]["expect"]["schema_id"], Value::Null);
+    assert!(m.busy());
+    assert!(
+        m.travel(Pos { x: 23, y: 12 }),
+        "handled, but not sent twice"
+    );
+    assert_eq!(submits(&h).len(), 1, "one command at a time");
+}
+
+#[test]
+fn travel_click_is_ignored_while_a_menu_is_open() {
+    let (t, h) = session();
+    let mut m = connected(t.on("bn.command.submit", walk_reply()));
+    for name in ["events_41_walk", "events_42_message", "events_43_menu"] {
+        h.push(fixture(name));
+    }
+    m.poll();
+    assert!(m.menu().is_some());
+    assert!(m.travel(Pos { x: 22, y: 12 }));
+    assert!(submits(&h).is_empty());
+}
+
+#[test]
+fn route_is_replaced_by_each_event_and_cleared_by_an_empty_one() {
+    let (t, h) = session();
+    let mut m = connected(t);
+    assert!(m.route().is_empty());
+    h.push(change(41, json!({"route": [pos(4, 4), pos(5, 4)]})));
+    m.poll();
+    assert_eq!(m.route(), [Pos { x: 21, y: 12 }, Pos { x: 22, y: 12 }]);
+    h.push(change(42, json!({"cells": []})));
+    m.poll();
+    assert_eq!(m.route().len(), 2, "events without route keep the plan");
+    h.push(change(43, json!({"route": []})));
+    m.poll();
+    assert!(m.route().is_empty());
+}
+
+#[test]
+fn route_in_the_snapshot_header_is_decoded() {
+    let mut sub = fixture("subscribe_result");
+    sub["result"]["route"] = json!([pos(4, 4), pos(4, 5)]);
+    let (t, _h) = ScriptedTransport::new();
+    let t = t.on("bn.hello", vec![fixture("hello_result")]).on(
+        "bn.subscribe",
+        vec![sub, fixture("snapshot_part_0"), fixture("snapshot_part_1")],
+    );
+    let m = connected(t);
+    assert_eq!(m.route(), [Pos { x: 21, y: 12 }, Pos { x: 21, y: 13 }]);
+}
+
+#[test]
+fn empty_action_list_between_auto_move_steps_keeps_the_controls_until_idle() {
+    let (t, h) = session();
+    let mut m = connected(t.on("bn.command.submit", walk_reply()));
+    let before = m.actions();
+    assert!(!before.is_empty());
+    assert!(m.travel(Pos { x: 22, y: 12 }));
+    h.push(change(
+        41,
+        json!({"interaction": boundary_without_actions()}),
+    ));
+    m.poll();
+    assert!(m.busy());
+    assert_eq!(m.actions(), before, "no flicker while a step is in flight");
+    h.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{
+        "epoch":"e7f3","command_id":"c:5","stage":"completed"}}));
+    m.poll();
+    assert!(!m.busy());
+    assert!(
+        m.actions().is_empty(),
+        "an idle boundary with none shows none"
+    );
+}

@@ -213,6 +213,9 @@ pub struct Changes {
     pub avatar: Option<Avatar>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub environment: Option<Environment>,
+    /// Replaces the planned route; `[]` clears it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub route: Option<Vec<WorldPos>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub interaction: Option<Boundary>,
 }
@@ -253,6 +256,9 @@ pub struct Snapshot {
     pub avatar: Option<Avatar>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub environment: Option<Environment>,
+    /// Planned travel route, nearest square first; omitted when empty.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub route: Vec<WorldPos>,
     pub entities: Vec<Entity>,
     pub parts: u32,
 }
@@ -338,6 +344,10 @@ pub enum Operation {
     Cancel,
     Action {
         action_id: String,
+    },
+    /// The left click of Tiles and curses on a map square: plans a route, a repeat walks it.
+    Travel {
+        pos: WorldPos,
     },
 }
 

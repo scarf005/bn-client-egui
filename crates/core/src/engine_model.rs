@@ -47,6 +47,8 @@ pub struct EngineModel {
     colors: ColorMap,
     keys: KeyMap,
     loading: Option<Loading>,
+    /// Actions on show: between auto-move steps the engine offers none, which must not flicker the list.
+    shown: Vec<ActionEntry>,
 }
 
 fn look_name(l: &Look) -> String {
@@ -104,6 +106,7 @@ impl EngineModel {
             colors: ColorMap::default(),
             keys: KeyMap::default(),
             loading: None,
+            shown: vec![],
         };
         m.call(
             "bn.hello",
@@ -316,6 +319,20 @@ impl EngineModel {
         };
     }
 
+    fn refresh_actions(&mut self) {
+        let offered = self.replica.boundary().map_or(&[][..], |b| &b.actions);
+        if !offered.is_empty() || !self.busy {
+            self.shown = offered
+                .iter()
+                .map(|a| ActionEntry {
+                    id: a.id.clone(),
+                    name: a.name.clone(),
+                    keys: self.keys.keys(&a.id).to_vec(),
+                })
+                .collect();
+        }
+    }
+
     fn refresh_items(&mut self) {
         let here = self
             .avatar_pos()
@@ -360,6 +377,7 @@ impl GameModel for EngineModel {
         self.messages.extend(self.replica.take_log());
         self.refresh_view();
         self.refresh_items();
+        self.refresh_actions();
     }
 
     fn set_waker(&mut self, waker: crate::transport::Waker) {
@@ -481,14 +499,30 @@ impl GameModel for EngineModel {
     }
 
     fn actions(&self) -> Vec<ActionEntry> {
-        let actions = self.replica.boundary().map(|b| b.actions.as_slice());
-        actions
-            .unwrap_or_default()
+        self.shown.clone()
+    }
+
+    fn travel(&mut self, at: Pos) -> bool {
+        let free = self
+            .replica
+            .boundary()
+            .is_some_and(|b| b.interaction.is_none());
+        if let (false, true, Some(pos)) = (self.busy, free, self.abs(at)) {
+            self.submit(Operation::Travel { pos });
+        }
+        true
+    }
+
+    fn route(&self) -> Vec<Pos> {
+        let Some((ox, oy)) = self.origin else {
+            return vec![];
+        };
+        self.replica
+            .route()
             .iter()
-            .map(|a| ActionEntry {
-                id: a.id.clone(),
-                name: a.name.clone(),
-                keys: self.keys.keys(&a.id).to_vec(),
+            .map(|p| Pos {
+                x: p.x - ox,
+                y: p.y - oy,
             })
             .collect()
     }

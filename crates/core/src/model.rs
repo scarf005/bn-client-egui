@@ -83,6 +83,15 @@ pub trait GameModel {
     fn press(&mut self, _key: &str) -> bool {
         false
     }
+    /// Left click on view cell `at`: the model's own travel (plan a route, repeat to walk it).
+    /// False when the model has none, so the UI walks by itself.
+    fn travel(&mut self, _at: Pos) -> bool {
+        false
+    }
+    /// The planned route in view coordinates, nearest first; empty when none.
+    fn route(&self) -> Vec<Pos> {
+        vec![]
+    }
     /// The engine's loading screen, while it is up.
     fn loading(&self) -> Option<Loading> {
         None
