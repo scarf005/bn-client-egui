@@ -135,6 +135,9 @@ pub struct Avatar {
     /// Carried items; optional on the wire (absent and empty both mean nothing carried).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub inventory: Option<Vec<InventoryItem>>,
+    /// The stacks on the avatar's own square; absent from engines that predate it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ground: Option<Vec<InventoryItem>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -143,6 +146,9 @@ pub struct InventoryItem {
     pub name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub count: Option<u64>,
+    /// `wielded`, `worn` or `carried`; absent for items on the ground.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub slot: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

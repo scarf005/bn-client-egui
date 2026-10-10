@@ -60,6 +60,9 @@ pub struct EngineModel {
     native: Vec<LogLine>,
     ground: Vec<String>,
     inventory: Vec<String>,
+    /// The engine's own names for the same rows; the native menus list items by these.
+    ground_names: Vec<String>,
+    inventory_names: Vec<String>,
     trace: Vec<(Instant, &'static str)>,
     received: u64,
     colors: ColorMap,
@@ -70,6 +73,16 @@ pub struct EngineModel {
     status: Option<CommandStatus>,
     /// Where the avatar stood when a travel click was sent; a click that plans and moves nothing found no route.
     travel_from: Option<WorldPos>,
+    /// An item picked or dropped from the panels: the native menu opens, this finishes it.
+    chore: Option<Chore>,
+}
+
+/// One panel button press, carried through the native selection menu it opens.
+struct Chore {
+    /// The item as the panel shows it.
+    name: String,
+    /// The menu's choice was marked; the next step confirms.
+    marked: bool,
 }
 
 fn look_name(l: &Look) -> String {
@@ -143,6 +156,8 @@ impl EngineModel {
             native: vec![],
             ground: vec![],
             inventory: vec![],
+            ground_names: vec![],
+            inventory_names: vec![],
             trace: vec![],
             received: 0,
             colors: ColorMap::default(),
@@ -151,6 +166,7 @@ impl EngineModel {
             shown: vec![],
             status: None,
             travel_from: None,
+            chore: None,
         };
         m.call(
             "bn.hello",
@@ -529,21 +545,71 @@ impl EngineModel {
     }
 
     fn refresh_items(&mut self) {
-        let here = self
-            .avatar_pos()
-            .and_then(|p| self.replica.cell(&p.dim, p.x, p.y, p.z));
-        self.ground = here.map_or(vec![], |c| c.items.iter().map(look_name).collect());
-        self.inventory = self.replica.avatar().map_or(vec![], |a| {
+        let avatar = self.replica.avatar();
+        let ground = match avatar.and_then(|a| a.ground.as_ref()) {
+            Some(stacks) => stacks
+                .iter()
+                .map(|i| (item_line(i), i.name.clone()))
+                .collect(),
+            None => self
+                .avatar_pos()
+                .and_then(|p| self.replica.cell(&p.dim, p.x, p.y, p.z))
+                .map_or(vec![], |c| {
+                    c.items
+                        .iter()
+                        .map(|l| (look_name(l), look_name(l)))
+                        .collect()
+                }),
+        };
+        let carried = avatar.map_or(vec![], |a| {
             a.inventory
                 .iter()
                 .flatten()
-                .map(|item| match item.count {
-                    Some(count) if count > 1 => format!("{} ({count})", item.name),
-                    _ => item.name.clone(),
-                })
+                .map(|i| (item_line(i), i.name.clone()))
                 .collect()
         });
+        (self.ground, self.ground_names) = ground.into_iter().unzip();
+        (self.inventory, self.inventory_names) = carried.into_iter().unzip();
     }
+
+    /// Marks the chore's item in the native menu it opened, then confirms; ends it when the menu is gone.
+    fn advance_chore(&mut self) {
+        if self.busy {
+            return;
+        }
+        let Some(Chore { name, marked }) = self.chore.take() else {
+            return;
+        };
+        let target = self.menu().and_then(|m| {
+            m.choices
+                .into_iter()
+                .find(|c| c.enabled && c.label.contains(&name))
+        });
+        match target {
+            Some(c) if !marked && !c.selected => {
+                self.chore = Some(Chore { name, marked: true });
+                self.choose(&c.id);
+            }
+            Some(_) => {
+                self.invoke_action("CONFIRM");
+            }
+            None => {}
+        }
+    }
+}
+
+/// An item the way the native lists name it, with how many and where it is kept.
+fn item_line(item: &protocol::InventoryItem) -> String {
+    let count = item
+        .count
+        .filter(|n| *n > 1)
+        .map_or(String::new(), |n| format!(" x{n}"));
+    let slot = item
+        .slot
+        .as_deref()
+        .filter(|s| *s != "carried")
+        .map_or(String::new(), |s| format!(" ({s})"));
+    format!("{}{count}{slot}", item.name)
 }
 
 /// Engine command errors in words a player can act on.
@@ -671,6 +737,7 @@ impl GameModel for EngineModel {
         self.refresh_view();
         self.refresh_items();
         self.refresh_actions();
+        self.advance_chore();
     }
 
     fn set_waker(&mut self, waker: crate::transport::Waker) {
@@ -802,15 +869,25 @@ impl GameModel for EngineModel {
         &self.inventory
     }
 
-    fn pick_up(&mut self, _index: usize) {
-        if !self.busy {
-            self.invoke(&["pickup".into(), "pick_up".into()]);
+    fn pick_up(&mut self, index: usize) {
+        let name = self.ground_names.get(index).cloned();
+        if let (false, Some(name)) = (self.busy, name) {
+            self.chore = self
+                .invoke(&["pickup_all".into(), "pickup".into()])
+                .then_some(Chore {
+                    name,
+                    marked: false,
+                });
         }
     }
 
-    fn drop_item(&mut self, _index: usize) {
-        if !self.busy {
-            self.invoke(&["drop".into()]);
+    fn drop_item(&mut self, index: usize) {
+        let name = self.inventory_names.get(index).cloned();
+        if let (false, Some(name)) = (self.busy, name) {
+            self.chore = self.invoke(&["drop".into()]).then_some(Chore {
+                name,
+                marked: false,
+            });
         }
     }
 

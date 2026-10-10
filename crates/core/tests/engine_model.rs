@@ -984,3 +984,96 @@ fn a_look_with_a_display_name_is_described_by_it_instead_of_its_id() {
     m.poll();
     assert_eq!(m.cell(Pos { x: 22, y: 12 }).desc, "floor");
 }
+
+fn avatar_event(inventory: Value, ground: Value) -> Value {
+    let mut event = fixture("events_41_walk");
+    let avatar = &mut event["params"]["events"][0]["changes"]["avatar"];
+    avatar["inventory"] = inventory;
+    avatar["ground"] = ground;
+    event
+}
+
+fn item(name: &str, count: u64, slot: Option<&str>) -> Value {
+    let mut row = json!({"look": {"kind": "item", "id": "x", "glyph": "/", "color": "white"}, "name": name, "count": count});
+    if let Some(slot) = slot {
+        row["slot"] = json!(slot);
+    }
+    row
+}
+
+#[test]
+fn panels_list_display_names_with_counts_and_where_items_are_kept() {
+    let (t, h) = session();
+    let mut m = connected(t);
+    h.push(avatar_event(
+        json!([
+            item("combat knife", 1, Some("wielded")),
+            item("fur scarf", 1, Some("worn")),
+            item("hammer", 2, Some("carried"))
+        ]),
+        json!([item("light disposable battery (12/25)", 3, None)]),
+    ));
+    m.poll();
+    assert_eq!(
+        m.inventory(),
+        ["combat knife (wielded)", "fur scarf (worn)", "hammer x2"]
+    );
+    assert_eq!(m.ground(), ["light disposable battery (12/25) x3"]);
+}
+
+#[test]
+fn an_avatar_that_carries_nothing_empties_the_inventory_panel() {
+    let (t, h) = session();
+    let mut m = connected(t);
+    assert_eq!(m.inventory(), ["flashlight"]);
+    let mut event = avatar_event(json!([]), json!([]));
+    event["params"]["events"][0]["changes"]["avatar"]
+        .as_object_mut()
+        .unwrap()
+        .retain(|k, _| k != "inventory" && k != "ground");
+    h.push(event);
+    m.poll();
+    assert!(m.inventory().is_empty());
+}
+
+#[test]
+fn picking_up_a_ground_item_marks_that_item_in_the_native_menu_and_confirms() {
+    let (t, h) = session();
+    let mut m = connected(
+        t.on("bn.command.submit", walk_reply())
+            .on("bn.command.submit", walk_reply())
+            .on("bn.command.submit", walk_reply()),
+    );
+    h.push(avatar_event(
+        json!([]),
+        json!([item("combat knife", 1, None), item("tin can", 1, None)]),
+    ));
+    m.poll();
+    m.pick_up(1);
+    let mut menu = fixture("events_43_menu");
+    menu["params"]["events"][0]["sequence"] = json!("42");
+    let interaction = &mut menu["params"]["events"][0]["changes"]["interaction"];
+    interaction["actions"] =
+        json!([{"id": "pickup_all", "name": "x"}, {"id": "CONFIRM", "name": "Confirm"}]);
+    interaction["interaction"]["choices"][1]["enabled"] = json!(true);
+    interaction["interaction"]["choices"][1]["selectable"] = json!(true);
+    interaction["interaction"]["choices"][1]["denial"] = json!("");
+    interaction["interaction"]["choices"][1]["label"] = json!("tin can");
+    // The engine publishes the menu before it reports the command done.
+    h.push(menu);
+    h.push(fixture("command_completed"));
+    m.poll();
+    let operations = submits(&h)
+        .into_iter()
+        .map(|s| s["params"]["operation"].clone())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        operations[0]["action_id"], "pickup",
+        "the fixture offers no pickup_all"
+    );
+    assert_eq!(
+        operations[1],
+        json!({"kind": "choose", "choice_id": "c:2"}),
+        "the clicked item, not the first row"
+    );
+}
