@@ -87,6 +87,8 @@ pub struct EngineModel {
     travel_from: Option<WorldPos>,
     /// An item picked or dropped from the panels: the native menu opens, this finishes it.
     chore: Option<Chore>,
+    /// The main menu was showing at the last poll; coming back to it ends the game whose lines are kept.
+    at_main_menu: bool,
 }
 
 /// One panel button press, carried through the native selection menu it opens.
@@ -183,6 +185,7 @@ impl EngineModel {
             status: None,
             travel_from: None,
             chore: None,
+            at_main_menu: false,
         };
         m.call(
             "bn.hello",
@@ -872,6 +875,12 @@ impl GameModel for EngineModel {
                 None => self.native.push(line),
             }
         }
+        let at_main_menu = self.menu().is_some_and(|m| m.context == "MAIN_MENU");
+        if at_main_menu && !std::mem::replace(&mut self.at_main_menu, true) {
+            self.messages.clear();
+            self.native.clear();
+        }
+        self.at_main_menu = at_main_menu;
         self.send_viewport();
         self.refresh_view();
         self.refresh_items();

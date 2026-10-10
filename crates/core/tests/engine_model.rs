@@ -1411,3 +1411,26 @@ mod failures {
         assert!(m.failure().is_some());
     }
 }
+
+#[test]
+fn returning_to_the_main_menu_clears_the_previous_games_log_and_command_lines() {
+    let (t, h) = session();
+    let mut m = connected(t);
+    h.push(fixture("events_41_walk"));
+    h.push(logged(42, "7", "You open the door.", 1));
+    m.poll();
+    m.say("Something blocks the way.".into());
+    assert_eq!(m.native_log().len(), 1);
+    let mut menu = crafting("favorites");
+    menu["interaction"]["context"] = json!("MAIN_MENU");
+    h.push(change(43, json!({"interaction": menu})));
+    m.poll();
+    assert!(
+        m.native_log().is_empty(),
+        "the game's own lines belong to that game"
+    );
+    assert!(m.messages().is_empty(), "so do the client's command lines");
+    h.push(logged(44, "8", "Welcome back.", 1));
+    m.poll();
+    assert_eq!(m.native_log().len(), 1, "a later game logs again");
+}

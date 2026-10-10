@@ -250,6 +250,10 @@ impl<M: GameModel> App<M> {
         if self.pending_since.is_some() && !self.settled() {
             ui.ctx().request_repaint_after(SETTLE);
         }
+        if self.model.menu().is_some_and(|m| m.context == "MAIN_MENU") {
+            // The game is over: the next one starts with the cursor on its player and no walk pending.
+            (self.cursor_placed, self.destination, self.marker) = (false, None, None);
+        }
         self.run_queued();
         // Esc interrupts a running activity; with none running it goes to the game like any key
         // (leaves look mode, acknowledges a popup, else opens the main menu).
