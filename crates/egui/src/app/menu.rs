@@ -372,6 +372,9 @@ fn dismiss_text(engine_label: &str) -> &str {
     }
 }
 
+/// A list this short is read at a glance; the engine's filter is offered from here on.
+const FILTER_MIN_ROWS: usize = 10;
+
 #[cfg(test)]
 mod tests {
     use super::dismiss_text;
@@ -383,6 +386,3 @@ mod tests {
         assert_eq!(dismiss_text("Press any key"), "Press any key");
     }
 }
-
-/// A list this short is read at a glance; the engine's filter is offered from here on.
-const FILTER_MIN_ROWS: usize = 10;
