@@ -6,6 +6,7 @@ use bn_client_core::{Failure, GameModel, Loading, LogLine, Pos, keys, markup};
 use eframe::egui::{self, accesskit};
 
 mod crafting;
+mod pickup;
 
 /// A command must outlast this before the controls show it; keeps short commands from blinking the UI.
 const SETTLE: std::time::Duration = std::time::Duration::from_millis(150);
@@ -74,6 +75,7 @@ pub struct App<M: GameModel> {
     /// The cursor has been put on the player since the map first appeared.
     cursor_placed: bool,
     crafting: crafting::Crafting,
+    pickup: pickup::Pickup,
     /// A click that arrived while a command was in flight, sent when the engine is free again.
     queued: Option<Queued>,
 }
@@ -109,6 +111,7 @@ impl<M: GameModel> App<M> {
             native_live: a11y::Announcer::default(),
             command_live: a11y::Announcer::default(),
             crafting: Default::default(),
+            pickup: Default::default(),
             queued: None,
         }
     }
@@ -503,6 +506,11 @@ impl<M: GameModel> App<M> {
             | (self.menu_title.replace(menu.title.clone()).as_ref() != Some(&menu.title));
         if menu.context == "CRAFTING" {
             let focused = self.crafting(ctx, &menu, entered);
+            self.focus_menu = entered && !focused;
+            return;
+        }
+        if menu.context == "PICKUP" {
+            let focused = self.pickup(ctx, &menu, entered);
             self.focus_menu = entered && !focused;
             return;
         }

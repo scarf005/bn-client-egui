@@ -85,6 +85,9 @@ fn confirm_is_the_menus_own_button_and_runs_the_confirm_action() {
 fn a_marked_stack_takes_a_count_up_to_what_is_there() {
     let (mut h, script) = harness();
     h.get_by_label("Count of tin can").click();
+    h.run_steps(2);
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+    h.run_steps(2);
     h.get_by_label("Count of tin can").type_text("3");
     h.run_steps(2);
     h.key_press(egui::Key::Enter);
@@ -99,6 +102,9 @@ fn a_marked_stack_takes_a_count_up_to_what_is_there() {
 fn a_count_beyond_the_stack_is_not_sent() {
     let (mut h, script) = harness();
     h.get_by_label("Count of tin can").click();
+    h.run_steps(2);
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+    h.run_steps(2);
     h.get_by_label("Count of tin can").type_text("9");
     h.run_steps(2);
     h.key_press(egui::Key::Enter);
