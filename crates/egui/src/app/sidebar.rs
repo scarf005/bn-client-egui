@@ -3,10 +3,12 @@
 use super::App;
 use crate::a11y;
 use bn_client_core::{GameModel, LogLine, markup};
-use eframe::egui;
+use eframe::egui::{self, accesskit};
 
 /// The message log's share of the sidebar height.
 const LOG_SHARE: f32 = 0.4;
+/// The log's height limits as shares of the sidebar height.
+const LOG_RANGE: (f32, f32) = (0.1, 0.8);
 
 #[derive(Clone, Copy, PartialEq)]
 enum Column {
@@ -24,10 +26,30 @@ struct Dragged {
 impl<M: GameModel> App<M> {
     /// The whole sidebar: the message log pinned to its bottom, `sidebar` filling the rest.
     pub(super) fn sidebar_panel(&mut self, ui: &mut egui::Ui) {
-        egui::Panel::bottom("log")
+        let room = ui.available_height();
+        let height = self.log_height.unwrap_or(room * LOG_SHARE);
+        let height = height.clamp(room * LOG_RANGE.0, room * LOG_RANGE.1);
+        let log = egui::Panel::bottom("log")
             .resizable(false)
-            .exact_size(ui.available_height() * LOG_SHARE)
+            .exact_size(height)
             .show(ui, |ui| self.log(ui));
+        // Our own handle on the panel's top edge: egui's nested panel handle never gets the pointer.
+        let edge = log.response.rect.expand2(egui::vec2(0.0, 3.0));
+        let handle = ui.interact(
+            egui::Rect::from_min_max(edge.left_top(), edge.right_top() + egui::vec2(0.0, 3.0)),
+            egui::Id::new("log_resize"),
+            egui::Sense::drag(),
+        );
+        ui.ctx().accesskit_node_builder(handle.id, |b| {
+            b.set_role(accesskit::Role::Splitter);
+            b.set_label("Resize message log");
+        });
+        if handle.hovered() || handle.dragged() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeVertical);
+        }
+        if handle.dragged() {
+            self.log_height = Some(height - handle.drag_delta().y);
+        }
         egui::CentralPanel::no_frame().show(ui, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| self.sidebar(ui));
         });

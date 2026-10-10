@@ -68,6 +68,8 @@ pub struct App<M: GameModel> {
     keys_consumed: bool,
     /// The action palette's search text while it is open.
     palette: Option<String>,
+    /// The message log's height once the user has dragged its edge.
+    log_height: Option<f32>,
     /// Title of the menu that last took focus, so a menu is entered once, not on every frame.
     menu_title: Option<String>,
     /// A menu opened and its first control has not taken focus yet (it may be disabled for a frame).
@@ -86,6 +88,10 @@ pub struct App<M: GameModel> {
     menu_focus: Option<String>,
     /// The cursor has been put on the player since the map first appeared.
     cursor_placed: bool,
+    /// The engine's text prompt as last seen (field id, value), and the text typed into it.
+    prompt: ((String, String), String),
+    /// The engine's look cursor was up at the last frame.
+    was_looking: bool,
     crafting: crafting::Crafting,
     pickup: pickup::Pickup,
     /// Input pressed while a command ran, in order; each goes out as soon as the one before it is done.
@@ -122,10 +128,13 @@ impl<M: GameModel> App<M> {
             display: Display::new(None, None),
             keys_consumed: false,
             palette: None,
+            log_height: None,
             menu_title: None,
             focus_menu: false,
             refocus_map: false,
             cursor_placed: false,
+            prompt: Default::default(),
+            was_looking: false,
             menu_ids: Vec::new(),
             palette_ids: Vec::new(),
             menu_focus: None,
@@ -323,6 +332,7 @@ impl<M: GameModel> App<M> {
             .size_range(SIDEBAR_WIDTH.0..=SIDEBAR_WIDTH.1)
             .show(ui, |ui| {
                 profiling::scope!("sidebar");
+                ui.set_min_width(ui.available_width());
                 self.sidebar_panel(ui)
             });
         label_resize_handle(ui.ctx(), "sidebar", "Resize sidebar");
@@ -599,9 +609,14 @@ impl<M: GameModel> App<M> {
             x: view.x + origin.x,
             y: view.y + origin.y,
         };
-        if let Some(focus) = self.model.focus() {
+        let looking = self.model.focus();
+        if let Some(focus) = looking {
             self.cursor = to_abs(focus);
+        } else if std::mem::take(&mut self.was_looking) {
+            // Native shows no cursor outside look mode: it goes back to the player.
+            self.cursor = to_abs(self.model.player());
         }
+        self.was_looking = looking.is_some();
         let player = self.model.player();
         if !std::mem::replace(&mut self.cursor_placed, true) {
             self.cursor = to_abs(player);
