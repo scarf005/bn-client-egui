@@ -173,12 +173,12 @@ impl<M: GameModel> App<M> {
             .choices
             .iter()
             .find(|c| c.label == "Options" && c.enabled);
-        if let (true, "MAIN MENU", Some(row), false) = (
-            menu.context != "MAIN_MENU",
-            bn_client_core::markup::plain(&menu.title).as_str(),
-            row,
-            self.model.busy(),
-        ) {
+        // The native screen names itself in its header text, not in a title.
+        let is_main_menu = menu.context != "MAIN_MENU"
+            && [&menu.title, &menu.message]
+                .iter()
+                .any(|t| bn_client_core::markup::plain(t) == "MAIN MENU");
+        if let (true, Some(row), false) = (is_main_menu, row, self.model.busy()) {
             self.open_options = None;
             self.model.choose(&row.id.clone());
         }

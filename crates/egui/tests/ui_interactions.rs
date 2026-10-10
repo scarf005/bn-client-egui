@@ -953,8 +953,8 @@ fn options_is_in_the_action_palette_and_opens_the_native_options_through_the_mai
     script.push(show(
         42,
         json!([]),
-        json!({"schema_id":"s:mm","kind":"choices","context":"UILIST","title":"MAIN MENU",
-            "message":"","allow_cancel":true,"choices":[choice("main:wiki","Open Wiki"), menu],
+        json!({"schema_id":"s:mm","kind":"choices","context":"UILIST","title":"",
+            "message":"MAIN MENU","allow_cancel":true,"choices":[choice("main:wiki","Open Wiki"), menu],
             "choice_total":2,"allow_set_count":false}),
     ));
     h.run_steps(5);
