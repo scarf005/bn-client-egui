@@ -83,20 +83,26 @@ impl<M: GameModel> App<M> {
             ui.add(
                 egui::Image::new(uri)
                     .alt_text("Loading image")
-                    .max_height(
-                        (ui.available_height() - 20.0 * loading.entries.len() as f32).max(80.0),
-                    )
+                    .max_size(egui::vec2(
+                        ui.available_width(),
+                        ui.available_height() * 0.6,
+                    ))
                     .maintain_aspect_ratio(true),
             );
         }
-        for (i, entry) in loading.entries.iter().enumerate() {
-            let text = egui::RichText::new(entry);
-            ui.label(if i == loading.index {
-                text.strong()
-            } else {
-                text
-            });
-        }
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            for (i, entry) in loading.entries.iter().enumerate() {
+                let text = egui::RichText::new(entry);
+                let label = ui.label(if i == loading.index {
+                    text.strong()
+                } else {
+                    text
+                });
+                if i == loading.index {
+                    label.scroll_to_me(None);
+                }
+            }
+        });
     }
 
     pub fn show(&mut self, ui: &mut egui::Ui) {
