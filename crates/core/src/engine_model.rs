@@ -52,6 +52,8 @@ pub struct EngineModel {
     /// Actions on show: between auto-move steps the engine offers none, which must not flicker the list.
     shown: Vec<ActionEntry>,
     status: Option<CommandStatus>,
+    /// Where the avatar stood when a travel click was sent; a click that plans and moves nothing found no route.
+    travel_from: Option<WorldPos>,
 }
 
 fn look_name(l: &Look) -> String {
@@ -111,6 +113,7 @@ impl EngineModel {
             loading: None,
             shown: vec![],
             status: None,
+            travel_from: None,
         };
         m.call(
             "bn.hello",
@@ -187,7 +190,18 @@ impl EngineModel {
                     let swap = reason.as_deref() == Some("stale_epoch");
                     let stage = match n.stage.as_str() {
                         "validated" => "accepted".into(),
-                        "completed" => "done".into(),
+                        "completed" => {
+                            let from = self.travel_from.take();
+                            let stuck = from.is_some()
+                                && from.as_ref() == self.avatar_pos()
+                                && self.replica.route().is_empty();
+                            if stuck {
+                                "done: no route there"
+                            } else {
+                                "done"
+                            }
+                            .into()
+                        }
                         _ if swap => "done".into(),
                         "rejected" | "interrupted" => {
                             let why = reason.as_deref().map_or("no reason given", explain);
@@ -298,6 +312,9 @@ impl EngineModel {
             operation,
         };
         self.status = Some(self.describe(&submit.operation));
+        self.travel_from = matches!(submit.operation, Operation::Travel { .. })
+            .then(|| self.avatar_pos().cloned())
+            .flatten();
         self.busy = true;
         self.rejected = false;
         self.walking = false;
@@ -583,6 +600,15 @@ impl GameModel for EngineModel {
     }
 
     fn travel(&mut self, at: Pos) -> bool {
+        // Like Tiles, walking into a closed door next to you opens it; the engine plans no route to one.
+        let (me, desc) = (self.player(), self.cell(at).desc);
+        let step = (at.x - me.x, at.y - me.y);
+        if desc.contains("door") && desc.ends_with("_c") && step.0.abs().max(step.1.abs()) == 1 {
+            if let (false, Some(id)) = (self.busy, direction(step.0, step.1)) {
+                self.invoke(&[id.into()]);
+            }
+            return true;
+        }
         let free = self
             .replica
             .boundary()

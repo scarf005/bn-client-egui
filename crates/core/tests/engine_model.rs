@@ -545,3 +545,58 @@ fn world_swap_interruption_is_not_reported_as_a_failure() {
     let (_, messages) = interrupted_by("stale_epoch");
     assert!(messages.is_empty(), "{messages:?}");
 }
+
+fn with_door(h: &bn_client_core::transport::ScriptHandle, x: i32) {
+    let look = json!({"kind":"terrain","id":"t_door_c","glyph":"+","color":"brown"});
+    let cell = json!({"at": pos(x, 4), "known": "visible", "terrain": look});
+    h.push(change(41, json!({"cells": [cell]})));
+}
+
+#[test]
+fn clicking_an_adjacent_closed_door_bumps_it_open_like_tiles() {
+    let (t, h) = session();
+    let mut m = connected(t.on("bn.command.submit", walk_reply()));
+    with_door(&h, 4);
+    m.poll();
+    assert!(m.travel(Pos { x: 21, y: 12 }));
+    assert_eq!(
+        submits(&h)[0]["params"]["operation"],
+        json!({"kind":"action","action_id":"RIGHT"})
+    );
+}
+
+#[test]
+fn clicking_a_distant_closed_door_still_asks_the_engine_for_a_route() {
+    let (t, h) = session();
+    let mut m = connected(t.on("bn.command.submit", walk_reply()));
+    with_door(&h, 6);
+    m.poll();
+    assert!(m.travel(Pos { x: 23, y: 12 }));
+    assert_eq!(
+        submits(&h)[0]["params"]["operation"],
+        json!({"kind":"travel","pos":pos(6, 4)})
+    );
+}
+
+#[test]
+fn travel_that_plans_nothing_and_moves_nothing_says_there_is_no_route() {
+    let (t, h) = session();
+    let mut m = connected(t.on("bn.command.submit", walk_reply()));
+    assert!(m.travel(Pos { x: 22, y: 12 }));
+    h.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{
+        "epoch":"e7f3","command_id":"c:5","stage":"completed"}}));
+    m.poll();
+    assert_eq!(m.command().unwrap().stage, "done: no route there");
+}
+
+#[test]
+fn travel_that_planned_a_route_is_simply_done() {
+    let (t, h) = session();
+    let mut m = connected(t.on("bn.command.submit", walk_reply()));
+    assert!(m.travel(Pos { x: 22, y: 12 }));
+    h.push(change(41, json!({"route": [pos(4, 4), pos(5, 4)]})));
+    h.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{
+        "epoch":"e7f3","command_id":"c:5","stage":"completed"}}));
+    m.poll();
+    assert_eq!(m.command().unwrap().stage, "done");
+}
