@@ -5,7 +5,7 @@ use bn_client_egui::{App, EngineModel, GameModel};
 use common::{fixture, session};
 use eframe::egui;
 use egui_kittest::Harness;
-use egui_kittest::kittest::Queryable;
+use egui_kittest::kittest::{NodeT, Queryable};
 use serde_json::json;
 
 type H<'a> = Harness<'a, App<EngineModel>>;
@@ -31,7 +31,7 @@ fn submits(h: &ScriptHandle) -> Vec<serde_json::Value> {
 }
 
 #[test]
-fn engine_map_renders_and_a_click_submits_a_move_through_the_protocol() {
+fn engine_map_renders_and_a_click_submits_a_travel_through_the_protocol() {
     let (mut h, script) = harness();
     h.run_steps(3);
     assert_eq!(script.sent_methods(), ["bn.hello", "bn.subscribe"]);
@@ -51,11 +51,38 @@ fn engine_map_renders_and_a_click_submits_a_move_through_the_protocol() {
     }
     h.run_steps(3);
     let sent = submits(&script);
-    assert_eq!(sent.len(), 1, "one step in flight at a time");
+    assert_eq!(sent.len(), 1, "one command in flight at a time");
     assert_eq!(
         sent[0]["params"]["operation"],
-        json!({"kind":"action","action_id":"RIGHT"})
+        json!({"kind":"travel","pos":{"dim":"","x":5,"y":4,"z":0}})
     );
+}
+
+#[test]
+fn planned_route_is_announced_and_cleared_by_an_empty_route() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    let event = |sequence: &str, route: serde_json::Value| {
+        json!({"jsonrpc":"2.0","method":"bn.events","params":{"epoch":"e7f3","events":[{
+            "sequence": sequence, "revision": "32", "type": "cells.seen",
+            "changes": {"route": route}}]}})
+    };
+    let at = |x| json!({"dim":"","x":x,"y":4,"z":0});
+    script.push(event("41", json!([at(4), at(5)])));
+    h.run_steps(3);
+    assert_eq!(h.state().model.route().len(), 2);
+    let map = h.get_by_label("Map");
+    let description = map.accesskit_node().description().unwrap_or_default();
+    assert!(
+        description.contains("Route of 2 squares to (22, 12)"),
+        "{description}"
+    );
+    script.push(event("42", json!([])));
+    h.run_steps(3);
+    assert!(h.state().model.route().is_empty());
+    let map = h.get_by_label("Map");
+    let description = map.accesskit_node().description().unwrap_or_default();
+    assert!(!description.contains("Route"), "{description}");
 }
 
 #[test]

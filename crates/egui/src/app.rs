@@ -234,6 +234,13 @@ impl<M: GameModel> App<M> {
         }
     }
 
+    /// The model's own travel if it has one (engine: first click plans, second walks), else our walk.
+    fn go_to(&mut self, view: Pos) {
+        if !self.model.travel(view) {
+            self.walk_to(view);
+        }
+    }
+
     fn walk_to(&mut self, view: Pos) {
         let origin = self.model.origin();
         self.destination = Some(Pos {
@@ -260,7 +267,8 @@ impl<M: GameModel> App<M> {
             y: self.cursor.y.clamp(0, size.y - 1),
         };
         let player = self.model.player();
-        let status = format!(
+        let route = self.model.route();
+        let mut status = format!(
             "Player at ({}, {}). Cursor ({}, {}): {}.",
             player.x,
             player.y,
@@ -268,6 +276,14 @@ impl<M: GameModel> App<M> {
             self.cursor.y,
             self.model.cell(self.cursor).desc
         );
+        if let Some(end) = route.last() {
+            status += &format!(
+                " Route of {} squares to ({}, {}); click it again to go.",
+                route.len(),
+                end.x,
+                end.y
+            );
+        }
         let status_label = ui.label(&status);
         ui.ctx()
             .accesskit_node_builder(status_label.id, |b| b.set_live(accesskit::Live::Polite));
@@ -294,7 +310,7 @@ impl<M: GameModel> App<M> {
         }
         self.last_hover = hover;
         if response.clicked() {
-            self.walk_to(self.cursor);
+            self.go_to(self.cursor);
         }
         if response.secondary_clicked() {
             self.menu_cell = self.cursor;
@@ -337,7 +353,7 @@ impl<M: GameModel> App<M> {
                 ui.close();
             }
             if menu_item(ui, "Move here") {
-                self.walk_to(at);
+                self.go_to(at);
                 ui.close();
             }
         });
@@ -374,6 +390,17 @@ impl<M: GameModel> App<M> {
                 egui::Vec2::splat(CELL),
             )
         };
+        for (i, p) in route.iter().enumerate() {
+            let in_view = (0..size.x).contains(&p.x) && (0..size.y).contains(&p.y);
+            if in_view {
+                let alpha = if i + 1 == route.len() { 140 } else { 70 };
+                painter.rect_filled(
+                    rect(*p),
+                    0.0,
+                    egui::Color32::from_rgba_unmultiplied(0, 200, 255, alpha),
+                );
+            }
+        }
         let center = rect(player).center();
         painter.text(
             center,
