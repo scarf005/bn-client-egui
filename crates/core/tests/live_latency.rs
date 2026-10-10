@@ -116,7 +116,9 @@ fn measure_startup_and_steps() {
             model.poll();
         }
         model.take_trace();
-        let start = model.player();
+        // The view follows the avatar, so only the absolute square tells that it moved.
+        let square = |m: &EngineModel| (m.player().x + m.origin().x, m.player().y + m.origin().y);
+        let (start, from) = (model.player(), square(&model));
         let dx = if i < 5 { 1 } else { -1 };
         let target = Pos {
             x: start.x + dx,
@@ -127,7 +129,7 @@ fn measure_startup_and_steps() {
             "step {i}: {:?}",
             model.messages()
         );
-        pump(&mut model, "step", |m| m.player() != start && !m.busy());
+        pump(&mut model, "step", |m| square(m) != from && !m.busy());
         steps.push(model.take_trace());
     }
     let mut rows: Vec<[f64; 6]> = vec![];

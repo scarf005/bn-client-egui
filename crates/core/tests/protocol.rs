@@ -151,7 +151,7 @@ fn by_def(def: &str, v: &Value) -> Result<Value, String> {
         "loading_notification" => round_trip::<LoadingNotice>(v),
         "choice" => round_trip::<Choice>(v),
         // The world values are typed by the replica tests; here they only have to be valid JSON.
-        "avatar" | "entity" | "field" | "look" | "cell" => Ok(v.clone()),
+        "entity" | "field" | "look" | "cell" => Ok(v.clone()),
         other => Err(format!("no type for {other}")),
     }
 }
