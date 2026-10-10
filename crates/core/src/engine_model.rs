@@ -295,7 +295,7 @@ impl EngineModel {
                                 && from.as_ref() == self.avatar_pos()
                                 && self.replica.route().is_empty();
                             if stuck {
-                                "done: no route there"
+                                "done: You can't travel there."
                             } else {
                                 "done"
                             }
@@ -1201,6 +1201,7 @@ impl GameModel for EngineModel {
             can_set_count: i.allow_set_count,
             title: i.title.clone(),
             message: i.message.clone(),
+            banner: i.banner.clone().unwrap_or_default(),
             choices: i
                 .choices
                 .iter()
