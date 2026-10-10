@@ -609,3 +609,43 @@ fn live_engine_opens_the_overmap_moves_its_cursor_and_closes_it() {
     wait_for(&mut model, "idle", |m| !m.busy());
     assert!(model.failure().is_none());
 }
+
+#[test]
+#[ignore = "requires BN_ENGINE with the structured overmap"]
+fn live_engine_overmap_gains_and_loses_tile_ids_when_the_client_switches() {
+    let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
+    let transport = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
+    let mut model = EngineModel::connect(Box::new(transport), false);
+    wait_for(&mut model, "subscription", |m| m.live());
+    choose_label(&mut model, "New Game");
+    choose_label(&mut model, "Tutorial");
+    wait_for(&mut model, "the tutorial map", |m| m.size().x > 0);
+    wait_for(&mut model, "idle", |m| !m.busy());
+    dismiss_popups(&mut model);
+
+    assert!(model.invoke_action("map"));
+    wait_for(&mut model, "the overmap", |m| m.overmap().is_some());
+    wait_for(&mut model, "idle", |m| !m.busy());
+    assert!(
+        model.overmap().unwrap().tiles.is_empty(),
+        "ASCII client: no tile ids"
+    );
+
+    // The player picks Tiles while the overmap is open: the open screen is published again with ids.
+    model.set_tiles(true);
+    wait_for(&mut model, "tile ids", |m| {
+        m.overmap().is_some_and(|o| !o.tiles.is_empty())
+    });
+    let tiled = model.overmap().unwrap();
+    assert_eq!(tiled.tiles.len(), (tiled.cols * tiled.rows) as usize);
+
+    model.set_tiles(false);
+    wait_for(&mut model, "no tile ids", |m| {
+        m.overmap().is_some_and(|o| o.tiles.is_empty())
+    });
+    model.close_overmap();
+    wait_for(&mut model, "the overmap to close", |m| {
+        m.overmap().is_none()
+    });
+    assert!(model.failure().is_none());
+}

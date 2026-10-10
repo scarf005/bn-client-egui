@@ -140,3 +140,78 @@ fn hello_says_tiles_only_for_a_client_that_draws_them() {
     assert_eq!(hello_of(true)["tiles"], true);
     assert!(hello_of(false).get("tiles").is_none());
 }
+
+mod switching {
+    use super::*;
+    use bn_client_core::Clock;
+    use std::time::Duration;
+
+    fn hellos(h: &bn_client_core::transport::ScriptHandle) -> Vec<Value> {
+        h.sent()
+            .into_iter()
+            .filter(|m| m["method"] == "bn.hello")
+            .map(|m| m["params"].clone())
+            .collect()
+    }
+
+    #[test]
+    fn switching_tiles_on_sends_a_hello_and_a_same_size_viewport_once_idle() {
+        let (t, h) = session();
+        let mut m = connected(t);
+        m.set_tiles(false);
+        m.poll();
+        assert_eq!(hellos(&h).len(), 1, "no change, nothing sent");
+        m.set_tiles(true);
+        m.poll();
+        let sent = hellos(&h);
+        assert_eq!(sent.len(), 2);
+        assert_eq!(sent[1]["tiles"], true);
+        assert!(
+            sent[1].get("viewport").is_none(),
+            "only the preference changes"
+        );
+        let methods = h.sent_methods();
+        assert_eq!(&methods[methods.len() - 2..], ["bn.hello", "bn.viewport"]);
+        m.poll();
+        assert_eq!(hellos(&h).len(), 2, "told once");
+        m.set_tiles(false);
+        m.poll();
+        assert!(
+            hellos(&h)[2].get("tiles").is_none(),
+            "switching back says so"
+        );
+    }
+
+    #[test]
+    fn the_preference_waits_while_a_command_runs() {
+        let (t, h) = session();
+        let mut m = connected(t.on("bn.command.submit", vec![common::fixture("submit_result")]));
+        assert!(m.invoke_action("RIGHT"));
+        m.set_tiles(true);
+        m.poll();
+        assert_eq!(hellos(&h).len(), 1);
+        h.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{
+            "epoch":"e7f3","command_id":"c:5","stage":"completed"}}));
+        m.poll();
+        assert_eq!(hellos(&h).len(), 2);
+    }
+
+    #[test]
+    fn a_refused_hello_is_tried_again_after_a_moment() {
+        let (t, h) = session();
+        let clock = Clock::manual();
+        let refuse = json!({"jsonrpc":"2.0","id":null,"error":{"code":1000,"message":"x","data":{"kind":"command_busy"}}});
+        let mut m =
+            EngineModel::new(Box::new(t.on("bn.hello", vec![refuse]))).with_clock(clock.clone());
+        m.poll();
+        m.set_tiles(true);
+        m.poll();
+        m.poll();
+        assert_eq!(hellos(&h).len(), 2, "refused");
+        m.poll();
+        assert_eq!(hellos(&h).len(), 2, "not at once");
+        clock.advance(Duration::from_secs(2));
+        m.poll();
+        assert_eq!(hellos(&h).len(), 3);
+    }
+}

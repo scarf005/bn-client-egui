@@ -375,6 +375,8 @@ pub trait GameModel {
     fn route(&self) -> Vec<Pos> {
         vec![]
     }
+    /// Says whether the client draws tiles now, so the engine sends tile ids where it has them.
+    fn set_tiles(&mut self, _tiles: bool) {}
     /// The overmap screen, while it is open.
     fn overmap(&self) -> Option<Overmap> {
         None

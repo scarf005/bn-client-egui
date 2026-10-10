@@ -34,6 +34,8 @@ enum Pending {
     Submit,
     Viewport,
     Interrupt,
+    /// A hello that only changes whether the engine sends tile ids.
+    Retile,
     Describe,
     Choices,
 }
@@ -57,7 +59,11 @@ pub type Respawn = Box<dyn FnMut() -> std::io::Result<Box<dyn Transport>>>;
 const STALL: Duration = Duration::from_secs(120);
 
 pub struct EngineModel {
+    /// Whether the client draws tiles now, and what the engine was last told.
     tiles: bool,
+    tiles_told: bool,
+    /// The earliest time to tell the engine again after it refused.
+    tiles_retry: Duration,
     transport: Box<dyn Transport>,
     respawn: Option<Respawn>,
     waker: Option<crate::transport::Waker>,
@@ -260,6 +266,8 @@ impl EngineModel {
     pub fn connect(transport: Box<dyn Transport>, tiles: bool) -> Self {
         let mut m = Self {
             tiles,
+            tiles_told: tiles,
+            tiles_retry: Duration::ZERO,
             transport,
             respawn: None,
             waker: None,
@@ -499,6 +507,14 @@ impl EngineModel {
             }
             return;
         }
+        if matches!(kind, Pending::Retile) {
+            // The engine refused (a command was running): ask again a moment later.
+            if result.is_err() {
+                self.tiles_told = !self.tiles;
+                self.tiles_retry = self.clock.now() + RESIZE_DEBOUNCE;
+            }
+            return;
+        }
         if matches!(kind, Pending::Interrupt) {
             // The engine had no activity running; say so once, not per key press.
             if result.is_err() {
@@ -527,7 +543,7 @@ impl EngineModel {
                 Ok(s) => self.replica.begin(s),
                 Err(e) => self.messages.push(format!("Bad snapshot: {e}")),
             },
-            Pending::Viewport | Pending::Interrupt | Pending::Describe => {}
+            Pending::Viewport | Pending::Interrupt | Pending::Retile | Pending::Describe => {}
             Pending::Choices => {
                 self.paged.waiting = false;
                 if let Ok(page) = serde_json::from_value::<protocol::ChoicesResult>(value)
@@ -721,6 +737,30 @@ impl EngineModel {
                 Pending::Viewport,
             );
         }
+    }
+
+    /// Tells the engine whether tile ids are wanted once it is idle: a hello says so, and a viewport
+    /// of the same size makes it publish the open screen again, now with or without them.
+    fn send_tiles(&mut self) {
+        if self.tiles == self.tiles_told
+            || self.busy
+            || self.replica.at().is_none()
+            || self.clock.now() < self.tiles_retry
+        {
+            return;
+        }
+        self.tiles_told = self.tiles;
+        self.call(
+            "bn.hello",
+            json!(protocol::HelloParams::new("bn-client").with_tiles(self.tiles)),
+            Pending::Retile,
+        );
+        let (cols, rows) = (self.declared.x as u32, self.declared.y as u32);
+        self.call(
+            "bn.viewport",
+            json!({"cols": cols, "rows": rows}),
+            Pending::Viewport,
+        );
     }
 
     fn refresh_actions(&mut self) {
@@ -1040,6 +1080,7 @@ impl GameModel for EngineModel {
         }
         self.at_main_menu = at_main_menu;
         self.send_viewport();
+        self.send_tiles();
         self.refresh_view();
         self.refresh_items();
         self.refresh_actions();
@@ -1049,6 +1090,10 @@ impl GameModel for EngineModel {
     fn set_waker(&mut self, waker: crate::transport::Waker) {
         self.transport.set_waker(waker.clone());
         self.waker = Some(waker);
+    }
+
+    fn set_tiles(&mut self, tiles: bool) {
+        self.tiles = tiles;
     }
 
     fn failure(&self) -> Option<Failure> {
