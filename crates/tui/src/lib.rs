@@ -1,12 +1,14 @@
 //! Terminal client over the same `GameModel` as the egui client.
 
+mod crafting;
+
 use bn_client_core::{ActionEntry, GameModel, Loading, Menu, Pos, Rgb};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Clear, Gauge, Paragraph};
+use ratatui::widgets::{Block, Clear, Gauge, Paragraph, Wrap};
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 const LOG_LINES: usize = 6;
@@ -31,6 +33,8 @@ pub struct TuiApp<M: GameModel> {
     actions_open: Option<usize>,
     /// Message log lines scrolled back from the newest.
     log_back: usize,
+    /// The crafting search or batch count being typed.
+    input: Option<crafting::Input>,
 }
 
 fn color(c: Rgb) -> Color {
@@ -80,6 +84,7 @@ impl<M: GameModel> TuiApp<M> {
             map_first: Pos { x: 0, y: 0 },
             actions_open: None,
             log_back: 0,
+            input: None,
         }
     }
 
@@ -145,7 +150,10 @@ impl<M: GameModel> TuiApp<M> {
             return;
         }
         if let Some(menu) = self.menu() {
-            return self.menu_key(&menu, key.code);
+            return match menu.context.as_str() {
+                "CRAFTING" => self.crafting_key(&menu, key),
+                _ => self.menu_key(&menu, key.code),
+            };
         }
         if let Some(row) = self.actions_open {
             return self.actions_key(row, key.code);
@@ -332,21 +340,28 @@ impl<M: GameModel> TuiApp<M> {
         self.draw_actions(f, actions);
         self.draw_items(f, items);
         f.render_widget(Paragraph::new(self.status_line()), status);
-        let messages = self.model.messages();
-        let end = messages
-            .len()
-            .saturating_sub(self.log_back.min(messages.len()));
-        let shown = &messages[end.saturating_sub(LOG_LINES)..end];
-        let lines = shown
+        // The game's own lines in their colours with repeat counts, then the client's command results.
+        let native = self.model.native_log().iter().map(|l| {
+            let style = l.color.map_or(Style::new(), |c| Style::new().fg(color(c)));
+            Line::styled(l.shown(), style)
+        });
+        let commands = self
+            .model
+            .messages()
             .iter()
-            .map(|m| Line::raw(m.as_str()))
-            .collect::<Vec<_>>();
+            .map(|m| Line::styled(m.as_str(), Style::new().fg(Color::DarkGray)));
+        let all = native.chain(commands).collect::<Vec<_>>();
+        let end = all.len().saturating_sub(self.log_back.min(all.len()));
+        let lines = all[end.saturating_sub(LOG_LINES)..end].to_vec();
         f.render_widget(
             Paragraph::new(lines).block(Block::bordered().title("Message log")),
             log,
         );
         if let Some(menu) = self.menu() {
-            self.draw_menu(f, &menu);
+            match menu.context.as_str() {
+                "CRAFTING" => self.draw_crafting(f, &menu),
+                _ => self.draw_menu(f, &menu),
+            }
         } else if let Some(row) = self.actions_open {
             self.draw_action_list(f, row);
         }
@@ -512,7 +527,12 @@ impl<M: GameModel> TuiApp<M> {
         };
         let mut lines = section("Ground", self.model.ground());
         lines.extend(section("Inventory", self.model.inventory()));
-        f.render_widget(Paragraph::new(lines).block(Block::bordered()), area);
+        f.render_widget(
+            Paragraph::new(lines)
+                .wrap(Wrap { trim: false })
+                .block(Block::bordered()),
+            area,
+        );
     }
 
     fn draw_menu(&mut self, f: &mut Frame, menu: &Menu) {
@@ -566,19 +586,7 @@ impl<M: GameModel> TuiApp<M> {
     /// A centred box: message lines, a tab bar, then the rows scrolled to keep the highlighted one visible.
     fn draw_popup(f: &mut Frame, popup: &Popup) {
         let area = f.area();
-        let tab_bar = Line::from(
-            popup
-                .tabs
-                .iter()
-                .flat_map(|(label, on)| {
-                    let style = match on {
-                        true => Style::new().add_modifier(Modifier::REVERSED),
-                        false => Style::new(),
-                    };
-                    [Span::styled(format!(" {label} "), style), Span::raw(" ")]
-                })
-                .collect::<Vec<_>>(),
-        );
+        let tab_bar = bar(&popup.tabs);
         let widest = popup
             .header
             .iter()
@@ -633,6 +641,21 @@ impl<M: GameModel> TuiApp<M> {
             .collect::<Vec<_>>();
         f.render_widget(Paragraph::new(lines), list);
     }
+}
+
+/// Tab labels in a row, the selected one reversed.
+fn bar(tabs: &[(String, bool)]) -> Line<'static> {
+    Line::from(
+        tabs.iter()
+            .flat_map(|(label, on)| {
+                let style = match on {
+                    true => Style::new().add_modifier(Modifier::REVERSED),
+                    false => Style::new(),
+                };
+                [Span::styled(format!(" {label} "), style), Span::raw(" ")]
+            })
+            .collect::<Vec<_>>(),
+    )
 }
 
 /// Breaks `text` into lines of at most `width` terminal columns, at spaces where it can.
