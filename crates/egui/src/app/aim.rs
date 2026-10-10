@@ -43,6 +43,9 @@ const GRID: [[Cell; 7]; 3] = [
 /// Height of the item description under the panes.
 const DESCRIPTION_HEIGHT: f32 = 96.0;
 
+/// How long a typed answer waits for the prompt it is meant for.
+const PROMPT_WAIT: std::time::Duration = std::time::Duration::from_secs(5);
+
 /// One input for the engine, sent once the previous one has finished.
 pub enum Step {
     Choose(String),
@@ -57,6 +60,8 @@ pub struct Aim {
     /// The filter box text of each pane, and the filter the engine last reported for it.
     filters: [(String, String); 2],
     amount: String,
+    /// When the front step began waiting for a prompt.
+    waiting: Option<std::time::Duration>,
     /// A text box of the screen has the keyboard, so typed keys are text and not game keys.
     pub(super) editing: bool,
 }
@@ -87,24 +92,40 @@ impl<M: GameModel> App<M> {
         if self.model.busy() {
             return;
         }
-        let Some(step) = self.aim.steps.pop_front() else {
+        let Some(step) = self.aim.steps.front() else {
+            self.aim.waiting = None;
             return;
         };
-        let sent = match &step {
+        let sent = match step {
             Step::Choose(id) => {
-                self.model.choose(id);
+                let id = id.clone();
+                self.model.choose(&id);
                 true
             }
-            Step::Action(id) => self.model.invoke_action(id),
+            Step::Action(id) => {
+                let id = id.clone();
+                self.model.invoke_action(&id)
+            }
             Step::Fill(text) => match self.model.menu().and_then(|m| m.field) {
                 Some(field) => {
-                    self.model.fill(&field.id, text, true);
+                    let text = text.clone();
+                    self.model.fill(&field.id, &text, true);
                     true
                 }
-                None => false,
+                None => {
+                    // The prompt an earlier action opens can arrive after that action completed.
+                    let since = *self.aim.waiting.get_or_insert_with(|| self.clock.now());
+                    if self.clock.now().saturating_sub(since) < PROMPT_WAIT {
+                        return;
+                    }
+                    false
+                }
             },
         };
-        if !sent {
+        self.aim.waiting = None;
+        if sent {
+            self.aim.steps.pop_front();
+        } else {
             self.aim.steps.clear();
         }
     }
