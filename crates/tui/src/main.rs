@@ -1,6 +1,6 @@
 use bn_client_core::colors::ColorMap;
 use bn_client_core::keys::KeyMap;
-use bn_client_core::transport::{StdioTransport, game_root};
+use bn_client_core::transport::{Profile, StdioTransport, game_root};
 use bn_client_core::{EngineModel, FakeModel, GameModel};
 use bn_client_tui::TuiApp;
 use crossterm::event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyEventKind};
@@ -10,7 +10,7 @@ use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-const USAGE: &str = "usage: bn-client-tui [--engine PATH]   (or set BN_ENGINE); no engine: fake model. Ctrl-C quits; x/; look cursor, Tab action list, PageUp/Down log";
+const USAGE: &str = "usage: bn-client-tui [--engine PATH] [--userdir PATH] [--configdir PATH] [--fresh-profile]   (or set BN_ENGINE); no engine: fake model. Ctrl-C quits; x/; look cursor, Tab action list, PageUp/Down log";
 
 enum Msg {
     Key(event::KeyEvent),
@@ -66,7 +66,11 @@ fn run(model: impl GameModel) -> std::io::Result<()> {
 }
 
 fn main() -> std::io::Result<()> {
-    let mut args = std::env::args().skip(1);
+    let (profile, rest) = Profile::from_args(std::env::args().skip(1)).unwrap_or_else(|e| {
+        eprintln!("{e}\n{USAGE}");
+        std::process::exit(2);
+    });
+    let mut args = rest.into_iter();
     let mut engine = std::env::var_os("BN_ENGINE").map(PathBuf::from);
     while let Some(arg) = args.next() {
         match (arg.as_str(), args.next()) {
@@ -80,7 +84,7 @@ fn main() -> std::io::Result<()> {
     let Some(engine) = engine else {
         return run(FakeModel::default());
     };
-    let transport = StdioTransport::spawn(&engine).unwrap_or_else(|e| {
+    let transport = StdioTransport::spawn_with(&engine, &profile).unwrap_or_else(|e| {
         eprintln!("cannot start engine {}: {e}", engine.display());
         std::process::exit(1);
     });
