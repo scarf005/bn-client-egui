@@ -97,8 +97,6 @@ impl<M: GameModel> App<M> {
                             });
                         }
                     });
-                // The row under the pointer, else the native cursor row, else the first.
-                let described = described.or(rows.first().map(|r| &r.description));
                 if let Some(description) = described.filter(|d| !d.is_empty()) {
                     ui.separator();
                     egui::ScrollArea::vertical()

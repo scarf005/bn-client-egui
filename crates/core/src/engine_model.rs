@@ -1182,6 +1182,20 @@ impl GameModel for EngineModel {
             c.pane_id.is_none()
                 && (pane_of(&c.label).is_some() || (pane_labels.is_empty() && paned))
         };
+        // The cursor travels as `compat.focus`; a popup row's description is its action id, for tools.
+        let focus = i
+            .compat
+            .as_ref()
+            .and_then(|c| c["focus"]["choice_id"].as_str());
+        let actions = self.replica.boundary().map_or(&[][..], |b| &b.actions);
+        let described = |text: &str| {
+            let machine = actions.iter().any(|a| a.id == text);
+            if machine {
+                String::new()
+            } else {
+                text.to_string()
+            }
+        };
         Some(Menu {
             context: i.context.clone(),
             field,
@@ -1199,10 +1213,10 @@ impl GameModel for EngineModel {
                     selected: c.selected,
                     group: c.pane_id.clone(),
                     tab: tab(c),
-                    highlighted: c.highlighted.unwrap_or(false),
+                    highlighted: Some(c.id.as_str()) == focus,
                     selected_count: c.selected_count,
                     available_count: c.available_count,
-                    description: c.description.clone(),
+                    description: described(&c.description),
                     columns: c
                         .columns
                         .iter()

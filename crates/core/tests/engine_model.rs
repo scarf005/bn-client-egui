@@ -1502,8 +1502,8 @@ fn pickup_rows_carry_the_native_highlight_marks_and_counts() {
     assert_eq!(
         rows,
         [
-            (true, false, None, Some(1)),
-            (false, true, Some(2), Some(3))
+            (false, false, None, Some(1)),
+            (true, true, Some(2), Some(3))
         ]
     );
 }
