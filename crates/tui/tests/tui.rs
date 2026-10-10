@@ -3,7 +3,7 @@ use bn_client_core::transport::ScriptHandle;
 use bn_client_core::{EngineModel, FakeModel, GameModel, Pos, Rgb};
 use bn_client_tui::TuiApp;
 use common::{connected, fixture, session};
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
 use ratatui::style::Color;
@@ -241,4 +241,413 @@ fn keys_do_not_reach_the_game_while_loading() {
     app.model.poll();
     app.handle_key(ch('k'));
     assert!(submits(&h).is_empty());
+}
+
+fn tabbed(h: &ScriptHandle, rows: Value) {
+    for name in ["events_41_walk", "events_42_message"] {
+        h.push(fixture(name));
+    }
+    let mut menu = fixture("events_43_menu");
+    menu["params"]["events"][0]["changes"]["interaction"]["interaction"]["choices"] = rows;
+    h.push(menu);
+}
+
+fn row(id: &str, label: &str, selected: bool, pane: Option<&str>) -> Value {
+    let mut c = json!({"id":id,"label":label,"description":"","denial":"","enabled":true,
+        "selectable":true,"selected":selected,"columns":[]});
+    if let Some(pane) = pane {
+        c["pane_id"] = pane.into();
+    }
+    c
+}
+
+fn main_menu(h: &ScriptHandle) {
+    tabbed(
+        h,
+        json!([
+            row("tab:new_game", "New Game", true, None),
+            row("tab:settings", "Settings", false, None),
+            row("new_game:tutorial", "Tutorial", false, Some("new_game")),
+            row(
+                "new_game:custom",
+                "Custom Character",
+                false,
+                Some("new_game")
+            ),
+        ]),
+    );
+}
+
+#[test]
+fn main_menu_shows_tabs_in_a_bar_above_the_selected_tabs_entries() {
+    let (mut app, h) = engine();
+    main_menu(&h);
+    app.model.poll();
+    let s = text(&render(&mut app));
+    let line = |want: &str| s.lines().position(|l| l.contains(want)).unwrap();
+    assert!(
+        s.lines()
+            .any(|l| l.contains("New Game") && l.contains("Settings")),
+        "{s}"
+    );
+    assert!(line("Settings") < line("Tutorial") && line("Tutorial") < line("Custom Character"));
+    assert!(!s.contains("> New Game"), "tabs are not list rows:\n{s}");
+    assert!(s.contains("> Tutorial"));
+}
+
+#[test]
+fn left_and_right_choose_the_neighbouring_tab_and_stop_at_the_ends() {
+    let (mut app, h) = engine();
+    main_menu(&h);
+    app.model.poll();
+    app.handle_key(key(KeyCode::Left));
+    assert!(submits(&h).is_empty(), "no tab before the first");
+    app.handle_key(key(KeyCode::Right));
+    assert_eq!(
+        submits(&h)[0]["params"]["operation"],
+        json!({"kind":"choose","choice_id":"tab:settings"})
+    );
+}
+
+#[test]
+fn enter_on_a_tabbed_menu_chooses_the_entry_not_the_tab() {
+    let (mut app, h) = engine();
+    main_menu(&h);
+    app.model.poll();
+    app.handle_key(key(KeyCode::Down));
+    assert_eq!(app.selected_label().as_deref(), Some("Custom Character"));
+    app.handle_key(key(KeyCode::Enter));
+    assert_eq!(
+        submits(&h)[0]["params"]["operation"],
+        json!({"kind":"choose","choice_id":"new_game:custom"})
+    );
+}
+
+#[test]
+fn long_menus_scroll_to_keep_the_highlighted_row_visible() {
+    let (mut app, h) = engine();
+    let rows = (0..60).map(|i| row(&format!("c:{i}"), &format!("Item {i}"), false, None));
+    tabbed(&h, Value::Array(rows.collect()));
+    app.model.poll();
+    for _ in 0..45 {
+        app.handle_key(key(KeyCode::Down));
+    }
+    let s = text(&render(&mut app));
+    assert!(s.contains("> Item 45") && !s.contains("Item 3 "), "{s}");
+    app.handle_key(key(KeyCode::Home));
+    assert!(text(&render(&mut app)).contains("> Item 0"));
+}
+
+#[test]
+fn korean_menu_rows_keep_the_popup_border_aligned() {
+    let (mut app, h) = engine();
+    tabbed(
+        &h,
+        json!([
+            row("c:0", "새 게임 시작하기", false, None),
+            row("c:1", "불러오기", false, None)
+        ]),
+    );
+    app.model.poll();
+    let t = render(&mut app);
+    let buf = t.backend().buffer();
+    let rows = (0..buf.area.height)
+        .filter(|&y| {
+            let line = (0..buf.area.width)
+                .map(|x| buf[(x, y)].symbol())
+                .collect::<String>()
+                .replace(' ', "");
+            line.contains("새게임") || line.contains("불러오기")
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(rows.len(), 2);
+    let edge = |y: u16| {
+        (0..buf.area.width)
+            .rev()
+            .find(|&x| buf[(x, y)].symbol() == "│")
+            .unwrap()
+    };
+    assert_eq!(
+        edge(rows[0]),
+        edge(rows[1]),
+        "same right border on every row"
+    );
+}
+
+#[test]
+fn map_viewport_is_declared_from_the_terminal_size_and_redeclared_on_resize() {
+    let (t, h) = session();
+    let t = t.on(
+        "bn.viewport",
+        vec![json!({"jsonrpc":"2.0","id":null,"result":{}})],
+    );
+    let mut app = TuiApp::new(connected(t));
+    let viewports = |h: &ScriptHandle| {
+        h.sent()
+            .into_iter()
+            .filter(|s| s["method"] == "bn.viewport")
+            .map(|s| s["params"].clone())
+            .collect::<Vec<_>>()
+    };
+    let draw = |app: &mut TuiApp<EngineModel>, w, hgt| {
+        let mut t = Terminal::new(TestBackend::new(w, hgt)).unwrap();
+        t.draw(|f| app.draw(f)).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        app.model.poll();
+    };
+    // Map pane = width - 36 side panel - 2 borders; height - 1 status - 8 log - 2 borders.
+    draw(&mut app, 120, 40);
+    assert_eq!(viewports(&h), [json!({"cols": 82, "rows": 29})]);
+    draw(&mut app, 100, 30);
+    assert_eq!(viewports(&h).last(), Some(&json!({"cols": 62, "rows": 19})));
+}
+
+#[test]
+fn a_view_larger_than_the_terminal_scrolls_to_keep_the_player_in_the_middle() {
+    let mut app = TuiApp::new(FakeModel::default());
+    for _ in 0..10 {
+        app.handle_key(key(KeyCode::Down));
+    }
+    let mut t = Terminal::new(TestBackend::new(60, 22)).unwrap();
+    t.draw(|f| app.draw(f)).unwrap();
+    let buf = t.backend().buffer();
+    let at = (0..buf.area.height)
+        .flat_map(|y| (0..buf.area.width).map(move |x| (x, y)))
+        .find(|&(x, y)| buf[(x, y)].symbol() == "@")
+        .unwrap();
+    // 11 map rows inside the border: the player is on the middle one.
+    assert_eq!(at.1, 1 + 11 / 2);
+}
+
+#[test]
+fn status_line_shows_ready_then_the_command_and_its_stage() {
+    let (mut app, _h) = engine();
+    let ready = text(&render(&mut app));
+    assert!(ready.contains("Ready"), "{ready}");
+    app.handle_key(ch('k'));
+    let s = text(&render(&mut app));
+    assert!(!s.contains("Ready") && s.contains("Move up"), "{s}");
+}
+
+#[test]
+fn look_cursor_moves_without_acting_and_describes_the_cell_under_it() {
+    let (mut app, h) = engine();
+    app.handle_key(ch('x'));
+    let me = app.model.player();
+    app.handle_key(key(KeyCode::Right));
+    app.handle_key(ch('j'));
+    assert!(submits(&h).is_empty(), "cursor keys do not walk");
+    assert_eq!(app.model.player(), me);
+    let s = text(&render(&mut app));
+    let want = format!("Look ({}, {})", me.x + 1, me.y + 1);
+    assert!(s.contains(&want), "{want} in:\n{s}");
+}
+
+#[test]
+fn shift_moves_the_look_cursor_five_cells_and_it_stays_inside_the_view() {
+    let (mut app, _h) = engine();
+    let me = app.model.player();
+    app.handle_key(ch('x'));
+    app.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::SHIFT));
+    assert!(text(&render(&mut app)).contains(&format!("Look ({}, {})", me.x + 5, me.y)));
+    for _ in 0..40 {
+        app.handle_key(KeyEvent::new(KeyCode::Up, KeyModifiers::SHIFT));
+    }
+    assert!(text(&render(&mut app)).contains(&format!("Look ({}, 0)", me.x + 5)));
+}
+
+#[test]
+fn enter_in_look_mode_travels_to_the_cursor_and_esc_returns_to_walking() {
+    let (mut app, h) = engine();
+    app.handle_key(ch('x'));
+    let me = app.model.player();
+    for _ in 0..2 {
+        app.handle_key(key(KeyCode::Right));
+    }
+    app.handle_key(key(KeyCode::Enter));
+    let op = &submits(&h)[0]["params"]["operation"];
+    assert_eq!(op["kind"], "travel");
+    app.handle_key(key(KeyCode::Esc));
+    assert!(!text(&render(&mut app)).contains("Look ("));
+    assert_eq!(app.model.player(), me);
+}
+
+#[test]
+fn enter_on_the_players_own_square_leaves_look_mode_without_travelling() {
+    let (mut app, h) = engine();
+    app.handle_key(ch('x'));
+    app.handle_key(key(KeyCode::Enter));
+    assert!(submits(&h).is_empty());
+    assert!(!text(&render(&mut app)).contains("Look ("));
+}
+
+#[test]
+fn clicking_a_map_cell_travels_there() {
+    let (mut app, h) = engine();
+    let t = render(&mut app);
+    let me = app.model.player();
+    let buf = t.backend().buffer();
+    let (px, py) = (0..buf.area.height)
+        .flat_map(|y| (0..buf.area.width).map(move |x| (x, y)))
+        .find(|&(x, y)| buf[(x, y)].symbol() == "@")
+        .unwrap();
+    assert_eq!(me.x, me.x);
+    app.handle_mouse(MouseEvent {
+        kind: MouseEventKind::Down(MouseButton::Left),
+        column: px + 2,
+        row: py,
+        modifiers: KeyModifiers::NONE,
+    });
+    let sent = submits(&h);
+    assert_eq!(sent[0]["params"]["operation"]["kind"], "travel");
+    let want = app.model.origin().x + me.x + 2;
+    assert_eq!(sent[0]["params"]["operation"]["pos"]["x"], want);
+}
+
+#[test]
+fn clicks_outside_the_map_or_under_a_menu_do_nothing() {
+    let (mut app, h) = engine();
+    render(&mut app);
+    let click = |column, row| MouseEvent {
+        kind: MouseEventKind::Down(MouseButton::Left),
+        column,
+        row,
+        modifiers: KeyModifiers::NONE,
+    };
+    app.handle_mouse(click(99, 29));
+    open_menu(&mut app, &h);
+    render(&mut app);
+    app.handle_mouse(click(20, 10));
+    assert!(submits(&h).is_empty());
+}
+
+#[test]
+fn fake_model_walks_to_the_look_cursor_one_step_per_tick() {
+    let mut app = TuiApp::new(FakeModel::default());
+    let start = app.model.player();
+    app.handle_key(ch('x'));
+    for _ in 0..3 {
+        app.handle_key(key(KeyCode::Right));
+    }
+    app.handle_key(key(KeyCode::Enter));
+    assert!(app.walking());
+    app.tick();
+    assert_eq!(app.model.player().x, start.x + 1);
+    for _ in 0..5 {
+        app.tick();
+    }
+    assert_eq!(app.model.player().x, start.x + 3);
+    assert!(!app.walking());
+}
+
+#[test]
+fn tab_opens_the_action_list_and_enter_runs_the_highlighted_action() {
+    let (mut app, h) = engine();
+    app.handle_key(key(KeyCode::Tab));
+    let s = text(&render(&mut app));
+    assert!(s.contains("> Move right"), "{s}");
+    app.handle_key(key(KeyCode::Down));
+    app.handle_key(key(KeyCode::Enter));
+    assert_eq!(submits(&h).len(), 1);
+    assert!(!text(&render(&mut app)).contains("> "), "list closed");
+}
+
+#[test]
+fn page_up_scrolls_the_message_log_back_and_page_down_returns() {
+    let mut app = TuiApp::new(FakeModel::default());
+    for i in 0..20 {
+        app.model.say(format!("line {i}"));
+    }
+    assert!(text(&render(&mut app)).contains("line 19"));
+    app.handle_key(key(KeyCode::PageUp));
+    let s = text(&render(&mut app));
+    assert!(!s.contains("line 19") && s.contains("line 13"), "{s}");
+    app.handle_key(key(KeyCode::PageDown));
+    assert!(text(&render(&mut app)).contains("line 19"));
+}
+
+#[test]
+fn wide_map_glyphs_do_not_shift_the_rest_of_the_row() {
+    struct Wide(FakeModel);
+    impl GameModel for Wide {
+        fn size(&self) -> Pos {
+            self.0.size()
+        }
+        fn cell(&self, at: Pos) -> bn_client_core::Cell {
+            let mut c = self.0.cell(at);
+            if at.x == 3 {
+                c.glyph = '木';
+            }
+            c
+        }
+        fn player(&self) -> Pos {
+            self.0.player()
+        }
+        fn step_toward(&mut self, t: Pos) -> bool {
+            self.0.step_toward(t)
+        }
+        fn ground(&self) -> &[String] {
+            self.0.ground()
+        }
+        fn inventory(&self) -> &[String] {
+            self.0.inventory()
+        }
+        fn pick_up(&mut self, _: usize) {}
+        fn drop_item(&mut self, _: usize) {}
+        fn messages(&self) -> &[String] {
+            self.0.messages()
+        }
+        fn say(&mut self, t: String) {
+            self.0.say(t)
+        }
+    }
+    let mut app = TuiApp::new(Wide(FakeModel::default()));
+    let t = render(&mut app);
+    let buf = t.backend().buffer();
+    let y = (0..buf.area.height)
+        .find(|&y| (0..buf.area.width).any(|x| buf[(x, y)].symbol() == "木"))
+        .unwrap();
+    let x = (0..buf.area.width)
+        .find(|&x| buf[(x, y)].symbol() == "木")
+        .unwrap();
+    // The glyph owns two columns: the cell after it is the wide glyph's continuation, not the next map cell.
+    let row = (0..buf.area.width)
+        .map(|c| buf[(c, y)].symbol())
+        .collect::<String>();
+    assert!(row.contains("木"), "{row}");
+    assert_eq!(buf[(x + 1, y)].symbol().trim(), "");
+}
+
+#[test]
+fn loading_step_list_scrolls_to_keep_the_current_step_visible() {
+    let (mut app, h) = engine();
+    let entries = (0..100).map(|i| format!("Step {i}")).collect::<Vec<_>>();
+    h.push(json!({"jsonrpc":"2.0","method":"bn.loading","params":{"epoch":"e7f3","title":"Loading world",
+      "entries":entries,"index":80}}));
+    app.model.poll();
+    let s = text(&render(&mut app));
+    assert!(s.contains("> Step 80") && !s.contains("Step 3 "), "{s}");
+}
+
+#[test]
+fn long_menu_messages_wrap_inside_the_popup_for_latin_and_korean_text() {
+    let (mut app, h) = engine();
+    for name in ["events_41_walk", "events_42_message", "events_43_menu"] {
+        let mut ev = fixture(name);
+        if name == "events_43_menu" {
+            let long = format!("{} {}", "word ".repeat(30), "가나다라마바사".repeat(12));
+            ev["params"]["events"][0]["changes"]["interaction"]["interaction"]["message"] =
+                long.into();
+        }
+        h.push(ev);
+    }
+    app.model.poll();
+    let s = text(&render(&mut app)).replace(' ', "");
+    assert_eq!(
+        s.matches('사').count(),
+        12,
+        "every wrapped Korean cell is shown:\n{s}"
+    );
+    assert_eq!(s.matches("word").count(), 30);
+    assert!(s.contains("combat"), "choices still shown:\n{s}");
 }

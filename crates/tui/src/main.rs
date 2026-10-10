@@ -3,16 +3,18 @@ use bn_client_core::keys::KeyMap;
 use bn_client_core::transport::{StdioTransport, game_root};
 use bn_client_core::{EngineModel, FakeModel, GameModel};
 use bn_client_tui::TuiApp;
-use crossterm::event::{self, Event, KeyEventKind};
+use crossterm::event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyEventKind};
+use crossterm::execute;
 use std::path::PathBuf;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-const USAGE: &str = "usage: bn-client-tui [--engine PATH]   (or set BN_ENGINE); no engine: fake model. Ctrl-C quits";
+const USAGE: &str = "usage: bn-client-tui [--engine PATH]   (or set BN_ENGINE); no engine: fake model. Ctrl-C quits; x/; look cursor, Tab action list, PageUp/Down log";
 
 enum Msg {
     Key(event::KeyEvent),
+    Mouse(event::MouseEvent),
     Wake,
 }
 
@@ -27,6 +29,7 @@ fn run(model: impl GameModel) -> std::io::Result<()> {
         while let Ok(ev) = event::read() {
             let msg = match ev {
                 Event::Key(k) if k.kind == KeyEventKind::Press => Msg::Key(k),
+                Event::Mouse(m) => Msg::Mouse(m),
                 _ => Msg::Wake,
             };
             if tx.send(msg).is_err() {
@@ -35,20 +38,29 @@ fn run(model: impl GameModel) -> std::io::Result<()> {
         }
     });
     let mut terminal = ratatui::init();
+    let _ = execute!(std::io::stdout(), EnableMouseCapture);
     let result = (|| {
         while !app.quit() {
             app.model.poll();
             terminal.draw(|f| app.draw(f))?;
             // Engine messages and key presses both arrive here, so neither waits for a timer.
-            let first = rx.recv_timeout(Duration::from_secs(1));
+            let wait = match app.walking() {
+                true => Duration::from_millis(50),
+                false => Duration::from_secs(1),
+            };
+            let first = rx.recv_timeout(wait);
             for msg in first.into_iter().chain(rx.try_iter()) {
-                if let Msg::Key(k) = msg {
-                    app.handle_key(k);
+                match msg {
+                    Msg::Key(k) => app.handle_key(k),
+                    Msg::Mouse(m) => app.handle_mouse(m),
+                    Msg::Wake => {}
                 }
             }
+            app.tick();
         }
         Ok(())
     })();
+    let _ = execute!(std::io::stdout(), DisableMouseCapture);
     ratatui::restore();
     result
 }

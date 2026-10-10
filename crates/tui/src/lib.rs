@@ -1,22 +1,36 @@
 //! Terminal client over the same `GameModel` as the egui client.
 
-use bn_client_core::{GameModel, Loading, Menu, Pos, Rgb};
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use bn_client_core::{ActionEntry, GameModel, Loading, Menu, Pos, Rgb};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Clear, Gauge, Paragraph};
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 const LOG_LINES: usize = 6;
 const SIDE_WIDTH: u16 = 36;
+const PAGE: usize = 10;
 
 pub struct TuiApp<M: GameModel> {
     pub model: M,
     selected: usize,
     /// Identity of the menu `selected` refers to; a different menu resets the selection.
-    menu_sig: Option<(String, usize)>,
+    menu_sig: Option<(String, usize, Option<String>)>,
     quit: bool,
+    /// The look cursor in absolute map coordinates; `Some` while looking around.
+    cursor: Option<Pos>,
+    /// Absolute destination of our own walk, for models without engine travel.
+    destination: Option<Pos>,
+    /// Where the map cells were last drawn, for mouse clicks.
+    map_cells: Rect,
+    /// View coordinates of the first drawn cell.
+    map_first: Pos,
+    /// The action list popup is open, with its highlighted row.
+    actions_open: Option<usize>,
+    /// Message log lines scrolled back from the newest.
+    log_back: usize,
 }
 
 fn color(c: Rgb) -> Color {
@@ -60,6 +74,12 @@ impl<M: GameModel> TuiApp<M> {
             selected: 0,
             menu_sig: None,
             quit: false,
+            cursor: None,
+            destination: None,
+            map_cells: Rect::default(),
+            map_first: Pos { x: 0, y: 0 },
+            actions_open: None,
+            log_back: 0,
         }
     }
 
@@ -70,18 +90,47 @@ impl<M: GameModel> TuiApp<M> {
     /// Label of the highlighted menu row.
     pub fn selected_label(&mut self) -> Option<String> {
         let menu = self.menu()?;
-        menu.choices.get(self.selected).map(|c| c.label.clone())
+        menu.entries().get(self.selected).map(|c| c.label.clone())
     }
 
     /// The current menu, resetting the highlight when the engine shows a different one.
     fn menu(&mut self) -> Option<Menu> {
         let menu = self.model.menu();
-        let sig = menu.as_ref().map(|m| (m.title.clone(), m.choices.len()));
+        let sig = menu.as_ref().map(|m| {
+            let tab = m.tabs().iter().find(|t| t.selected).map(|t| t.id.clone());
+            (m.title.clone(), m.entries().len(), tab)
+        });
         if sig != self.menu_sig {
             self.selected = 0;
             self.menu_sig = sig;
         }
         menu
+    }
+
+    /// Whether our own walk is under way and needs `tick`s.
+    pub fn walking(&self) -> bool {
+        self.destination.is_some()
+    }
+
+    /// One step of our own walk (models without engine travel); call between frames.
+    pub fn tick(&mut self) {
+        let Some(dest) = self.destination else {
+            return;
+        };
+        let origin = self.model.origin();
+        let target = Pos {
+            x: dest.x - origin.x,
+            y: dest.y - origin.y,
+        };
+        if self.model.busy() {
+            return;
+        }
+        if !self.model.step_toward(target) {
+            self.model.say("Something blocks the way.".into());
+            self.destination = None;
+        } else if self.model.player() == target {
+            self.destination = None;
+        }
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) {
@@ -93,38 +142,185 @@ impl<M: GameModel> TuiApp<M> {
             return;
         }
         if let Some(menu) = self.menu() {
-            match key.code {
-                KeyCode::Up => self.selected = self.selected.saturating_sub(1),
-                KeyCode::Down => {
-                    self.selected = (self.selected + 1).min(menu.choices.len().saturating_sub(1));
-                }
-                KeyCode::Enter => {
-                    if let Some(c) = menu.choices.get(self.selected) {
-                        self.model.choose(&c.id);
-                    }
-                }
-                KeyCode::Esc => self.model.cancel_menu(),
-                _ => {}
-            }
+            return self.menu_key(&menu, key.code);
+        }
+        if let Some(row) = self.actions_open {
+            return self.actions_key(row, key.code);
+        }
+        if self.cursor.is_some() {
+            return self.look_key(key);
+        }
+        self.destination = None;
+        if matches!(key.code, KeyCode::Char('x' | ';')) {
+            self.cursor = Some(self.absolute(self.model.player()));
             return;
         }
-        let ran = token(key).is_some_and(|t| self.model.press(&t));
-        if let (false, Some((dx, dy))) = (ran, arrow(key.code)) {
-            let me = self.model.player();
-            self.model.step_toward(Pos {
-                x: me.x + dx,
-                y: me.y + dy,
-            });
+        if token(key).is_some_and(|t| self.model.press(&t)) {
+            return;
         }
+        match key.code {
+            KeyCode::Tab => self.actions_open = Some(0),
+            KeyCode::PageUp => self.log_back += LOG_LINES,
+            KeyCode::PageDown => self.log_back = self.log_back.saturating_sub(LOG_LINES),
+            code => {
+                if let Some((dx, dy)) = arrow(code) {
+                    let me = self.model.player();
+                    self.model.step_toward(Pos {
+                        x: me.x + dx,
+                        y: me.y + dy,
+                    });
+                }
+            }
+        }
+    }
+
+    fn absolute(&self, view: Pos) -> Pos {
+        let origin = self.model.origin();
+        Pos {
+            x: view.x + origin.x,
+            y: view.y + origin.y,
+        }
+    }
+
+    fn view(&self, absolute: Pos) -> Pos {
+        let origin = self.model.origin();
+        Pos {
+            x: absolute.x - origin.x,
+            y: absolute.y - origin.y,
+        }
+    }
+
+    fn menu_key(&mut self, menu: &Menu, code: KeyCode) {
+        let (tabs, entries) = (menu.tabs(), menu.entries());
+        let last = entries.len().saturating_sub(1);
+        match code {
+            KeyCode::Up => self.selected = self.selected.saturating_sub(1),
+            KeyCode::Down => self.selected = (self.selected + 1).min(last),
+            KeyCode::PageUp => self.selected = self.selected.saturating_sub(PAGE),
+            KeyCode::PageDown => self.selected = (self.selected + PAGE).min(last),
+            KeyCode::Home => self.selected = 0,
+            KeyCode::End => self.selected = last,
+            KeyCode::Left | KeyCode::Right => {
+                let here = tabs.iter().position(|t| t.selected).unwrap_or(0);
+                let next = match code {
+                    KeyCode::Left => here.checked_sub(1),
+                    _ => Some(here + 1),
+                };
+                if let Some(tab) = next.and_then(|i| tabs.get(i)) {
+                    self.model.choose(&tab.id);
+                }
+            }
+            KeyCode::Enter => {
+                if let Some(c) = entries.get(self.selected) {
+                    self.model.choose(&c.id);
+                }
+            }
+            KeyCode::Esc => self.model.cancel_menu(),
+            _ => {}
+        }
+    }
+
+    fn actions_key(&mut self, row: usize, code: KeyCode) {
+        let actions = self.model.actions();
+        let last = actions.len().saturating_sub(1);
+        match code {
+            KeyCode::Up => self.actions_open = Some(row.saturating_sub(1)),
+            KeyCode::Down => self.actions_open = Some((row + 1).min(last)),
+            KeyCode::PageUp => self.actions_open = Some(row.saturating_sub(PAGE)),
+            KeyCode::PageDown => self.actions_open = Some((row + PAGE).min(last)),
+            KeyCode::Enter => {
+                self.actions_open = None;
+                if let Some(a) = actions.get(row) {
+                    self.model.invoke_action(&a.id);
+                }
+            }
+            KeyCode::Esc | KeyCode::Tab => self.actions_open = None,
+            _ => {}
+        }
+    }
+
+    /// The look cursor moves with arrows and vi keys (five cells with Shift); Enter plans a route to it
+    /// and, pressed again, walks it; Esc leaves.
+    fn look_key(&mut self, key: KeyEvent) {
+        let Some(at) = self.cursor else {
+            return;
+        };
+        let shifted = key.modifiers.contains(KeyModifiers::SHIFT)
+            || matches!(key.code, KeyCode::Char(c) if c.is_uppercase());
+        let step = if shifted { 5 } else { 1 };
+        let delta = match key.code {
+            KeyCode::Char(c) => match c.to_ascii_lowercase() {
+                'h' => Some((-1, 0)),
+                'j' => Some((0, 1)),
+                'k' => Some((0, -1)),
+                'l' => Some((1, 0)),
+                'y' => Some((-1, -1)),
+                'u' => Some((1, -1)),
+                'b' => Some((-1, 1)),
+                'n' => Some((1, 1)),
+                _ => None,
+            },
+            code => arrow(code),
+        };
+        if let Some((dx, dy)) = delta {
+            let size = self.model.size();
+            let view = self.view(at);
+            self.cursor = Some(self.absolute(Pos {
+                x: (view.x + dx * step).clamp(0, (size.x - 1).max(0)),
+                y: (view.y + dy * step).clamp(0, (size.y - 1).max(0)),
+            }));
+            return;
+        }
+        match key.code {
+            KeyCode::Enter => {
+                if self.view(at) == self.model.player() {
+                    self.cursor = None;
+                } else {
+                    self.go_to(self.view(at));
+                }
+            }
+            KeyCode::Esc | KeyCode::Char('x' | ';') => {
+                self.cursor = None;
+                self.destination = None;
+            }
+            _ => {}
+        }
+    }
+
+    /// The model's own travel if it has one (engine: first call plans, second walks), else our walk.
+    fn go_to(&mut self, view: Pos) {
+        if !self.model.travel(view) {
+            self.destination = Some(self.absolute(view));
+        }
+    }
+
+    /// Left click on a map cell moves the look cursor there and travels; the first click shows the route.
+    pub fn handle_mouse(&mut self, ev: MouseEvent) {
+        let area = self.map_cells;
+        let inside = (area.x..area.x + area.width).contains(&ev.column)
+            && (area.y..area.y + area.height).contains(&ev.row);
+        let click = ev.kind == MouseEventKind::Down(MouseButton::Left);
+        if !click || !inside || self.model.loading().is_some() || self.model.menu().is_some() {
+            return;
+        }
+        let view = Pos {
+            x: self.map_first.x + i32::from(ev.column - area.x),
+            y: self.map_first.y + i32::from(ev.row - area.y),
+        };
+        self.cursor = Some(self.absolute(view));
+        self.go_to(view);
     }
 
     pub fn draw(&mut self, f: &mut Frame) {
         if let Some(loading) = self.model.loading() {
             return Self::draw_loading(f, &loading);
         }
-        let [main, log] =
-            Layout::vertical([Constraint::Min(5), Constraint::Length(LOG_LINES as u16 + 2)])
-                .areas(f.area());
+        let [main, status, log] = Layout::vertical([
+            Constraint::Min(5),
+            Constraint::Length(1),
+            Constraint::Length(LOG_LINES as u16 + 2),
+        ])
+        .areas(f.area());
         let [map, side] =
             Layout::horizontal([Constraint::Min(10), Constraint::Length(SIDE_WIDTH)]).areas(main);
         let [actions, items] =
@@ -132,8 +328,12 @@ impl<M: GameModel> TuiApp<M> {
         self.draw_map(f, map);
         self.draw_actions(f, actions);
         self.draw_items(f, items);
+        f.render_widget(Paragraph::new(self.status_line()), status);
         let messages = self.model.messages();
-        let shown = &messages[messages.len().saturating_sub(LOG_LINES)..];
+        let end = messages
+            .len()
+            .saturating_sub(self.log_back.min(messages.len()));
+        let shown = &messages[end.saturating_sub(LOG_LINES)..end];
         let lines = shown
             .iter()
             .map(|m| Line::raw(m.as_str()))
@@ -144,7 +344,31 @@ impl<M: GameModel> TuiApp<M> {
         );
         if let Some(menu) = self.menu() {
             self.draw_menu(f, &menu);
+        } else if let Some(row) = self.actions_open {
+            self.draw_action_list(f, row);
         }
+    }
+
+    /// The pressed command and its stage, then what the look cursor points at.
+    fn status_line(&mut self) -> String {
+        let command = self
+            .model
+            .command()
+            .map_or_else(|| "Ready".into(), |s| format!("{}: {}", s.label, s.stage));
+        let Some(at) = self.cursor else {
+            return command;
+        };
+        let view = self.view(at);
+        let route = self.model.route();
+        let hint = match route.is_empty() {
+            true => "Enter: route",
+            false => "Enter: walk",
+        };
+        let desc = self.model.cell(view).desc;
+        format!(
+            "{command} | Look ({}, {}): {desc} [{hint}, Esc]",
+            view.x, view.y
+        )
     }
 
     /// Title, a progress bar over the steps, and the step list (the splash image is skipped).
@@ -184,19 +408,26 @@ impl<M: GameModel> TuiApp<M> {
                 true => Line::styled(format!("> {e}"), Style::new().add_modifier(Modifier::BOLD)),
                 false => Line::raw(format!("  {e}")),
             });
-        f.render_widget(Paragraph::new(lines.collect::<Vec<_>>()), list);
+        let offset = (loading.index + 1).saturating_sub(usize::from(list.height));
+        f.render_widget(Paragraph::new(lines.skip(offset).collect::<Vec<_>>()), list);
     }
 
     fn draw_map(&mut self, f: &mut Frame, area: Rect) {
         let block = Block::bordered().title("Map");
         let inner = block.inner(area);
         f.render_widget(block, area);
+        self.model.set_viewport(Pos {
+            x: i32::from(inner.width),
+            y: i32::from(inner.height),
+        });
         let size = self.model.size();
         if size.x <= 0 || size.y <= 0 {
+            self.map_cells = Rect::default();
             f.render_widget(Paragraph::new("No map loaded"), inner);
             return;
         }
         let player = self.model.player();
+        // The part of the view that fits, centred on the player when the view is larger than the room.
         let window = |centre: i32, len: i32, avail: u16| {
             let avail = i32::from(avail).min(len);
             let start = (centre - avail / 2).clamp(0, len - avail);
@@ -204,21 +435,52 @@ impl<M: GameModel> TuiApp<M> {
         };
         let (x0, w) = window(player.x, size.x, inner.width);
         let (y0, h) = window(player.y, size.y, inner.height);
+        // A view smaller than the room sits in the middle of it.
+        let cells = Rect::new(
+            inner.x + (inner.width - w as u16) / 2,
+            inner.y + (inner.height - h as u16) / 2,
+            w as u16,
+            h as u16,
+        );
+        self.map_cells = cells;
+        self.map_first = Pos { x: x0, y: y0 };
+        let route = self.model.route();
+        let cursor = self.cursor.map(|c| self.view(c));
         let lines = (y0..y0 + h)
             .map(|y| {
-                let spans = (x0..x0 + w).map(|x| {
-                    if (x, y) == (player.x, player.y) {
-                        return Span::styled("@", Style::new().fg(Color::Yellow));
+                let mut spans = vec![];
+                let mut skip = 0;
+                for x in x0..x0 + w {
+                    if skip > 0 {
+                        skip -= 1;
+                        continue;
                     }
-                    let cell = self.model.cell(Pos { x, y });
-                    let style = Style::new().fg(color(cell.color));
-                    let style = cell.bg.map_or(style, |bg| style.bg(color(bg)));
-                    Span::styled(cell.glyph.to_string(), style)
-                });
-                Line::from(spans.collect::<Vec<_>>())
+                    let at = Pos { x, y };
+                    let cell = self.model.cell(at);
+                    let (mut glyph, mut style) = (cell.glyph, Style::new().fg(color(cell.color)));
+                    if let Some(bg) = cell.bg {
+                        style = style.bg(color(bg));
+                    }
+                    if at == player {
+                        (glyph, style) = ('@', Style::new().fg(Color::Yellow));
+                    } else if route.contains(&at) {
+                        (glyph, style) = ('*', Style::new().fg(Color::Yellow));
+                    }
+                    if cursor == Some(at) {
+                        style = style.add_modifier(Modifier::REVERSED);
+                    }
+                    // A wide glyph covers the next cell; one with no width would shift the row.
+                    match glyph.width() {
+                        Some(2) => skip = 1,
+                        Some(1) => {}
+                        _ => glyph = ' ',
+                    }
+                    spans.push(Span::styled(glyph.to_string(), style));
+                }
+                Line::from(spans)
             })
             .collect::<Vec<_>>();
-        f.render_widget(Paragraph::new(lines), inner);
+        f.render_widget(Paragraph::new(lines), cells);
     }
 
     fn draw_actions(&mut self, f: &mut Frame, area: Rect) {
@@ -226,10 +488,7 @@ impl<M: GameModel> TuiApp<M> {
             .model
             .actions()
             .iter()
-            .map(|a| match a.keys.is_empty() {
-                true => Line::raw(a.name.clone()),
-                false => Line::raw(format!("{} [{}]", a.name, a.keys.join(", "))),
-            })
+            .map(|a| Line::raw(action_label(a)))
             .collect::<Vec<_>>();
         f.render_widget(
             Paragraph::new(lines).block(Block::bordered().title("Actions")),
@@ -250,30 +509,87 @@ impl<M: GameModel> TuiApp<M> {
     }
 
     fn draw_menu(&mut self, f: &mut Frame, menu: &Menu) {
-        let mut lines = vec![];
-        if !menu.message.is_empty() {
-            lines.extend(menu.message.lines().map(|l| Line::raw(l.to_string())));
-        }
-        for (i, c) in menu.choices.iter().enumerate() {
-            let mark = if i == self.selected { "> " } else { "  " };
-            let denial = if c.enabled || c.denial.is_empty() {
-                String::new()
-            } else {
-                format!(" ({})", c.denial)
-            };
-            let mut style = if c.enabled {
-                Style::new()
-            } else {
-                Style::new().fg(Color::DarkGray)
-            };
-            if i == self.selected {
-                style = style.add_modifier(Modifier::REVERSED);
-            }
-            lines.push(Line::styled(format!("{mark}{}{denial}", c.label), style));
-        }
+        let rows = menu
+            .entries()
+            .iter()
+            .map(|c| {
+                let denial = match c.enabled || c.denial.is_empty() {
+                    true => String::new(),
+                    false => format!(" ({})", c.denial),
+                };
+                let style = match c.enabled {
+                    true => Style::new(),
+                    false => Style::new().fg(Color::DarkGray),
+                };
+                (format!("{}{denial}", c.label), style)
+            })
+            .collect::<Vec<_>>();
+        let tabs = menu
+            .tabs()
+            .iter()
+            .map(|t| (t.label.clone(), t.selected))
+            .collect::<Vec<_>>();
+        let popup = Popup {
+            title: &menu.title,
+            header: menu.message.lines().map(str::to_string).collect(),
+            tabs,
+            rows,
+            selected: self.selected,
+        };
+        Self::draw_popup(f, &popup);
+    }
+
+    fn draw_action_list(&mut self, f: &mut Frame, row: usize) {
+        let rows = self
+            .model
+            .actions()
+            .iter()
+            .map(|a| (action_label(a), Style::new()))
+            .collect();
+        let popup = Popup {
+            title: "Actions",
+            header: vec![],
+            tabs: vec![],
+            rows,
+            selected: row,
+        };
+        Self::draw_popup(f, &popup);
+    }
+
+    /// A centred box: message lines, a tab bar, then the rows scrolled to keep the highlighted one visible.
+    fn draw_popup(f: &mut Frame, popup: &Popup) {
         let area = f.area();
-        let height = (lines.len() as u16 + 2).min(area.height);
-        let width = area.width.min(70);
+        let tab_bar = Line::from(
+            popup
+                .tabs
+                .iter()
+                .flat_map(|(label, on)| {
+                    let style = match on {
+                        true => Style::new().add_modifier(Modifier::REVERSED),
+                        false => Style::new(),
+                    };
+                    [Span::styled(format!(" {label} "), style), Span::raw(" ")]
+                })
+                .collect::<Vec<_>>(),
+        );
+        let widest = popup
+            .header
+            .iter()
+            .map(|l| l.width())
+            .chain(popup.rows.iter().map(|(l, _)| l.width() + 2))
+            .chain(std::iter::once(tab_bar.width()))
+            .max()
+            .unwrap_or(0);
+        let width = (widest as u16 + 2).clamp(30, 100).min(area.width);
+        let header = popup
+            .header
+            .iter()
+            .flat_map(|l| wrap(l, usize::from(width) - 2))
+            .collect::<Vec<_>>();
+        let head = (header.len() as u16).min(area.height.saturating_sub(2) / 2);
+        let bar = u16::from(!popup.tabs.is_empty());
+        let want = head + bar + popup.rows.len() as u16 + 2;
+        let height = want.min(area.height);
         let rect = Rect::new(
             area.x + (area.width - width) / 2,
             area.y + (area.height - height) / 2,
@@ -281,9 +597,74 @@ impl<M: GameModel> TuiApp<M> {
             height,
         );
         f.render_widget(Clear, rect);
+        let block = Block::bordered().title(popup.title.to_string());
+        let inner = block.inner(rect);
+        f.render_widget(block, rect);
+        let [header_area, bar_area, list] = Layout::vertical([
+            Constraint::Length(head),
+            Constraint::Length(bar),
+            Constraint::Min(0),
+        ])
+        .areas(inner);
+        let header_lines = header;
+        let text = |s: &String| Line::raw(s.clone());
         f.render_widget(
-            Paragraph::new(lines).block(Block::bordered().title(menu.title.clone())),
-            rect,
+            Paragraph::new(header_lines.iter().map(text).collect::<Vec<_>>()),
+            header_area,
         );
+        f.render_widget(Paragraph::new(tab_bar), bar_area);
+        let offset = (popup.selected + 1).saturating_sub(usize::from(list.height));
+        let lines = popup
+            .rows
+            .iter()
+            .enumerate()
+            .skip(offset)
+            .map(|(i, (label, style))| match i == popup.selected {
+                true => Line::styled(format!("> {label}"), style.add_modifier(Modifier::REVERSED)),
+                false => Line::styled(format!("  {label}"), *style),
+            })
+            .collect::<Vec<_>>();
+        f.render_widget(Paragraph::new(lines), list);
+    }
+}
+
+/// Breaks `text` into lines of at most `width` terminal columns, at spaces where it can.
+fn wrap(text: &str, width: usize) -> Vec<String> {
+    let mut lines = vec![String::new()];
+    for word in text.split(' ') {
+        let line = lines.last_mut().expect("starts with one line");
+        let sep = usize::from(!line.is_empty());
+        if line.width() + sep + word.width() <= width {
+            line.push_str(&" ".repeat(sep));
+            line.push_str(word);
+            continue;
+        }
+        lines.push(String::new());
+        // A word wider than a line (Korean runs, paths) breaks between characters.
+        for c in word.chars() {
+            let line = lines.last_mut().expect("just pushed");
+            if line.width() + c.width().unwrap_or(0) > width {
+                lines.push(String::new());
+            }
+            lines.last_mut().expect("just pushed").push(c);
+        }
+    }
+    lines
+}
+
+/// What `draw_popup` shows.
+struct Popup<'a> {
+    title: &'a str,
+    header: Vec<String>,
+    /// Tab labels and whether each is the current one.
+    tabs: Vec<(String, bool)>,
+    rows: Vec<(String, Style)>,
+    selected: usize,
+}
+
+fn action_label(a: &ActionEntry) -> String {
+    match a.keys.is_empty() {
+        true => a.name.clone(),
+        false => format!("{} [{}]", a.name, a.keys.join(", ")),
     }
 }
