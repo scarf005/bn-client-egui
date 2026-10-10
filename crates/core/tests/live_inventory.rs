@@ -48,7 +48,7 @@ fn dismiss_popups(model: &mut EngineModel) {
 
 fn start_tutorial() -> EngineModel {
     let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
-    let transport = StdioTransport::spawn(engine.as_ref()).expect("engine starts");
+    let transport = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
     let mut model = EngineModel::new(Box::new(transport));
     wait_for(&mut model, "subscription", |m| m.live());
     choose_label(&mut model, "New Game");

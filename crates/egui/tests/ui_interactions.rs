@@ -902,6 +902,25 @@ fn a_popup_right_after_another_takes_the_focus_too() {
 }
 
 #[test]
+fn a_popups_dismiss_button_tells_screen_readers_which_keys_close_it() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    let mut ack = choice("acknowledge", "Cancel popup");
+    ack["description"] = "QUIT".into();
+    script.push(show(
+        41,
+        json!([{"id":"QUIT","name":"Cancel popup","keys":["ESC","SPACE","RETURN"]}]),
+        popup(true, "Welcome to the tutorial!", ack),
+    ));
+    h.run_steps(3);
+    let button = h.get_by_role_and_label(egui::accesskit::Role::MenuItem, "Cancel popup");
+    let hint = egui_kittest::kittest::NodeT::accesskit_node(&button)
+        .description()
+        .unwrap_or_default();
+    assert_eq!(hint, "Space or Enter closes this popup");
+}
+
+#[test]
 fn list_menu_rows_fill_the_window_like_the_native_highlight_bar() {
     let (mut h, script) = harness();
     h.run_steps(3);

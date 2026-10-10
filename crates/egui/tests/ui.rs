@@ -317,3 +317,26 @@ fn blocked_destination_stops_instead_of_retrying_forever() {
     let last = h.state().model.messages().last().unwrap().clone();
     assert!(last.contains("blocks"), "{last}");
 }
+
+#[test]
+fn the_tooltip_describes_the_square_under_the_pointer_not_the_keyboard_cursor() {
+    let mut h = harness();
+    let under = Pos { x: 2, y: 4 };
+    let moved_to = Pos { x: 3, y: 4 };
+    let (a, b) = (
+        h.state().model.cell(under).desc,
+        h.state().model.cell(moved_to).desc,
+    );
+    assert_ne!(a, b);
+    h.hover_at(cell_center(&h, under));
+    h.run_steps(10);
+    h.get_by_label(&a);
+    h.get_by_label("Map").focus();
+    h.run_steps(2);
+    h.key_press(egui::Key::ArrowRight);
+    h.run_steps(4);
+    assert!(
+        h.query_by_label(&b).is_none(),
+        "the pointer has not moved: {b:?} is the cursor's square"
+    );
+}

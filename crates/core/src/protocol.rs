@@ -29,6 +29,8 @@ pub struct At {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Look {
+    /// Absent in a cell layer, whose name already says it.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub kind: String,
     pub id: Option<String>,
     /// The player-facing name, when the engine sends one; otherwise only `id` identifies it.
@@ -111,6 +113,42 @@ pub struct Cell {
     pub light: Option<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub memory: Option<Memory>,
+}
+
+impl Cell {
+    /// Puts back what the engine leaves out of a layer: the kind its name says and the default
+    /// `center` subtile of a shaped layer.
+    pub fn complete(&mut self) {
+        let shape = |look: &mut Look, kind: &str| {
+            if look.kind.is_empty() {
+                look.kind = kind.into();
+            }
+            look.subtile.get_or_insert_with(|| "center".into());
+        };
+        let layers = [
+            (self.terrain.as_mut(), "terrain"),
+            (self.furniture.as_mut(), "furniture"),
+            (self.vehicle.as_mut(), "vehicle_part"),
+        ];
+        layers.into_iter().for_each(|(look, kind)| {
+            look.into_iter().for_each(|look| shape(look, kind));
+        });
+        self.traps.iter_mut().for_each(|look| shape(look, "trap"));
+        self.fields
+            .iter_mut()
+            .for_each(|f| shape(&mut f.look, "field"));
+        for look in &mut self.items {
+            if look.kind.is_empty() {
+                look.kind = "item".into();
+            }
+        }
+        if let Some(memory) = &mut self.memory {
+            shape(&mut memory.terrain, "terrain");
+            if let Some(overlay) = &mut memory.overlay {
+                overlay.subtile.get_or_insert_with(|| "center".into());
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -328,6 +366,16 @@ pub struct Boundary {
     pub interaction: Option<Interaction>,
 }
 
+/// A boundary in an event: `actions` is absent when it keeps the previous boundary's.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct BoundaryChange {
+    pub boundary_id: String,
+    pub readiness: Readiness,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub actions: Option<Vec<Action>>,
+    pub interaction: Option<Interaction>,
+}
+
 /// The only state-bearing part of an event, applied in field order (§3.4).
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Changes {
@@ -352,7 +400,7 @@ pub struct Changes {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub route: Option<Vec<WorldPos>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub interaction: Option<Boundary>,
+    pub interaction: Option<BoundaryChange>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

@@ -267,3 +267,58 @@ fn an_area_the_engine_does_not_offer_stays_in_its_place_dimmed() {
         area(&h, "Left pane", "North West").center().x < area(&h, "Left pane", "North").center().x
     );
 }
+
+/// A prompt the engine opens only after its command finished (the interaction event can trail the
+/// completion notice) must still receive the text that was typed for it.
+#[test]
+fn a_filter_typed_before_the_prompt_arrives_is_still_filled_when_it_does() {
+    let (mut h, script) = harness();
+    h.get_by_label("Left pane filter").focus();
+    h.run_steps(2);
+    h.get_by_label("Left pane filter").type_text("can");
+    h.run_steps(2);
+    h.key_press(egui::Key::Enter);
+    h.run_steps(3);
+    finished(&mut h, &script);
+    assert_eq!(operations(&script).last(), Some(&action("FILTER")));
+    finished(&mut h, &script);
+    h.run_steps(4);
+    let mut prompt = aim();
+    prompt["interaction"]["context"] = json!("STRING_INPUT");
+    prompt["interaction"]["kind"] = json!("field");
+    prompt["interaction"]["choices"] = json!([]);
+    prompt["interaction"]["choice_total"] = json!(0);
+    prompt["interaction"]["compat"] = json!({"panes": []});
+    prompt["interaction"]["field"] = json!({"id":"field:value","label":"Filter:","description":"",
+        "value":"","type":"text","max_length":10,"printable":false});
+    script.push(event(42, prompt));
+    h.run_steps(4);
+    assert_eq!(
+        operations(&script).last(),
+        Some(&json!({"kind":"fill","field_id":"field:value","value":"can","submit":true}))
+    );
+}
+
+#[test]
+fn the_area_grid_sits_at_the_top_right_of_the_pane_header_beside_its_title() {
+    let (h, _) = harness();
+    let title = h.get_by_label("Left pane: Directly below you").rect();
+    let at = |n: &str| area(&h, "Left pane", n);
+    let first_row = at("Container");
+    assert!(
+        first_row.min.x > title.max.x,
+        "the grid is right of the title"
+    );
+    assert!(
+        first_row.min.y < title.max.y,
+        "and starts at the title's own height"
+    );
+    let pane_right = at("Above").max.x;
+    let right_pane = h.get_by_label("Right pane: Worn Items").rect();
+    assert!(pane_right < right_pane.min.x, "inside its own pane");
+    let filter = h.get_by_label("Left pane filter").rect();
+    assert!(
+        filter.min.y > at("Surrounding area").max.y,
+        "the filter box is under the grid"
+    );
+}

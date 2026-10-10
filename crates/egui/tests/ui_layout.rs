@@ -258,3 +258,19 @@ fn the_sidebar_is_wide_enough_for_the_longest_status_line_on_one_line() {
     // The text starts inside the panel margin.
     assert!(1280.0 - ground.min.x >= 410.0, "{ground:?}");
 }
+
+#[test]
+fn the_sidebar_follows_the_clamp_when_the_window_shrinks() {
+    let (mut h, _script) = harness(egui::vec2(1280.0, 800.0));
+    h.run_steps(5);
+    let wide = 1280.0 - h.get_by_label("Ground").rect().min.x;
+    assert!(wide >= 410.0, "{wide}");
+    h.set_size(egui::vec2(900.0, 560.0));
+    h.run_steps(6);
+    let ground = h.get_by_label("Ground").rect();
+    let sidebar = 900.0 - ground.min.x;
+    // The text starts inside the panel margin; the panel itself is at most 40% of the window.
+    assert!(sidebar <= 900.0 * 0.4 - 8.0 + 1.0, "{sidebar}");
+    let map = h.get_by_label("Map").rect();
+    assert!(map.width() >= 900.0 * 0.55, "{map:?}");
+}
