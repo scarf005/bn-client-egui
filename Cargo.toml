@@ -1,3 +1,7 @@
 [workspace]
 members = ["crates/core", "crates/egui", "crates/tui"]
 resolver = "3"
+
+# Dependencies (egui, image, wgpu) optimized even in debug builds; this crate's own code stays debuggable.
+[profile.dev.package."*"]
+opt-level = 2
