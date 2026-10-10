@@ -566,7 +566,7 @@ impl Display {
     /// Mode and tileset choice, kept as soon as they change.
     pub fn controls(&mut self, ui: &mut egui::Ui) {
         let before = self.settings.clone();
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             for (tiles, label) in [(true, "Tiles"), (false, "ASCII")] {
                 if ui
                     .selectable_label(self.wants_tiles() == tiles, label)
