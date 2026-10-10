@@ -1,7 +1,7 @@
 //! First-run window shown when no engine was found (or the found one cannot start): a desktop-launched
 //! client has no visible stderr, so the searched locations and a path field are shown instead.
 
-use bn_client_core::launch::is_executable;
+use bn_client_core::launch::{is_executable, save_engine};
 use eframe::egui;
 use std::path::PathBuf;
 
@@ -14,6 +14,8 @@ pub struct Launcher {
     error: Option<String>,
     start: Starter,
     running: Option<Box<dyn eframe::App>>,
+    /// Where a path the user typed here is remembered; nothing is remembered without it.
+    config: Option<PathBuf>,
 }
 
 impl Launcher {
@@ -24,6 +26,7 @@ impl Launcher {
             error: None,
             start,
             running: None,
+            config: None,
         }
     }
 
@@ -32,6 +35,12 @@ impl Launcher {
             running: Some(app),
             ..Self::new(String::new(), start)
         }
+    }
+
+    /// Remembers the engine path the user picks in this window in `config`.
+    pub fn with_config(mut self, config: PathBuf) -> Self {
+        self.config = Some(config);
+        self
     }
 
     pub fn with_error(mut self, error: String) -> Self {
@@ -64,8 +73,13 @@ impl Launcher {
             self.error = Some(format!("{} is not an executable file", path.display()));
             return;
         }
-        match (self.start)(ctx, path) {
-            Ok(app) => self.running = Some(app),
+        match (self.start)(ctx, path.clone()) {
+            Ok(app) => {
+                if let Some(config) = &self.config {
+                    let _ = save_engine(config, &path);
+                }
+                self.running = Some(app);
+            }
             Err(e) => self.error = Some(e),
         }
     }

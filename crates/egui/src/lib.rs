@@ -11,6 +11,7 @@ pub mod sidebar;
 pub mod text;
 pub mod theme;
 pub mod tileset;
+pub mod tint;
 
 pub use app::App;
 pub use bn_client_core::*;

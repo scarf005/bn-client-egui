@@ -17,10 +17,25 @@ impl<M: GameModel> App<M> {
             }
             return;
         };
-        let entered = self.focus_menu
-            | (self.menu_title.replace(menu.title.clone()).as_ref() != Some(&menu.title));
+        // A popup follows another with the same empty title, so its text tells them apart.
+        let shown = format!(
+            "{}\n{}",
+            menu.title,
+            if menu.acknowledges() {
+                &menu.message
+            } else {
+                ""
+            }
+        );
+        let entered =
+            self.focus_menu | (self.menu_title.replace(shown.clone()).as_ref() != Some(&shown));
         if menu.context == "CRAFTING" {
             let focused = self.crafting(ctx, &menu, entered);
+            self.focus_menu = entered && !focused;
+            return;
+        }
+        if menu.context == "ADVANCED_INVENTORY" {
+            let focused = self.aim(ctx, &menu, entered);
             self.focus_menu = entered && !focused;
             return;
         }
@@ -106,7 +121,7 @@ impl<M: GameModel> App<M> {
                 } else {
                     egui::ScrollArea::vertical()
                 };
-                area.max_height(ctx.content_rect().height() * 0.6)
+                area.max_height(super::dialog_scroll_height(ctx))
                     .scroll_source(egui::scroll_area::ScrollSource {
                         mouse_wheel: !engine_scroll,
                         ..Default::default()
@@ -126,7 +141,11 @@ impl<M: GameModel> App<M> {
                                 focused = response.has_focus();
                             }
                         }
+                        // A run of rows refused for the same reason says it once.
+                        let mut last_denial = "";
                         for (i, choice) in menu.entries().into_iter().enumerate() {
+                            let said = std::mem::replace(&mut last_denial, &choice.denial)
+                                == choice.denial;
                             if let Some(row) = &choice.editor {
                                 let usable = choice.enabled && !self.model.busy();
                                 let label = markup::plain(&choice.label);
@@ -135,7 +154,7 @@ impl<M: GameModel> App<M> {
                                 {
                                     edited = Some((choice.id.clone(), value));
                                 }
-                                if !choice.enabled && !choice.denial.is_empty() {
+                                if !choice.enabled && !choice.denial.is_empty() && !said {
                                     ui.label(self.rich(ui, &choice.denial));
                                 }
                                 continue;
@@ -165,7 +184,11 @@ impl<M: GameModel> App<M> {
                                     focused = button.has_focus();
                                 }
                                 ui.ctx().accesskit_node_builder(button.id, |b| {
-                                    b.set_role(accesskit::Role::MenuItem)
+                                    b.set_role(accesskit::Role::MenuItem);
+                                    // Said once on screen, but every refused row carries its reason.
+                                    if !choice.enabled && !choice.denial.is_empty() {
+                                        b.set_description(markup::plain(&choice.denial));
+                                    }
                                 });
                                 if choice.id != "acknowledge"
                                     && (button.hovered()
@@ -174,7 +197,7 @@ impl<M: GameModel> App<M> {
                                     described = Some(&choice.description);
                                 }
                                 self.columns(ui, &choice.label, &choice.columns);
-                                if !choice.enabled && !choice.denial.is_empty() {
+                                if !choice.enabled && !choice.denial.is_empty() && !said {
                                     ui.label(self.rich(ui, &choice.denial));
                                 }
                                 if button.clicked() {
@@ -192,15 +215,17 @@ impl<M: GameModel> App<M> {
                     filter_clicked = filter.clicked();
                 }
                 if menu.total > menu.choices.len() {
-                    // The rest of a long list comes one page per click, so a huge list never floods the window.
+                    // A character creation list is all there is to pick from, so its pages are fetched
+                    // as they are missing; any other long list comes one page per click.
+                    more = menu.context.starts_with("NEW_CHAR_");
                     let rest = ui.button(format!(
                         "Load more ({} of {})",
                         menu.choices.len(),
                         menu.total
                     ));
-                    more = rest.clicked();
+                    more |= rest.clicked();
                 }
-                if let Some(description) = described.filter(|d| !d.is_empty()) {
+                if let Some(description) = described.filter(|d| is_prose(d)) {
                     ui.separator();
                     ui.label(self.rich(ui, description));
                 }
@@ -314,4 +339,12 @@ impl<M: GameModel> App<M> {
             ui.label(self.rich(ui, &text));
         }
     }
+}
+
+/// A description the player can read; the engine fills it with the bound action's name (`NO`,
+/// `QUIT`, `ANY_INPUT`) when an entry has no text of its own.
+fn is_prose(description: &str) -> bool {
+    description
+        .chars()
+        .any(|c| !(c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_'))
 }

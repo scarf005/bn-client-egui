@@ -88,17 +88,21 @@ fn main() -> eframe::Result {
             theme::apply(&cc.egui_ctx);
             let starter = profile.clone();
             let start: Starter = Box::new(move |ctx, engine| start_engine(ctx, engine, &starter));
+            let remember = |l: Launcher| match bn_client_egui::launch::config_file() {
+                Some(file) => l.with_config(file),
+                None => l,
+            };
             Ok(Box::new(match found {
                 Ok(engine) => match start_engine(&cc.egui_ctx, engine, &profile) {
                     Ok(app) => Launcher::running(app, start),
                     Err(e) => {
                         eprintln!("{e}");
-                        Launcher::new(String::new(), start).with_error(e)
+                        remember(Launcher::new(String::new(), start)).with_error(e)
                     }
                 },
                 Err(not_found) => {
                     eprintln!("{not_found}");
-                    Launcher::new(not_found.to_string(), start)
+                    remember(Launcher::new(not_found.to_string(), start))
                 }
             }))
         }),

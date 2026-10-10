@@ -30,6 +30,9 @@ pub struct Layer {
     pub creature: bool,
     /// Picks between the weighted variants of a sprite, like the game's per-tile seed.
     pub seed: u32,
+    /// Paint the tileset blends into the background and the foreground sprite.
+    pub tint_bg: Option<Rgb>,
+    pub tint_fg: Option<Rgb>,
     /// What stands in for the sprite when the tileset has none; NUL for an overlay, which then draws nothing.
     pub glyph: char,
     pub color: Rgb,
@@ -49,6 +52,8 @@ pub struct Cell {
     pub remembered: bool,
     /// The game's light level of a square in sight: 0 dark, 1 low, 2 bright only, 3 lit, 4 bright.
     pub light: Option<u8>,
+    /// How many levels down the layers lie, seen through open air; 0 on the avatar's own level.
+    pub depth: u8,
     /// The game's per-square seed for weighted sprite variants, also for squares nothing is known about.
     pub square: u32,
 }
@@ -84,10 +89,13 @@ pub enum Shape {
         shrapnel: bool,
         tile: String,
     },
-    /// Floating text rising from `at`, in colored segments.
+    /// Floating text at `at`, in colored segments, moving by `scroll` each animation step as the
+    /// native text does; `hp` marks a creature's hit-point readout, which stays beside it.
     Text {
         at: Pos,
         segments: Vec<(String, Rgb)>,
+        scroll: Pos,
+        hp: bool,
     },
 }
 
@@ -151,6 +159,19 @@ pub struct MenuField {
     pub kind: String,
 }
 
+/// One pane of a two-pane menu such as the advanced inventory: where it looks and how it is filtered.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MenuPane {
+    pub id: String,
+    pub label: String,
+    /// `source` for the pane the engine acts on, `destination` for the other.
+    pub role: String,
+    /// The name of the area the pane shows, as the native screen prints it.
+    pub area: String,
+    pub storage: String,
+    pub filter: String,
+}
+
 /// The engine's current interaction, rendered generically.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Menu {
@@ -161,6 +182,8 @@ pub struct Menu {
     /// Lines drawn above the menu in a fixed-width font, with colour tags.
     pub banner: Vec<String>,
     pub choices: Vec<MenuChoice>,
+    /// The panes of a two-pane menu; empty for other menus.
+    pub panes: Vec<MenuPane>,
     /// How many choices the engine has in all; more than `choices.len()` until the rest is fetched.
     pub total: usize,
     pub can_cancel: bool,
@@ -375,6 +398,12 @@ pub trait GameModel {
     fn route(&self) -> Vec<Pos> {
         vec![]
     }
+    /// The engine's `USE_TILES` and `TILES` options, when it publishes them: the map mode a new profile starts in.
+    fn display_default(&self) -> Option<(bool, String)> {
+        None
+    }
+    /// Says whether the client draws tiles now, so the engine sends tile ids where it has them.
+    fn set_tiles(&mut self, _tiles: bool) {}
     /// The overmap screen, while it is open.
     fn overmap(&self) -> Option<Overmap> {
         None

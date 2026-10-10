@@ -26,6 +26,10 @@ pub trait Transport {
     fn stderr_tail(&self) -> Vec<String> {
         vec![]
     }
+    /// How the engine process ended, once its output has closed: `exit code 0` or `signal 9`.
+    fn exit_reason(&mut self) -> Option<String> {
+        None
+    }
 }
 
 /// How many stderr lines are kept for the error screen.
@@ -236,6 +240,25 @@ impl Transport for StdioTransport {
     fn stderr_tail(&self) -> Vec<String> {
         self.stderr.lock().unwrap().iter().cloned().collect()
     }
+
+    fn exit_reason(&mut self) -> Option<String> {
+        // Output closes just before the process is reaped.
+        for _ in 0..20 {
+            if let Some(status) = self.child.try_wait().ok().flatten() {
+                #[cfg(unix)]
+                let signal = std::os::unix::process::ExitStatusExt::signal(&status);
+                #[cfg(not(unix))]
+                let signal: Option<i32> = None;
+                return Some(match (status.code(), signal) {
+                    (Some(code), _) => format!("exit code {code}"),
+                    (None, Some(signal)) => format!("signal {signal}"),
+                    _ => "unknown status".into(),
+                });
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        None
+    }
 }
 
 impl Drop for StdioTransport {
@@ -255,6 +278,7 @@ pub struct ScriptHandle {
     inbox: Arc<Mutex<VecDeque<Value>>>,
     closed: Arc<AtomicBool>,
     stderr: Arc<Mutex<Vec<String>>>,
+    exit: Arc<Mutex<Option<String>>>,
 }
 
 impl ScriptHandle {
@@ -275,6 +299,11 @@ impl ScriptHandle {
     pub fn close(&self, stderr: &[&str]) {
         *self.stderr.lock().unwrap() = stderr.iter().map(|l| l.to_string()).collect();
         self.closed.store(true, Ordering::SeqCst);
+    }
+
+    /// What the engine process reported when it ended, such as `exit code 0`.
+    pub fn exit_with(&self, reason: &str) {
+        *self.exit.lock().unwrap() = Some(reason.into());
     }
 
     /// Queues an unsolicited engine message.
@@ -336,6 +365,10 @@ impl Transport for ScriptedTransport {
 
     fn stderr_tail(&self) -> Vec<String> {
         self.handle.stderr.lock().unwrap().clone()
+    }
+
+    fn exit_reason(&mut self) -> Option<String> {
+        self.handle.exit.lock().unwrap().clone()
     }
 }
 
