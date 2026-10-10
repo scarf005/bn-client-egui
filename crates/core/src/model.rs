@@ -228,6 +228,16 @@ pub struct ActionEntry {
     pub keys: Vec<String>,
 }
 
+/// The key the game binds to the action a menu row stands for (`action:NEXT_TAB`), shown as a hint
+/// beside the row as the native screens print their keys; `None` for any other row or an unbound action.
+pub fn action_hint(actions: &[ActionEntry], row_id: &str) -> Option<String> {
+    let id = row_id.strip_prefix("action:")?;
+    actions
+        .iter()
+        .find(|a| a.id == id)
+        .and_then(|a| a.keys.first().cloned())
+}
+
 /// The command in flight, or the last one's outcome, for the status line and the pressed control.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CommandStatus {

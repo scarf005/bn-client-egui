@@ -99,6 +99,8 @@ pub struct App<M: GameModel> {
     status_live: a11y::Announcer,
     /// The enabled controls of the open menu, in Tab order, as of the last frame.
     menu_ids: Vec<egui::Id>,
+    /// The controls of the open menu that stand for an engine action, for Alt+Up and Alt+Down.
+    action_ids: Vec<egui::Id>,
     /// The same for the action palette.
     palette_ids: Vec<egui::Id>,
     /// Where the engine's cursor was in the open menu, so keyboard focus can follow it.
@@ -166,6 +168,7 @@ impl<M: GameModel> App<M> {
             effects: Effects::default(),
             was_looking: false,
             menu_ids: Vec::new(),
+            action_ids: Vec::new(),
             palette_ids: Vec::new(),
             menu_focus: None,
             native_live: a11y::Announcer::new(" "),
@@ -487,7 +490,10 @@ impl<M: GameModel> App<M> {
                             pressed: true,
                             modifiers,
                             ..
-                        } if !(*key == Key::Escape && (interrupted || esc_cancels)) => {
+                        } if !(*key == Key::Escape && (interrupted || esc_cancels))
+                            // Alt with an arrow moves the focus among the action rows, not the engine's cursor.
+                            && !(modifiers.alt && matches!(key, Key::ArrowUp | Key::ArrowDown)) =>
+                        {
                             name(*key, *modifiers)
                         }
                         _ => None,
@@ -502,6 +508,7 @@ impl<M: GameModel> App<M> {
             named.into_iter().filter(|t| !toolkit(t)).collect(),
         );
         self.keys_consumed = false;
+        self.focus_action_row(ctx);
         if self.palette.is_some() {
             return;
         }
@@ -568,6 +575,41 @@ impl<M: GameModel> App<M> {
     fn settled(&self) -> bool {
         self.pending_since
             .is_some_and(|t| self.clock.now().saturating_sub(t) >= SETTLE)
+    }
+
+    /// Alt+Down and Alt+Up put the keyboard focus on the next and previous action row of the open menu,
+    /// where Enter sends that action; the engine's own keys never reach those rows.
+    fn focus_action_row(&mut self, ctx: &egui::Context) {
+        let step = ctx.input(|i| {
+            i.events.iter().fold(0_isize, |step, e| match e {
+                egui::Event::Key {
+                    key: egui::Key::ArrowDown,
+                    pressed: true,
+                    modifiers,
+                    ..
+                } if modifiers.alt => step + 1,
+                egui::Event::Key {
+                    key: egui::Key::ArrowUp,
+                    pressed: true,
+                    modifiers,
+                    ..
+                } if modifiers.alt => step - 1,
+                _ => step,
+            })
+        });
+        if step == 0 || self.action_ids.is_empty() {
+            return;
+        }
+        let at = ctx
+            .memory(|m| m.focused())
+            .and_then(|id| self.action_ids.iter().position(|a| *a == id));
+        let last = self.action_ids.len() as isize - 1;
+        let to = match at {
+            Some(i) => (i as isize + step).clamp(0, last),
+            None if step > 0 => 0,
+            None => last,
+        };
+        ctx.memory_mut(|m| m.request_focus(self.action_ids[to as usize]));
     }
 
     /// A button for a choice or action. Once a command has lasted a while, the pressed one is

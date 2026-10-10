@@ -11,6 +11,7 @@ impl<M: GameModel> App<M> {
         let Some(menu) = self.model.menu() else {
             self.focus_menu = false;
             self.menu_ids.clear();
+            self.action_ids.clear();
             self.refocus_map |= self.menu_title.take().is_some();
             if std::mem::take(&mut self.in_popup) {
                 self.ack_closed = Some(self.clock.now());
@@ -48,6 +49,7 @@ impl<M: GameModel> App<M> {
         self.in_popup = menu.acknowledges();
         a11y::trap_tab(ctx, self.trapped_by_menu());
         let mut ids = Vec::new();
+        let mut action_ids = Vec::new();
         let mut focused = false;
         let mut chosen = None;
         let follows = self.menu_focus != menu.focus;
@@ -174,6 +176,16 @@ impl<M: GameModel> App<M> {
                                     choice.selected,
                                 );
                                 ids.extend(button.enabled().then_some(button.id));
+                                if choice.id.starts_with("action:") {
+                                    action_ids.push(button.id);
+                                    // The key the game binds to it, as the native screens print their keys.
+                                    if let Some(key) = bn_client_core::action_hint(
+                                        &self.model.actions(),
+                                        &choice.id,
+                                    ) {
+                                        ui.weak(format!("[{key}]"));
+                                    }
+                                }
                                 if choice.selected {
                                     cursor_seen = Some(choice.id.clone());
                                     if self.menu_cursor.as_deref() != Some(&choice.id) {
@@ -241,6 +253,7 @@ impl<M: GameModel> App<M> {
                 }
             });
         self.menu_ids = ids;
+        self.action_ids = action_ids;
         if filter_clicked {
             self.model.invoke_action("FILTER");
         }
