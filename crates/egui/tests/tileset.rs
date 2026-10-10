@@ -198,3 +198,63 @@ fn the_filters_for_low_light_and_memory_equal_the_games_pixel_functions() {
         assert_eq!(Fx::Memory.pixel(pixel), memory, "{pixel:?}");
     }
 }
+
+/// Adds a mod tileset file listing `compatibility` with one sheet of four sprites (0 and 2 are sprites,
+/// 1 and 3 their tint masks) and the given tiles.
+fn add_mod(root: &std::path::Path, file: &str, compatibility: &[&str], tiles: serde_json::Value) {
+    let dir = root.join("data/json/external_tileset");
+    std::fs::create_dir_all(&dir).unwrap();
+    image::RgbaImage::new(16, 4)
+        .save(dir.join("mod.png"))
+        .unwrap();
+    let config = serde_json::json!([
+        {"type": "mod_tileset", "compatibility": compatibility, "tiles-new": [{"file": "external_tileset/mod.png", "tiles": tiles}]}
+    ]);
+    std::fs::write(dir.join(file), config.to_string()).unwrap();
+}
+
+#[test]
+fn a_mod_tileset_numbers_its_sprites_after_the_tilesets_own_and_masks_its_tint() {
+    let root = game_root("mod-mask");
+    add_mod(
+        &root,
+        "vehicles.json",
+        &["other", "test"],
+        serde_json::json!([
+            {"id": "vp_glass", "fg": 0, "masks": [{"type": "tint", "fg": 1}]},
+            {"id": "vp_open", "fg": 2},
+            // A mask that does not match its sprites is dropped.
+            {"id": "vp_odd", "fg": 2, "masks": [{"type": "tint", "fg": [1, 3]}]},
+            // A mod tile replaces the tileset's own.
+            {"id": "t_floor", "fg": 2}
+        ]),
+    );
+    let set = Tileset::load(&root.join("gfx/test")).unwrap();
+    let placed = |id: &str| set.choose(&query(id)).unwrap().fg.unwrap();
+    // The tileset has sprites 0 to 9, so the mod's sheet starts at 10.
+    assert_eq!(
+        (placed("vp_glass").sprite, placed("vp_glass").mask),
+        (10, Some(11))
+    );
+    assert_eq!(
+        (placed("vp_open").sprite, placed("vp_open").mask),
+        (12, None)
+    );
+    assert_eq!(placed("vp_odd").mask, None);
+    assert_eq!(placed("t_floor").sprite, 12);
+    assert_eq!(set.locate(13), Some((2, 3)));
+}
+
+#[test]
+fn a_mod_tileset_for_another_tileset_adds_nothing() {
+    let root = game_root("mod-other");
+    add_mod(
+        &root,
+        "other.json",
+        &["other"],
+        serde_json::json!([{"id": "vp_glass", "fg": 0}]),
+    );
+    let set = Tileset::load(&root.join("gfx/test")).unwrap();
+    assert!(set.choose(&query("vp_glass")).is_none());
+    assert_eq!(set.sheets.len(), 2);
+}

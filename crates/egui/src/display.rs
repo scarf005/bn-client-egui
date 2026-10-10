@@ -167,7 +167,7 @@ struct Atlas {
 }
 
 /// A sprite, the paint and the filter it is made under.
-type PaintKey = (u32, [u8; 3], Fx);
+type PaintKey = (u32, Option<u32>, [u8; 3], Fx);
 
 /// A sprite painted with a vehicle part's color, made in the background.
 enum Painted {
@@ -194,15 +194,29 @@ impl Atlas {
     }
 
     /// The sprite painted with `paint` under a filter; none while it is being made or when it cannot be.
-    fn painted(&self, ctx: &egui::Context, sprite: u32, fx: Fx, paint: [u8; 3]) -> Option<Source> {
+    fn painted(
+        &self,
+        ctx: &egui::Context,
+        (placed, paint): (Placed, [u8; 3]),
+        fx: Fx,
+    ) -> Option<Source> {
+        let sprite = placed.sprite;
         let (n, local) = self.tileset.locate(sprite)?;
         let mut cache = self.painted.borrow_mut();
-        let key = (sprite, paint, fx);
+        let key = (sprite, placed.mask, paint, fx);
         let Some(entry) = cache.get_mut(&key) else {
             let (sheet, decoded) = (self.tileset.sheets[n].clone(), self.decoded.clone());
+            let mask = placed.mask.and_then(|m| {
+                let (n, local) = self.tileset.locate(m)?;
+                Some((n, self.tileset.sheets[n].clone(), local))
+            });
             let (send, receive) = channel();
             std::thread::spawn(move || {
-                let _ = send.send(paint_sprite(&decoded, n, &sheet, local, fx, paint));
+                let job = Job {
+                    sheet: (n, &sheet, local),
+                    mask: mask.as_ref().map(|(n, s, l)| (*n, s, *l)),
+                };
+                let _ = send.send(paint_sprite(&decoded, job, fx, paint));
             });
             cache.insert(key, Painted::Pending(receive));
             ctx.request_repaint_after(std::time::Duration::from_millis(30));
@@ -301,27 +315,56 @@ fn load(sheet: &tileset::Sheet) -> Option<image::RgbaImage> {
     Some(image)
 }
 
-/// One sprite of a sheet painted with `paint` and then filtered, like the game's tinted sprite lookup.
-fn paint_sprite(
+/// The sheet of a sprite as `(sheet number, sheet, index in the sheet)`, and of the sprite masking its paint.
+struct Job<'a> {
+    sheet: (usize, &'a tileset::Sheet, u32),
+    mask: Option<(usize, &'a tileset::Sheet, u32)>,
+}
+
+/// The decoded pixels of sheet `n`, kept for the other sprites painted from it.
+fn decoded_sheet(
     decoded: &Mutex<HashMap<usize, Arc<image::RgbaImage>>>,
     n: usize,
     sheet: &tileset::Sheet,
-    local: u32,
+) -> Option<Arc<image::RgbaImage>> {
+    let mut sheets = decoded.lock().ok()?;
+    match sheets.get(&n) {
+        Some(image) => Some(image.clone()),
+        None => Some(sheets.entry(n).or_insert(Arc::new(load(sheet)?)).clone()),
+    }
+}
+
+/// One sprite of a sheet painted with `paint`, where its mask lets the paint through, and then filtered, like
+/// the game's tinted sprite lookup.
+fn paint_sprite(
+    decoded: &Mutex<HashMap<usize, Arc<image::RgbaImage>>>,
+    Job {
+        sheet: (n, sheet, local),
+        mask,
+    }: Job,
     fx: Fx,
     paint: [u8; 3],
 ) -> Option<egui::ColorImage> {
-    let image = {
-        let mut sheets = decoded.lock().ok()?;
-        match sheets.get(&n) {
-            Some(image) => image.clone(),
-            None => sheets.entry(n).or_insert(Arc::new(load(sheet)?)).clone(),
-        }
-    };
+    let image = decoded_sheet(decoded, n, sheet)?;
+    let mask = mask.and_then(|(n, sheet, local)| {
+        let image = decoded_sheet(decoded, n, sheet)?;
+        let (w, h) = sheet.sprite;
+        let (col, row) = (local % sheet.columns, local / sheet.columns);
+        Some(image::imageops::crop_imm(&*image, col * w, row * h, w, h).to_image())
+    });
     let (w, h) = sheet.sprite;
     let (col, row) = (local % sheet.columns, local / sheet.columns);
     let mut sprite = image::imageops::crop_imm(&*image, col * w, row * h, w, h).to_image();
-    for px in sprite.pixels_mut().filter(|px| px.0[3] > 0) {
-        let tinted = tint_pixel([px.0[0], px.0[1], px.0[2]], paint);
+    for (x, y, px) in sprite
+        .enumerate_pixels_mut()
+        .filter(|(_, _, px)| px.0[3] > 0)
+    {
+        let pixel = |p: &image::Rgba<u8>| [p.0[0], p.0[1], p.0[2]];
+        let mask = mask
+            .as_ref()
+            .and_then(|m| m.get_pixel_checked(x, y))
+            .map(pixel);
+        let tinted = tint_pixel(pixel(px), paint, mask);
         px.0[..3].copy_from_slice(&fx.pixel(tinted));
     }
     Some(egui::ColorImage::from_rgba_unmultiplied(
@@ -810,7 +853,7 @@ fn draw_sprite(
     (fx, opacity): (Fx, u8),
 ) -> bool {
     // A painted sprite is made in the background; the plain one stands in until it is.
-    let painted = paint.and_then(|p| atlas.painted(painter.ctx(), placed.sprite, fx, p));
+    let painted = paint.and_then(|p| atlas.painted(painter.ctx(), (placed, p), fx));
     let Some(Source {
         texture,
         uv,
@@ -869,4 +912,61 @@ fn draw_sprite(
     mesh.indices.extend([0, 1, 2, 0, 2, 3]);
     painter.add(Shape::mesh(mesh));
     true
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A sheet of two 2x1 sprites in `dir`: a sprite of two grey pixels and its mask, whose first pixel lets
+    /// the paint through and whose second does not.
+    fn sheet(dir: &Path) -> tileset::Sheet {
+        let file = dir.join("masked.png");
+        let mut image = image::RgbaImage::new(4, 1);
+        let pixels = [[128, 128, 128], [200, 40, 40], [255, 255, 127], [0, 0, 0]];
+        for (x, rgb) in pixels.into_iter().enumerate() {
+            image.put_pixel(x as u32, 0, image::Rgba([rgb[0], rgb[1], rgb[2], 255]));
+        }
+        image.save(&file).unwrap();
+        tileset::Sheet {
+            file,
+            sprite: (2, 1),
+            offset: (0, 0),
+            pixelscale: 1.0,
+            key: None,
+            columns: 2,
+            first: 0,
+            count: 2,
+        }
+    }
+
+    #[test]
+    fn a_sprite_is_painted_only_where_its_mask_lets_the_paint_through() {
+        let dir = std::env::temp_dir().join(format!("bn-client-mask-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let sheet = sheet(&dir);
+        let decoded = Mutex::default();
+        let paint = [247, 251, 245];
+        let painted = |mask: Option<(usize, &tileset::Sheet, u32)>| {
+            let job = Job {
+                sheet: (0, &sheet, 0),
+                mask,
+            };
+            paint_sprite(&decoded, job, Fx::Plain, paint)
+                .unwrap()
+                .pixels
+        };
+        let color = |p: [u8; 3]| Color32::from_rgb(p[0], p[1], p[2]);
+        let masked = painted(Some((0, &sheet, 1)));
+        assert_eq!(
+            masked[0],
+            color(tint_pixel([128; 3], paint, Some([255, 255, 127])))
+        );
+        assert_ne!(masked[0], color([128; 3]));
+        assert_eq!(masked[1], color([200, 40, 40]));
+        // Without a mask the whole sprite is painted.
+        let whole = painted(None);
+        assert_eq!(whole[1], color(tint_pixel([200, 40, 40], paint, None)));
+        assert_ne!(whole[1], color([200, 40, 40]));
+    }
 }
