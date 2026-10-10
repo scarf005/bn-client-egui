@@ -220,3 +220,50 @@ fn live_engine_travel_click_plans_a_route_and_a_second_click_walks_it() {
     );
     assert!(model.route().is_empty(), "arriving clears the route");
 }
+
+#[test]
+#[ignore = "requires BN_ENGINE built with remembered furniture overlays"]
+fn live_engine_remembered_furniture_stays_drawn_after_walking_past_it() {
+    let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
+    let transport = StdioTransport::spawn(engine.as_ref()).expect("engine starts");
+    let mut model = EngineModel::new(Box::new(transport));
+
+    wait_for(&mut model, "subscription", |m| m.live());
+    choose_label(&mut model, "New Game");
+    choose_label(&mut model, "Tutorial");
+    wait_for(&mut model, "the tutorial map", |m| m.size().x > 0);
+    wait_for(&mut model, "idle", |m| !m.busy());
+    dismiss_popups(&mut model);
+
+    let step = |model: &mut EngineModel, dy: i32| {
+        let me = model.player();
+        wait_for(model, "idle", |m| !m.busy());
+        model.step_toward(Pos {
+            x: me.x,
+            y: me.y + dy,
+        });
+        wait_for(model, "the step to finish", |m| !m.busy());
+        dismiss_popups(model);
+    };
+    let racks = |model: &EngineModel| {
+        let (w, h) = (model.size().x, model.size().y);
+        (0..h)
+            .flat_map(|y| (0..w).map(move |x| Pos { x, y }))
+            .filter(|&p| model.cell(p).desc == "f_rack")
+            .count()
+    };
+
+    // Walking south, a loaded rack in the room ahead is seen, and walking back it is only remembered.
+    for _ in 0..15 {
+        step(&mut model, 1);
+    }
+    assert_eq!(racks(&model), 0, "items on the rack show while it is seen");
+    // Back up the corridor the rack drops out of sight; memory must keep drawing it as furniture.
+    for _ in 0..14 {
+        if racks(&model) > 0 {
+            break;
+        }
+        step(&mut model, -1);
+    }
+    assert_eq!(racks(&model), 1, "the rack is drawn from map memory");
+}

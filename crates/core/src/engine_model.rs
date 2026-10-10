@@ -62,7 +62,8 @@ fn glyph(l: &Look) -> char {
     l.glyph.chars().next().unwrap_or('?')
 }
 
-/// The topmost thing drawn in a cell: item, field, furniture, terrain, then remembered terrain.
+/// The topmost thing drawn in a cell: item, field, furniture, terrain, then what memory holds
+/// (its furniture or other overlay over its terrain).
 fn top_look(c: &WorldCell) -> Option<&Look> {
     c.vehicle
         .as_ref()
@@ -70,7 +71,10 @@ fn top_look(c: &WorldCell) -> Option<&Look> {
         .or(c.fields.last().map(|f| &f.look))
         .or(c.furniture.as_ref())
         .or(c.terrain.as_ref())
-        .or(c.memory.as_ref().map(|m| &m.terrain))
+        .or(c
+            .memory
+            .as_ref()
+            .map(|m| m.overlay.as_ref().unwrap_or(&m.terrain)))
 }
 
 /// Native registered-action id for a one-square move.
