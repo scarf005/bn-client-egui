@@ -203,10 +203,10 @@ impl EngineModel {
                             .into()
                         }
                         _ if swap => "done".into(),
-                        "rejected" | "interrupted" => {
-                            let why = reason.as_deref().map_or("no reason given", explain);
-                            format!("{}: {why}", n.stage)
-                        }
+                        "rejected" | "interrupted" => match reason.as_deref() {
+                            Some(why) => format!("{}: {}", n.stage, explain(why)),
+                            None => n.stage.clone(),
+                        },
                         other => other.into(),
                     };
                     if let Some(s) = &mut self.status {
