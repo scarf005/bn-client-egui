@@ -5,8 +5,10 @@ use bn_client_core::{Cell, Layer};
 use eframe::egui::{self, Color32, Mesh, Rect, Shape, TextureHandle, TextureId, TextureOptions};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, channel};
+use std::sync::{Arc, OnceLock};
 
 /// The game's default `TILES` option value.
 const DEFAULT_TILESET: &str = "UNDEAD_PEOPLE_BASE";
@@ -89,15 +91,20 @@ struct Strips {
     strips: Vec<egui::ColorImage>,
 }
 
+/// Wakes the UI when a background thread has finished a sheet; known once the first frame has run.
+type Wake = Arc<OnceLock<egui::Context>>;
+
 /// The sheets of a tileset under one filter, decoded in the background and uploaded as they arrive.
 struct Sheets {
     incoming: Receiver<Strips>,
+    /// Decoded sheets waiting for their turn: one is uploaded per frame, so no frame stalls on a copy.
+    decoded: VecDeque<Strips>,
     textures: HashMap<usize, Vec<TextureHandle>>,
     loading: usize,
 }
 
 impl Sheets {
-    fn start(sheets: Vec<tileset::Sheet>, fx: Fx) -> Self {
+    fn start(sheets: Vec<tileset::Sheet>, fx: Fx, wake: Wake) -> Self {
         let (send, incoming) = channel();
         let loading = sheets.len();
         std::thread::spawn(move || {
@@ -106,18 +113,21 @@ impl Sheets {
                 if send.send(Strips { sheet: n, strips }).is_err() {
                     return;
                 }
+                wake.get().inspect(|ctx| ctx.request_repaint());
             }
         });
         Self {
             incoming,
+            decoded: VecDeque::new(),
             textures: HashMap::new(),
             loading,
         }
     }
 
-    /// Uploads the sheets decoded since the last call; true while more are coming.
+    /// Uploads the next decoded sheet; true while more are waiting for the next frame.
     fn upload(&mut self, ctx: &egui::Context, fx: Fx) -> bool {
-        while let Ok(done) = self.incoming.try_recv() {
+        self.decoded.extend(self.incoming.try_iter());
+        if let Some(done) = self.decoded.pop_front() {
             self.loading -= 1;
             let textures = done
                 .strips
@@ -130,7 +140,7 @@ impl Sheets {
                 .collect();
             self.textures.insert(done.sheet, textures);
         }
-        self.loading > 0
+        !self.decoded.is_empty()
     }
 }
 
@@ -147,25 +157,34 @@ struct Source {
 struct Atlas {
     tileset: Tileset,
     sheets: [Option<Sheets>; 3],
+    wake: Wake,
 }
 
 impl Atlas {
     fn start(tileset: Tileset) -> Self {
-        let plain = Sheets::start(tileset.sheets.clone(), Fx::Plain);
+        let wake = Wake::default();
+        let plain = Sheets::start(tileset.sheets.clone(), Fx::Plain, wake.clone());
         Self {
             tileset,
             sheets: [Some(plain), None, None],
+            wake,
         }
     }
 
     /// Starts decoding the sheets of a filter the first time something is drawn with it.
     fn request(&mut self, fx: Fx) {
         if self.sheets[fx.index()].is_none() {
-            self.sheets[fx.index()] = Some(Sheets::start(self.tileset.sheets.clone(), fx));
+            self.sheets[fx.index()] = Some(Sheets::start(
+                self.tileset.sheets.clone(),
+                fx,
+                self.wake.clone(),
+            ));
         }
     }
 
     fn upload(&mut self, ctx: &egui::Context) -> bool {
+        // Set before looking for sheets, so one finished meanwhile either is seen now or wakes the UI.
+        let _ = self.wake.set(ctx.clone());
         let mut more = false;
         for fx in Fx::ALL {
             if let Some(sheets) = &mut self.sheets[fx.index()] {
@@ -382,13 +401,13 @@ impl Display {
         }
     }
 
-    /// Uploads sheets that finished decoding; keeps repainting until all are in.
+    /// Uploads a sheet that finished decoding; a finished thread wakes the UI, so nothing polls.
     pub fn update(&mut self, ctx: &egui::Context) {
         profiling::scope!("Display::update");
         if let Some(atlas) = &mut self.atlas
             && atlas.upload(ctx)
         {
-            ctx.request_repaint_after(std::time::Duration::from_millis(30));
+            ctx.request_repaint();
         }
     }
 
