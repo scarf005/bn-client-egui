@@ -16,7 +16,11 @@ fn run(model: impl GameModel + 'static, root: Option<PathBuf>) -> eframe::Result
             if let Some(root) = &root {
                 fonts::install(&cc.egui_ctx, root);
             }
-            Ok(Box::new(App::new(model)))
+            let app = App::new(model);
+            Ok(Box::new(match root {
+                Some(root) => app.with_root(root),
+                None => app,
+            }))
         }),
     )
 }

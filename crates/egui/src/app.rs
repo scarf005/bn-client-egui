@@ -1,4 +1,4 @@
-use crate::model::{GameModel, Pos};
+use bn_client_core::{GameModel, Loading, Pos};
 use eframe::egui::{self, accesskit};
 
 /// Side length of one map cell in points.
@@ -36,6 +36,9 @@ pub struct App<M: GameModel> {
     destination: Option<Pos>,
     last_hover: Option<egui::Pos2>,
     wired: bool,
+    images: bool,
+    /// Game root, for files the engine names relative to it (loading images).
+    root: Option<std::path::PathBuf>,
     /// A typed key already ran an engine action this frame.
     keys_consumed: bool,
 }
@@ -50,7 +53,49 @@ impl<M: GameModel> App<M> {
             destination: None,
             last_hover: None,
             wired: false,
+            images: false,
+            root: None,
             keys_consumed: false,
+        }
+    }
+
+    pub fn with_root(mut self, root: std::path::PathBuf) -> Self {
+        self.root = Some(root);
+        self
+    }
+
+    /// Native-style loading screen: splash image, current step as live text, the step list.
+    fn loading(&self, ui: &mut egui::Ui, loading: &Loading) {
+        ui.heading(&loading.title);
+        if let Some(step) = loading.entries.get(loading.index) {
+            let status = format!(
+                "{}: {step} ({} of {})",
+                loading.title,
+                loading.index + 1,
+                loading.entries.len()
+            );
+            let live = ui.label(status);
+            ui.ctx()
+                .accesskit_node_builder(live.id, |b| b.set_live(accesskit::Live::Polite));
+        }
+        if let (Some(root), Some(image)) = (&self.root, &loading.image) {
+            let uri = format!("file://{}", root.join(image).display());
+            ui.add(
+                egui::Image::new(uri)
+                    .alt_text("Loading image")
+                    .max_height(
+                        (ui.available_height() - 20.0 * loading.entries.len() as f32).max(80.0),
+                    )
+                    .maintain_aspect_ratio(true),
+            );
+        }
+        for (i, entry) in loading.entries.iter().enumerate() {
+            let text = egui::RichText::new(entry);
+            ui.label(if i == loading.index {
+                text.strong()
+            } else {
+                text
+            });
         }
     }
 
@@ -62,6 +107,14 @@ impl<M: GameModel> App<M> {
             self.wired = true;
         }
         self.model.poll();
+        if !self.images {
+            egui_extras::install_image_loaders(ui.ctx());
+            self.images = true;
+        }
+        if let Some(loading) = self.model.loading() {
+            self.loading(ui, &loading);
+            return;
+        }
         if self.model.live() {
             // Safety net only: incoming engine messages repaint through the waker.
             ui.ctx()
