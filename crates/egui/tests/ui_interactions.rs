@@ -108,7 +108,8 @@ fn any_key_popup_closes_on_escape_space_enter_and_letters() {
             [json!({"kind":"choose","choice_id":"acknowledge"})]
         );
     }
-    for text in ["w"] {
+    {
+        let text = "w";
         let (mut h, script) = harness();
         h.run_steps(3);
         script.push(show(41, json!([]), any_key_popup()));
