@@ -602,14 +602,14 @@ fn clicking_a_distant_closed_door_still_asks_the_engine_for_a_route() {
 }
 
 #[test]
-fn travel_that_plans_nothing_and_moves_nothing_says_there_is_no_route() {
+fn travel_that_plans_nothing_and_moves_nothing_says_the_native_cant_travel_message() {
     let (t, h) = session();
     let mut m = connected(t.on("bn.command.submit", walk_reply()));
     assert!(m.travel(Pos { x: 22, y: 12 }));
     h.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{
         "epoch":"e7f3","command_id":"c:5","stage":"completed"}}));
     m.poll();
-    assert_eq!(m.command().unwrap().stage, "done: no route there");
+    assert_eq!(m.command().unwrap().stage, "done: You can't travel there.");
 }
 
 #[test]

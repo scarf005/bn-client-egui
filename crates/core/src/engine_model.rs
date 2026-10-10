@@ -295,7 +295,7 @@ impl EngineModel {
                                 && from.as_ref() == self.avatar_pos()
                                 && self.replica.route().is_empty();
                             if stuck {
-                                "done: no route there"
+                                "done: You can't travel there."
                             } else {
                                 "done"
                             }
