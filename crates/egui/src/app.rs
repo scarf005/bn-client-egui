@@ -34,6 +34,11 @@ fn dialog_offset(ctx: &egui::Context) -> [f32; 2] {
     [0.0, ctx.content_rect().height() * 0.12]
 }
 
+/// The tallest a dialog's list grows: the room under the dialog's top, less its title, tabs and description.
+fn dialog_scroll_height(ctx: &egui::Context) -> f32 {
+    (ctx.content_rect().height() * 0.88 - 150.0).max(150.0)
+}
+
 /// Names the drag handle of the panel with this id for screen readers.
 fn label_resize_handle(ctx: &egui::Context, panel: &str, label: &str) {
     ctx.accesskit_node_builder(egui::Id::new(panel).with("__resize"), |b| {
@@ -543,15 +548,13 @@ impl<M: GameModel> App<M> {
             .map(|s| (s.label, self.status_live.update(&s.history).to_owned()))
             .filter(|_| self.status_live.changed());
         let text = news.map_or(text, |(label, stages)| format!("{label}: {stages}"));
-        ui.horizontal(|ui| {
-            let label = ui.label(text);
-            ui.ctx()
-                .accesskit_node_builder(label.id, |b| b.set_live(accesskit::Live::Polite));
-            // Stops a wait or other activity, like the native interrupt key.
-            if self.model.busy() && ui.button("Interrupt").clicked() {
-                self.model.interrupt();
-            }
-        });
+        let label = ui.label(text);
+        ui.ctx()
+            .accesskit_node_builder(label.id, |b| b.set_live(accesskit::Live::Polite));
+        // Stops a wait or other activity, like the native interrupt key.
+        if self.model.busy() && ui.button("Interrupt").clicked() {
+            self.model.interrupt();
+        }
     }
 
     /// The command in flight has lasted long enough to show; shorter ones never blink the controls.
@@ -840,10 +843,10 @@ impl<M: GameModel> App<M> {
         let route = self.model.route();
         let mut status = format!(
             "Player at ({}, {}). Cursor ({}, {}): {}.",
-            player.x,
-            player.y,
-            cursor.x,
-            cursor.y,
+            to_abs(player).x,
+            to_abs(player).y,
+            to_abs(cursor).x,
+            to_abs(cursor).y,
             self.model.cell(cursor).desc
         );
         if let Some(end) = route.last() {
@@ -928,7 +931,12 @@ impl<M: GameModel> App<M> {
             }
         }
         self.cursor = to_abs(cursor);
+        // A dialog on top owns the pointer; the tooltip would hang over it.
+        let tip = self.model.menu().is_none() && self.palette.is_none();
         response.clone().on_hover_ui_at_pointer(|ui| {
+            if !tip {
+                return;
+            }
             // The engine's own mouse-view text when it has answered for this square.
             if let Some(lines) = self.model.hover_text(cursor) {
                 for line in lines {

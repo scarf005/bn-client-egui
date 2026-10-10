@@ -1652,3 +1652,51 @@ fn a_menu_banner_is_published_line_by_line() {
         ["<color_light_cyan>art</color>", "", "Version: x"]
     );
 }
+
+fn subscribe_with_log(lines: &[(&str, &str, u32)]) -> Vec<serde_json::Value> {
+    let mut reply = subscribe_reply();
+    reply[0]["result"]["messages"] = lines
+        .iter()
+        .map(|(id, text, count)| {
+            json!({"id": id, "text": text, "kind": "bad", "color": "c_red", "count": count})
+        })
+        .collect();
+    reply
+}
+
+#[test]
+fn the_log_a_snapshot_carries_is_the_native_log_before_any_event() {
+    let (t, _h) = ScriptedTransport::new();
+    let t = t.on("bn.hello", vec![fixture("hello_result")]).on(
+        "bn.subscribe",
+        subscribe_with_log(&[("3", "You wake up.", 1), ("7", "Bang!", 2)]),
+    );
+    let m = connected(t);
+    let shown: Vec<_> = m.native_log().iter().map(|l| l.shown()).collect();
+    assert_eq!(shown, ["You wake up.", "Bang! x2"]);
+    assert!(m.native_log().iter().all(|l| l.color.is_some()));
+}
+
+#[test]
+fn a_second_snapshot_with_the_same_log_replaces_lines_instead_of_duplicating_them() {
+    let (t, h) = ScriptedTransport::new();
+    let t = t
+        .on("bn.hello", vec![fixture("hello_result")])
+        .on(
+            "bn.subscribe",
+            subscribe_with_log(&[("3", "You wake up.", 1)]),
+        )
+        .on(
+            "bn.subscribe",
+            subscribe_with_log(&[
+                ("3", "You wake up.", 1),
+                ("7", "Bang!", 1),
+                ("8", "Crash!", 1),
+            ]),
+        );
+    let mut m = connected(t);
+    h.push(fixture("events_45_gap"));
+    m.poll();
+    let shown: Vec<_> = m.native_log().iter().map(|l| l.shown()).collect();
+    assert_eq!(shown, ["You wake up.", "Bang!", "Crash!"]);
+}

@@ -1066,16 +1066,21 @@ impl GameModel for EngineModel {
                 text: line.text,
                 count: line.count,
             };
-            // A repeat replaces the line it counts; ids are never reused, so search the tail only.
-            match self
+            // Ids only grow and are never reused. A line past the newest one is new; any other is a
+            // repeat, or a line a fresh snapshot carries again, and replaces its own line.
+            let id = line.id.parse::<u64>().ok();
+            let newest = self.native.last().and_then(|l| l.id.parse::<u64>().ok());
+            if id.is_some() && id > newest {
+                self.native.push(line);
+            } else if let Some(old) = self
                 .native
                 .iter_mut()
                 .rev()
-                .take(8)
                 .find(|l| !line.id.is_empty() && l.id == line.id)
             {
-                Some(old) => *old = line,
-                None => self.native.push(line),
+                *old = line;
+            } else if id.is_none() || newest.is_none() {
+                self.native.push(line);
             }
         }
         let at_main_menu = self.menu().is_some_and(|m| m.context == "MAIN_MENU");
