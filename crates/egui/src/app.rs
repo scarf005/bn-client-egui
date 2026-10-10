@@ -445,7 +445,11 @@ impl<M: GameModel> App<M> {
         // player's bindings, and the engine moves its own cursor. The exceptions are the toolkit's
         // accessibility keys: Tab and Shift+Tab move focus, and Space and Enter act on a focused widget.
         // Menus with a text field keep the keyboard for typing.
-        let focused = ctx.memory(|m| m.focused()).is_some();
+        // Only a focused control of the menu itself takes Space and Enter; with the focus left on the
+        // map, they are the engine's (they close a popup).
+        let focused = ctx
+            .memory(|m| m.focused())
+            .is_some_and(|id| self.menu_ids.contains(&id));
         let toolkit = |token: &str| match &menu {
             // A composed screen has no widgets: every key, Tab included, is the engine's.
             None => false,
