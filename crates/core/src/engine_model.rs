@@ -180,8 +180,9 @@ impl EngineModel {
                 radius: d["radius"].as_u64().unwrap_or(0) as u32,
                 color: color(&d["color"]),
             },
-            "explosion.blast" => Shape::Blast {
+            "explosion.blast" | "explosion.shrapnel" => Shape::Blast {
                 cells: squares("cells"),
+                shrapnel: fact.kind == "explosion.shrapnel",
             },
             "combat_text.shown" => Shape::Text {
                 at: self.view_of(&d["at"])?,

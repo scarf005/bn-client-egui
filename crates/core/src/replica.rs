@@ -130,6 +130,7 @@ impl Replica {
                 "projectile.moved"
                     | "explosion.started"
                     | "explosion.blast"
+                    | "explosion.shrapnel"
                     | "explosion.ended"
                     | "combat_text.shown"
             ) && let Some(data) = &e.data

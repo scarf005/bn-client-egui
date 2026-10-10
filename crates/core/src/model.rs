@@ -72,8 +72,8 @@ pub enum Shape {
     },
     /// An explosion starting at `at` and reaching `radius` squares.
     Burst { at: Pos, radius: u32, color: Rgb },
-    /// One ring of squares an explosion shaped by terrain fills.
-    Blast { cells: Vec<Pos> },
+    /// The squares one step of an explosion blasts, or its shrapnel lands on.
+    Blast { cells: Vec<Pos>, shrapnel: bool },
     /// Floating text rising from `at`, in colored segments.
     Text {
         at: Pos,
@@ -333,6 +333,14 @@ pub struct FakeModel {
     ground: Vec<String>,
     inventory: Vec<String>,
     messages: Vec<String>,
+    effects: Vec<Effect>,
+}
+
+impl FakeModel {
+    /// An animation the next `take_effects` hands out.
+    pub fn queue_effect(&mut self, effect: Effect) {
+        self.effects.push(effect);
+    }
 }
 
 impl Default for FakeModel {
@@ -343,6 +351,7 @@ impl Default for FakeModel {
             ground: vec!["Rusty knife".into(), "Tin can".into()],
             inventory: vec!["Flashlight".into()],
             messages: vec!["Welcome to the prototype.".into()],
+            effects: vec![],
         }
     }
 }
@@ -365,6 +374,10 @@ impl GameModel for FakeModel {
             action("LEFTDOWN", "Move down left", &["END", "b"]),
             action("RIGHTDOWN", "Move down right", &["NPAGE", "n"]),
         ]
+    }
+
+    fn take_effects(&mut self) -> Vec<Effect> {
+        std::mem::take(&mut self.effects)
     }
 
     fn size(&self) -> Pos {
