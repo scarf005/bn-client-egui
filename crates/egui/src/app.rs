@@ -82,6 +82,8 @@ pub struct App<M: GameModel> {
     menu_focus: Option<String>,
     /// The cursor has been put on the player since the map first appeared.
     cursor_placed: bool,
+    /// The engine's text prompt as last seen (field id, value), and the text typed into it.
+    prompt: ((String, String), String),
     /// The engine's look cursor was up at the last frame.
     was_looking: bool,
     crafting: crafting::Crafting,
@@ -117,6 +119,7 @@ impl<M: GameModel> App<M> {
             focus_menu: false,
             refocus_map: false,
             cursor_placed: false,
+            prompt: Default::default(),
             was_looking: false,
             menu_ids: Vec::new(),
             menu_focus: None,
