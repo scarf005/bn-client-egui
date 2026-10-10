@@ -169,7 +169,9 @@ pub struct Opened {
 }
 
 /// Starts the engine, remembers its path in the config file and loads colours and keys from its game root.
-pub fn open_engine(engine: &Path, profile: &Profile) -> Result<Opened, String> {
+///
+/// `tiles` says the client draws tiles: the engine then sends tile ids where it has them.
+pub fn open_engine(engine: &Path, profile: &Profile, tiles: bool) -> Result<Opened, String> {
     let transport = StdioTransport::spawn_with(engine, profile)
         .map_err(|e| format!("cannot start engine {}: {e}", engine.display()))?;
     if let Some(file) = config_file() {
@@ -183,7 +185,7 @@ pub fn open_engine(engine: &Path, profile: &Profile) -> Result<Opened, String> {
     let respawn = Box::new(move || {
         StdioTransport::spawn_with(&engine, &profile).map(|t| Box::new(t) as Box<dyn Transport>)
     });
-    let model = EngineModel::new(Box::new(transport))
+    let model = EngineModel::connect(Box::new(transport), tiles)
         .with_colors(colors)
         .with_respawn(respawn);
     Ok(Opened { model, root })

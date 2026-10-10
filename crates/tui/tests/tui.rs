@@ -1,3 +1,4 @@
+#![recursion_limit = "512"]
 mod common;
 use bn_client_core::transport::ScriptHandle;
 use bn_client_core::{EngineModel, FakeModel, GameModel, Pos, Rgb};
@@ -817,6 +818,89 @@ fn a_dead_engine_shows_stderr_and_r_restarts_it() {
     assert!(!text(&render(&mut app)).contains("The engine stopped."));
 }
 
+mod overmap {
+    use super::*;
+
+    fn open_overmap() -> (TuiApp<EngineModel>, ScriptHandle) {
+        let (mut app, h) = engine();
+        h.push(common::overmap_event(100));
+        app.model.poll();
+        (app, h)
+    }
+
+    fn last_operation(h: &ScriptHandle) -> Value {
+        submits(h).last().unwrap()["params"]["operation"].clone()
+    }
+
+    #[test]
+    fn the_overmap_is_drawn_with_the_cursor_note_and_legend() {
+        let (mut app, _h) = open_overmap();
+        let screen = text(&render(&mut app));
+        assert!(screen.contains("Overmap (100, 200, 0)"), "{screen}");
+        assert!(
+            screen.contains("Note: cache") || !screen.contains("Note:"),
+            "{screen}"
+        );
+        assert!(screen.contains("forest"), "{screen}");
+        assert!(
+            screen.contains("@"),
+            "the player marker is part of the cells"
+        );
+        assert!(!screen.contains("Map"), "the map is not drawn under it");
+    }
+
+    #[test]
+    fn a_click_moves_the_cursor_and_esc_closes() {
+        let (mut app, h) = open_overmap();
+        render(&mut app);
+        let click = |col: u16, row: u16| MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: col,
+            row,
+            modifiers: KeyModifiers::NONE,
+        };
+        // Cell (3, 0) is square (101, 199).
+        app.handle_mouse(click(3, 0));
+        assert_eq!(
+            last_operation(&h),
+            json!({"kind":"set_target","pos":{"dim":"","x":101,"y":199,"z":0}})
+        );
+        h.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{
+            "epoch":"e7f3","command_id":"c:5","stage":"completed"}}));
+        app.model.poll();
+        app.handle_key(key(KeyCode::Esc));
+        assert_eq!(last_operation(&h), json!({"kind":"cancel"}));
+    }
+}
+
+#[test]
+fn a_menu_with_more_choices_than_listed_asks_for_the_next_page_near_the_end() {
+    let (t, h) = session();
+    let t = t.on(
+        "bn.interaction.choices",
+        vec![json!({"jsonrpc":"2.0","id":3,"result":{"boundary_id":"b:13","total":3,"choices":[
+            {"id":"c:3","label":"glass jar","enabled":true,"description":"","denial":"","selectable":true,
+             "selected":false,"columns":[]}]}})],
+    );
+    let mut app = TuiApp::new(connected(t));
+    for name in ["events_41_walk", "events_42_message"] {
+        h.push(fixture(name));
+    }
+    let mut menu = menu_event(fixture("events_43_menu"), "c:1");
+    menu["params"]["events"][0]["changes"]["interaction"]["interaction"]["choice_total"] = json!(3);
+    h.push(menu);
+    app.model.poll();
+    let _ = render(&mut app);
+    app.model.poll();
+    let asked = h
+        .sent()
+        .into_iter()
+        .filter(|m| m["method"] == "bn.interaction.choices")
+        .count();
+    assert_eq!(asked, 1);
+    assert!(text(&render(&mut app)).contains("glass jar"));
+}
+
 #[test]
 fn a_composed_screen_shows_its_text_and_its_actions_take_the_keys() {
     let (mut app, h) = engine();
@@ -838,4 +922,39 @@ fn a_composed_screen_shows_its_text_and_its_actions_take_the_keys() {
     );
     app.handle_key(key(KeyCode::Tab));
     assert_eq!(sent_actions(&h), [json!("NEXT_TAB")]);
+}
+
+mod overmap_route {
+    use super::*;
+
+    #[test]
+    fn the_route_and_the_notes_are_shown_and_a_note_row_moves_the_cursor() {
+        let (mut app, h) = engine();
+        h.push(common::overmap_event(100));
+        app.model.poll();
+        let screen = text(&render(&mut app));
+        assert!(screen.contains("Route of 2 squares"), "{screen}");
+        assert!(screen.contains("(99, 200) cache"), "{screen}");
+        // The note list sits at the foot of the sidebar; its one row is the note.
+        let row = screen
+            .lines()
+            .position(|l| l.contains("(99, 200) cache"))
+            .unwrap() as u16;
+        let col = screen
+            .lines()
+            .nth(row as usize)
+            .unwrap()
+            .find("(99, 200)")
+            .unwrap() as u16;
+        app.handle_mouse(MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: col,
+            row,
+            modifiers: KeyModifiers::NONE,
+        });
+        assert_eq!(
+            submits(&h).last().unwrap()["params"]["operation"],
+            json!({"kind":"set_target","pos":{"dim":"","x":99,"y":200,"z":0}})
+        );
+    }
 }

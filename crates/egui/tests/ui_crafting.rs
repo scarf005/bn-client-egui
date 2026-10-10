@@ -1,3 +1,4 @@
+#![recursion_limit = "512"]
 mod common;
 use bn_client_egui::transport::ScriptHandle;
 use bn_client_egui::{App, Clock, EngineModel, GameModel};
@@ -157,4 +158,16 @@ fn batch_mode_has_no_tabs_or_search_and_escape_closes() {
     h.run_steps(2);
     assert_eq!(operations(&script), [json!({"kind":"cancel"})]);
     assert!(h.state().model.menu().is_some());
+}
+
+#[test]
+fn the_crafting_window_opens_at_the_common_dialog_position() {
+    let (h, _) = harness("weapon");
+    let tab = h.get_by_label("Weapons").rect();
+    // Centred at the top, 12% down.
+    assert!((100.0..250.0).contains(&tab.min.x), "{tab:?}");
+    assert!(
+        tab.min.y > 800.0 * 0.12 && tab.min.y < 800.0 * 0.12 + 60.0,
+        "{tab:?}"
+    );
 }

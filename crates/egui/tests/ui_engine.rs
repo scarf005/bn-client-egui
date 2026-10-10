@@ -1,3 +1,4 @@
+#![recursion_limit = "512"]
 mod common;
 use bn_client_egui::app::CELL;
 use bn_client_egui::transport::ScriptHandle;
@@ -608,6 +609,34 @@ fn a_key_prompt_fills_its_field_with_the_next_key_and_a_function_key_by_its_name
     );
 }
 
+#[test]
+fn a_bare_text_prompt_is_a_field_that_enter_submits() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    for name in ["events_41_walk", "events_42_message"] {
+        script.push(fixture(name));
+    }
+    let mut menu = fixture("events_43_menu");
+    let interaction = &mut menu["params"]["events"][0]["changes"]["interaction"]["interaction"];
+    interaction["choices"] = json!([]);
+    interaction["field"] = json!({"id":"field:value","label":"World name","description":"",
+        "value":"","type":"text","max_length":-1,"printable":true});
+    script.push(menu);
+    h.run_steps(3);
+    let prompt = h.get_by_role(accesskit::Role::TextInput);
+    prompt.click();
+    prompt.type_text("Ada");
+    h.run_steps(2);
+    script.push(notice("completed", None));
+    h.run_steps(2);
+    h.key_press(egui::Key::Enter);
+    h.run_steps(3);
+    assert_eq!(
+        operations(&script).last(),
+        Some(&json!({"kind":"fill","field_id":"field:value","value":"Ada","submit":true}))
+    );
+}
+
 mod failures {
     use super::*;
     use bn_client_core::transport::ScriptedTransport;
@@ -648,6 +677,69 @@ mod failures {
     }
 }
 
+mod overmap {
+    use super::*;
+
+    fn open_overmap<'a>() -> (H<'a>, ScriptHandle) {
+        let (mut h, script) = harness();
+        h.run_steps(3);
+        script.push(common::overmap_event(100));
+        h.run_steps(3);
+        (h, script)
+    }
+
+    #[test]
+    fn the_overmap_replaces_the_map_and_names_the_cursor_square() {
+        let (h, _script) = open_overmap();
+        h.get_by_label("Overmap view");
+        h.get_by_label("Overmap (100, 200, 0). Route of 2 squares; click the cursor to go.");
+        assert!(
+            h.query_by_label("Map").is_none(),
+            "the map is not drawn under it"
+        );
+        h.get_by_label("  forest");
+    }
+
+    #[test]
+    fn clicking_a_square_moves_the_cursor_and_clicking_the_cursor_travels() {
+        let (mut h, script) = open_overmap();
+        let origin = h.get_by_label("Overmap view").rect().min;
+        let click = |h: &mut H, col: f32, row: f32| {
+            let pos = origin + egui::vec2((col + 0.5) * CELL, (row + 0.5) * CELL);
+            h.hover_at(pos);
+            h.run_steps(1);
+            for pressed in [true, false] {
+                h.event(egui::Event::PointerButton {
+                    pos,
+                    button: egui::PointerButton::Primary,
+                    pressed,
+                    modifiers: egui::Modifiers::NONE,
+                });
+                h.run_steps(1);
+            }
+            h.run_steps(2);
+        };
+        // Cell (3, 0) is square (101, 199).
+        click(&mut h, 3.0, 0.0);
+        let ops = operations(&script);
+        assert_eq!(
+            ops.last().unwrap(),
+            &json!({"kind":"set_target","pos":{"dim":"","x":101,"y":199,"z":0}})
+        );
+    }
+
+    #[test]
+    fn escape_leaves_the_overmap_through_the_engines_quit_action() {
+        let (mut h, script) = open_overmap();
+        h.key_press(egui::Key::Escape);
+        h.run_steps(2);
+        assert_eq!(
+            operations(&script).last().unwrap(),
+            &json!({"kind":"action","action_id":"QUIT"})
+        );
+    }
+}
+
 #[test]
 fn the_title_screen_is_only_its_menu() {
     let (mut h, script) = harness();
@@ -667,4 +759,25 @@ fn the_title_screen_is_only_its_menu() {
             "{panel} belongs to a running game"
         );
     }
+}
+
+#[test]
+fn the_title_screen_draws_the_engines_banner_above_its_menu() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    let mut menu = fixture("events_43_menu");
+    let interaction = &mut menu["params"]["events"][0]["changes"]["interaction"]["interaction"];
+    interaction["context"] = json!("MAIN_MENU");
+    interaction["banner"] = json!([
+        "<color_light_cyan> _ART_ </color>",
+        "",
+        "Version: HEAD-HASH"
+    ]);
+    script.push(fixture("events_41_walk"));
+    script.push(fixture("events_42_message"));
+    script.push(menu);
+    h.run_steps(4);
+    h.get_by_label(" _ART_ ");
+    h.get_by_label("Version: HEAD-HASH");
+    h.get_by_label("combat knife");
 }

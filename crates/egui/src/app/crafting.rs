@@ -107,6 +107,8 @@ impl<M: GameModel> App<M> {
         let mut batch = None;
         egui::Window::new(&menu.title)
             .id(a11y::dialog_id(&menu.title))
+            .anchor(egui::Align2::CENTER_TOP, super::dialog_offset(ctx))
+            .collapsible(false)
             .default_size(egui::vec2(900.0, 560.0))
             .show(ctx, |ui| {
                 ui.horizontal_wrapped(|ui| {

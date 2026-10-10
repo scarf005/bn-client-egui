@@ -1,3 +1,4 @@
+#![recursion_limit = "512"]
 mod common;
 use bn_client_egui::transport::ScriptedTransport;
 use bn_client_egui::{App, EngineModel, GameModel};
@@ -96,7 +97,10 @@ fn switching_to_ascii_draws_glyphs_again_and_the_choice_survives_a_restart() {
     h.run_steps(3);
     assert!(!h.state().display().tiles());
     assert_eq!(h.state().display().drawn(), 0);
-    assert_eq!(saved(&settings), json!({"tiles": false, "tileset": null}));
+    assert_eq!(
+        saved(&settings),
+        json!({"tiles": false, "tileset": null, "reduced_motion": false})
+    );
 
     // A new run reads the file and starts in ASCII without loading the tileset.
     let again = harness(&root, settings.clone());
@@ -132,4 +136,199 @@ fn the_chosen_tileset_name_is_kept() {
         Some("test")
     );
     assert!(h.state().display().tiles());
+}
+
+#[test]
+fn the_overmap_draws_the_engines_tile_ids_with_fallbacks_and_keeps_markers_as_glyphs() {
+    let root = game_root("ui-overmap");
+    let (t, script) = ScriptedTransport::new();
+    let transport = t.on("bn.hello", vec![fixture("hello_result")]).on(
+        "bn.subscribe",
+        vec![
+            fixture("subscribe_result"),
+            fixture("snapshot_part_0"),
+            fixture("snapshot_part_1"),
+        ],
+    );
+    let app = App::new(EngineModel::connect(Box::new(transport), true))
+        .with_root(root.clone())
+        .with_settings(root.join("settings.json"));
+    let mut h: H = Harness::builder()
+        .with_size(egui::vec2(1100.0, 800.0))
+        .build_ui_state(|ui, app: &mut App<EngineModel>| app.show(ui), app);
+    settle(&mut h);
+    script.push(common::with_tiles(common::overmap_event(100)));
+    h.run_steps(4);
+    settle(&mut h);
+    // Twelve squares, each with a sprite under it: the floor, and the forest through its `t_dirt`
+    // fallback. The player's marker is a glyph over its sprite.
+    h.run_steps(2);
+    let display = h.state().display();
+    assert!(display.tiles());
+    assert_eq!(
+        display.drawn(),
+        12,
+        "a sprite under every square, markers on top"
+    );
+    h.get_by_label("Overmap (100, 200, 0). Route of 2 squares; click the cursor to go.");
+    // The note is listed and a click on it moves the overmap cursor there.
+    h.get_by_label("(99, 200) cache").click();
+    h.run_steps(2);
+    let sent = script.sent();
+    let last = sent
+        .iter()
+        .rfind(|m| m["method"] == "bn.command.submit")
+        .unwrap();
+    assert_eq!(
+        last["params"]["operation"],
+        json!({"kind":"set_target","pos":{"dim":"","x":99,"y":200,"z":0}})
+    );
+    assert_eq!(
+        sent[0]["params"]["tiles"], true,
+        "hello said the client draws tiles"
+    );
+}
+
+#[test]
+fn switching_between_tiles_and_ascii_tells_the_engine_without_a_restart() {
+    let root = game_root("ui-switch-hello");
+    let (t, script) = ScriptedTransport::new();
+    let transport = t.on("bn.hello", vec![fixture("hello_result")]).on(
+        "bn.subscribe",
+        vec![
+            fixture("subscribe_result"),
+            fixture("snapshot_part_0"),
+            fixture("snapshot_part_1"),
+        ],
+    );
+    let app = App::new(EngineModel::connect(Box::new(transport), true))
+        .with_root(root.clone())
+        .with_settings(root.join("settings.json"));
+    let mut h: H = Harness::builder()
+        .with_size(egui::vec2(1100.0, 800.0))
+        .build_ui_state(|ui, app: &mut App<EngineModel>| app.show(ui), app);
+    settle(&mut h);
+    let tiles_said = |script: &bn_client_egui::transport::ScriptHandle| -> Vec<bool> {
+        script
+            .sent()
+            .iter()
+            .filter(|m| m["method"] == "bn.hello")
+            .map(|m| m["params"]["tiles"] == true)
+            .collect()
+    };
+    assert_eq!(tiles_said(&script), [true], "started with tiles");
+
+    h.get_by_label("ASCII").click();
+    h.run_steps(4);
+    assert_eq!(tiles_said(&script), [true, false]);
+
+    h.get_by_label("Tiles").click();
+    h.run_steps(2);
+    settle(&mut h);
+    assert_eq!(tiles_said(&script), [true, false, true]);
+    let methods = script.sent_methods();
+    // Each change of the cell size is declared once it has settled; a slow frame can add another.
+    assert!(methods.iter().filter(|m| *m == "bn.viewport").count() >= 2);
+}
+
+fn session_with_display(tiles: bool) -> ScriptedTransport {
+    let mut hello = fixture("hello_result");
+    hello["result"]["engine"]["display"] = json!({"tiles": tiles, "tileset": "test"});
+    let (t, _) = ScriptedTransport::new();
+    t.on("bn.hello", vec![hello]).on(
+        "bn.subscribe",
+        vec![
+            fixture("subscribe_result"),
+            fixture("snapshot_part_0"),
+            fixture("snapshot_part_1"),
+        ],
+    )
+}
+
+fn harness_with(root: &Path, settings: PathBuf, t: ScriptedTransport) -> H<'static> {
+    let app = App::new(EngineModel::new(Box::new(t)))
+        .with_root(root.to_path_buf())
+        .with_settings(settings);
+    Harness::builder()
+        .with_size(egui::vec2(1100.0, 800.0))
+        .build_ui_state(|ui, app: &mut App<EngineModel>| app.show(ui), app)
+}
+
+#[test]
+fn with_no_saved_choice_the_map_starts_in_the_mode_the_engines_options_say() {
+    let root = game_root("ui-engine-default");
+    let mut off = harness_with(&root, root.join("off.json"), session_with_display(false));
+    off.run_steps(4);
+    assert!(!off.state().display().tiles(), "USE_TILES is off: ASCII");
+    let mut on = harness_with(&root, root.join("on.json"), session_with_display(true));
+    settle(&mut on);
+    assert!(on.state().display().tiles());
+    assert!(
+        !root.join("off.json").exists(),
+        "following the engine is not a choice and saves nothing"
+    );
+}
+
+#[test]
+fn a_saved_choice_wins_over_the_engines_options() {
+    let root = game_root("ui-saved-wins");
+    let settings = root.join("config/settings.json");
+    std::fs::create_dir_all(settings.parent().unwrap()).unwrap();
+    std::fs::write(
+        &settings,
+        json!({"tiles": true, "tileset": null}).to_string(),
+    )
+    .unwrap();
+    let mut h = harness_with(&root, settings, session_with_display(false));
+    settle(&mut h);
+    assert!(h.state().display().tiles());
+}
+
+fn lit_cell(sequence: u32, x: i32, light: u8) -> Value {
+    json!({"jsonrpc":"2.0","method":"bn.events","params":{"epoch":"e7f3","events":[{
+        "sequence": sequence.to_string(), "revision": (sequence - 9).to_string(),
+        "type": "cells.seen", "changes": {"cells": [
+            {"at": {"dim":"","x":x,"y":4,"z":0}, "known":"visible", "light": light,
+             "terrain": {"kind":"terrain","id":"t_floor","glyph":".","color":"c_cyan"}}]}}]}})
+}
+
+/// The native view draws a square it cannot see at all (dark) or can only tell is bright (bright only)
+/// as its lighting overlay instead of the terrain; low light, lit and bright draw the terrain.
+#[test]
+fn dark_and_bright_only_squares_draw_the_lowlight_overlay_instead_of_their_terrain() {
+    let root = game_root("ui-light");
+    let run = |light: u8| {
+        let (t, handle) = ScriptedTransport::new();
+        let t = t.on("bn.hello", vec![fixture("hello_result")]).on(
+            "bn.subscribe",
+            vec![
+                fixture("subscribe_result"),
+                fixture("snapshot_part_0"),
+                fixture("snapshot_part_1"),
+            ],
+        );
+        let mut h = harness_with(&root, root.join(format!("l{light}.json")), t);
+        settle(&mut h);
+        handle.push(lit_cell(41, 5, light));
+        h.run_steps(4);
+        let d = h.state().display();
+        (d.drawn(), d.dimmed())
+    };
+    let (clear_drawn, clear_dimmed) = run(4);
+    assert_eq!(clear_dimmed, 0);
+    assert_eq!(run(3), (clear_drawn, 0));
+    assert_eq!(
+        run(1),
+        (clear_drawn, 0),
+        "low light is the grayscale terrain"
+    );
+    for light in [0, 2] {
+        let (drawn, dimmed) = run(light);
+        assert_eq!(dimmed, 1, "light {light} draws the overlay");
+        assert_eq!(
+            drawn,
+            clear_drawn - 1,
+            "light {light} hides the terrain sprite"
+        );
+    }
 }

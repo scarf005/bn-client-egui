@@ -2,14 +2,15 @@
 
 use crate::tileset::{self, Placed, Query, Tileset, TilesetInfo, Turn};
 use crate::tint::tint_pixel;
-use bn_client_core::{Cell, Layer};
+use bn_client_core::{Cell, Layer, OvermapTile};
 use eframe::egui::{self, Color32, Mesh, Rect, Shape, TextureHandle, TextureId, TextureOptions};
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, channel};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 
 /// The game's default `TILES` option value.
 const DEFAULT_TILESET: &str = "UNDEAD_PEOPLE_BASE";
@@ -20,21 +21,17 @@ const MEMORY: Color32 = Color32::from_gray(100);
 const SHADOW: Color32 = Color32::from_gray(170);
 
 /// The choice that survives a restart.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Settings {
-    /// Draw sprites; false draws ASCII glyphs.
-    pub tiles: bool,
+    /// Draw sprites (true) or ASCII glyphs (false); absent until the player chooses, so the engine's
+    /// `USE_TILES` option decides.
+    #[serde(default)]
+    pub tiles: Option<bool>,
     /// The `TILES` name of the tileset; the game's default when absent.
     pub tileset: Option<String>,
-}
-
-impl Default for Settings {
-    fn default() -> Self {
-        Self {
-            tiles: true,
-            tileset: None,
-        }
-    }
+    /// Play no shot, explosion or floating-text overlays on the map.
+    #[serde(default)]
+    pub reduced_motion: bool,
 }
 
 /// `$XDG_CONFIG_HOME/bn-client-egui/settings.json`, or the same under `~/.config`.
@@ -96,15 +93,20 @@ struct Strips {
     strips: Vec<egui::ColorImage>,
 }
 
+/// Wakes the UI when a background thread has finished a sheet; known once the first frame has run.
+type Wake = Arc<OnceLock<egui::Context>>;
+
 /// The sheets of a tileset under one filter, decoded in the background and uploaded as they arrive.
 struct Sheets {
     incoming: Receiver<Strips>,
+    /// Decoded sheets waiting for their turn: one is uploaded per frame, so no frame stalls on a copy.
+    decoded: VecDeque<Strips>,
     textures: HashMap<usize, Vec<TextureHandle>>,
     loading: usize,
 }
 
 impl Sheets {
-    fn start(sheets: Vec<tileset::Sheet>, fx: Fx) -> Self {
+    fn start(sheets: Vec<tileset::Sheet>, fx: Fx, wake: Wake) -> Self {
         let (send, incoming) = channel();
         let loading = sheets.len();
         std::thread::spawn(move || {
@@ -113,18 +115,21 @@ impl Sheets {
                 if send.send(Strips { sheet: n, strips }).is_err() {
                     return;
                 }
+                wake.get().inspect(|ctx| ctx.request_repaint());
             }
         });
         Self {
             incoming,
+            decoded: VecDeque::new(),
             textures: HashMap::new(),
             loading,
         }
     }
 
-    /// Uploads the sheets decoded since the last call; true while more are coming.
+    /// Uploads the next decoded sheet; true while more are waiting for the next frame.
     fn upload(&mut self, ctx: &egui::Context, fx: Fx) -> bool {
-        while let Ok(done) = self.incoming.try_recv() {
+        self.decoded.extend(self.incoming.try_iter());
+        if let Some(done) = self.decoded.pop_front() {
             self.loading -= 1;
             let textures = done
                 .strips
@@ -137,7 +142,7 @@ impl Sheets {
                 .collect();
             self.textures.insert(done.sheet, textures);
         }
-        self.loading > 0
+        !self.decoded.is_empty()
     }
 }
 
@@ -158,6 +163,7 @@ struct Atlas {
     /// Sheets decoded for painting single sprites, shared by the threads that paint them.
     decoded: Arc<Mutex<HashMap<usize, Arc<image::RgbaImage>>>>,
     painted: RefCell<HashMap<PaintKey, Painted>>,
+    wake: Wake,
 }
 
 /// A sprite, the paint and the filter it is made under.
@@ -176,12 +182,14 @@ enum Painted {
 
 impl Atlas {
     fn start(tileset: Tileset) -> Self {
-        let plain = Sheets::start(tileset.sheets.clone(), Fx::Plain);
+        let wake = Wake::default();
+        let plain = Sheets::start(tileset.sheets.clone(), Fx::Plain, wake.clone());
         Self {
             tileset,
             sheets: [Some(plain), None, None, None],
             decoded: Arc::default(),
             painted: RefCell::default(),
+            wake,
         }
     }
 
@@ -233,11 +241,17 @@ impl Atlas {
     /// Starts decoding the sheets of a filter the first time something is drawn with it.
     fn request(&mut self, fx: Fx) {
         if self.sheets[fx.index()].is_none() {
-            self.sheets[fx.index()] = Some(Sheets::start(self.tileset.sheets.clone(), fx));
+            self.sheets[fx.index()] = Some(Sheets::start(
+                self.tileset.sheets.clone(),
+                fx,
+                self.wake.clone(),
+            ));
         }
     }
 
     fn upload(&mut self, ctx: &egui::Context) -> bool {
+        // Set before looking for sheets, so one finished meanwhile either is seen now or wakes the UI.
+        let _ = self.wake.set(ctx.clone());
         let mut more = false;
         for fx in Fx::ALL {
             if let Some(sheets) = &mut self.sheets[fx.index()] {
@@ -350,10 +364,14 @@ pub struct Display {
     atlas: Option<Atlas>,
     /// Why the chosen tileset is not in use.
     problem: Option<String>,
+    /// The engine's `USE_TILES` and `TILES` options, for what the player has not chosen.
+    engine: Option<(bool, String)>,
     /// Sprites drawn by the last map paint.
     drawn: usize,
     /// Squares of the last map paint that lie on the hidden-lighting sprite.
     hidden: usize,
+    /// Squares of the last map paint drawn as a lowlight overlay instead of their terrain.
+    dimmed: usize,
 }
 
 impl Display {
@@ -371,8 +389,10 @@ impl Display {
             tilesets: root.map_or(vec![], tileset::available),
             atlas: None,
             problem: None,
+            engine: None,
             drawn: 0,
             hidden: 0,
+            dimmed: 0,
         };
         display.open();
         display
@@ -381,10 +401,12 @@ impl Display {
     /// The tileset to use: the chosen one, else the game's default, else the first.
     fn chosen(&self) -> Option<&TilesetInfo> {
         let by_name = |name: &str| self.tilesets.iter().find(|t| t.name == name);
+        let engine = self.engine.as_ref().map(|(_, name)| name.as_str());
         self.settings
             .tileset
             .as_deref()
             .and_then(by_name)
+            .or_else(|| engine.and_then(by_name))
             .or_else(|| by_name(DEFAULT_TILESET))
             .or(self.tilesets.first())
     }
@@ -393,7 +415,7 @@ impl Display {
     fn open(&mut self) {
         self.atlas = None;
         self.problem = None;
-        if !self.settings.tiles || !self.rooted {
+        if !self.wants_tiles() || !self.rooted {
             return;
         }
         let Some(dir) = self.chosen().map(|t| t.dir.clone()) else {
@@ -403,6 +425,22 @@ impl Display {
         match Tileset::load(&dir) {
             Ok(tileset) => self.atlas = Some(Atlas::start(tileset)),
             Err(e) => self.problem = Some(e),
+        }
+    }
+
+    /// Sprites are wanted: the player's choice, else the engine's option, else yes.
+    fn wants_tiles(&self) -> bool {
+        self.settings
+            .tiles
+            .or(self.engine.as_ref().map(|(tiles, _)| *tiles))
+            .unwrap_or(true)
+    }
+
+    /// Takes the engine's `USE_TILES` and `TILES` options as the default for choices not yet made.
+    pub fn follow_engine(&mut self, options: Option<(bool, String)>) {
+        if self.engine != options {
+            self.engine = options;
+            self.open();
         }
     }
 
@@ -423,6 +461,11 @@ impl Display {
         self.atlas.is_some()
     }
 
+    /// The player asked for no map animation.
+    pub fn reduced_motion(&self) -> bool {
+        self.settings.reduced_motion
+    }
+
     /// The choice kept between runs.
     pub fn settings(&self) -> &Settings {
         &self.settings
@@ -438,12 +481,24 @@ impl Display {
         self.hidden
     }
 
+    /// Squares of the last map paint shown as a lowlight overlay: dark or only known to be bright.
+    pub fn dimmed(&self) -> usize {
+        self.dimmed
+    }
+
     /// Whether every sheet of the tileset is ready to draw.
     pub fn ready(&self) -> bool {
         self.atlas
             .as_ref()
             .and_then(|a| a.sheets[Fx::Plain.index()].as_ref())
             .is_some_and(|s| s.loading == 0)
+    }
+
+    /// Some requested sheet is still being decoded or uploaded.
+    pub fn loading(&self) -> bool {
+        self.atlas
+            .as_ref()
+            .is_some_and(|a| a.sheets.iter().flatten().any(|s| s.loading > 0))
     }
 
     /// The side of a map square in points: a tile of the tileset, or the glyph square.
@@ -459,15 +514,15 @@ impl Display {
         ui.horizontal(|ui| {
             for (tiles, label) in [(true, "Tiles"), (false, "ASCII")] {
                 if ui
-                    .selectable_label(self.settings.tiles == tiles, label)
+                    .selectable_label(self.wants_tiles() == tiles, label)
                     .clicked()
                 {
-                    self.settings.tiles = tiles;
+                    self.settings.tiles = Some(tiles);
                 }
             }
             let shown = self.chosen().map_or("none".to_string(), |t| t.view.clone());
             let mut pick = None;
-            ui.add_enabled_ui(self.settings.tiles, |ui| {
+            ui.add_enabled_ui(self.wants_tiles(), |ui| {
                 egui::ComboBox::from_label("Tileset")
                     .selected_text(shown)
                     .show_ui(ui, |ui| {
@@ -485,6 +540,7 @@ impl Display {
             if let Some(problem) = &self.problem {
                 ui.label(format!("Tileset unavailable: {problem}"));
             }
+            ui.checkbox(&mut self.settings.reduced_motion, "Reduced motion");
         });
         if self.settings != before {
             self.save();
@@ -492,12 +548,13 @@ impl Display {
         }
     }
 
-    /// Uploads sheets that finished decoding; keeps repainting until all are in.
+    /// Uploads a sheet that finished decoding; a finished thread wakes the UI, so nothing polls.
     pub fn update(&mut self, ctx: &egui::Context) {
+        profiling::scope!("Display::update");
         if let Some(atlas) = &mut self.atlas
             && atlas.upload(ctx)
         {
-            ctx.request_repaint_after(std::time::Duration::from_millis(30));
+            ctx.request_repaint();
         }
     }
 
@@ -505,6 +562,82 @@ impl Display {
     pub fn begin(&mut self) {
         self.drawn = 0;
         self.hidden = 0;
+        self.dimmed = 0;
+    }
+
+    /// Draws an overmap square's tile into `rect`; false when no tileset is in use or it has no sprite
+    /// for the tile or any of its fallbacks.
+    pub fn paint_overmap(
+        &mut self,
+        painter: &egui::Painter,
+        rect: Rect,
+        tile: &OvermapTile,
+    ) -> bool {
+        let Some(atlas) = &mut self.atlas else {
+            return false;
+        };
+        atlas.request(Fx::Plain);
+        let scale = (
+            rect.width() / atlas.tileset.tile.0 as f32,
+            rect.height() / atlas.tileset.tile.1 as f32,
+        );
+        let query = Query {
+            id: &tile.id,
+            fallbacks: &tile.fallbacks,
+            subtile: (!tile.subtile.is_empty()).then_some(tile.subtile.as_str()),
+            rotation: tile.rotation,
+            mirrored: false,
+            creature: false,
+            seed: 0,
+            season: None,
+        };
+        let chosen = atlas.tileset.choose(&query);
+        let mut drawn = false;
+        for placed in chosen.iter().flat_map(|c| [c.bg, c.fg]).flatten() {
+            drawn |= draw_sprite(
+                painter,
+                atlas,
+                rect,
+                scale,
+                (placed, None),
+                (Fx::Plain, 255),
+            );
+        }
+        self.drawn += usize::from(drawn);
+        drawn
+    }
+
+    /// Whether the tileset has a sprite for the layer.
+    pub fn has_sprite(&self, layer: &Layer) -> bool {
+        self.atlas
+            .as_ref()
+            .is_some_and(|a| a.tileset.choose(&query(layer, None)).is_some())
+    }
+
+    /// Draws one tile into `rect` when the tileset has a sprite for it; false draws nothing.
+    pub fn paint_sprite(&mut self, painter: &egui::Painter, rect: Rect, layer: &Layer) -> bool {
+        let Some(atlas) = &mut self.atlas else {
+            return false;
+        };
+        atlas.request(Fx::Plain);
+        let scale = (
+            rect.width() / atlas.tileset.tile.0 as f32,
+            rect.height() / atlas.tileset.tile.1 as f32,
+        );
+        let chosen = atlas.tileset.choose(&query(layer, None));
+        let sprites = chosen.iter().flat_map(|c| [c.bg, c.fg]).flatten();
+        let mut any = false;
+        for placed in sprites {
+            any |= draw_sprite(
+                painter,
+                atlas,
+                rect,
+                scale,
+                (placed, None),
+                (Fx::Plain, 255),
+            );
+        }
+        any
     }
 
     /// Draws a cell's layers into `rect`, bottom first, the way the game's tile view does: sprites where
@@ -517,6 +650,7 @@ impl Display {
         cell: &Cell,
         season: Option<&str>,
     ) -> bool {
+        profiling::scope!("Display::paint");
         let Some(atlas) = &mut self.atlas else {
             return false;
         };
@@ -558,6 +692,41 @@ impl Display {
         self.hidden += usize::from(backdrop);
         if cell.layers.is_empty() {
             return backdrop;
+        }
+        // The game cannot see a dark square at all and can only tell a bright-only one is bright: it draws
+        // the lowlight overlay in place of the square's terrain.
+        let overlay = match (cell.remembered, cell.light) {
+            (false, Some(0)) => Some("lighting_lowlight_dark"),
+            (false, Some(2)) => Some("lighting_lowlight_light"),
+            _ => None,
+        };
+        if let Some(id) = overlay {
+            let query = Query {
+                id,
+                fallbacks: &[],
+                subtile: None,
+                rotation: 0,
+                mirrored: false,
+                creature: false,
+                seed: cell.square,
+                season,
+            };
+            let sprites = atlas.tileset.choose(&query);
+            let mut any = false;
+            for placed in sprites.iter().flat_map(|c| [c.bg, c.fg]).flatten() {
+                any |= draw_sprite(
+                    painter,
+                    atlas,
+                    rect,
+                    (sx, sy),
+                    (placed, None),
+                    (Fx::Plain, 255),
+                );
+            }
+            if any {
+                self.dimmed += 1;
+                return true;
+            }
         }
         let mut drawn = 0;
         for layer in &cell.layers {
@@ -619,6 +788,16 @@ fn glyph(painter: &egui::Painter, rect: Rect, layer: &Layer, tint: Color32) {
         egui::FontId::monospace(rect.height() - 2.0),
         Color32::from_rgb(c.0, c.1, c.2).gamma_multiply(f32::from(tint.r()) / 255.0),
     );
+}
+
+/// Whether the game at `root` would be shown with sprites: sprites are chosen in the saved settings
+/// at `path` (on by default) and the game has a tileset.
+pub fn tiles_wanted(root: Option<&Path>, path: Option<&Path>) -> bool {
+    let settings = path
+        .and_then(|p| std::fs::read(p).ok())
+        .and_then(|b| serde_json::from_slice::<Settings>(&b).ok())
+        .unwrap_or_default();
+    settings.tiles.unwrap_or(true) && root.is_some_and(|r| !tileset::available(r).is_empty())
 }
 
 /// One sprite at its place in the cell, turned as the tileset asks; false when its sheet is not loaded.

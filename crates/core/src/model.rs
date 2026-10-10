@@ -58,6 +58,47 @@ pub struct Cell {
     pub square: u32,
 }
 
+/// One short animation the native game would play on the map, in view coordinates.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Effect {
+    pub shape: Shape,
+    /// How long the native animation holds it.
+    pub duration_ms: u64,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Shape {
+    /// A shot flying along `path`; a tiles client looks `sprite` up first.
+    Projectile {
+        path: Vec<Pos>,
+        glyph: char,
+        sprite: Option<String>,
+        color: Rgb,
+    },
+    /// An explosion starting at `at` and reaching `radius` squares.
+    Burst {
+        at: Pos,
+        radius: u32,
+        color: Rgb,
+        /// The tile id the native tiles draw it with.
+        tile: String,
+    },
+    /// The squares one step of an explosion blasts, or its shrapnel lands on.
+    Blast {
+        cells: Vec<Pos>,
+        shrapnel: bool,
+        tile: String,
+    },
+    /// Floating text at `at`, in colored segments, moving by `scroll` each animation step as the
+    /// native text does; `hp` marks a creature's hit-point readout, which stays beside it.
+    Text {
+        at: Pos,
+        segments: Vec<(String, Rgb)>,
+        scroll: Pos,
+        hp: bool,
+    },
+}
+
 /// One line of the game's own message log. A repeat of the newest line keeps its `id` and raises
 /// `count`; the client shows it as "text x2" in place of the earlier line.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -125,7 +166,11 @@ pub struct Menu {
     pub context: String,
     pub title: String,
     pub message: String,
+    /// Lines drawn above the menu in a fixed-width font, with colour tags.
+    pub banner: Vec<String>,
     pub choices: Vec<MenuChoice>,
+    /// How many choices the engine has in all; more than `choices.len()` until the rest is fetched.
+    pub total: usize,
     pub can_cancel: bool,
     pub can_set_count: bool,
     pub field: Option<MenuField>,
@@ -199,6 +244,74 @@ pub struct Loading {
     pub image: Option<String>,
 }
 
+/// One overmap square as the native screen draws it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OvermapCell {
+    pub glyph: String,
+    pub color: Rgb,
+    pub bg: Option<Rgb>,
+}
+
+/// What the tiles view draws on an overmap square.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OvermapTile {
+    pub id: String,
+    pub rotation: u8,
+    /// The multitile key, empty for a plain tile.
+    pub subtile: String,
+    /// Tile ids to try when the tileset has no sprite for `id`, nearest first.
+    pub fallbacks: Vec<String>,
+}
+
+/// The overmap screen (`m`): the native window's cells and sidebar, with the cursor.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Overmap {
+    pub cols: i32,
+    pub rows: i32,
+    /// Row-major, `cols * rows` cells.
+    pub cells: Vec<OvermapCell>,
+    /// Absolute overmap square of cell (0, 0), the cursor and the player, as `(x, y, z)`.
+    pub origin: (i32, i32, i32),
+    pub cursor: (i32, i32, i32),
+    pub player: (i32, i32, i32),
+    pub legend: Vec<String>,
+    pub notes: Vec<((i32, i32, i32), String)>,
+    /// The planned travel route, nearest square first.
+    pub path: Vec<(i32, i32, i32)>,
+    /// Row-major like `cells`; empty unless the client said it draws tiles.
+    pub tiles: Vec<OvermapTile>,
+}
+
+impl Overmap {
+    pub fn cell(&self, col: i32, row: i32) -> Option<&OvermapCell> {
+        let inside = (0..self.cols).contains(&col) && (0..self.rows).contains(&row);
+        inside.then(|| &self.cells[(row * self.cols + col) as usize])
+    }
+
+    /// The absolute overmap square drawn in view cell `(col, row)`.
+    pub fn square(&self, col: i32, row: i32) -> (i32, i32, i32) {
+        (self.origin.0 + col, self.origin.1 + row, self.origin.2)
+    }
+
+    /// The tile of view cell `(col, row)`, when the engine sent tile ids.
+    pub fn tile(&self, col: i32, row: i32) -> Option<&OvermapTile> {
+        let inside = (0..self.cols).contains(&col) && (0..self.rows).contains(&row);
+        self.tiles.get(
+            usize::try_from(row * self.cols + col)
+                .ok()
+                .filter(|_| inside)?,
+        )
+    }
+
+    /// The note on this square, if any.
+    pub fn note(&self, at: (i32, i32, i32)) -> Option<&str> {
+        self.notes
+            .iter()
+            .find(|(p, _)| *p == at)
+            .map(|(_, t)| t.as_str())
+    }
+}
+
 /// Why the engine cannot be played right now.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FailureKind {
@@ -253,6 +366,10 @@ pub trait GameModel {
     fn interrupt(&mut self) -> bool {
         false
     }
+    /// The game key would run an action if the model were not busy; the UI queues such keys meanwhile.
+    fn key_bound(&self, _key: &str) -> bool {
+        false
+    }
     /// A game key token (`g`, `SPACE`, `UP`); true if it ran an action.
     fn press(&mut self, _key: &str) -> bool {
         false
@@ -266,6 +383,20 @@ pub trait GameModel {
     fn route(&self) -> Vec<Pos> {
         vec![]
     }
+    /// The engine's `USE_TILES` and `TILES` options, when it publishes them: the map mode a new profile starts in.
+    fn display_default(&self) -> Option<(bool, String)> {
+        None
+    }
+    /// Says whether the client draws tiles now, so the engine sends tile ids where it has them.
+    fn set_tiles(&mut self, _tiles: bool) {}
+    /// The overmap screen, while it is open.
+    fn overmap(&self) -> Option<Overmap> {
+        None
+    }
+    /// Moves the overmap cursor to an absolute overmap square.
+    fn overmap_cursor_to(&mut self, _at: (i32, i32, i32)) {}
+    /// Leaves the overmap screen.
+    fn close_overmap(&mut self) {}
     /// Set while the engine has exited or stopped answering; the UI shows it instead of the map.
     fn failure(&self) -> Option<Failure> {
         None
@@ -290,6 +421,34 @@ pub trait GameModel {
         markup::runs(text, &ColorMap::default())
     }
     fn choose(&mut self, _choice_id: &str) {}
+    /// Asks for the native description of the hovered view square; it arrives with later polls.
+    fn hover(&mut self, _at: Pos) {}
+    /// The native description lines of view square `at`, once the engine has answered for it.
+    fn hover_text(&self, _at: Pos) -> Option<Vec<String>> {
+        None
+    }
+    /// The model answers a right click itself, so the client offers no menu of its own.
+    fn native_context(&self) -> bool {
+        false
+    }
+    /// The right click on a view square, as the engine's own SEC_SELECT; false when the model has none.
+    fn context_click(&mut self, _at: Pos) -> bool {
+        false
+    }
+    /// The engine's cursor (look mode, aiming) moves to view square `at`, or confirms it when already there.
+    fn aim(&mut self, _at: Pos) -> bool {
+        false
+    }
+    /// Whether the open menu scrolls by the mouse wheel in the engine, as a native list does.
+    fn can_scroll_menu(&self) -> bool {
+        false
+    }
+    /// One wheel step in the open menu; `up` moves the engine's cursor three rows up.
+    fn scroll_menu(&mut self, _up: bool) -> bool {
+        false
+    }
+    /// Fetches the next page of a menu that has more choices than it lists.
+    fn more_choices(&mut self) {}
     fn cancel_menu(&mut self) {}
     /// Season of the game calendar (`spring`, `summer`, `autumn`, `winter`), which picks seasonal sprites.
     fn season(&self) -> Option<String> {
@@ -319,6 +478,10 @@ pub trait GameModel {
         &[]
     }
     fn say(&mut self, text: String);
+    /// The map animations produced since the last call; models without a game have none.
+    fn take_effects(&mut self) -> Vec<Effect> {
+        vec![]
+    }
 }
 
 pub struct FakeModel {
@@ -328,6 +491,14 @@ pub struct FakeModel {
     ground: Vec<String>,
     inventory: Vec<String>,
     messages: Vec<String>,
+    effects: Vec<Effect>,
+}
+
+impl FakeModel {
+    /// An animation the next `take_effects` hands out.
+    pub fn queue_effect(&mut self, effect: Effect) {
+        self.effects.push(effect);
+    }
 }
 
 impl Default for FakeModel {
@@ -338,6 +509,7 @@ impl Default for FakeModel {
             ground: vec!["Rusty knife".into(), "Tin can".into()],
             inventory: vec!["Flashlight".into()],
             messages: vec!["Welcome to the prototype.".into()],
+            effects: vec![],
         }
     }
 }
@@ -360,6 +532,10 @@ impl GameModel for FakeModel {
             action("LEFTDOWN", "Move down left", &["END", "b"]),
             action("RIGHTDOWN", "Move down right", &["NPAGE", "n"]),
         ]
+    }
+
+    fn take_effects(&mut self) -> Vec<Effect> {
+        std::mem::take(&mut self.effects)
     }
 
     fn size(&self) -> Pos {
