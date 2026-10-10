@@ -784,3 +784,18 @@ fn a_click_outside_the_engines_view_is_ignored_without_a_message() {
     assert!(m.travel(Pos { x: 35, y: 12 }));
     assert_eq!(submits(&h).len(), 1);
 }
+
+#[test]
+fn a_look_with_a_display_name_is_described_by_it_instead_of_its_id() {
+    let (t, h) = session();
+    let mut m = connected(t);
+    let at = json!({"dim":"","x":5,"y":4,"z":0});
+    let floor =
+        json!({"kind":"terrain","id":"t_floor","name":"floor","glyph":".","color":"c_cyan"});
+    h.push(cell_event(
+        41,
+        json!({"at": at, "known": "visible", "terrain": floor}),
+    ));
+    m.poll();
+    assert_eq!(m.cell(Pos { x: 22, y: 12 }).desc, "floor");
+}
