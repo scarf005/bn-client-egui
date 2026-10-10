@@ -1,5 +1,10 @@
 use bn_client_egui::tint::{Blend, Paint, tint_pixel};
 
+type Pixel = [u8; 3];
+/// A sprite pixel, its paint, its mask pixel and the result the game prints.
+type Masked = (Pixel, Pixel, Pixel, Pixel);
+type Blended = (Blend, Pixel, Pixel, Pixel, Pixel);
+
 #[test]
 fn a_tinted_pixel_equals_the_games_blend() {
     // Values printed by the game's own hsv2rgb, rgb2hsv and tint blend (cata_tiles.cpp, hsv_color.cpp).
@@ -45,7 +50,7 @@ fn a_tinted_pixel_equals_the_games_blend() {
 #[test]
 fn a_masked_pixel_equals_the_games_mask_blend() {
     // (sprite pixel, paint, mask pixel, result) printed by the game's blend with a mask (cata_tiles.cpp).
-    let cases: [([u8; 3], [u8; 3], [u8; 3], [u8; 3]); 30] = [
+    let cases: [Masked; 30] = [
         (
             [200, 40, 40],
             [247, 251, 245],
@@ -177,7 +182,7 @@ fn a_mask_without_red_leaves_the_sprite_alone_and_the_default_mask_is_the_unmask
 #[test]
 fn every_blend_equals_the_games_blend() {
     // (blend, sprite pixel, paint, mask pixel, result) printed by the game's blend (cata_tiles.cpp).
-    let cases: [(Blend, [u8; 3], [u8; 3], [u8; 3], [u8; 3]); 60] = [
+    let cases: [Blended; 60] = [
         (
             Blend::Tint,
             [200, 40, 40],

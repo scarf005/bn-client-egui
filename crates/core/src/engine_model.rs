@@ -1051,8 +1051,9 @@ impl EngineModel {
             .into_iter()
             .flat_map(|l| {
                 let seeded = !matches!(l.kind.as_str(), "item" | "trap");
-                let stacked = l.stack.is_some_and(|n| n > 1);
-                // The native view highlights a pile right over its displayed item.
+                // A loaded cargo part is highlighted over the part, a pile over its displayed item.
+                let loaded = c.cargo && l.kind == "vehicle_part";
+                let stacked = loaded || l.stack.is_some_and(|n| n > 1);
                 let mark = stacked.then(|| self.marker("highlight_item"));
                 [Some(self.layer(l, if seeded { seed } else { 0 })), mark]
             })

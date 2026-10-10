@@ -115,6 +115,9 @@ pub struct Cell {
     /// A corpse here can rise.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub reviving: bool,
+    /// A cargo part of a vehicle here holds items.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub cargo: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub traps: Vec<Look>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
