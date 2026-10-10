@@ -256,5 +256,5 @@ fn the_sidebar_is_wide_enough_for_the_longest_status_line_on_one_line() {
     h.run_steps(5);
     let ground = h.get_by_label("Ground").rect();
     // The text starts inside the panel margin.
-    assert!(1280.0 - ground.min.x >= 340.0, "{ground:?}");
+    assert!(1280.0 - ground.min.x >= 410.0, "{ground:?}");
 }

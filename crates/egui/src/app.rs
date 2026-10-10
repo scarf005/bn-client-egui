@@ -18,8 +18,8 @@ const SETTLE: std::time::Duration = std::time::Duration::from_millis(150);
 
 /// The sidebar's initial share of the window width, and its limits in points; independent of its content.
 const SIDEBAR_SHARE: f32 = 0.28;
-/// 360 pt holds the longest status line (stamina) on one line; a small window gives up at most 40%.
-const SIDEBAR_WIDTH: (f32, f32) = (360.0, 520.0);
+/// 430 pt holds the longest status line (R LEG ... Stm 10000/10000) on one line; a small window gives up at most 40%.
+const SIDEBAR_WIDTH: (f32, f32) = (430.0, 600.0);
 /// The most of the window width the sidebar's minimum may take.
 const SIDEBAR_MIN_SHARE: f32 = 0.4;
 
