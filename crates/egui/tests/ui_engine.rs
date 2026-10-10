@@ -589,3 +589,43 @@ fn a_key_prompt_fills_its_field_with_the_next_key_and_a_function_key_by_its_name
         [json!({"kind":"fill","field_id":"field:key","value":"z","submit":true})]
     );
 }
+
+mod failures {
+    use super::*;
+    use bn_client_core::transport::ScriptedTransport;
+
+    fn dying<'a>() -> (H<'a>, ScriptHandle, ScriptHandle) {
+        let (t, first) = session();
+        let (next, second) = session();
+        let mut spare = Some(next);
+        let model = EngineModel::new(Box::new(t)).with_respawn(Box::new(move || {
+            Ok(Box::new(spare.take().expect("one restart"))
+                as Box<dyn bn_client_egui::transport::Transport>)
+        }));
+        let _: &ScriptedTransport;
+        let harness = Harness::builder()
+            .with_size(egui::vec2(1100.0, 800.0))
+            .build_ui_state(
+                |ui, app: &mut App<EngineModel>| app.show(ui),
+                App::new(model),
+            );
+        (harness, first, second)
+    }
+
+    #[test]
+    fn a_dead_engine_shows_its_stderr_not_a_frozen_map_and_restart_relaunches() {
+        let (mut h, first, second) = dying();
+        h.run_steps(3);
+        h.get_by_label("Map");
+        first.close(&["loading data", "Segmentation fault"]);
+        h.run_steps(3);
+        h.get_by_label("The engine stopped.");
+        h.get_by_label("Segmentation fault");
+        assert!(h.query_by_label("Map").is_none(), "no frozen map behind it");
+        h.get_by_label("Restart").click();
+        h.run_steps(4);
+        assert_eq!(second.sent_methods()[..2], ["bn.hello", "bn.subscribe"]);
+        h.get_by_label("Map");
+        assert!(h.query_by_label("Restart").is_none());
+    }
+}

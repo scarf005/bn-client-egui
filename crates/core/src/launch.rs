@@ -5,7 +5,7 @@
 
 use crate::colors::ColorMap;
 use crate::engine_model::EngineModel;
-use crate::transport::{Profile, StdioTransport, game_root};
+use crate::transport::{Profile, StdioTransport, Transport, game_root};
 use clap::Args;
 use serde_json::{Value, json};
 use std::ffi::{OsStr, OsString};
@@ -179,7 +179,13 @@ pub fn open_engine(engine: &Path, profile: &Profile) -> Result<Opened, String> {
     let colors = root
         .as_deref()
         .map_or_else(ColorMap::default, ColorMap::load);
-    let model = EngineModel::new(Box::new(transport)).with_colors(colors);
+    let (engine, profile) = (engine.to_path_buf(), profile.clone());
+    let respawn = Box::new(move || {
+        StdioTransport::spawn_with(&engine, &profile).map(|t| Box::new(t) as Box<dyn Transport>)
+    });
+    let model = EngineModel::new(Box::new(transport))
+        .with_colors(colors)
+        .with_respawn(respawn);
     Ok(Opened { model, root })
 }
 

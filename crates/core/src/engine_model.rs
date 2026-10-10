@@ -5,8 +5,8 @@ use crate::colors::ColorMap;
 use crate::keys;
 use crate::markup::{self, Run};
 use crate::model::{
-    ActionEntry, Cell, CommandStatus, GameModel, Layer, Loading, LogLine, Menu, MenuChoice,
-    MenuField, Pos, Rgb,
+    ActionEntry, Cell, CommandStatus, Failure, FailureKind, GameModel, Layer, Loading, LogLine,
+    Menu, MenuChoice, MenuField, Pos, Rgb,
 };
 use crate::protocol::{
     self, Cell as WorldCell, Expect, Incoming, Known, LoadingNotice, Look, Operation, Snapshot,
@@ -36,8 +36,20 @@ enum Pending {
     Interrupt,
 }
 
+/// Starts the engine again on the same profile.
+pub type Respawn = Box<dyn FnMut() -> std::io::Result<Box<dyn Transport>>>;
+
+/// Without a message for this long while a request is outstanding, the engine counts as stalled.
+const STALL: Duration = Duration::from_secs(120);
+
 pub struct EngineModel {
     transport: Box<dyn Transport>,
+    respawn: Option<Respawn>,
+    waker: Option<crate::transport::Waker>,
+    failure: Option<Failure>,
+    /// When the engine last said anything, on the model's clock.
+    heard: Duration,
+    stall: Duration,
     replica: Replica,
     next_id: u64,
     pending: HashMap<u64, Pending>,
@@ -138,6 +150,11 @@ impl EngineModel {
     pub fn new(transport: Box<dyn Transport>) -> Self {
         let mut m = Self {
             transport,
+            respawn: None,
+            waker: None,
+            failure: None,
+            heard: Duration::ZERO,
+            stall: STALL,
             replica: Replica::default(),
             next_id: 0,
             pending: HashMap::new(),
@@ -183,6 +200,18 @@ impl EngineModel {
     /// Times the resize debounce with `clock`, so tests can advance it instead of sleeping.
     pub fn with_clock(mut self, clock: Clock) -> Self {
         self.clock = clock;
+        self
+    }
+
+    /// How to start the engine again, for `restart`.
+    pub fn with_respawn(mut self, respawn: Respawn) -> Self {
+        self.respawn = Some(respawn);
+        self
+    }
+
+    /// Silence that counts as a stall while a request is outstanding.
+    pub fn with_stall(mut self, stall: Duration) -> Self {
+        self.stall = stall;
         self
     }
 
@@ -310,6 +339,11 @@ impl EngineModel {
                 self.connected = false;
                 self.busy = false;
                 self.messages.push("Engine connection closed.".into());
+                self.failure = Some(Failure {
+                    kind: FailureKind::Exited,
+                    message: "The engine stopped.".into(),
+                    stderr: self.transport.stderr_tail(),
+                });
             }
         }
     }
@@ -710,9 +744,35 @@ impl EngineModel {
 
 impl GameModel for EngineModel {
     fn poll(&mut self) {
+        let now = self.clock.now();
         while let Some(msg) = self.transport.recv() {
             self.received += 1;
+            self.heard = now;
+            // Anything the engine says shows it is alive again.
+            if self
+                .failure
+                .as_ref()
+                .is_some_and(|f| f.kind == FailureKind::Stalled)
+            {
+                self.failure = None;
+            }
             self.handle(msg);
+        }
+        let waiting = self.busy || !self.pending.is_empty();
+        if self.failure.is_none()
+            && self.connected
+            && self.replica.at().is_some()
+            && waiting
+            && now.saturating_sub(self.heard) >= self.stall
+        {
+            self.failure = Some(Failure {
+                kind: FailureKind::Stalled,
+                message: format!(
+                    "The engine has not answered for {} seconds.",
+                    self.stall.as_secs()
+                ),
+                stderr: self.transport.stderr_tail(),
+            });
         }
         self.messages.extend(self.replica.take_log());
         for line in self.replica.take_lines() {
@@ -742,7 +802,40 @@ impl GameModel for EngineModel {
     }
 
     fn set_waker(&mut self, waker: crate::transport::Waker) {
-        self.transport.set_waker(waker);
+        self.transport.set_waker(waker.clone());
+        self.waker = Some(waker);
+    }
+
+    fn failure(&self) -> Option<Failure> {
+        self.failure.clone()
+    }
+
+    fn restart(&mut self) -> bool {
+        let Some(mut respawn) = self.respawn.take() else {
+            return false;
+        };
+        match respawn() {
+            Ok(transport) => {
+                let mut fresh = EngineModel::new(transport)
+                    .with_clock(self.clock.clone())
+                    .with_colors(self.colors.clone())
+                    .with_stall(self.stall);
+                fresh.heard = self.clock.now();
+                fresh.respawn = Some(respawn);
+                if let Some(waker) = self.waker.take() {
+                    fresh.set_waker(waker);
+                }
+                *self = fresh;
+                true
+            }
+            Err(e) => {
+                self.respawn = Some(respawn);
+                if let Some(f) = &mut self.failure {
+                    f.message = format!("The engine could not be restarted: {e}");
+                }
+                false
+            }
+        }
     }
 
     fn origin(&self) -> Pos {

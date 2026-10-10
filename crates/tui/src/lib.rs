@@ -3,7 +3,7 @@
 mod crafting;
 mod settings;
 
-use bn_client_core::{ActionEntry, GameModel, Loading, Menu, Pos, Rgb, keys};
+use bn_client_core::{ActionEntry, Failure, GameModel, Loading, Menu, Pos, Rgb, keys};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
@@ -170,6 +170,12 @@ impl<M: GameModel> TuiApp<M> {
     pub fn handle_key(&mut self, key: KeyEvent) {
         if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
             self.quit = true;
+            return;
+        }
+        if self.model.failure().is_some() {
+            if matches!(key.code, KeyCode::Char('r' | 'R')) {
+                self.model.restart();
+            }
             return;
         }
         if self.model.loading().is_some() {
@@ -367,6 +373,9 @@ impl<M: GameModel> TuiApp<M> {
     }
 
     pub fn draw(&mut self, f: &mut Frame) {
+        if let Some(failure) = self.model.failure() {
+            return Self::draw_failure(f, &failure);
+        }
         if let Some(loading) = self.model.loading() {
             return Self::draw_loading(f, &loading);
         }
@@ -436,6 +445,18 @@ impl<M: GameModel> TuiApp<M> {
             "{command} | Look ({}, {}): {desc} [{hint}, Esc]",
             view.x, view.y
         )
+    }
+
+    /// The engine is gone or silent: its last stderr lines and how to restart.
+    fn draw_failure(f: &mut Frame, failure: &Failure) {
+        let mut lines = vec![Line::from(failure.message.clone()), Line::from("")];
+        if !failure.stderr.is_empty() {
+            lines.push(Line::from("Last engine output:"));
+            lines.extend(failure.stderr.iter().map(|l| Line::from(l.clone())));
+            lines.push(Line::from(""));
+        }
+        lines.push(Line::from("R: restart the engine    Ctrl-C: quit"));
+        f.render_widget(Paragraph::new(lines), f.area());
     }
 
     /// Title, a progress bar over the steps, and the step list (the splash image is skipped).

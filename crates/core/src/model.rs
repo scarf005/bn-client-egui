@@ -174,6 +174,23 @@ pub struct Loading {
     pub image: Option<String>,
 }
 
+/// Why the engine cannot be played right now.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FailureKind {
+    /// The engine process ended or closed its output.
+    Exited,
+    /// A request has been outstanding longer than the watchdog allows.
+    Stalled,
+}
+
+/// The engine's failure, with its last stderr lines, for an error screen with a Restart button.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Failure {
+    pub kind: FailureKind,
+    pub message: String,
+    pub stderr: Vec<String>,
+}
+
 /// What the UI needs from the game: `FakeModel` in tests, `EngineModel` against a real engine.
 pub trait GameModel {
     /// Called once per frame: drain engine messages. No-op for synchronous models.
@@ -223,6 +240,14 @@ pub trait GameModel {
     /// The planned route in view coordinates, nearest first; empty when none.
     fn route(&self) -> Vec<Pos> {
         vec![]
+    }
+    /// Set while the engine has exited or stopped answering; the UI shows it instead of the map.
+    fn failure(&self) -> Option<Failure> {
+        None
+    }
+    /// Starts the engine again on the same profile; false when the model cannot.
+    fn restart(&mut self) -> bool {
+        false
     }
     /// The engine's loading screen, while it is up.
     fn loading(&self) -> Option<Loading> {

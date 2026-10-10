@@ -1320,3 +1320,89 @@ fn control_function_and_numpad_keys_run_the_actions_the_engine_binds_to_them() {
         ]
     );
 }
+
+mod failures {
+    use super::*;
+    use bn_client_core::{Clock, FailureKind};
+    use std::time::Duration;
+
+    fn with_clock(t: ScriptedTransport) -> (EngineModel, Clock) {
+        let clock = Clock::manual();
+        let mut m = EngineModel::new(Box::new(t)).with_clock(clock.clone());
+        m.poll();
+        (m, clock)
+    }
+
+    #[test]
+    fn an_exit_is_a_failure_with_the_last_stderr_lines() {
+        let (t, h) = session();
+        let mut m = connected(t);
+        assert!(m.failure().is_none());
+        h.close(&["loading data", "terminate called after throwing"]);
+        m.poll();
+        let failure = m.failure().expect("the exit is reported");
+        assert_eq!(failure.kind, FailureKind::Exited);
+        assert_eq!(
+            failure.stderr,
+            ["loading data", "terminate called after throwing"]
+        );
+        assert!(!m.busy());
+    }
+
+    #[test]
+    fn silence_with_a_command_in_flight_is_a_stall_that_a_message_clears() {
+        let (t, h) = session();
+        let (mut m, clock) = with_clock(t.on("bn.command.submit", walk_reply()));
+        assert!(m.step_toward(Pos { x: 30, y: 12 }));
+        m.poll();
+        clock.advance(Duration::from_secs(119));
+        m.poll();
+        assert!(m.failure().is_none(), "within the watchdog");
+        clock.advance(Duration::from_secs(2));
+        m.poll();
+        assert_eq!(m.failure().unwrap().kind, FailureKind::Stalled);
+        h.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{
+            "epoch":"e7f3","command_id":"c:5","stage":"executing"}}));
+        m.poll();
+        assert!(m.failure().is_none(), "the engine answered after all");
+    }
+
+    #[test]
+    fn an_idle_engine_may_stay_quiet() {
+        let (t, _h) = session();
+        let (mut m, clock) = with_clock(t);
+        clock.advance(Duration::from_secs(3600));
+        m.poll();
+        assert!(m.failure().is_none());
+    }
+
+    #[test]
+    fn restart_starts_a_fresh_session_through_the_respawn_hook() {
+        let (t, h) = session();
+        let (t2, h2) = session();
+        let mut spare = Some(t2);
+        let mut m = EngineModel::new(Box::new(t)).with_respawn(Box::new(move || {
+            Ok(Box::new(spare.take().expect("one restart"))
+                as Box<dyn bn_client_core::transport::Transport>)
+        }));
+        m.poll();
+        h.close(&["boom"]);
+        m.poll();
+        assert!(m.failure().is_some());
+        assert!(m.restart());
+        assert!(m.failure().is_none());
+        m.poll();
+        assert_eq!(h2.sent_methods(), ["bn.hello", "bn.subscribe"]);
+        assert_eq!(m.size(), Pos { x: 40, y: 25 }, "the new session is live");
+    }
+
+    #[test]
+    fn restart_without_a_respawn_hook_does_nothing() {
+        let (t, h) = session();
+        let mut m = connected(t);
+        h.close(&[]);
+        m.poll();
+        assert!(!m.restart());
+        assert!(m.failure().is_some());
+    }
+}

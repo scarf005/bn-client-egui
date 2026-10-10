@@ -790,3 +790,29 @@ fn control_function_navigation_and_numpad_keys_reach_the_engines_actions() {
     assert_eq!(sent(&mut app, key(KeyCode::PageUp)), Some(json!("up")));
     assert_eq!(sent(&mut app, key(KeyCode::Delete)), Some(json!("del")));
 }
+
+#[test]
+fn a_dead_engine_shows_stderr_and_r_restarts_it() {
+    let (t, first) = session();
+    let (next, second) = session();
+    let mut spare = Some(next);
+    let model = bn_client_core::EngineModel::new(Box::new(t)).with_respawn(Box::new(move || {
+        Ok(Box::new(spare.take().expect("one restart"))
+            as Box<dyn bn_client_core::transport::Transport>)
+    }));
+    let mut app = TuiApp::new(model);
+    app.model.poll();
+    first.close(&["Segmentation fault"]);
+    app.model.poll();
+    let screen = text(&render(&mut app));
+    assert!(screen.contains("The engine stopped."), "{screen}");
+    assert!(screen.contains("Segmentation fault"));
+    assert!(screen.contains("R: restart"));
+    app.handle_key(ch('x'));
+    assert!(app.model.failure().is_some(), "other keys do nothing");
+    app.handle_key(ch('r'));
+    app.model.poll();
+    assert!(app.model.failure().is_none());
+    assert_eq!(second.sent_methods()[..2], ["bn.hello", "bn.subscribe"]);
+    assert!(!text(&render(&mut app)).contains("The engine stopped."));
+}
