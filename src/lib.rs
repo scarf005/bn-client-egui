@@ -2,6 +2,7 @@ pub mod app;
 pub mod color_table;
 pub mod colors;
 pub mod engine_model;
+pub mod fonts;
 pub mod model;
 pub mod protocol;
 pub mod replica;

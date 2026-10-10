@@ -1,4 +1,5 @@
 use bn_client_egui::colors::ColorMap;
+use bn_client_egui::fonts;
 use bn_client_egui::transport::{StdioTransport, game_root};
 use bn_client_egui::{App, EngineModel, FakeModel, GameModel};
 use std::path::PathBuf;
@@ -6,11 +7,16 @@ use std::path::PathBuf;
 const USAGE: &str =
     "usage: bn-client-egui [--engine PATH]   (or set BN_ENGINE); no engine: fake model";
 
-fn run(model: impl GameModel + 'static) -> eframe::Result {
+fn run(model: impl GameModel + 'static, root: Option<PathBuf>) -> eframe::Result {
     eframe::run_native(
         "Cataclysm: Bright Nights client",
         eframe::NativeOptions::default(),
-        Box::new(|_| Ok(Box::new(App::new(model)))),
+        Box::new(move |cc| {
+            if let Some(root) = &root {
+                fonts::install(&cc.egui_ctx, root);
+            }
+            Ok(Box::new(App::new(model)))
+        }),
     )
 }
 
@@ -27,13 +33,15 @@ fn main() -> eframe::Result {
         }
     }
     let Some(engine) = engine else {
-        return run(FakeModel::default());
+        return run(FakeModel::default(), None);
     };
     match StdioTransport::spawn(&engine) {
         Ok(t) => {
             let root = game_root(&engine, std::env::var_os("BN_ROOT").map(PathBuf::from));
-            let colors = root.map_or_else(ColorMap::default, |r| ColorMap::load(&r));
-            run(EngineModel::new(Box::new(t)).with_colors(colors))
+            let colors = root
+                .as_deref()
+                .map_or_else(ColorMap::default, ColorMap::load);
+            run(EngineModel::new(Box::new(t)).with_colors(colors), root)
         }
         Err(e) => {
             eprintln!("cannot start engine {}: {e}", engine.display());
