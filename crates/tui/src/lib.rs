@@ -137,6 +137,10 @@ impl<M: GameModel> TuiApp<M> {
                 .position(|c| menu.focus.as_deref() == Some(c.id.as_str()))
                 .or_else(|| entries.iter().position(|c| c.selected));
             self.selected = at.unwrap_or(self.selected);
+            // The rest of a long list comes in pages as the cursor nears the end of what is listed.
+            if menu.total > menu.choices.len() && self.selected + PAGE >= entries.len() {
+                self.model.more_choices();
+            }
         }
         menu
     }
@@ -198,7 +202,7 @@ impl<M: GameModel> TuiApp<M> {
         if let Some(menu) = self.menu() {
             return match menu.context.as_str() {
                 "CRAFTING" => self.crafting_key(&menu, key),
-                _ if self.settings_key(&menu, key) => {}
+                _ if !menu.screen && self.settings_key(&menu, key) => {}
                 _ => self.menu_key(&menu, key),
             };
         }

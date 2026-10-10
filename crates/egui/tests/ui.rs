@@ -76,7 +76,7 @@ fn pick_up_button_moves_item_to_inventory() {
 
 fn drag_item(h: &mut H, item: &str, to_column: &str) {
     let from = h.get_by_label(item).rect().center();
-    let to = h.get_by_label(to_column).rect().center() + egui::vec2(0.0, 60.0);
+    let to = h.get_by_label(to_column).rect().center();
     h.hover_at(from);
     h.run_steps(2);
     h.drag_at(from);

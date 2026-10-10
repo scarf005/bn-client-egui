@@ -816,3 +816,54 @@ fn a_dead_engine_shows_stderr_and_r_restarts_it() {
     assert_eq!(second.sent_methods()[..2], ["bn.hello", "bn.subscribe"]);
     assert!(!text(&render(&mut app)).contains("The engine stopped."));
 }
+
+#[test]
+fn a_menu_with_more_choices_than_listed_asks_for_the_next_page_near_the_end() {
+    let (t, h) = session();
+    let t = t.on(
+        "bn.interaction.choices",
+        vec![json!({"jsonrpc":"2.0","id":3,"result":{"boundary_id":"b:13","total":3,"choices":[
+            {"id":"c:3","label":"glass jar","enabled":true,"description":"","denial":"","selectable":true,
+             "selected":false,"columns":[]}]}})],
+    );
+    let mut app = TuiApp::new(connected(t));
+    for name in ["events_41_walk", "events_42_message"] {
+        h.push(fixture(name));
+    }
+    let mut menu = menu_event(fixture("events_43_menu"), "c:1");
+    menu["params"]["events"][0]["changes"]["interaction"]["interaction"]["choice_total"] = json!(3);
+    h.push(menu);
+    app.model.poll();
+    let _ = render(&mut app);
+    app.model.poll();
+    let asked = h
+        .sent()
+        .into_iter()
+        .filter(|m| m["method"] == "bn.interaction.choices")
+        .count();
+    assert_eq!(asked, 1);
+    assert!(text(&render(&mut app)).contains("glass jar"));
+}
+
+#[test]
+fn a_composed_screen_shows_its_text_and_its_actions_take_the_keys() {
+    let (mut app, h) = engine();
+    for name in ["events_41_walk", "events_42_message"] {
+        h.push(fixture(name));
+    }
+    let mut screen = fixture("events_43_menu");
+    let ev = &mut screen["params"]["events"][0]["changes"]["interaction"];
+    ev["actions"] = json!([{"id":"NEXT_TAB","name":"Next tab","keys":["TAB"]}]);
+    ev["interaction"]["kind"] = "custom".into();
+    ev["interaction"]["message"] = "Strength:    8\nDexterity:   8".into();
+    ev["interaction"]["choices"] = json!([]);
+    h.push(screen);
+    app.model.poll();
+    let s = text(&render(&mut app));
+    assert!(
+        s.contains("Strength:    8") && s.contains("Dexterity:   8"),
+        "{s}"
+    );
+    app.handle_key(key(KeyCode::Tab));
+    assert_eq!(sent_actions(&h), [json!("NEXT_TAB")]);
+}

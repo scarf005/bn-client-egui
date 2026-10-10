@@ -290,6 +290,7 @@
      "terrain": {
       "kind": "terrain",
       "id": "t_wall",
+      "name": "plastered wooden wall",
       "glyph": "#",
       "color": "light_gray"
      }

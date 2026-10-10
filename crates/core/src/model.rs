@@ -53,6 +53,44 @@ pub struct Cell {
     pub square: u32,
 }
 
+/// One short animation the native game would play on the map, in view coordinates.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Effect {
+    pub shape: Shape,
+    /// How long the native animation holds it.
+    pub duration_ms: u64,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Shape {
+    /// A shot flying along `path`; a tiles client looks `sprite` up first.
+    Projectile {
+        path: Vec<Pos>,
+        glyph: char,
+        sprite: Option<String>,
+        color: Rgb,
+    },
+    /// An explosion starting at `at` and reaching `radius` squares.
+    Burst {
+        at: Pos,
+        radius: u32,
+        color: Rgb,
+        /// The tile id the native tiles draw it with.
+        tile: String,
+    },
+    /// The squares one step of an explosion blasts, or its shrapnel lands on.
+    Blast {
+        cells: Vec<Pos>,
+        shrapnel: bool,
+        tile: String,
+    },
+    /// Floating text rising from `at`, in colored segments.
+    Text {
+        at: Pos,
+        segments: Vec<(String, Rgb)>,
+    },
+}
+
 /// One line of the game's own message log. A repeat of the newest line keeps its `id` and raises
 /// `count`; the client shows it as "text x2" in place of the earlier line.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -120,7 +158,11 @@ pub struct Menu {
     pub context: String,
     pub title: String,
     pub message: String,
+    /// Lines drawn above the menu in a fixed-width font, with colour tags.
+    pub banner: Vec<String>,
     pub choices: Vec<MenuChoice>,
+    /// How many choices the engine has in all; more than `choices.len()` until the rest is fetched.
+    pub total: usize,
     pub can_cancel: bool,
     pub can_set_count: bool,
     pub field: Option<MenuField>,
@@ -128,6 +170,9 @@ pub struct Menu {
     pub pane: Option<String>,
     /// The row the engine's own cursor is on, which its navigation keys move.
     pub focus: Option<String>,
+    /// The engine's composed screen of a view it has no structured interaction for: only text to
+    /// show, driven by the keys of the view's actions.
+    pub screen: bool,
 }
 
 impl Menu {
@@ -169,6 +214,16 @@ pub struct CommandStatus {
     pub stage: String,
     /// The command reached a terminal stage.
     pub finished: bool,
+    /// Every stage the command went through, oldest first, so ones that pass within a frame are kept.
+    pub history: Vec<String>,
+}
+
+impl CommandStatus {
+    pub fn set_stage(&mut self, stage: String, finished: bool) {
+        self.history.push(stage.clone());
+        self.stage = stage;
+        self.finished = finished;
+    }
 }
 
 /// Engine loading screen: a title, the steps seen so far and the one in progress.
@@ -235,6 +290,10 @@ pub trait GameModel {
     fn interrupt(&mut self) -> bool {
         false
     }
+    /// The game key would run an action if the model were not busy; the UI queues such keys meanwhile.
+    fn key_bound(&self, _key: &str) -> bool {
+        false
+    }
     /// A game key token (`g`, `SPACE`, `UP`); true if it ran an action.
     fn press(&mut self, _key: &str) -> bool {
         false
@@ -272,6 +331,34 @@ pub trait GameModel {
         markup::runs(text, &ColorMap::default())
     }
     fn choose(&mut self, _choice_id: &str) {}
+    /// Asks for the native description of the hovered view square; it arrives with later polls.
+    fn hover(&mut self, _at: Pos) {}
+    /// The native description lines of view square `at`, once the engine has answered for it.
+    fn hover_text(&self, _at: Pos) -> Option<Vec<String>> {
+        None
+    }
+    /// The model answers a right click itself, so the client offers no menu of its own.
+    fn native_context(&self) -> bool {
+        false
+    }
+    /// The right click on a view square, as the engine's own SEC_SELECT; false when the model has none.
+    fn context_click(&mut self, _at: Pos) -> bool {
+        false
+    }
+    /// The engine's cursor (look mode, aiming) moves to view square `at`, or confirms it when already there.
+    fn aim(&mut self, _at: Pos) -> bool {
+        false
+    }
+    /// Whether the open menu scrolls by the mouse wheel in the engine, as a native list does.
+    fn can_scroll_menu(&self) -> bool {
+        false
+    }
+    /// One wheel step in the open menu; `up` moves the engine's cursor three rows up.
+    fn scroll_menu(&mut self, _up: bool) -> bool {
+        false
+    }
+    /// Fetches the next page of a menu that has more choices than it lists.
+    fn more_choices(&mut self) {}
     fn cancel_menu(&mut self) {}
     /// Season of the game calendar (`spring`, `summer`, `autumn`, `winter`), which picks seasonal sprites.
     fn season(&self) -> Option<String> {
@@ -301,6 +388,10 @@ pub trait GameModel {
         &[]
     }
     fn say(&mut self, text: String);
+    /// The map animations produced since the last call; models without a game have none.
+    fn take_effects(&mut self) -> Vec<Effect> {
+        vec![]
+    }
 }
 
 pub struct FakeModel {
@@ -310,6 +401,14 @@ pub struct FakeModel {
     ground: Vec<String>,
     inventory: Vec<String>,
     messages: Vec<String>,
+    effects: Vec<Effect>,
+}
+
+impl FakeModel {
+    /// An animation the next `take_effects` hands out.
+    pub fn queue_effect(&mut self, effect: Effect) {
+        self.effects.push(effect);
+    }
 }
 
 impl Default for FakeModel {
@@ -320,6 +419,7 @@ impl Default for FakeModel {
             ground: vec!["Rusty knife".into(), "Tin can".into()],
             inventory: vec!["Flashlight".into()],
             messages: vec!["Welcome to the prototype.".into()],
+            effects: vec![],
         }
     }
 }
@@ -342,6 +442,10 @@ impl GameModel for FakeModel {
             action("LEFTDOWN", "Move down left", &["END", "b"]),
             action("RIGHTDOWN", "Move down right", &["NPAGE", "n"]),
         ]
+    }
+
+    fn take_effects(&mut self) -> Vec<Effect> {
+        std::mem::take(&mut self.effects)
     }
 
     fn size(&self) -> Pos {
