@@ -422,11 +422,16 @@ impl Tileset {
             (None, Some(root)) => scan_mods(root),
             (None, None) => vec![],
         };
+        // The engine names its files from the game folder, which is where `gfx` lies.
+        let game = dir.parent().and_then(Path::parent).unwrap_or(dir);
         for file in found.iter().filter(|m| m.compatibility.contains(&name)) {
-            let Some(config) = mod_config(file) else {
+            let Some(config) = mod_config(&game.join(&file.path), file.index) else {
                 continue;
             };
-            if set.add_sheets(config.sheets, Path::new(&file.base)).is_ok() {
+            if set
+                .add_sheets(config.sheets, &game.join(&file.base))
+                .is_ok()
+            {
                 set.add_tints(config.tints, config.tint_pairs);
             }
         }
@@ -730,10 +735,10 @@ fn mod_objects(file: &Path) -> Vec<serde_json::Value> {
         .collect()
 }
 
-/// The `mod_tileset` a listed game data file holds.
-fn mod_config(file: &ModTileset) -> Option<ModConfig> {
-    let objects = mod_objects(Path::new(&file.path));
-    let object = objects.get((file.index as usize).checked_sub(1)?)?;
+/// The `index`th `mod_tileset` of a game data file, counting from 1.
+fn mod_config(file: &Path, index: u32) -> Option<ModConfig> {
+    let objects = mod_objects(file);
+    let object = objects.get((index as usize).checked_sub(1)?)?;
     serde_json::from_value(object.clone()).ok()
 }
 

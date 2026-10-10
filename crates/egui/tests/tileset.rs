@@ -352,14 +352,11 @@ fn the_engines_list_of_mod_tilesets_replaces_the_search_of_the_data() {
         serde_json::json!([{"id": "vp_listed", "fg": 0}]),
     );
     let dir = root.join("gfx/test");
-    let json = root.join("data/json");
+    // The engine names its files from the game folder, through the folder of the mod that loads them.
+    std::fs::create_dir_all(root.join("data/mods/bn")).unwrap();
     let only = |name: &str| ModTileset {
-        path: json
-            .join("external_tileset")
-            .join(name)
-            .display()
-            .to_string(),
-        base: json.display().to_string(),
+        path: format!("data/mods/bn/../../json/external_tileset/{name}"),
+        base: "data/mods/bn/../../json".into(),
         index: 1,
         compatibility: vec!["test".into()],
     };
