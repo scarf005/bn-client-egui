@@ -3,6 +3,8 @@ pub mod app;
 pub mod display;
 pub mod editor;
 pub mod fonts;
+#[cfg(feature = "profile")]
+pub mod profile;
 pub mod setup;
 pub mod sidebar;
 pub mod text;

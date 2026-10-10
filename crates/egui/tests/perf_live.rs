@@ -276,7 +276,7 @@ fn frame_cost_idle_and_while_stepping() {
     let idle = run_for(&mut h, &clock, 8);
     report(&format!("{scenario} tiles={tiles} idle"), &idle, 8.0);
     #[cfg(feature = "profile")]
-    scopes("idle", &view);
+    bn_client_egui::profile::scopes("idle", &view);
 
     let mut steps = Frames::default();
     let mut latencies = vec![];
@@ -362,7 +362,7 @@ fn frame_cost_idle_and_while_stepping() {
         load()
     );
     #[cfg(feature = "profile")]
-    scopes("all", &view);
+    bn_client_egui::profile::scopes("all", &view);
 }
 
 fn run_for(h: &mut H, clock: &Clockwork, secs: u64) -> Frames {
@@ -374,56 +374,4 @@ fn run_for(h: &mut H, clock: &Clockwork, secs: u64) -> Frames {
         }
     }
     frames
-}
-
-/// Inclusive time per scope name, per recorded frame, largest first.
-#[cfg(feature = "profile")]
-fn scopes(phase: &str, view: &puffin::GlobalFrameView) {
-    use std::collections::HashMap;
-    fn walk(
-        names: &puffin::ScopeCollection,
-        stream: &puffin::Stream,
-        reader: puffin::Reader<'_>,
-        total: &mut HashMap<String, (u64, u64)>,
-    ) {
-        for scope in reader.flatten() {
-            let name = names
-                .fetch_by_id(&scope.id)
-                .map_or("?".to_string(), |d| d.name().to_string());
-            let e = total.entry(name).or_default();
-            e.0 += scope.record.duration_ns as u64;
-            e.1 += 1;
-            if let Ok(children) = puffin::Reader::with_offset(stream, scope.child_begin_position) {
-                walk(names, stream, children, total);
-            }
-        }
-    }
-    let mut total = HashMap::new();
-    let guard = view.lock();
-    let frames = guard.all_uniq().cloned().collect::<Vec<_>>();
-    for data in &frames {
-        let Ok(unpacked) = data.unpacked();
-        for info in unpacked.thread_streams.values() {
-            walk(
-                guard.scope_collection(),
-                &info.stream,
-                puffin::Reader::from_start(&info.stream),
-                &mut total,
-            );
-        }
-    }
-    let mut rows = total.into_iter().collect::<Vec<_>>();
-    rows.sort_by_key(|(_, (ns, _))| std::cmp::Reverse(*ns));
-    let n = frames.len().max(1) as f64;
-    println!(
-        "PERF scopes {phase}: {} frames; inclusive ms per frame, calls per frame",
-        frames.len()
-    );
-    for (name, (ns, calls)) in rows.into_iter().take(22) {
-        println!(
-            "PERF   {:9.3} ms {:9.1} calls  {name}",
-            ns as f64 / 1e6 / n,
-            calls as f64 / n
-        );
-    }
 }
