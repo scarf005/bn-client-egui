@@ -34,6 +34,8 @@ pub struct App<M: GameModel> {
     cursor: Pos,
     menu_cell: Pos,
     destination: Option<Pos>,
+    /// Absolute square of the last map click, marked until its command finishes.
+    marker: Option<Pos>,
     last_hover: Option<egui::Pos2>,
     wired: bool,
     images: bool,
@@ -51,12 +53,23 @@ impl<M: GameModel> App<M> {
             cursor,
             menu_cell: cursor,
             destination: None,
+            marker: None,
             last_hover: None,
             wired: false,
             images: false,
             root: None,
             keys_consumed: false,
         }
+    }
+
+    /// The clicked map square in view coordinates while its command is in flight.
+    pub fn marker(&self) -> Option<Pos> {
+        let origin = self.model.origin();
+        let m = self.marker.filter(|_| self.model.busy())?;
+        Some(Pos {
+            x: m.x - origin.x,
+            y: m.y - origin.y,
+        })
     }
 
     pub fn with_root(mut self, root: std::path::PathBuf) -> Self {
@@ -128,6 +141,7 @@ impl<M: GameModel> App<M> {
         }
         self.walk(ui.ctx());
         self.game_keys(ui.ctx());
+        egui::Panel::top("status").show(ui, |ui| self.status(ui));
         egui::Panel::left("actions")
             .resizable(false)
             .show(ui, |ui| self.actions(ui));
@@ -158,6 +172,32 @@ impl<M: GameModel> App<M> {
         }
     }
 
+    /// The pressed control's name and stage, announced politely; stays until the next command.
+    fn status(&self, ui: &mut egui::Ui) {
+        let text = self
+            .model
+            .command()
+            .map_or_else(|| "Ready".into(), |s| format!("{}: {}", s.label, s.stage));
+        let label = ui.label(text);
+        ui.ctx()
+            .accesskit_node_builder(label.id, |b| b.set_live(accesskit::Live::Polite));
+    }
+
+    /// A button for a choice or action: the pressed one shows pending and the rest wait for the engine.
+    fn control(&self, ui: &mut egui::Ui, text: String, id: &str, enabled: bool) -> egui::Response {
+        let pending = self
+            .model
+            .command()
+            .is_some_and(|s| !s.finished && s.target.as_deref() == Some(id));
+        let text = if pending {
+            format!("{text} (pending)")
+        } else {
+            text
+        };
+        let usable = enabled && !self.model.busy();
+        ui.add_enabled(usable, egui::Button::new(text).selected(pending))
+    }
+
     /// Everything the engine accepts right now, each with its game key, clickable.
     fn actions(&mut self, ui: &mut egui::Ui) {
         ui.heading("Actions");
@@ -169,12 +209,13 @@ impl<M: GameModel> App<M> {
                 } else {
                     format!("{} ({})", a.name, a.keys.join(", "))
                 };
-                if ui.button(label).clicked() {
+                if self.control(ui, label, &a.id, true).clicked() {
                     invoke = Some(a.id);
                 }
             }
         });
         if let Some(id) = invoke {
+            ui.ctx().request_repaint();
             self.model.invoke_action(&id);
         }
     }
@@ -191,7 +232,7 @@ impl<M: GameModel> App<M> {
                 ui.label(&menu.message);
             }
             for choice in &menu.choices {
-                let button = ui.add_enabled(choice.enabled, egui::Button::new(&choice.label));
+                let button = self.control(ui, choice.label.clone(), &choice.id, choice.enabled);
                 ui.ctx()
                     .accesskit_node_builder(button.id, |b| b.set_role(accesskit::Role::MenuItem));
                 if !choice.enabled && !choice.denial.is_empty() {
@@ -201,11 +242,16 @@ impl<M: GameModel> App<M> {
                     chosen = Some(choice.id.clone());
                 }
             }
-            if menu.can_cancel && ui.button("Cancel").clicked() {
+            if menu.can_cancel
+                && ui
+                    .add_enabled(!self.model.busy(), egui::Button::new("Cancel"))
+                    .clicked()
+            {
                 cancel = true;
             }
         });
         if let Some(id) = chosen {
+            ctx.request_repaint();
             self.model.choose(&id);
         } else if cancel {
             self.model.cancel_menu();
@@ -239,6 +285,11 @@ impl<M: GameModel> App<M> {
         if !self.model.travel(view) {
             self.walk_to(view);
         }
+        let origin = self.model.origin();
+        self.marker = self.model.busy().then_some(Pos {
+            x: view.x + origin.x,
+            y: view.y + origin.y,
+        });
     }
 
     fn walk_to(&mut self, view: Pos) {
@@ -311,6 +362,7 @@ impl<M: GameModel> App<M> {
         self.last_hover = hover;
         if response.clicked() {
             self.go_to(self.cursor);
+            ui.ctx().request_repaint();
         }
         if response.secondary_clicked() {
             self.menu_cell = self.cursor;
@@ -354,6 +406,7 @@ impl<M: GameModel> App<M> {
             }
             if menu_item(ui, "Move here") {
                 self.go_to(at);
+                ui.ctx().request_repaint();
                 ui.close();
             }
         });
@@ -400,6 +453,18 @@ impl<M: GameModel> App<M> {
                     egui::Color32::from_rgba_unmultiplied(0, 200, 255, alpha),
                 );
             }
+        }
+        let origin = self.model.origin();
+        if let Some(m) = self.marker.filter(|_| self.model.busy()) {
+            painter.rect_stroke(
+                rect(Pos {
+                    x: m.x - origin.x,
+                    y: m.y - origin.y,
+                }),
+                0.0,
+                egui::Stroke::new(2.0, egui::Color32::from_rgb(0, 200, 255)),
+                egui::StrokeKind::Inside,
+            );
         }
         let center = rect(player).center();
         painter.text(

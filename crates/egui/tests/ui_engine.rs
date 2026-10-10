@@ -185,3 +185,102 @@ fn typed_key_with_no_offered_action_submits_nothing() {
     h.run_steps(2);
     assert!(submits(&script).is_empty(), "q is bound to nothing offered");
 }
+
+fn open_menu(h: &mut H, script: &ScriptHandle) {
+    h.run_steps(3);
+    for name in ["events_41_walk", "events_42_message", "events_43_menu"] {
+        script.push(fixture(name));
+    }
+    h.run_steps(3);
+}
+
+fn notice(stage: &str, error: Option<&str>) -> serde_json::Value {
+    let mut params = json!({"epoch":"e7f3","command_id":"c:5","stage":stage});
+    if let Some(e) = error {
+        params["error"] = e.into();
+    }
+    json!({"jsonrpc":"2.0","method":"bn.command","params":params})
+}
+
+fn click_choice(h: &mut H) {
+    h.get_by_label("combat knife").click();
+    h.run_steps(2);
+}
+
+#[test]
+fn pressed_choice_shows_pending_at_once_and_other_controls_wait() {
+    let (mut h, script) = harness();
+    open_menu(&mut h, &script);
+    click_choice(&mut h);
+    h.get_by_label("combat knife (pending)");
+    assert!(h.get_by_label("Cancel").accesskit_node().is_disabled());
+    h.get_by_label("tin can");
+    script.push(notice("completed", None));
+    h.run_steps(3);
+    assert!(h.query_by_label("combat knife (pending)").is_none());
+    assert!(!h.get_by_label("Cancel").accesskit_node().is_disabled());
+}
+
+#[test]
+fn status_line_names_the_stage_and_explains_a_rejection_in_words() {
+    let (mut h, script) = harness();
+    open_menu(&mut h, &script);
+    h.get_by_label("Ready");
+    click_choice(&mut h);
+    let line = h.get_by_label("combat knife: accepted");
+    assert_eq!(
+        line.accesskit_node().live(),
+        egui::accesskit::Live::Polite,
+        "announced to screen readers"
+    );
+    script.push(notice("executing", None));
+    h.run_steps(2);
+    h.get_by_label("combat knife: executing");
+    script.push(notice("interrupted", Some("not_ready")));
+    h.run_steps(2);
+    h.get_by_label("combat knife: interrupted: the game is not ready");
+}
+
+#[test]
+fn status_line_reports_done_and_keeps_executing_until_the_boundary_is_reached() {
+    let (mut h, script) = harness();
+    open_menu(&mut h, &script);
+    click_choice(&mut h);
+    script.push(notice("executing", None));
+    h.run_steps(40);
+    h.get_by_label("combat knife: executing");
+    assert!(h.state().model.busy(), "still busy without any bn.loading");
+    script.push(notice("completed", None));
+    h.run_steps(2);
+    h.get_by_label("combat knife: done");
+    assert!(!h.state().model.busy());
+}
+
+#[test]
+fn map_click_marks_the_cell_before_the_route_arrives() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    let origin = h.get_by_label("Map").rect().min;
+    let pos = origin + egui::vec2(22.5 * CELL, 12.5 * CELL);
+    h.hover_at(pos);
+    h.run_steps(2);
+    for pressed in [true, false] {
+        h.event(egui::Event::PointerButton {
+            pos,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        });
+        h.run_steps(1);
+    }
+    h.run_steps(2);
+    assert!(h.state().model.route().is_empty(), "no route yet");
+    assert_eq!(
+        h.state().marker(),
+        Some(bn_client_egui::Pos { x: 22, y: 12 })
+    );
+    h.get_by_label("Travel: accepted");
+    script.push(notice("completed", None));
+    h.run_steps(3);
+    assert_eq!(h.state().marker(), None, "cleared once the command ends");
+}
