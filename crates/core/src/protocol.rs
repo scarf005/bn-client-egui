@@ -178,6 +178,9 @@ pub struct Readiness {
 pub struct Action {
     pub id: String,
     pub name: String,
+    /// Keyboard keys the active input context binds to the action; absent from older engines.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub keys: Option<Vec<String>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

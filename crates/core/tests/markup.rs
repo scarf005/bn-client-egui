@@ -24,10 +24,7 @@ fn tag_names_resolve_with_or_without_the_c_prefix_and_nest() {
     let colors = ColorMap::default();
     let (white, red) = (colors.resolve("white").0, colors.resolve("red").0);
     assert_eq!(
-        runs(
-            "<color_white>a<color_c_red>b</color>c</color>d",
-            &colors
-        ),
+        runs("<color_white>a<color_c_red>b</color>c</color>d", &colors),
         [
             run("a", Some(white)),
             run("b", Some(red)),
