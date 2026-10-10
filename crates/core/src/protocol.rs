@@ -33,6 +33,21 @@ pub struct Look {
     pub id: Option<String>,
     pub glyph: String,
     pub color: String,
+    /// Sprite id when it differs from `id` (corpses, characters, vehicle parts).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tile: Option<String>,
+    /// The data's fallback sprite ids, nearest first.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub looks_like: Vec<String>,
+    /// Multitile key the engine's tile selection chose.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subtile: Option<String>,
+    /// Quarter turns of the engine's tile selection: 0 north, 1 west, 2 south, 3 east.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rotation: Option<u8>,
+    /// `left` or `right`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub facing: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -87,6 +102,9 @@ pub struct Entity {
     pub look: Option<Look>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    /// Sprites drawn over a character, bottom first.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub overlays: Vec<Look>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub statuses: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -105,6 +123,11 @@ pub struct Avatar {
     pub id: String,
     pub at: WorldPos,
     pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub look: Option<Look>,
+    /// Sprites drawn over the avatar, bottom first.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub overlays: Vec<Look>,
     pub stats: Vec<Stat>,
     /// Carried items; optional on the wire (absent and empty both mean nothing carried).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -124,6 +147,8 @@ pub struct Environment {
     pub turn: String,
     pub time: String,
     pub weather: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub season: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

@@ -30,6 +30,13 @@ Terminal client over the same model (`Ctrl-C` quits; arrows/vi-keys/game keys wa
 
     cargo run -p bn-client-tui                 # same engine lookup; --fake for the fake model
 
+The map draws with the game's tilesets (`<game root>/gfx/<name>/tile_config.json`) like the native Tiles
+client, or as ASCII glyphs. The Tiles / ASCII buttons above the map switch at runtime and the Tileset menu picks
+one of the game's tilesets (default `UNDEAD_PEOPLE_BASE`); the choice is kept in
+`$XDG_CONFIG_HOME/bn-client-egui/settings.json` (`~/.config/...` without it). The engine publishes the
+sprite facts only it knows (tile selection per square, light, season, facing, `looks_like`), see
+`docs/en/dev/reference/engine_client_protocol.md` in the game; ids without a sprite draw as their glyph.
+
 Crates: `crates/core` (protocol, transport, replica, models, colours, keys), `crates/egui`, `crates/tui`.
 Live integration tests (ignored by default, need an engine build; the TUI one drives its key handling):
 

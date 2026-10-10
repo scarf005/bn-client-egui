@@ -834,3 +834,138 @@ fn a_not_ready_interrupt_is_explained_once() {
     assert_eq!(said.len(), 1, "{:?}", m.messages());
     assert!(!m.messages().iter().any(|l| l.contains("not_ready")));
 }
+
+/// The fixture world with sprite facts: a connected wall with a light level, a remembered square, a
+/// zombie facing left and an avatar wearing a jacket.
+fn tiled_session() -> EngineModel {
+    let mut subscribe = fixture("subscribe_result");
+    subscribe["result"]["environment"]["season"] = json!("winter");
+    subscribe["result"]["avatar"]["look"] = json!({
+        "kind": "avatar", "id": "avatar", "glyph": "@", "color": "white",
+        "tile": "player_female", "facing": "right"
+    });
+    subscribe["result"]["avatar"]["overlays"] = json!([{
+        "kind": "overlay", "id": "worn_jacket", "glyph": "", "color": "",
+        "tile": "overlay_female_worn_jacket", "looks_like": ["overlay_worn_jacket"]
+    }]);
+    subscribe["result"]["entities"][0]["look"]
+        .as_object_mut()
+        .unwrap()
+        .extend(
+            json!({"facing": "left", "looks_like": ["mon_zombie_base"]})
+                .as_object()
+                .unwrap()
+                .clone(),
+        );
+    let mut part = fixture("snapshot_part_1");
+    part["params"]["cells"].as_array_mut().unwrap().extend([
+        json!({"at": {"dim": "", "x": 9, "y": 8, "z": 0}, "known": "visible", "light": 1,
+            "terrain": {"kind": "terrain", "id": "t_wall", "glyph": "|", "color": "light_gray",
+                "looks_like": ["t_wall_base"], "subtile": "edge", "rotation": 1},
+            "items": [
+                {"kind": "item", "id": "corpse", "glyph": "%", "color": "red", "tile": "corpse_mon_zombie",
+                 "looks_like": ["corpse"]}
+            ]}),
+        json!({"at": {"dim": "", "x": 9, "y": 7, "z": 0}, "known": "remembered",
+            "memory": {"terrain": {"kind": "terrain", "id": "t_grass", "glyph": "\"", "color": "green",
+                "subtile": "center", "rotation": 0},
+                "overlay": {"kind": "furniture", "id": "f_bench", "glyph": "H", "color": "brown",
+                "subtile": "unconnected", "rotation": 2}}}),
+    ]);
+    let (t, _) = ScriptedTransport::new();
+    connected(t.on("bn.hello", vec![fixture("hello_result")]).on(
+        "bn.subscribe",
+        vec![subscribe, fixture("snapshot_part_0"), part],
+    ))
+}
+
+#[test]
+fn a_cell_lists_its_sprites_bottom_first_with_the_engines_tile_selection() {
+    let m = tiled_session();
+    assert_eq!(m.season().as_deref(), Some("winter"));
+    let origin = m.origin();
+    let cell = m.cell(Pos {
+        x: 9 - origin.x,
+        y: 8 - origin.y,
+    });
+    let layers = cell
+        .layers
+        .iter()
+        .map(|l| l.id.as_str())
+        .collect::<Vec<_>>();
+    // The item is named by its sprite id, the corpse of the monster, not the item type.
+    assert_eq!(layers, ["t_wall", "corpse_mon_zombie"]);
+    let wall = &cell.layers[0];
+    assert_eq!((wall.subtile.as_deref(), wall.rotation), (Some("edge"), 1));
+    assert_eq!(wall.fallbacks, ["t_wall_base"]);
+    assert_eq!(cell.layers[1].fallbacks, ["corpse"]);
+    assert_eq!(cell.light, Some(1));
+    assert!(!cell.remembered);
+}
+
+#[test]
+fn a_remembered_cell_lists_its_memorized_terrain_and_overlay_and_is_marked_remembered() {
+    let m = tiled_session();
+    let origin = m.origin();
+    let cell = m.cell(Pos {
+        x: 9 - origin.x,
+        y: 7 - origin.y,
+    });
+    assert!(cell.remembered);
+    assert_eq!(cell.light, None);
+    let layers = cell
+        .layers
+        .iter()
+        .map(|l| (l.id.as_str(), l.subtile.as_deref(), l.rotation))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        layers,
+        [
+            ("t_grass", Some("center"), 0),
+            ("f_bench", Some("unconnected"), 2)
+        ]
+    );
+}
+
+#[test]
+fn creatures_and_the_avatar_draw_over_the_terrain_with_their_overlays() {
+    let m = tiled_session();
+    let at = |x: i32, y: i32| {
+        let origin = m.origin();
+        m.cell(Pos {
+            x: x - origin.x,
+            y: y - origin.y,
+        })
+    };
+    // The zombie faces left: mirrored, with its data's fallbacks, over the dirt it stands on.
+    let zombie = at(6, 4);
+    let ids = zombie
+        .layers
+        .iter()
+        .map(|l| l.id.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(ids, ["t_dirt", "mon_zombie"]);
+    let sprite = &zombie.layers[1];
+    assert!(sprite.mirrored && sprite.creature);
+    assert_eq!(sprite.fallbacks, ["mon_zombie_base"]);
+    // The avatar stands over the items on the ground: its gendered sprite, then the jacket, which has
+    // no glyph to fall back on.
+    let me = at(3, 4);
+    let ids = me.layers.iter().map(|l| l.id.as_str()).collect::<Vec<_>>();
+    assert_eq!(
+        ids,
+        [
+            "t_dirt",
+            "tin_can",
+            "player_female",
+            "overlay_female_worn_jacket"
+        ]
+    );
+    assert!(!me.layers[2].mirrored && me.layers[2].creature);
+    assert_eq!(me.layers[2].glyph, '@');
+    assert_eq!(me.layers[3].glyph, '\0');
+    assert_eq!(me.layers[3].fallbacks, ["overlay_worn_jacket"]);
+    // A square without sprite facts keeps its ASCII look.
+    let plain = at(2, 2);
+    assert_eq!((plain.glyph, plain.layers.len()), ('.', 1));
+}
