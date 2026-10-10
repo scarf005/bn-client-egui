@@ -1070,6 +1070,11 @@ impl GameModel for EngineModel {
                 .iter()
                 .find(|c| tab(c) && c.selected)
                 .and_then(|c| pane_of(&c.label).map(String::from)),
+            focus: i
+                .compat
+                .as_ref()
+                .and_then(|c| c["focus"]["choice_id"].as_str())
+                .map(String::from),
         })
     }
 

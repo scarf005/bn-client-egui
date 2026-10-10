@@ -76,10 +76,55 @@ fn engine_with_look() -> (TuiApp<EngineModel>, ScriptHandle) {
     (app, h)
 }
 
+/// The actions of a menu's input context with their keys, as the engine sends them.
+fn menu_actions() -> Value {
+    json!([
+        {"id":"UP","name":"Up","keys":["UP"]},
+        {"id":"DOWN","name":"Down","keys":["DOWN"]},
+        {"id":"PAGE_UP","name":"Page up","keys":["PPAGE"]},
+        {"id":"PAGE_DOWN","name":"Page down","keys":["NPAGE"]},
+        {"id":"NEXT_TAB","name":"Next tab","keys":["RIGHT"]},
+        {"id":"PREV_TAB","name":"Previous tab","keys":["LEFT"]},
+        {"id":"CONFIRM","name":"Confirm","keys":["RETURN","x"]},
+        {"id":"QUIT","name":"Cancel","keys":["ESC"]}
+    ])
+}
+
+/// Ends the command in flight so the next key can be sent.
+fn finish(app: &mut TuiApp<EngineModel>, h: &ScriptHandle) {
+    h.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{
+        "epoch":"e7f3","command_id":"c:5","stage":"completed"}}));
+    app.model.poll();
+}
+
+fn sent_actions(h: &ScriptHandle) -> Vec<Value> {
+    submits(h)
+        .iter()
+        .map(|s| s["params"]["operation"]["action_id"].clone())
+        .collect()
+}
+
+/// Puts the engine's cursor on `focus` in the menu `fixture` event and gives it the menu actions.
+fn menu_event(mut menu: Value, focus: &str) -> Value {
+    let ev = &mut menu["params"]["events"][0]["changes"]["interaction"];
+    ev["actions"] = menu_actions();
+    ev["interaction"]["compat"] = json!({"focus":{"choice_id":focus},"panes":[]});
+    menu
+}
+
+fn engine_n(commands: usize) -> (TuiApp<EngineModel>, ScriptHandle) {
+    let (t, h) = session();
+    let t = (0..commands).fold(t, |t, _| {
+        t.on("bn.command.submit", vec![fixture("submit_result")])
+    });
+    (TuiApp::new(connected(t)), h)
+}
+
 fn open_menu(app: &mut TuiApp<EngineModel>, h: &ScriptHandle) {
-    for name in ["events_41_walk", "events_42_message", "events_43_menu"] {
+    for name in ["events_41_walk", "events_42_message"] {
         h.push(fixture(name));
     }
+    h.push(menu_event(fixture("events_43_menu"), "c:1"));
     app.model.poll();
 }
 
@@ -130,46 +175,52 @@ fn menu_overlay_shows_title_message_choices_and_denial() {
 }
 
 #[test]
-fn enter_chooses_the_highlighted_choice_and_disabled_rows_are_inert() {
-    let (mut app, h) = engine();
+fn menu_keys_run_the_actions_the_menus_context_binds_and_the_player_may_rebind_them() {
+    let (mut app, h) = engine_n(4);
     open_menu(&mut app, &h);
-    app.handle_key(key(KeyCode::Down));
-    assert_eq!(app.selected_label().as_deref(), Some("tin can"));
-    app.handle_key(key(KeyCode::Enter));
-    assert!(submits(&h).is_empty(), "disabled choice");
-    app.handle_key(key(KeyCode::Up));
-    app.handle_key(key(KeyCode::Enter));
+    for (k, want) in [
+        (key(KeyCode::Down), "DOWN"),
+        (key(KeyCode::Enter), "CONFIRM"),
+        (ch('x'), "CONFIRM"),
+        (key(KeyCode::PageDown), "PAGE_DOWN"),
+    ] {
+        app.handle_key(k);
+        assert_eq!(sent_actions(&h).last(), Some(&json!(want)));
+        finish(&mut app, &h);
+    }
+    assert_eq!(sent_actions(&h).len(), 4);
+    app.handle_key(ch('q'));
     assert_eq!(
-        submits(&h)[0]["params"]["operation"],
-        json!({"kind":"choose","choice_id":"c:1"})
+        sent_actions(&h).len(),
+        4,
+        "a key the menu does not bind does nothing"
     );
 }
 
 #[test]
-fn selection_stops_at_both_ends() {
+fn the_highlight_is_the_engines_cursor() {
     let (mut app, h) = engine();
     open_menu(&mut app, &h);
-    app.handle_key(key(KeyCode::Up));
     assert_eq!(app.selected_label().as_deref(), Some("combat knife"));
-    for _ in 0..5 {
-        app.handle_key(key(KeyCode::Down));
-    }
+    h.push(menu_event(fixture("events_43_menu"), "c:2"));
+    let mut next = fixture("events_43_menu");
+    next["params"]["events"][0]["sequence"] = "44".into();
+    next["params"]["events"][0]["revision"] = "34".into();
+    h.push(menu_event(next, "c:2"));
+    app.model.poll();
     assert_eq!(app.selected_label().as_deref(), Some("tin can"));
 }
 
 #[test]
-fn escape_cancels_the_menu() {
+fn escape_closes_the_menu_through_the_engines_cancel_action() {
     let (mut app, h) = engine();
     open_menu(&mut app, &h);
     app.handle_key(key(KeyCode::Esc));
-    assert_eq!(
-        submits(&h)[0]["params"]["operation"],
-        json!({"kind":"cancel"})
-    );
+    assert_eq!(sent_actions(&h), [json!("QUIT")]);
 }
 
 #[test]
-fn game_keys_run_actions_but_not_while_a_menu_is_open() {
+fn game_keys_run_actions_but_a_menu_has_its_own_keys() {
     let (mut app, h) = engine();
     app.handle_key(ch('k'));
     assert_eq!(
@@ -179,7 +230,7 @@ fn game_keys_run_actions_but_not_while_a_menu_is_open() {
     let (mut app, h) = engine();
     open_menu(&mut app, &h);
     app.handle_key(ch('k'));
-    assert!(submits(&h).is_empty(), "menu swallows game keys");
+    assert!(submits(&h).is_empty(), "k is bound to nothing in the menu");
 }
 
 #[test]
@@ -278,7 +329,7 @@ fn tabbed(h: &ScriptHandle, rows: Value) {
     }
     let mut menu = fixture("events_43_menu");
     menu["params"]["events"][0]["changes"]["interaction"]["interaction"]["choices"] = rows;
-    h.push(menu);
+    h.push(menu_event(menu, "new_game:tutorial"));
 }
 
 fn row(id: &str, label: &str, selected: bool, pane: Option<&str>) -> Value {
@@ -325,46 +376,40 @@ fn main_menu_shows_tabs_in_a_bar_above_the_selected_tabs_entries() {
 }
 
 #[test]
-fn left_and_right_choose_the_neighbouring_tab_and_stop_at_the_ends() {
-    let (mut app, h) = engine();
+fn tab_keys_are_the_menus_next_and_previous_tab_actions() {
+    let (mut app, h) = engine_n(3);
     main_menu(&h);
     app.model.poll();
-    app.handle_key(key(KeyCode::Left));
-    assert!(submits(&h).is_empty(), "no tab before the first");
     app.handle_key(key(KeyCode::Right));
-    assert_eq!(
-        submits(&h)[0]["params"]["operation"],
-        json!({"kind":"choose","choice_id":"tab:settings"})
-    );
+    assert_eq!(sent_actions(&h).last(), Some(&json!("NEXT_TAB")));
+    finish(&mut app, &h);
+    app.handle_key(key(KeyCode::Left));
+    assert_eq!(sent_actions(&h).last(), Some(&json!("PREV_TAB")));
 }
 
 #[test]
-fn enter_on_a_tabbed_menu_chooses_the_entry_not_the_tab() {
+fn confirm_on_a_tabbed_menu_is_the_engines_action_whichever_row_is_highlighted() {
     let (mut app, h) = engine();
     main_menu(&h);
     app.model.poll();
-    app.handle_key(key(KeyCode::Down));
-    assert_eq!(app.selected_label().as_deref(), Some("Custom Character"));
     app.handle_key(key(KeyCode::Enter));
-    assert_eq!(
-        submits(&h)[0]["params"]["operation"],
-        json!({"kind":"choose","choice_id":"new_game:custom"})
-    );
+    assert_eq!(sent_actions(&h), [json!("CONFIRM")]);
 }
 
 #[test]
-fn long_menus_scroll_to_keep_the_highlighted_row_visible() {
+fn long_menus_scroll_to_keep_the_engines_cursor_row_visible() {
     let (mut app, h) = engine();
     let rows = (0..60).map(|i| row(&format!("c:{i}"), &format!("Item {i}"), false, None));
-    tabbed(&h, Value::Array(rows.collect()));
-    app.model.poll();
-    for _ in 0..45 {
-        app.handle_key(key(KeyCode::Down));
+    for name in ["events_41_walk", "events_42_message"] {
+        h.push(fixture(name));
     }
+    let mut menu = fixture("events_43_menu");
+    menu["params"]["events"][0]["changes"]["interaction"]["interaction"]["choices"] =
+        Value::Array(rows.collect());
+    h.push(menu_event(menu, "c:45"));
+    app.model.poll();
     let s = text(&render(&mut app));
     assert!(s.contains("> Item 45") && !s.contains("Item 3 "), "{s}");
-    app.handle_key(key(KeyCode::Home));
-    assert!(text(&render(&mut app)).contains("> Item 0"));
 }
 
 #[test]

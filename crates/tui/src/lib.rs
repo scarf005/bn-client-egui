@@ -127,6 +127,15 @@ impl<M: GameModel> TuiApp<M> {
             self.selected = 0;
             self.menu_sig = sig;
         }
+        // The engine's own cursor is the highlight; its navigation keys move it. The crafting
+        // screen keeps its own list.
+        if let Some(menu) = menu.as_ref().filter(|m| m.context != "CRAFTING") {
+            let at = menu
+                .entries()
+                .iter()
+                .position(|c| menu.focus.as_deref() == Some(c.id.as_str()));
+            self.selected = at.unwrap_or(self.selected);
+        }
         menu
     }
 
@@ -182,7 +191,7 @@ impl<M: GameModel> TuiApp<M> {
             return match menu.context.as_str() {
                 "CRAFTING" => self.crafting_key(&menu, key),
                 _ if self.settings_key(&menu, key) => {}
-                _ => self.menu_key(&menu, key.code),
+                _ => self.menu_key(&menu, key),
             };
         }
         if self.cursor.is_some() {
@@ -229,33 +238,15 @@ impl<M: GameModel> TuiApp<M> {
         }
     }
 
-    fn menu_key(&mut self, menu: &Menu, code: KeyCode) {
-        let (tabs, entries) = (menu.tabs(), menu.entries());
-        let last = entries.len().saturating_sub(1);
-        match code {
-            KeyCode::Up => self.selected = self.selected.saturating_sub(1),
-            KeyCode::Down => self.selected = (self.selected + 1).min(last),
-            KeyCode::PageUp => self.selected = self.selected.saturating_sub(PAGE),
-            KeyCode::PageDown => self.selected = (self.selected + PAGE).min(last),
-            KeyCode::Home => self.selected = 0,
-            KeyCode::End => self.selected = last,
-            KeyCode::Left | KeyCode::Right => {
-                let here = tabs.iter().position(|t| t.selected).unwrap_or(0);
-                let next = match code {
-                    KeyCode::Left => here.checked_sub(1),
-                    _ => Some(here + 1),
-                };
-                if let Some(tab) = next.and_then(|i| tabs.get(i)) {
-                    self.model.choose(&tab.id);
-                }
-            }
-            KeyCode::Enter => {
-                if let Some(c) = entries.get(self.selected) {
-                    self.model.choose(&c.id);
-                }
-            }
-            KeyCode::Esc => self.model.cancel_menu(),
-            _ => {}
+    /// A menu is an engine input context: its keys (navigation, paging, confirm, cancel, tab switch)
+    /// are whatever the player bound in it, and the engine moves its own cursor.
+    fn menu_key(&mut self, menu: &Menu, key: KeyEvent) {
+        if token(key).is_some_and(|t| self.model.press(&t)) {
+            return;
+        }
+        // A menu the engine gives no cancel key still closes with Esc.
+        if key.code == KeyCode::Esc && menu.can_cancel {
+            self.model.cancel_menu();
         }
     }
 

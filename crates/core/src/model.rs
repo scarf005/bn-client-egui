@@ -119,6 +119,8 @@ pub struct Menu {
     pub field: Option<MenuField>,
     /// The pane of the selected tab, when the menu has tabs.
     pub pane: Option<String>,
+    /// The row the engine's own cursor is on, which its navigation keys move.
+    pub focus: Option<String>,
 }
 
 impl Menu {

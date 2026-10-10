@@ -388,12 +388,18 @@ fn arrow_key_walks_after_the_map_was_clicked() {
 }
 
 #[test]
-fn arrow_key_does_not_walk_while_a_menu_is_open() {
+fn arrow_key_in_a_menu_runs_the_action_the_menus_context_binds_to_it() {
     let (mut h, script) = harness();
     open_menu(&mut h, &script);
     h.key_press(egui::Key::ArrowRight);
     h.run_steps(3);
-    assert!(submits(&script).is_empty());
+    assert_eq!(
+        submits(&script)
+            .iter()
+            .map(|s| s["params"]["operation"].clone())
+            .collect::<Vec<_>>(),
+        [json!({"kind":"action","action_id":"RIGHT"})]
+    );
 }
 
 #[test]

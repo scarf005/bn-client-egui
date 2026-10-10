@@ -52,6 +52,8 @@ fn open(field: Option<Value>, choices: Vec<Value>) -> (TuiApp<EngineModel>, Scri
     if let Some(field) = field {
         interaction["field"] = field;
     }
+    menu["params"]["events"][0]["changes"]["interaction"]["actions"] =
+        json!([{"id":"CONFIRM","name":"Confirm","keys":["RETURN"]}]);
     h.push(menu);
     app.model.poll();
     (app, h)
@@ -207,7 +209,7 @@ fn a_filter_beside_a_list_updates_the_screen_without_ending_it() {
 }
 
 #[test]
-fn a_plain_row_is_still_chosen_and_tab_opens_the_screens_actions() {
+fn a_plain_row_is_confirmed_by_the_engines_key_and_tab_opens_the_screens_actions() {
     let (mut app, h) = open(None, vec![row("mode:add_local", "Add local", None)]);
     let before = text(&mut app);
     app.handle_key(key(KeyCode::Tab));
@@ -225,7 +227,8 @@ fn a_plain_row_is_still_chosen_and_tab_opens_the_screens_actions() {
     app.handle_key(key(KeyCode::Enter));
     assert_eq!(
         operations(&h),
-        [json!({"kind":"choose","choice_id":"mode:add_local"})]
+        [json!({"kind":"action","action_id":"CONFIRM"})],
+        "a plain row is confirmed by the engine's own confirm key"
     );
 }
 

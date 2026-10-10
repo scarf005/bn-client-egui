@@ -69,6 +69,8 @@ pub struct App<M: GameModel> {
     command_live: a11y::Announcer,
     /// The enabled controls of the open menu, in Tab order, as of the last frame.
     menu_ids: Vec<egui::Id>,
+    /// Where the engine's cursor was in the open menu, so keyboard focus can follow it.
+    menu_focus: Option<String>,
     /// The cursor has been put on the player since the map first appeared.
     cursor_placed: bool,
     crafting: crafting::Crafting,
@@ -103,6 +105,7 @@ impl<M: GameModel> App<M> {
             refocus_map: false,
             cursor_placed: false,
             menu_ids: Vec::new(),
+            menu_focus: None,
             native_live: a11y::Announcer::default(),
             command_live: a11y::Announcer::default(),
             crafting: Default::default(),
@@ -231,7 +234,7 @@ impl<M: GameModel> App<M> {
             ui.ctx().input(|i| i.key_pressed(egui::Key::Escape)) && self.model.interrupt();
         self.walk(ui.ctx());
         self.game_keys(ui.ctx(), interrupted);
-        if self.model.menu().is_none() {
+        if menu_forwards_keys(self.model.menu().as_ref()) {
             // Arrow keys belong to the game, whichever widget was clicked last; Tab still moves focus.
             let ctx = ui.ctx();
             if let Some(id) = ctx.memory(|m| m.focused()) {
@@ -317,15 +320,27 @@ impl<M: GameModel> App<M> {
                 .collect::<Vec<_>>()
         });
         let menu = self.model.menu();
-        // Menus own the keyboard (typing in their text fields must not run game actions), except a
-        // "press any key" or acknowledge popup, which takes every key.
-        let typed = match &menu {
-            Some(menu) if !menu.acknowledges() => vec![],
-            _ => typed,
+        // A menu is an engine input context: its navigation, paging, confirm and cancel keys are the
+        // player's bindings, and the engine moves its own cursor. The exceptions are the toolkit's
+        // accessibility keys: Tab and Shift+Tab move focus, and Space and Enter act on a focused widget.
+        // Menus with a text field keep the keyboard for typing.
+        let focused = ctx.memory(|m| m.focused()).is_some();
+        let toolkit = |token: &str| match &menu {
+            None => false,
+            Some(_) => {
+                token == "TAB"
+                    || token == "BACKTAB"
+                    || (focused && matches!(token, "SPACE" | "RETURN"))
+            }
         };
-        let named = match &menu {
-            Some(menu) if !menu.acknowledges() || menu.can_cancel => vec![],
-            _ => ctx.input(|i| {
+        let forwards = menu_forwards_keys(menu.as_ref());
+        let typed = if forwards { typed } else { vec![] };
+        // Esc closes a menu through its cancel button, which also covers menus the engine binds no key to.
+        let esc_cancels = menu
+            .as_ref()
+            .is_some_and(|m| m.can_cancel && !m.acknowledges());
+        let named = if forwards {
+            ctx.input(|i| {
                 i.events
                     .iter()
                     .filter_map(|e| match e {
@@ -334,12 +349,20 @@ impl<M: GameModel> App<M> {
                             pressed: true,
                             modifiers,
                             ..
-                        } if !(interrupted && *key == Key::Escape) => name(*key, *modifiers),
+                        } if !(*key == Key::Escape && (interrupted || esc_cancels)) => {
+                            name(*key, *modifiers)
+                        }
                         _ => None,
                     })
                     .collect::<Vec<_>>()
-            }),
+            })
+        } else {
+            vec![]
         };
+        let (typed, named): (Vec<_>, Vec<_>) = (
+            typed.into_iter().filter(|t| !toolkit(t)).collect(),
+            named.into_iter().filter(|t| !toolkit(t)).collect(),
+        );
         self.keys_consumed = false;
         for key in typed.into_iter().chain(named) {
             if self.model.press(&key) {
@@ -460,6 +483,7 @@ impl<M: GameModel> App<M> {
         let mut ids = Vec::new();
         let mut focused = false;
         let mut chosen = None;
+        let follows = self.menu_focus != menu.focus;
         let mut edited = None;
         let mut key_chosen = None;
         let mut cancel = ctx.input(|i| i.key_pressed(egui::Key::Escape)) && menu.can_cancel;
@@ -519,7 +543,11 @@ impl<M: GameModel> App<M> {
                                     choice.selected,
                                 );
                                 ids.extend(button.enabled().then_some(button.id));
-                                if entered && i == 0 && tabs.is_empty() {
+                                // The keyboard focus follows the engine's own cursor.
+                                let at_cursor = menu.focus.as_deref() == Some(choice.id.as_str());
+                                if (entered && i == 0 && tabs.is_empty() && menu.focus.is_none())
+                                    || (at_cursor && (entered || follows))
+                                {
                                     button.request_focus();
                                     focused = button.has_focus();
                                 }
@@ -553,6 +581,7 @@ impl<M: GameModel> App<M> {
                 }
             });
         self.menu_ids = ids;
+        self.menu_focus = menu.focus.clone();
         self.focus_menu = entered && !focused;
         a11y::dialog(ctx, &title, &menu.message);
         if let (Some(field), Some(value)) = (&menu.field, key_chosen) {
@@ -965,6 +994,12 @@ fn message_log(ui: &mut egui::Ui, native: &[crate::LogLine], commands: &[String]
                 ui.label(message);
             }
         });
+}
+
+/// Whether the keys pressed go to the engine: with no menu open, or in a menu that has no text field
+/// to type into (the crafting screen takes its own keys).
+fn menu_forwards_keys(menu: Option<&bn_client_core::Menu>) -> bool {
+    menu.is_none_or(|m| m.acknowledges() || (m.field.is_none() && m.context != "CRAFTING"))
 }
 
 impl<M: GameModel> eframe::App for App<M> {
