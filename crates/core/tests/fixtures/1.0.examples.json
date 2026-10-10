@@ -392,7 +392,9 @@
                 "mon_zombie_base"
               ],
               "facing": "right"
-            }
+            },
+            "attitude": "hostile",
+            "aware": true
           },
           {
             "id": "e:13",
@@ -456,7 +458,8 @@
                 "tile": "corpse_mon_zombie",
                 "looks_like": [
                   "corpse"
-                ]
+                ],
+                "stack": 3
               }
             ],
             "light": 1,
@@ -1542,6 +1545,17 @@
             "slot": "pocket"
           }
         ]
+      }
+    },
+    {
+      "name": "stack of one item",
+      "def": "look",
+      "value": {
+        "kind": "item",
+        "id": "rock",
+        "glyph": "*",
+        "color": "light_gray",
+        "stack": 1
       }
     }
   ]

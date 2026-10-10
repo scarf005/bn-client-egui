@@ -857,6 +857,8 @@ fn tiled_session() -> EngineModel {
                 .unwrap()
                 .clone(),
         );
+    subscribe["result"]["entities"][0]["attitude"] = json!("hostile");
+    subscribe["result"]["entities"][0]["aware"] = json!(true);
     let mut part = fixture("snapshot_part_1");
     part["params"]["cells"].as_array_mut().unwrap().extend([
         json!({"at": {"dim": "", "x": 9, "y": 8, "z": 0}, "known": "visible", "light": 1,
@@ -864,7 +866,7 @@ fn tiled_session() -> EngineModel {
                 "looks_like": ["t_wall_base"], "subtile": "edge", "rotation": 1},
             "items": [
                 {"kind": "item", "id": "corpse", "glyph": "%", "color": "red", "tile": "corpse_mon_zombie",
-                 "looks_like": ["corpse"]}
+                 "looks_like": ["corpse"], "stack": 2}
             ]}),
         json!({"at": {"dim": "", "x": 9, "y": 7, "z": 0}, "known": "remembered",
             "memory": {"terrain": {"kind": "terrain", "id": "t_grass", "glyph": "\"", "color": "green",
@@ -894,7 +896,9 @@ fn a_cell_lists_its_sprites_bottom_first_with_the_engines_tile_selection() {
         .map(|l| l.id.as_str())
         .collect::<Vec<_>>();
     // The item is named by its sprite id, the corpse of the monster, not the item type.
-    assert_eq!(layers, ["t_wall", "corpse_mon_zombie"]);
+    // A pile of two is highlighted over its displayed item, with a sprite that has no glyph.
+    assert_eq!(layers, ["t_wall", "corpse_mon_zombie", "highlight_item"]);
+    assert_eq!(cell.layers[2].glyph, '\0');
     let wall = &cell.layers[0];
     assert_eq!((wall.subtile.as_deref(), wall.rotation), (Some("edge"), 1));
     assert_eq!(wall.fallbacks, ["t_wall_base"]);
@@ -944,7 +948,8 @@ fn creatures_and_the_avatar_draw_over_the_terrain_with_their_overlays() {
         .iter()
         .map(|l| l.id.as_str())
         .collect::<Vec<_>>();
-    assert_eq!(ids, ["t_dirt", "mon_zombie"]);
+    // The native view marks a monster that is aware of the avatar with its attitude.
+    assert_eq!(ids, ["t_dirt", "mon_zombie", "overlay_hostile_sees_player"]);
     let sprite = &zombie.layers[1];
     assert!(sprite.mirrored && sprite.creature);
     assert_eq!(sprite.fallbacks, ["mon_zombie_base"]);

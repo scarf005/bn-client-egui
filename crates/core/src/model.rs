@@ -48,6 +48,8 @@ pub struct Cell {
     pub remembered: bool,
     /// The game's light level of a square in sight: 0 dark, 1 low, 2 bright only, 3 lit, 4 bright.
     pub light: Option<u8>,
+    /// The game's per-square seed for weighted sprite variants, also for squares nothing is known about.
+    pub square: u32,
 }
 
 /// One line of the game's own message log. A repeat of the newest line keeps its `id` and raises
