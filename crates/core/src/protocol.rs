@@ -581,6 +581,8 @@ pub enum Incoming {
     Command(CommandNotice),
     Resync(Resync),
     Loading(LoadingNotice),
+    /// The engine's heartbeat while an activity runs; it only shows the engine is alive.
+    Progress,
     /// Notification this client does not know; ignored.
     Unknown(String),
     /// A line that is not valid protocol JSON.
@@ -609,6 +611,7 @@ pub fn parse_message(msg: &Value) -> Result<Incoming, serde_json::Error> {
             "bn.command" => Incoming::Command(params(msg)?),
             "bn.resync" => Incoming::Resync(params(msg)?),
             "bn.loading" => Incoming::Loading(params(msg)?),
+            "bn.progress" => Incoming::Progress,
             other => Incoming::Unknown(other.to_string()),
         });
     }

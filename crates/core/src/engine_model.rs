@@ -211,8 +211,12 @@ impl EngineModel {
 
     /// Silence that counts as a stall while a request is outstanding.
     pub fn with_stall(mut self, stall: Duration) -> Self {
-        self.stall = stall;
+        self.set_stall(stall);
         self
+    }
+
+    pub fn set_stall(&mut self, stall: Duration) {
+        self.stall = stall;
     }
 
     /// Uses the game's own palette for look colours.
@@ -333,7 +337,7 @@ impl EngineModel {
                     LoadingNotice::Done(_) => None,
                 };
             }
-            Incoming::Unknown(_) => {}
+            Incoming::Progress | Incoming::Unknown(_) => {}
             Incoming::Malformed(e) => self.messages.push(format!("Bad engine message: {e}")),
             Incoming::Closed => {
                 self.connected = false;

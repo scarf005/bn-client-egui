@@ -458,3 +458,62 @@ fn live_engine_killed_mid_game_shows_the_failure_and_restart_brings_the_menu_bac
             .is_some_and(|menu| menu.choices.iter().any(|c| c.label.contains("New Game")))
     });
 }
+
+#[test]
+#[ignore = "requires BN_ENGINE with bn.progress heartbeats"]
+fn live_engine_long_wait_is_never_reported_as_stalled() {
+    let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
+    let transport = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
+    let mut model = EngineModel::new(Box::new(transport));
+    wait_for(&mut model, "subscription", |m| m.live());
+    choose_label(&mut model, "New Game");
+    choose_label(&mut model, "Tutorial");
+    wait_for(&mut model, "the tutorial map", |m| m.size().x > 0);
+    wait_for(&mut model, "idle", |m| !m.busy());
+    dismiss_popups(&mut model);
+    assert!(model.invoke_action("wait"));
+    choose_label(&mut model, "5 minutes");
+    dismiss_popups(&mut model);
+
+    assert!(model.invoke_action("wait"));
+    wait_for(&mut model, "the wait menu", |m| m.menu().is_some());
+    wait_for(&mut model, "the command to finish", |m| !m.busy());
+    let id = model
+        .menu()
+        .unwrap()
+        .choices
+        .iter()
+        .find(|c| c.label.starts_with("6 hours"))
+        .expect("6 hours")
+        .id
+        .clone();
+    // A stall limit far below the wait: only the heartbeats keep the model from reporting one.
+    model.set_stall(Duration::from_secs(5));
+    model.choose(&id);
+    assert!(model.busy());
+    let started = std::time::Instant::now();
+    while started.elapsed() < Duration::from_secs(20) && model.busy() {
+        model.poll();
+        assert!(
+            model.failure().is_none(),
+            "{:?} after {:?}",
+            model.failure(),
+            started.elapsed()
+        );
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    assert!(
+        model.busy(),
+        "the wait outlasted the stall limit ({:?})",
+        started.elapsed()
+    );
+    assert!(model.interrupt());
+    wait_for(&mut model, "the stop question", |m| {
+        m.menu()
+            .is_some_and(|menu| menu.choices.iter().any(|c| c.label == "Yes"))
+    });
+    wait_for(&mut model, "the command to finish", |m| !m.busy());
+    model.set_stall(Duration::from_secs(120));
+    choose_label(&mut model, "Yes");
+    assert!(model.failure().is_none());
+}

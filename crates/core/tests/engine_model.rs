@@ -1373,6 +1373,44 @@ mod failures {
     }
 
     #[test]
+    fn heartbeats_keep_a_long_activity_from_counting_as_stalled() {
+        let (t, h) = session();
+        let (mut m, clock) = with_clock(t.on("bn.command.submit", walk_reply()));
+        assert!(m.step_toward(Pos { x: 30, y: 12 }));
+        m.poll();
+        // Ten minutes of activity, with a heartbeat every two seconds.
+        for _ in 0..300 {
+            clock.advance(Duration::from_secs(2));
+            h.push(json!({"jsonrpc":"2.0","method":"bn.progress","params":{"epoch":"e7f3"}}));
+            m.poll();
+            assert!(m.failure().is_none(), "alive engines are not stalled");
+        }
+        assert!(m.busy(), "the command is still running");
+        // Then the heartbeats stop.
+        clock.advance(Duration::from_secs(119));
+        m.poll();
+        assert!(m.failure().is_none());
+        clock.advance(Duration::from_secs(2));
+        m.poll();
+        assert_eq!(m.failure().unwrap().kind, FailureKind::Stalled);
+    }
+
+    #[test]
+    fn loading_notifications_also_count_as_signs_of_life() {
+        let (t, h) = session();
+        let (mut m, clock) = with_clock(t.on("bn.command.submit", walk_reply()));
+        assert!(m.step_toward(Pos { x: 30, y: 12 }));
+        m.poll();
+        for _ in 0..100 {
+            clock.advance(Duration::from_secs(60));
+            h.push(json!({"jsonrpc":"2.0","method":"bn.loading","params":{
+                "epoch":"e7f3","title":"Loading","entries":["a"],"index":0}}));
+            m.poll();
+            assert!(m.failure().is_none());
+        }
+    }
+
+    #[test]
     fn an_idle_engine_may_stay_quiet() {
         let (t, _h) = session();
         let (mut m, clock) = with_clock(t);
