@@ -1469,3 +1469,14 @@ fn pickup_rows_carry_the_native_highlight_marks_and_counts() {
         ]
     );
 }
+
+#[test]
+fn a_client_line_repeating_the_newest_one_is_not_added_again() {
+    let (t, _h) = session();
+    let mut m = connected(t);
+    m.say("You see a wall at (4, 5).".into());
+    m.say("You see a wall at (4, 5).".into());
+    m.say("You see a door at (5, 5).".into());
+    m.say("You see a wall at (4, 5).".into());
+    assert_eq!(m.messages().len(), 3, "{:?}", m.messages());
+}

@@ -1032,7 +1032,9 @@ impl GameModel for EngineModel {
     }
 
     fn say(&mut self, text: String) {
-        self.messages.push(text);
+        if self.messages.last() != Some(&text) {
+            self.messages.push(text);
+        }
     }
 
     fn loading(&self) -> Option<Loading> {
