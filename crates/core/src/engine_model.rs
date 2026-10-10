@@ -2,7 +2,7 @@
 
 use crate::clock::Clock;
 use crate::colors::ColorMap;
-use crate::keys::KeyMap;
+use crate::keys::{self, KeyMap};
 use crate::markup::{self, Run};
 use crate::model::{
     ActionEntry, Cell, CommandStatus, GameModel, Layer, Loading, LogLine, Menu, MenuChoice,
@@ -983,14 +983,18 @@ impl GameModel for EngineModel {
     }
 
     fn press(&mut self, key: &str) -> bool {
-        let offered = self.replica.boundary().and_then(|b| {
-            // The engine names the keys of its active context; the key settings only serve older engines.
+        // The engine names the keys of its active context; the key settings only serve older engines.
+        // A digit with no binding may be a numpad key (terminals and windows do not tell them apart).
+        let bound_to = |key: &str| {
             let bound = self.keys.actions_for(key);
-            b.actions.iter().find(|a| match &a.keys {
-                Some(keys) => keys.iter().any(|k| k == key),
-                None => bound.contains(&a.id.as_str()),
+            self.replica.boundary().and_then(|b| {
+                b.actions.iter().find(|a| match &a.keys {
+                    Some(keys) => keys.iter().any(|k| k == key),
+                    None => bound.contains(&a.id.as_str()),
+                })
             })
-        });
+        };
+        let offered = bound_to(key).or_else(|| keys::numpad(key).and_then(|k| bound_to(&k)));
         if let Some(id) = offered.map(|a| a.id.clone()) {
             return self.invoke_action(&id);
         }

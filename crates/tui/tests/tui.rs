@@ -47,6 +47,35 @@ fn engine() -> (TuiApp<EngineModel>, ScriptHandle) {
     (TuiApp::new(connected(t)), h)
 }
 
+/// The engine's look and diagonal movement actions with their keys, as `bn.events` sends them.
+fn engine_with_look() -> (TuiApp<EngineModel>, ScriptHandle) {
+    let (mut app, h) = engine();
+    let actions: Vec<_> = [
+        ("look", &[";", "x"][..]),
+        ("RIGHT", &["RIGHT", "l"]),
+        ("LEFT", &["LEFT", "h"]),
+        ("UP", &["UP", "k"]),
+        ("DOWN", &["DOWN", "j"]),
+        ("LEFTUP", &["HOME", "y"]),
+        ("RIGHTUP", &["PPAGE", "u"]),
+        ("LEFTDOWN", &["END", "b"]),
+        ("RIGHTDOWN", &["NPAGE", "n"]),
+    ]
+    .iter()
+    .map(|(id, keys)| json!({"id": id, "name": id, "keys": keys}))
+    .collect();
+    h.push(
+        json!({"jsonrpc":"2.0","method":"bn.events","params":{"epoch":"e7f3","events":[{
+        "sequence":"41","revision":"32","type":"interaction.changed",
+        "changes":{"interaction":{"boundary_id":"b:13",
+            "readiness":{"phase":"playing","game_ready":true,
+                "accepts_interaction_commands":true,"accepts_registered_actions":true},
+            "actions": actions, "interaction": null}}}]}}),
+    );
+    app.model.poll();
+    (app, h)
+}
+
 fn open_menu(app: &mut TuiApp<EngineModel>, h: &ScriptHandle) {
     for name in ["events_41_walk", "events_42_message", "events_43_menu"] {
         h.push(fixture(name));
@@ -431,7 +460,7 @@ fn status_line_shows_ready_then_the_command_and_its_stage() {
 
 #[test]
 fn look_cursor_moves_without_acting_and_describes_the_cell_under_it() {
-    let (mut app, h) = engine();
+    let (mut app, h) = engine_with_look();
     app.handle_key(ch('x'));
     let me = app.model.player();
     app.handle_key(key(KeyCode::Right));
@@ -445,7 +474,7 @@ fn look_cursor_moves_without_acting_and_describes_the_cell_under_it() {
 
 #[test]
 fn shift_moves_the_look_cursor_five_cells_and_it_stays_inside_the_view() {
-    let (mut app, _h) = engine();
+    let (mut app, _h) = engine_with_look();
     let me = app.model.player();
     app.handle_key(ch('x'));
     app.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::SHIFT));
@@ -458,7 +487,7 @@ fn shift_moves_the_look_cursor_five_cells_and_it_stays_inside_the_view() {
 
 #[test]
 fn enter_in_look_mode_travels_to_the_cursor_and_esc_returns_to_walking() {
-    let (mut app, h) = engine();
+    let (mut app, h) = engine_with_look();
     app.handle_key(ch('x'));
     let me = app.model.player();
     for _ in 0..2 {
@@ -670,4 +699,49 @@ fn esc_interrupts_the_running_command_and_the_status_line_says_so() {
     assert!(text(&render(&mut app)).contains("Esc: interrupt"));
     app.handle_key(key(KeyCode::Esc));
     assert_eq!(interrupts(&h), 1);
+}
+
+#[test]
+fn control_function_navigation_and_numpad_keys_reach_the_engines_actions() {
+    let (t, h) = session();
+    let t = (0..6).fold(t, |t, _| {
+        t.on("bn.command.submit", vec![fixture("submit_result")])
+    });
+    let mut app = TuiApp::new(connected(t));
+    h.push(
+        json!({"jsonrpc":"2.0","method":"bn.events","params":{"epoch":"e7f3","events":[{
+        "sequence":"41","revision":"32","type":"interaction.changed",
+        "changes":{"interaction":{"boundary_id":"b:13",
+            "readiness":{"phase":"playing","game_ready":true,
+                "accepts_interaction_commands":true,"accepts_registered_actions":true},
+            "actions":[{"id":"save","name":"Save","keys":["CTRL+S"]},
+                       {"id":"help","name":"Help","keys":["F1"]},
+                       {"id":"back","name":"Back","keys":["BACKTAB"]},
+                       {"id":"pause","name":"Pause","keys":[".","NUMPAD_5"]},
+                       {"id":"up","name":"Page","keys":["PPAGE"]},
+                       {"id":"del","name":"Del","keys":["DELETE"]}],
+            "interaction":null}}}]}}),
+    );
+    app.model.poll();
+    let sent = |app: &mut TuiApp<EngineModel>, e: KeyEvent| {
+        app.handle_key(e);
+        let id = submits(&h)
+            .last()
+            .map(|s| s["params"]["operation"]["action_id"].clone());
+        h.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{
+            "epoch":"e7f3","command_id":"c:5","stage":"completed"}}));
+        app.model.poll();
+        id
+    };
+    let ctrl_s = KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL);
+    assert_eq!(sent(&mut app, ctrl_s), Some(json!("save")));
+    assert_eq!(sent(&mut app, key(KeyCode::F(1))), Some(json!("help")));
+    assert_eq!(sent(&mut app, key(KeyCode::BackTab)), Some(json!("back")));
+    assert_eq!(
+        sent(&mut app, ch('5')),
+        Some(json!("pause")),
+        "numpad 5 arrives as a digit"
+    );
+    assert_eq!(sent(&mut app, key(KeyCode::PageUp)), Some(json!("up")));
+    assert_eq!(sent(&mut app, key(KeyCode::Delete)), Some(json!("del")));
 }

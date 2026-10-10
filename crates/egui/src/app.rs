@@ -2,7 +2,7 @@ use crate::a11y;
 use crate::display::Display;
 use crate::editor;
 use crate::text;
-use bn_client_core::{GameModel, Loading, LogLine, Pos, markup};
+use bn_client_core::{GameModel, Loading, LogLine, Pos, keys, markup};
 use eframe::egui::{self, accesskit};
 
 mod crafting;
@@ -278,6 +278,35 @@ impl<M: GameModel> App<M> {
             (Key::PageUp, "PPAGE"),
             (Key::PageDown, "NPAGE"),
         ];
+        const FUNCTION: [Key; 12] = [
+            Key::F1,
+            Key::F2,
+            Key::F3,
+            Key::F4,
+            Key::F5,
+            Key::F6,
+            Key::F7,
+            Key::F8,
+            Key::F9,
+            Key::F10,
+            Key::F11,
+            Key::F12,
+        ];
+        // The engine's name for a pressed key, with Ctrl and Shift folded in (`CTRL+S`, `BACKTAB`).
+        let name = |key: Key, mods: egui::Modifiers| {
+            let base = NAMED
+                .iter()
+                .find(|(k, _)| *k == key)
+                .map(|(_, n)| n.to_string())
+                .or_else(|| {
+                    FUNCTION
+                        .iter()
+                        .position(|k| *k == key)
+                        .map(|n| keys::function(n as u8 + 1))
+                })
+                .or_else(|| mods.ctrl.then(|| key.name().to_string()))?;
+            Some(keys::chord(&base, mods.ctrl, mods.shift))
+        };
         let typed = ctx.input(|i| {
             i.events
                 .iter()
@@ -297,10 +326,17 @@ impl<M: GameModel> App<M> {
         let named = match &menu {
             Some(menu) if !menu.acknowledges() || menu.can_cancel => vec![],
             _ => ctx.input(|i| {
-                NAMED
-                    .into_iter()
-                    .filter(|(key, _)| i.key_pressed(*key) && !(interrupted && *key == Key::Escape))
-                    .map(|(_, token)| token.to_string())
+                i.events
+                    .iter()
+                    .filter_map(|e| match e {
+                        egui::Event::Key {
+                            key,
+                            pressed: true,
+                            modifiers,
+                            ..
+                        } if !(interrupted && *key == Key::Escape) => name(*key, *modifiers),
+                        _ => None,
+                    })
                     .collect::<Vec<_>>()
             }),
         };
@@ -709,12 +745,11 @@ impl<M: GameModel> App<M> {
                     },
                 )
             });
-            let (dx, dy, look) = ui.input(|i| {
+            let (dx, dy) = ui.input(|i| {
                 let k = |key| i.key_pressed(key) as i32;
                 (
                     k(egui::Key::ArrowRight) - k(egui::Key::ArrowLeft),
                     k(egui::Key::ArrowDown) - k(egui::Key::ArrowUp),
-                    i.key_pressed(egui::Key::L),
                 )
             });
             // While the engine owns the cursor its own arrow handling moves it.
@@ -723,9 +758,6 @@ impl<M: GameModel> App<M> {
                     x: (cursor.x + dx).clamp(0, size.x - 1),
                     y: (cursor.y + dy).clamp(0, size.y - 1),
                 };
-            }
-            if look && !self.keys_consumed {
-                self.look(cursor);
             }
         }
         self.cursor = to_abs(cursor);

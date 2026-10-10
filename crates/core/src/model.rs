@@ -287,6 +287,25 @@ impl Default for FakeModel {
 }
 
 impl GameModel for FakeModel {
+    fn actions(&self) -> Vec<ActionEntry> {
+        let action = |id: &str, name: &str, keys: &[&str]| ActionEntry {
+            id: id.into(),
+            name: name.into(),
+            keys: keys.iter().map(|k| k.to_string()).collect(),
+        };
+        vec![
+            action("look", "Look around", &[";", "x"]),
+            action("UP", "Move up", &["UP", "k"]),
+            action("DOWN", "Move down", &["DOWN", "j"]),
+            action("LEFT", "Move left", &["LEFT", "h"]),
+            action("RIGHT", "Move right", &["RIGHT", "l"]),
+            action("LEFTUP", "Move up left", &["HOME", "y"]),
+            action("RIGHTUP", "Move up right", &["PPAGE", "u"]),
+            action("LEFTDOWN", "Move down left", &["END", "b"]),
+            action("RIGHTDOWN", "Move down right", &["NPAGE", "n"]),
+        ]
+    }
+
     fn size(&self) -> Pos {
         self.size
     }

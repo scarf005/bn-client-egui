@@ -12,9 +12,9 @@ type H<'a> = Harness<'a, App<EngineModel>>;
 
 fn harness<'a>() -> (H<'a>, ScriptHandle) {
     let (t, h) = session();
-    let t = t
-        .on("bn.command.submit", vec![fixture("submit_result")])
-        .on("bn.command.submit", vec![fixture("submit_result")]);
+    let t = (0..6).fold(t, |t, _| {
+        t.on("bn.command.submit", vec![fixture("submit_result")])
+    });
     let model = EngineModel::new(Box::new(t));
     let harness = Harness::builder()
         .with_size(egui::vec2(1100.0, 800.0))
@@ -378,5 +378,49 @@ fn the_cursor_stays_on_its_map_square_when_the_view_scrolls() {
         description(&h).contains("Cursor (7, 5)"),
         "{}",
         description(&h)
+    );
+}
+
+#[test]
+fn control_function_and_shift_tab_keys_run_the_engines_actions_and_a_digit_may_be_numpad() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    script.push(show(
+        41,
+        json!([{"id":"save","name":"Save","keys":["CTRL+S"]},
+               {"id":"help","name":"Help","keys":["F1"]},
+               {"id":"back","name":"Back","keys":["BACKTAB"]},
+               {"id":"pause","name":"Pause","keys":[".","NUMPAD_5"]}]),
+        Value::Null,
+    ));
+    h.run_steps(3);
+    let finish = |h: &mut H, script: &ScriptHandle, n: u32| {
+        script.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{
+            "epoch":"e7f3","command_id":"c:5","stage":"completed"}}));
+        script.push(show(
+            n,
+            json!([
+            {"id":"save","name":"Save","keys":["CTRL+S"]},
+            {"id":"help","name":"Help","keys":["F1"]},
+            {"id":"back","name":"Back","keys":["BACKTAB"]},
+            {"id":"pause","name":"Pause","keys":[".","NUMPAD_5"]}]),
+            Value::Null,
+        ));
+        h.run_steps(3);
+    };
+    h.key_press_modifiers(egui::Modifiers::CTRL, egui::Key::S);
+    h.run_steps(2);
+    finish(&mut h, &script, 42);
+    h.key_press(egui::Key::F1);
+    h.run_steps(2);
+    finish(&mut h, &script, 43);
+    h.key_press_modifiers(egui::Modifiers::SHIFT, egui::Key::Tab);
+    h.run_steps(2);
+    finish(&mut h, &script, 44);
+    h.event(egui::Event::Text("5".into()));
+    h.run_steps(2);
+    assert_eq!(
+        submits(&script),
+        ["save", "help", "back", "pause"].map(|id| json!({"kind":"action","action_id":id}))
     );
 }

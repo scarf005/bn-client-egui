@@ -1290,3 +1290,36 @@ fn fill_sets_an_editable_row_or_the_key_field_and_ignores_anything_else() {
         json!({"kind":"fill","field_id":"c:1","value":"8","submit":true})
     );
 }
+
+#[test]
+fn control_function_and_numpad_keys_run_the_actions_the_engine_binds_to_them() {
+    let (t, h) = session();
+    let mut m = connected(
+        t.on("bn.command.submit", walk_reply())
+            .on("bn.command.submit", walk_reply()),
+    );
+    h.push(show(
+        41,
+        json!([{"id":"save","name":"Save","keys":["CTRL+S"]},
+               {"id":"help","name":"Help","keys":["F1"]},
+               {"id":"pause","name":"Pause","keys":[".","NUMPAD_5"]},
+               {"id":"back","name":"Back","keys":["BACKTAB"]}]),
+        Value::Null,
+    ));
+    m.poll();
+    assert!(m.press("CTRL+S"));
+    h.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{"epoch":"e7f3","command_id":"c:5","stage":"completed"}}));
+    m.poll();
+    assert!(
+        m.press("5"),
+        "a digit with no binding may be the numpad key"
+    );
+    assert!(!m.press("CTRL+Q"), "no other control letter is bound");
+    assert_eq!(
+        operations(&h),
+        [
+            json!({"kind":"action","action_id":"save"}),
+            json!({"kind":"action","action_id":"pause"})
+        ]
+    );
+}
