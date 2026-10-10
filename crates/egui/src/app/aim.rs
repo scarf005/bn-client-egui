@@ -393,3 +393,27 @@ impl<M: GameModel> App<M> {
         }
     }
 }
+
+/// The colour the native picker draws an area's mark in: red when the pane cannot put items there,
+/// white for the pane's own area, dark gray for the rest.
+fn area_color(on: bool, blocked: bool) -> egui::Color32 {
+    match (blocked, on) {
+        (true, _) => egui::Color32::from_rgb(255, 60, 60),
+        (false, true) => egui::Color32::WHITE,
+        (false, false) => egui::Color32::from_gray(110),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn blocked_areas_are_red_the_panes_own_white_and_the_rest_dark_gray() {
+        let red = area_color(false, true);
+        assert!(red.r() > 200 && red.g() < 100 && red.b() < 100);
+        assert_eq!(area_color(true, true), red, "blocked wins over selected");
+        assert_eq!(area_color(true, false), egui::Color32::WHITE);
+        assert!(area_color(false, false).r() < 140);
+    }
+}
