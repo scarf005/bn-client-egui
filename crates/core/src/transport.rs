@@ -126,11 +126,19 @@ impl StdioTransport {
                 .arg(format!("{}/", root.display()));
         }
         command.args(["--client", "mcp"]);
+        // The engine appends file names to these without a separator, so each must end in one.
+        let dir_arg = |dir: &Path| {
+            let mut arg = dir.as_os_str().to_os_string();
+            if !arg.to_string_lossy().ends_with(std::path::MAIN_SEPARATOR) {
+                arg.push(std::path::MAIN_SEPARATOR_STR);
+            }
+            arg
+        };
         if let Some(user) = &userdir {
-            command.arg("--userdir").arg(user);
+            command.arg("--userdir").arg(dir_arg(user));
         }
         if let Some(config) = &configdir {
-            command.arg("--configdir").arg(config);
+            command.arg("--configdir").arg(dir_arg(config));
         }
         let mut child = command
             .stdin(Stdio::piped())
