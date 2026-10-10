@@ -235,7 +235,10 @@ impl<M: GameModel> App<M> {
                             self.menu_message(ui, &menu);
                         }
                     });
-                if self.model.actions().iter().any(|a| a.id == "FILTER") && menu.field.is_none() {
+                if self.model.actions().iter().any(|a| a.id == "FILTER")
+                    && menu.field.is_none()
+                    && menu.total > FILTER_MIN_ROWS
+                {
                     let filter = ui.add_enabled(!self.model.busy(), egui::Button::new("Filter"));
                     ids.extend(filter.enabled().then_some(filter.id));
                     filter_clicked = filter.clicked();
@@ -384,6 +387,9 @@ fn dismiss_text(engine_label: &str) -> &str {
         "OK"
     }
 }
+
+/// A list this short is read at a glance; the engine's filter is offered from here on.
+const FILTER_MIN_ROWS: usize = 10;
 
 #[cfg(test)]
 mod tests {
