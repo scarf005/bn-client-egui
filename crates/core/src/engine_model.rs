@@ -1070,6 +1070,7 @@ impl GameModel for EngineModel {
                 .iter()
                 .find(|c| tab(c) && c.selected)
                 .and_then(|c| pane_of(&c.label).map(String::from)),
+            screen: i.kind == "custom",
             focus: i
                 .compat
                 .as_ref()

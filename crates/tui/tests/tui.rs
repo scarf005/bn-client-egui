@@ -790,3 +790,26 @@ fn control_function_navigation_and_numpad_keys_reach_the_engines_actions() {
     assert_eq!(sent(&mut app, key(KeyCode::PageUp)), Some(json!("up")));
     assert_eq!(sent(&mut app, key(KeyCode::Delete)), Some(json!("del")));
 }
+
+#[test]
+fn a_composed_screen_shows_its_text_and_its_actions_take_the_keys() {
+    let (mut app, h) = engine();
+    for name in ["events_41_walk", "events_42_message"] {
+        h.push(fixture(name));
+    }
+    let mut screen = fixture("events_43_menu");
+    let ev = &mut screen["params"]["events"][0]["changes"]["interaction"];
+    ev["actions"] = json!([{"id":"NEXT_TAB","name":"Next tab","keys":["TAB"]}]);
+    ev["interaction"]["kind"] = "custom".into();
+    ev["interaction"]["message"] = "Strength:    8\nDexterity:   8".into();
+    ev["interaction"]["choices"] = json!([]);
+    h.push(screen);
+    app.model.poll();
+    let s = text(&render(&mut app));
+    assert!(
+        s.contains("Strength:    8") && s.contains("Dexterity:   8"),
+        "{s}"
+    );
+    app.handle_key(key(KeyCode::Tab));
+    assert_eq!(sent_actions(&h), [json!("NEXT_TAB")]);
+}

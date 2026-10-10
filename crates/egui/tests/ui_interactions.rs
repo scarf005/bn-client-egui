@@ -478,3 +478,30 @@ fn a_menus_rebound_keys_move_and_confirm_through_the_engine_and_focus_follows_it
         ["DOWN", "CONFIRM"].map(|id| json!({"kind":"action","action_id":id}))
     );
 }
+
+fn screen(sequence: u32) -> Value {
+    show(
+        sequence,
+        json!([{"id":"NEXT_TAB","name":"Next tab","keys":["TAB"]},
+               {"id":"QUIT","name":"Cancel","keys":["ESC"]}]),
+        json!({"schema_id":"s:screen","kind":"custom","context":"NEW_CHAR_STATS","title":"",
+            "message":"Strength:    8\nDexterity:   8","allow_cancel":false,"choices":[],
+            "choice_total":0,"allow_set_count":false}),
+    )
+}
+
+#[test]
+fn a_composed_screen_is_shown_as_text_and_every_key_including_tab_is_the_engines() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    script.push(screen(41));
+    h.run_steps(4);
+    assert!(h.state().model.menu().unwrap().screen);
+    h.get_by_label_contains("Strength:    8");
+    h.key_press(egui::Key::Tab);
+    h.run_steps(2);
+    assert_eq!(
+        submits(&script),
+        [json!({"kind":"action","action_id":"NEXT_TAB"})]
+    );
+}

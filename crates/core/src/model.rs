@@ -121,6 +121,9 @@ pub struct Menu {
     pub pane: Option<String>,
     /// The row the engine's own cursor is on, which its navigation keys move.
     pub focus: Option<String>,
+    /// The engine's composed screen of a view it has no structured interaction for: only text to
+    /// show, driven by the keys of the view's actions.
+    pub screen: bool,
 }
 
 impl Menu {
