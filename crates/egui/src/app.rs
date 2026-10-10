@@ -81,8 +81,6 @@ pub struct App<M: GameModel> {
     log_height: Option<f32>,
     /// Title of the menu that last took focus, so a menu is entered once, not on every frame.
     menu_title: Option<String>,
-    /// The popup message that already took its one key press, so a burst of Space cannot reach the game behind it.
-    ack_key: Option<String>,
     /// When the last popup closed, to hold Space back for a moment.
     ack_closed: Option<std::time::Duration>,
     /// The menu on screen last frame was a popup.
@@ -151,7 +149,6 @@ impl<M: GameModel> App<M> {
             palette: None,
             log_height: None,
             menu_title: None,
-            ack_key: None,
             ack_closed: None,
             in_popup: false,
             focus_menu: false,
@@ -449,7 +446,11 @@ impl<M: GameModel> App<M> {
         // player's bindings, and the engine moves its own cursor. The exceptions are the toolkit's
         // accessibility keys: Tab and Shift+Tab move focus, and Space and Enter act on a focused widget.
         // Menus with a text field keep the keyboard for typing.
-        let focused = ctx.memory(|m| m.focused()).is_some();
+        // Only a focused control of the menu itself takes Space and Enter; with the focus left on the
+        // map, they are the engine's (they close a popup).
+        let focused = ctx
+            .memory(|m| m.focused())
+            .is_some_and(|id| self.menu_ids.contains(&id));
         let toolkit = |token: &str| match &menu {
             // A composed screen has no widgets: every key, Tab included, is the engine's.
             None => false,
@@ -496,14 +497,9 @@ impl<M: GameModel> App<M> {
         }
         let mut keys = typed.into_iter().chain(named).collect::<Vec<_>>();
         match menu.as_ref().filter(|m| m.acknowledges()) {
-            // A popup takes one key; the rest of a burst would land on the game it covers.
-            Some(m) if self.ack_key.as_ref() == Some(&m.message) => keys.clear(),
-            Some(m) => {
-                keys.truncate(1);
-                self.ack_key = (!keys.is_empty()).then(|| m.message.clone());
-            }
+            // A popup takes one key per frame; the rest of a burst would land on the game it covers.
+            Some(_) => keys.truncate(1),
             None => {
-                self.ack_key = None;
                 let now = self.clock.now();
                 let held = self
                     .ack_closed

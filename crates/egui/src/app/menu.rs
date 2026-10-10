@@ -17,8 +17,18 @@ impl<M: GameModel> App<M> {
             }
             return;
         };
-        let entered = self.focus_menu
-            | (self.menu_title.replace(menu.title.clone()).as_ref() != Some(&menu.title));
+        // A popup follows another with the same empty title, so its text tells them apart.
+        let shown = format!(
+            "{}\n{}",
+            menu.title,
+            if menu.acknowledges() {
+                &menu.message
+            } else {
+                ""
+            }
+        );
+        let entered =
+            self.focus_menu | (self.menu_title.replace(shown.clone()).as_ref() != Some(&shown));
         if menu.context == "CRAFTING" {
             let focused = self.crafting(ctx, &menu, entered);
             self.focus_menu = entered && !focused;

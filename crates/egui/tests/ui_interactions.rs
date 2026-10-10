@@ -847,3 +847,56 @@ fn a_long_menu_scrolls_inside_the_window_instead_of_running_off_it() {
         "the rest waits behind the scroll bar"
     );
 }
+
+#[test]
+fn a_popup_that_ignored_a_key_still_takes_the_next_one() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    script.push(show(
+        41,
+        json!([{"id":"QUIT","name":"Cancel popup","keys":["x","y"]}]),
+        popup_with("Welcome."),
+    ));
+    h.run_steps(3);
+    // The first key is sent but the engine keeps the popup open; the next key must still be sent.
+    h.event(egui::Event::Text("x".into()));
+    h.run_steps(3);
+    script.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{
+        "epoch":"e7f3","command_id":"c:5","stage":"completed"}}));
+    h.run_steps(3);
+    h.event(egui::Event::Text("y".into()));
+    h.run_steps(3);
+    assert_eq!(submits(&script).len(), 2, "{:?}", submits(&script));
+}
+
+#[test]
+fn space_closes_a_popup_while_the_focus_is_still_on_the_map() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    h.get_by_label("Map").focus();
+    h.run_steps(2);
+    script.push(show(
+        41,
+        json!([{"id":"QUIT","name":"Cancel popup","keys":["ESC","SPACE"]}]),
+        popup_with("Close the door with c."),
+    ));
+    // A frame without the popup's controls in focus: the map still has it.
+    h.event(egui::Event::Text(" ".into()));
+    h.run_steps(3);
+    assert!(!submits(&script).is_empty(), "Space reaches the engine");
+}
+
+#[test]
+fn a_popup_right_after_another_takes_the_focus_too() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    script.push(show(41, json!([]), popup_with("First.")));
+    h.run_steps(4);
+    script.push(show(42, json!([]), popup_with("Second.")));
+    h.run_steps(4);
+    let button = h
+        .get_all_by_role_and_label(egui::accesskit::Role::MenuItem, "Cancel popup")
+        .next()
+        .unwrap();
+    assert!(button.accesskit_node().is_focused());
+}
