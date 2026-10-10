@@ -1,3 +1,4 @@
+#![recursion_limit = "512"]
 mod common;
 use bn_client_egui::app::CELL;
 use bn_client_egui::transport::ScriptHandle;
@@ -108,7 +109,8 @@ fn any_key_popup_closes_on_escape_space_enter_and_letters() {
             [json!({"kind":"choose","choice_id":"acknowledge"})]
         );
     }
-    for text in ["w"] {
+    {
+        let text = "w";
         let (mut h, script) = harness();
         h.run_steps(3);
         script.push(show(41, json!([]), any_key_popup()));
@@ -238,7 +240,9 @@ fn the_engines_look_cursor_is_the_map_cursor_and_arrows_do_not_move_it_twice() {
     script.push(look_mode(41, 6));
     h.run_steps(3);
     let focus = h.state().model.focus().expect("look cursor");
-    let status = format!("Cursor ({}, {})", focus.x, focus.y);
+    // The status line names squares by their absolute position, not their place in the window.
+    let at = h.state().model.origin();
+    let status = format!("Cursor ({}, {})", focus.x + at.x, focus.y + at.y);
     let map = h.get_by_label("Map");
     assert!(
         map.accesskit_node()
@@ -314,7 +318,8 @@ fn tabbed(sequence: u32, selected: &str) -> Value {
         .collect();
     show(
         sequence,
-        json!([]),
+        json!([{"id":"NEXT_TAB","name":"Next tab","keys":["TAB"]},
+               {"id":"PREV_TAB","name":"Previous tab","keys":["BACKTAB"]}]),
         json!({"schema_id":"s:tabs","kind":"choices","context":"PLAYER_INFO","title":"Info",
             "message":"","allow_cancel":true,"choices":choices,"choice_total":5,
             "allow_set_count":false,"compat":{"focus":{},"panes":panes}}),
@@ -339,6 +344,26 @@ fn only_the_selected_tabs_entries_are_listed_and_an_entryless_tab_keeps_its_tab_
         "tabs stay tabs when the tab has no entries"
     );
     assert!(menu.entries().is_empty());
+}
+
+#[test]
+fn tab_and_shift_tab_are_the_engines_tab_keys_on_a_tabbed_screen() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    script.push(tabbed(41, "stats"));
+    h.run_steps(3);
+    h.key_press(egui::Key::Tab);
+    h.run_steps(2);
+    script.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{
+        "epoch":"e7f3","command_id":"c:5","stage":"completed"}}));
+    script.push(tabbed(42, "skills"));
+    h.run_steps(3);
+    h.key_press_modifiers(egui::Modifiers::SHIFT, egui::Key::Tab);
+    h.run_steps(2);
+    assert_eq!(
+        submits(&script),
+        ["NEXT_TAB", "PREV_TAB"].map(|id| json!({"kind":"action","action_id":id}))
+    );
 }
 
 #[test]
@@ -396,18 +421,13 @@ fn the_cursor_stays_on_its_map_square_when_the_view_scrolls() {
             .unwrap_or_default()
             .to_string()
     };
-    assert!(
-        description(&h).contains("Cursor (10, 5)"),
-        "{}",
-        description(&h)
-    );
+    // Absolute: the square keeps its name while the window scrolls under the cursor.
+    let at = h.state().model.origin();
+    let named = format!("Cursor ({}, {})", 10 + at.x, 5 + at.y);
+    assert!(description(&h).contains(&named), "{}", description(&h));
     script.push(view_event(42, -13, 26));
     h.run_steps(3);
-    assert!(
-        description(&h).contains("Cursor (7, 5)"),
-        "{}",
-        description(&h)
-    );
+    assert!(description(&h).contains(&named), "{}", description(&h));
 }
 
 #[test]
@@ -531,7 +551,8 @@ fn leaving_look_mode_puts_the_cursor_back_on_the_player() {
     script.push(show(42, json!([]), Value::Null));
     h.run_steps(3);
     let me = h.state().model.player();
-    let status = format!("Cursor ({}, {})", me.x, me.y);
+    let at = h.state().model.origin();
+    let status = format!("Cursor ({}, {})", me.x + at.x, me.y + at.y);
     let map = h.get_by_label("Map");
     let description = map.accesskit_node().description().unwrap_or_default();
     assert!(description.contains(&status), "{status} in {description}");
@@ -677,5 +698,152 @@ fn space_right_after_a_popup_closes_does_not_reach_the_game_until_the_hold_ends(
     assert_eq!(
         submits(&script).last(),
         Some(&json!({"kind":"action","action_id":"jump"}))
+    );
+}
+
+fn choices_menu(choices: Vec<Value>) -> Value {
+    json!({"schema_id":"s:list","kind":"choices","context":"UILIST","title":"Options",
+        "message":"","allow_cancel":true,"choices":choices,"choice_total":0,
+        "allow_set_count":false})
+}
+
+#[test]
+fn an_entry_described_only_by_its_action_name_shows_no_description_row() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    let mut no = choice("no", "No");
+    no["selected"] = true.into();
+    no["description"] = "NO".into();
+    script.push(show(
+        41,
+        json!([]),
+        choices_menu(vec![choice("yes", "Yes"), no]),
+    ));
+    h.run_steps(4);
+    h.get_by_label("No");
+    assert!(h.query_by_label("NO").is_none());
+    // Real prose is still shown.
+    let mut helped = choice("help", "Help");
+    helped["selected"] = true.into();
+    helped["description"] = "Shows what the keys do.".into();
+    script.push(show(42, json!([]), choices_menu(vec![helped])));
+    h.run_steps(4);
+    h.get_by_label("Shows what the keys do.");
+}
+
+#[test]
+fn rows_refused_for_the_same_reason_say_it_once_and_each_carries_it_as_its_description() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    let refused = |id: &str, label: &str, denial: &str| {
+        let mut c = choice(id, label);
+        c["enabled"] = false.into();
+        c["denial"] = denial.into();
+        c
+    };
+    script.push(show(
+        41,
+        json!([]),
+        choices_menu(vec![
+            choice("a", "Auto pickup enabled"),
+            refused("b", "Adjacent", "Needs auto pickup"),
+            refused("c", "Weight limit", "Needs auto pickup"),
+            refused("d", "Volume limit", "Needs auto pickup"),
+            refused("e", "Other", "Needs something else"),
+        ]),
+    ));
+    h.run_steps(4);
+    assert_eq!(h.get_all_by_label("Needs auto pickup").count(), 1);
+    h.get_by_label("Needs something else");
+    for row in ["Adjacent", "Weight limit", "Volume limit"] {
+        let node = h.get_by_label(row);
+        assert_eq!(
+            node.accesskit_node().description().as_deref(),
+            Some("Needs auto pickup"),
+            "{row}"
+        );
+    }
+}
+
+#[test]
+fn the_status_line_gives_absolute_coordinates_that_do_not_change_when_the_view_scrolls() {
+    let (mut h, script) = harness();
+    h.run_steps(5);
+    h.get_by_label_contains("Player at (3, 4).");
+    // The engine's window moves while the avatar stays where it is.
+    script.push(view_event(41, -16, 23));
+    h.run_steps(4);
+    h.get_by_label_contains("Player at (3, 4).");
+}
+
+#[test]
+fn the_cell_tooltip_does_not_hang_over_a_dialog() {
+    let (mut h, script) = harness();
+    h.run_steps(5);
+    let map = h.get_by_label("Map").rect();
+    // The avatar's own square is tin_can in the fixture, as is a ground row; the tooltip is one more.
+    let over = map.min + egui::vec2(20.5 * CELL, 12.5 * CELL);
+    let named = |h: &H| h.query_all_by_label("tin_can").count();
+    let rows = named(&h);
+    h.hover_at(over);
+    h.run_steps(3);
+    assert_eq!(named(&h), rows + 1, "the tooltip shows without a dialog");
+    script.push(show(
+        41,
+        json!([]),
+        choices_menu(vec![choice("a", "Alpha")]),
+    ));
+    h.run_steps(4);
+    h.hover_at(over + egui::vec2(1.0, 1.0));
+    h.run_steps(3);
+    assert_eq!(named(&h), rows, "no tooltip over a dialog");
+}
+
+#[test]
+fn the_interrupt_button_appearing_does_not_move_the_map_or_the_sidebar() {
+    let (mut h, _script) = harness();
+    // The real theme: its button padding is what made the bar one pixel taller.
+    bn_client_egui::theme::apply(&h.ctx);
+    h.run_steps(5);
+    let top = |h: &H| {
+        (
+            h.get_by_label("Map").rect().min.y,
+            h.get_by_label("Ground").rect().min.y,
+        )
+    };
+    let idle = top(&h);
+    assert!(h.query_by_label("Interrupt").is_none());
+    h.event(egui::Event::Text("k".into()));
+    h.run_steps(3);
+    assert!(
+        h.query_by_label("Interrupt").is_some(),
+        "a command is running"
+    );
+    assert_eq!(top(&h), idle);
+}
+
+#[test]
+fn a_long_menu_scrolls_inside_the_window_instead_of_running_off_it() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    let rows = (0..60)
+        .map(|n| choice(&format!("r{n}"), &format!("Row {n}")))
+        .collect();
+    script.push(show(41, json!([]), choices_menu(rows)));
+    h.run_steps(5);
+    let last_shown = (0..60)
+        .filter(|n| {
+            h.query_by_label(&format!("Row {n}"))
+                .is_some_and(|row| row.rect().max.y <= 800.0)
+        })
+        .count();
+    assert!(
+        last_shown >= 20,
+        "{last_shown} rows are fully inside the window"
+    );
+    assert!(
+        h.query_by_label("Row 59")
+            .is_none_or(|row| row.rect().min.y >= 800.0 * 0.85),
+        "the rest waits behind the scroll bar"
     );
 }

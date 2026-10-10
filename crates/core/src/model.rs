@@ -84,10 +84,13 @@ pub enum Shape {
         shrapnel: bool,
         tile: String,
     },
-    /// Floating text rising from `at`, in colored segments.
+    /// Floating text at `at`, in colored segments, moving by `scroll` each animation step as the
+    /// native text does; `hp` marks a creature's hit-point readout, which stays beside it.
     Text {
         at: Pos,
         segments: Vec<(String, Rgb)>,
+        scroll: Pos,
+        hp: bool,
     },
 }
 
@@ -236,6 +239,74 @@ pub struct Loading {
     pub image: Option<String>,
 }
 
+/// One overmap square as the native screen draws it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OvermapCell {
+    pub glyph: String,
+    pub color: Rgb,
+    pub bg: Option<Rgb>,
+}
+
+/// What the tiles view draws on an overmap square.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OvermapTile {
+    pub id: String,
+    pub rotation: u8,
+    /// The multitile key, empty for a plain tile.
+    pub subtile: String,
+    /// Tile ids to try when the tileset has no sprite for `id`, nearest first.
+    pub fallbacks: Vec<String>,
+}
+
+/// The overmap screen (`m`): the native window's cells and sidebar, with the cursor.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Overmap {
+    pub cols: i32,
+    pub rows: i32,
+    /// Row-major, `cols * rows` cells.
+    pub cells: Vec<OvermapCell>,
+    /// Absolute overmap square of cell (0, 0), the cursor and the player, as `(x, y, z)`.
+    pub origin: (i32, i32, i32),
+    pub cursor: (i32, i32, i32),
+    pub player: (i32, i32, i32),
+    pub legend: Vec<String>,
+    pub notes: Vec<((i32, i32, i32), String)>,
+    /// The planned travel route, nearest square first.
+    pub path: Vec<(i32, i32, i32)>,
+    /// Row-major like `cells`; empty unless the client said it draws tiles.
+    pub tiles: Vec<OvermapTile>,
+}
+
+impl Overmap {
+    pub fn cell(&self, col: i32, row: i32) -> Option<&OvermapCell> {
+        let inside = (0..self.cols).contains(&col) && (0..self.rows).contains(&row);
+        inside.then(|| &self.cells[(row * self.cols + col) as usize])
+    }
+
+    /// The absolute overmap square drawn in view cell `(col, row)`.
+    pub fn square(&self, col: i32, row: i32) -> (i32, i32, i32) {
+        (self.origin.0 + col, self.origin.1 + row, self.origin.2)
+    }
+
+    /// The tile of view cell `(col, row)`, when the engine sent tile ids.
+    pub fn tile(&self, col: i32, row: i32) -> Option<&OvermapTile> {
+        let inside = (0..self.cols).contains(&col) && (0..self.rows).contains(&row);
+        self.tiles.get(
+            usize::try_from(row * self.cols + col)
+                .ok()
+                .filter(|_| inside)?,
+        )
+    }
+
+    /// The note on this square, if any.
+    pub fn note(&self, at: (i32, i32, i32)) -> Option<&str> {
+        self.notes
+            .iter()
+            .find(|(p, _)| *p == at)
+            .map(|(_, t)| t.as_str())
+    }
+}
+
 /// Why the engine cannot be played right now.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FailureKind {
@@ -307,6 +378,20 @@ pub trait GameModel {
     fn route(&self) -> Vec<Pos> {
         vec![]
     }
+    /// The engine's `USE_TILES` and `TILES` options, when it publishes them: the map mode a new profile starts in.
+    fn display_default(&self) -> Option<(bool, String)> {
+        None
+    }
+    /// Says whether the client draws tiles now, so the engine sends tile ids where it has them.
+    fn set_tiles(&mut self, _tiles: bool) {}
+    /// The overmap screen, while it is open.
+    fn overmap(&self) -> Option<Overmap> {
+        None
+    }
+    /// Moves the overmap cursor to an absolute overmap square.
+    fn overmap_cursor_to(&mut self, _at: (i32, i32, i32)) {}
+    /// Leaves the overmap screen.
+    fn close_overmap(&mut self) {}
     /// Set while the engine has exited or stopped answering; the UI shows it instead of the map.
     fn failure(&self) -> Option<Failure> {
         None

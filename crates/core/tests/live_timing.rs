@@ -3,12 +3,23 @@
 use bn_client_core::transport::StdioTransport;
 use bn_client_core::watchdog::Watchdog;
 use bn_client_core::{EngineModel, GameModel};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
 #[derive(Default)]
 struct Phase {
     loading_for: Duration,
     steps: usize,
+}
+
+/// Every `bn.loading` step seen, whichever wait was running when it arrived.
+static STEPS: AtomicUsize = AtomicUsize::new(0);
+static LOADING_MS: AtomicU64 = AtomicU64::new(0);
+
+fn take_loading() -> (usize, Duration) {
+    let steps = STEPS.swap(0, Ordering::Relaxed);
+    let ms = LOADING_MS.swap(0, Ordering::Relaxed);
+    (steps, Duration::from_millis(ms))
 }
 
 fn wait_for(
@@ -23,7 +34,7 @@ fn wait_for(
         assert!(
             !watchdog.expired(model.received()),
             "timed out waiting for {what}: {:?}",
-            model.menu().map(|m| (m.context, m.title))
+            model.menu().map(|m| (m.context, m.title, m.message))
         );
         model.poll();
         // The tutorial save raises a harmless debug message while loading; acknowledge it.
@@ -37,10 +48,15 @@ fn wait_for(
             (Some(l), None) => {
                 loading_since = Some(Instant::now());
                 phase.steps = l.entries.len();
+                STEPS.fetch_add(1, Ordering::Relaxed);
             }
-            (Some(l), Some(_)) => phase.steps = phase.steps.max(l.entries.len()),
+            (Some(l), Some(_)) => {
+                phase.steps = phase.steps.max(l.entries.len());
+                STEPS.fetch_add(1, Ordering::Relaxed);
+            }
             (None, Some(since)) => {
                 phase.loading_for += since.elapsed();
+                LOADING_MS.fetch_add(since.elapsed().as_millis() as u64, Ordering::Relaxed);
                 loading_since = None;
             }
             (None, None) => {}
@@ -89,10 +105,16 @@ fn live_timing_of_starting_the_tutorial_and_loading_its_save() {
     wait_for(&mut model, "the main menu", |m| m.live());
 
     choose_label(&mut model, "New Game");
+    take_loading();
     let started = Instant::now();
     choose_label(&mut model, "Tutorial");
     let new_game = wait_for(&mut model, "the tutorial map", |m| m.size().x > 0);
     let new_game_total = started.elapsed();
+    let (new_game_steps, new_game_loading) = take_loading();
+    assert!(
+        new_game_steps > 0,
+        "the engine's loading screen reached the client on new game"
+    );
     wait_for(&mut model, "idle", |m| !m.busy());
     dismiss_popups(&mut model);
 
@@ -128,6 +150,7 @@ fn live_timing_of_starting_the_tutorial_and_loading_its_save() {
                 .map(|c| c.label.clone())
         })
         .unwrap();
+    take_loading();
     let started = Instant::now();
     choose_label(&mut model, &entry);
     choose_label(&mut model, "John Smith");
@@ -136,9 +159,14 @@ fn live_timing_of_starting_the_tutorial_and_loading_its_save() {
         m.size().x > 0 && m.menu().is_none_or(|x| x.context != "MAIN_MENU")
     });
     let load_total = started.elapsed();
+    let (load_steps, load_loading) = take_loading();
+    assert!(
+        load_steps > 0,
+        "the engine's loading screen reached the client on load"
+    );
+    let _ = (new_game, load);
     println!(
-        "TIMING new game: {new_game_total:?} (loading screen {:?}, {} steps); load: {load_total:?} (loading screen {:?}, {} steps)",
-        new_game.loading_for, new_game.steps, load.loading_for, load.steps
+        "TIMING new game: {new_game_total:?} (loading screen {new_game_loading:?}, {new_game_steps} polls); load: {load_total:?} (loading screen {load_loading:?}, {load_steps} polls)"
     );
 }
 

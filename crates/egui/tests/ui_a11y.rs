@@ -1,3 +1,4 @@
+#![recursion_limit = "512"]
 //! What a screen reader gets from the AccessKit tree: names, roles, selection and focus.
 mod common;
 use bn_client_egui::transport::ScriptHandle;
