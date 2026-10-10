@@ -102,3 +102,41 @@ fn progress_without_steps_shows_just_the_title() {
     h.run_steps(4);
     h.get_by_label("Starting");
 }
+
+/// Needs the game's data directory: set `BN_ROOT`, or keep the default sibling worktree.
+#[test]
+fn the_games_webp_loading_images_decode() {
+    use eframe::egui::load::{ImagePoll, LoadError};
+    let root = std::env::var_os("BN_ROOT")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| "/home/scarf/repo/cata/Cataclysm-BN-worktrees/magnum-opus".into());
+    let webp = std::fs::read_dir(root.join("data/json/loading"))
+        .unwrap()
+        .filter_map(Result::ok)
+        .map(|e| e.path())
+        .find(|p| p.extension().is_some_and(|e| e == "webp"))
+        .expect("a webp loading image in the game data");
+    let ctx = egui::Context::default();
+    egui_extras::install_image_loaders(&ctx);
+    let uri = format!("file://{}", webp.display());
+    let mut result = None;
+    for _ in 0..200 {
+        ctx.run_ui(egui::RawInput::default(), |_| {})
+            .textures_delta
+            .clear();
+        match ctx.try_load_image(&uri, egui::SizeHint::default()) {
+            Ok(ImagePoll::Pending { .. }) => {
+                std::thread::sleep(std::time::Duration::from_millis(10))
+            }
+            other => {
+                result = Some(other);
+                break;
+            }
+        }
+    }
+    match result.expect("decoding finished") {
+        Ok(ImagePoll::Ready { image }) => assert!(image.size[0] > 1 && image.size[1] > 1),
+        Err(LoadError::NoImageLoaders | LoadError::Loading(_)) => panic!("webp not decodable"),
+        _ => panic!("loading did not finish"),
+    }
+}
