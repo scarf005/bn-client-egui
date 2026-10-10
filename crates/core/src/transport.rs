@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 /// Called from the reader thread whenever a message arrives, e.g. to request a UI repaint.
 pub type Waker = Arc<dyn Fn() + Send + Sync>;
@@ -38,6 +39,27 @@ pub fn game_root(engine: &Path, env_root: Option<PathBuf>) -> Option<PathBuf> {
             .find(|dir| dir.join("data/json").is_dir())
             .map(Path::to_path_buf)
     })
+}
+
+/// Appends every JSON-RPC line with a millisecond offset (`->` sent, `<-` received) to the file named by
+/// `BN_CLIENT_TRACE`, if set.
+#[derive(Clone)]
+struct Trace(Option<Arc<Mutex<(std::fs::File, Instant)>>>);
+
+impl Trace {
+    fn from_env() -> Self {
+        let file = std::env::var_os("BN_CLIENT_TRACE")
+            .and_then(|p| std::fs::File::create(p).ok())
+            .map(|f| Arc::new(Mutex::new((f, Instant::now()))));
+        Self(file)
+    }
+
+    fn line(&self, arrow: &str, line: &str) {
+        if let Some(t) = &self.0 {
+            let (file, start) = &mut *t.lock().unwrap();
+            let _ = writeln!(file, "{:>8} {arrow} {line}", start.elapsed().as_millis());
+        }
+    }
 }
 
 /// Engine child process speaking JSON-RPC on stdin/stdout, with private user/config dirs.
@@ -72,6 +94,7 @@ impl StdioTransport {
             .spawn()?;
         let stdin = child.stdin.take().expect("piped stdin");
         let stdout = child.stdout.take().expect("piped stdout");
+        let trace = Trace::from_env();
         let (tx, incoming) = mpsc::channel();
         let waker: Arc<Mutex<Option<Waker>>> = Arc::default();
         let wake = waker.clone();
@@ -82,9 +105,11 @@ impl StdioTransport {
             }
             sent
         };
+        let read_trace = trace.clone();
         std::thread::spawn(move || {
             for line in BufReader::new(stdout).lines() {
                 let Ok(line) = line else { break };
+                read_trace.line("<-", &line);
                 if !line.trim().is_empty() && !notify(protocol::parse_line(&line)) {
                     return;
                 }
@@ -95,6 +120,7 @@ impl StdioTransport {
         std::thread::spawn(move || {
             let mut stdin = stdin;
             for line in lines {
+                trace.line("->", &line);
                 if writeln!(stdin, "{line}")
                     .and_then(|()| stdin.flush())
                     .is_err()
