@@ -208,3 +208,62 @@ fn colour_tags_in_an_item_name_are_drawn_as_colour_and_not_as_text() {
     h.get_by_label("|| long-sleeved shirt");
     assert!(h.query_by_label_contains("<color").is_none());
 }
+
+fn area(h: &H, pane: &str, name: &str) -> egui::Rect {
+    h.get_by_label(&format!("{pane} area {name}")).rect()
+}
+
+#[test]
+fn the_areas_sit_in_the_native_compass_grid_with_the_marker_columns_beside_it() {
+    let (h, _) = harness();
+    let at = |n: &str| area(&h, "Left pane", n);
+    let (here, north, south) = (at("Directly below you"), at("North"), at("South"));
+    let (west, east) = (at("West"), at("East"));
+    assert!(north.center().y < here.center().y && here.center().y < south.center().y);
+    assert!((north.center().x - here.center().x).abs() < 1.0);
+    assert!((south.center().x - here.center().x).abs() < 1.0);
+    assert!(west.center().x < here.center().x && here.center().x < east.center().x);
+    assert!((west.center().y - here.center().y).abs() < 1.0);
+    // The corners fill the rows, and Above and Below close the right edge of the first two rows.
+    assert!(at("North West").center().x < north.center().x);
+    assert!(at("North East").center().x > north.center().x);
+    assert!(at("Above").center().x > at("North East").center().x);
+    assert!(at("Below").center().x > east.center().x);
+    assert!((at("Above").center().y - north.center().y).abs() < 1.0);
+    assert!((at("Below").center().y - here.center().y).abs() < 1.0);
+    // Container and Grabbed Vehicle above Surrounding area and Worn Items, Inventory between them.
+    let (container, grabbed) = (at("Container"), at("Grabbed Vehicle"));
+    let (around, worn, inventory) = (at("Surrounding area"), at("Worn Items"), at("Inventory"));
+    assert!(container.center().y < around.center().y && grabbed.center().y < worn.center().y);
+    assert!(container.center().x < grabbed.center().x);
+    assert!((container.center().x - around.center().x).abs() < 1.0);
+    assert!((grabbed.center().x - inventory.center().x).abs() < 1.0);
+    assert!(grabbed.center().x < west.center().x);
+    assert!((inventory.center().y - here.center().y).abs() < 1.0);
+}
+
+#[test]
+fn an_area_the_engine_does_not_offer_stays_in_its_place_dimmed() {
+    let (t, script) = session();
+    let clock = Clock::manual();
+    let model = EngineModel::new(Box::new(t)).with_clock(clock.clone());
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(1300.0, 800.0))
+        .build_ui_state(
+            |ui, app: &mut App<EngineModel>| app.show(ui),
+            App::new(model).with_clock(clock),
+        );
+    h.run_steps(3);
+    let mut boundary = aim();
+    boundary["actions"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|a| a["id"] != "ITEMS_NW");
+    script.push(event(41, boundary));
+    h.run_steps(4);
+    let node = h.get_by_label("Left pane area North West");
+    assert!(egui_kittest::kittest::NodeT::accesskit_node(&node).is_disabled());
+    assert!(
+        area(&h, "Left pane", "North West").center().x < area(&h, "Left pane", "North").center().x
+    );
+}
