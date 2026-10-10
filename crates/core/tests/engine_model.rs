@@ -1411,3 +1411,72 @@ mod failures {
         assert!(m.failure().is_some());
     }
 }
+
+#[test]
+fn returning_to_the_main_menu_clears_the_previous_games_log_and_command_lines() {
+    let (t, h) = session();
+    let mut m = connected(t);
+    h.push(fixture("events_41_walk"));
+    h.push(logged(42, "7", "You open the door.", 1));
+    m.poll();
+    m.say("Something blocks the way.".into());
+    assert_eq!(m.native_log().len(), 1);
+    let mut menu = crafting("favorites");
+    menu["interaction"]["context"] = json!("MAIN_MENU");
+    h.push(change(43, json!({"interaction": menu})));
+    m.poll();
+    assert!(
+        m.native_log().is_empty(),
+        "the game's own lines belong to that game"
+    );
+    assert!(m.messages().is_empty(), "so do the client's command lines");
+    h.push(logged(44, "8", "Welcome back.", 1));
+    m.poll();
+    assert_eq!(m.native_log().len(), 1, "a later game logs again");
+}
+
+#[test]
+fn pickup_rows_carry_the_native_highlight_marks_and_counts() {
+    let text = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/pickup.json"
+    ))
+    .unwrap();
+    let boundary = serde_json::from_str::<Value>(&text).unwrap()["pickup"].clone();
+    let (t, h) = session();
+    let mut m = connected(t);
+    h.push(change(41, json!({"interaction": boundary})));
+    m.poll();
+    let menu = m.menu().unwrap();
+    assert_eq!(menu.context, "PICKUP");
+    let rows = menu
+        .choices
+        .iter()
+        .map(|c| {
+            (
+                c.highlighted,
+                c.selected,
+                c.selected_count,
+                c.available_count,
+            )
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        rows,
+        [
+            (true, false, None, Some(1)),
+            (false, true, Some(2), Some(3))
+        ]
+    );
+}
+
+#[test]
+fn a_client_line_repeating_the_newest_one_is_not_added_again() {
+    let (t, _h) = session();
+    let mut m = connected(t);
+    m.say("You see a wall at (4, 5).".into());
+    m.say("You see a wall at (4, 5).".into());
+    m.say("You see a door at (5, 5).".into());
+    m.say("You see a wall at (4, 5).".into());
+    assert_eq!(m.messages().len(), 3, "{:?}", m.messages());
+}

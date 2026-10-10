@@ -6,6 +6,7 @@ use bn_client_core::{Failure, GameModel, Loading, LogLine, Pos, keys, markup};
 use eframe::egui::{self, accesskit};
 
 mod crafting;
+mod pickup;
 
 /// A command must outlast this before the controls show it; keeps short commands from blinking the UI.
 const SETTLE: std::time::Duration = std::time::Duration::from_millis(150);
@@ -74,6 +75,7 @@ pub struct App<M: GameModel> {
     /// The cursor has been put on the player since the map first appeared.
     cursor_placed: bool,
     crafting: crafting::Crafting,
+    pickup: pickup::Pickup,
     /// A click that arrived while a command was in flight, sent when the engine is free again.
     queued: Option<Queued>,
 }
@@ -109,6 +111,7 @@ impl<M: GameModel> App<M> {
             native_live: a11y::Announcer::default(),
             command_live: a11y::Announcer::default(),
             crafting: Default::default(),
+            pickup: Default::default(),
             queued: None,
         }
     }
@@ -249,6 +252,10 @@ impl<M: GameModel> App<M> {
         }
         if self.pending_since.is_some() && !self.settled() {
             ui.ctx().request_repaint_after(SETTLE);
+        }
+        if self.model.menu().is_some_and(|m| m.context == "MAIN_MENU") {
+            // The game is over: the next one starts with the cursor on its player and no walk pending.
+            (self.cursor_placed, self.destination, self.marker) = (false, None, None);
         }
         self.run_queued();
         // Esc interrupts a running activity; with none running it goes to the game like any key
@@ -506,6 +513,11 @@ impl<M: GameModel> App<M> {
             | (self.menu_title.replace(menu.title.clone()).as_ref() != Some(&menu.title));
         if menu.context == "CRAFTING" {
             let focused = self.crafting(ctx, &menu, entered);
+            self.focus_menu = entered && !focused;
+            return;
+        }
+        if menu.context == "PICKUP" {
+            let focused = self.pickup(ctx, &menu, entered);
             self.focus_menu = entered && !focused;
             return;
         }
@@ -823,7 +835,8 @@ impl<M: GameModel> App<M> {
         response.clone().on_hover_ui_at_pointer(|ui| {
             let desc = self.model.cell(cursor).desc;
             if desc != "unknown" {
-                ui.label(desc);
+                // A tooltip at the pointer gets almost no width to wrap in; one line never wraps.
+                ui.add(egui::Label::new(desc).wrap_mode(egui::TextWrapMode::Extend));
             }
         });
         let menu = response.context_menu(|ui| {
@@ -995,9 +1008,7 @@ impl<M: GameModel> App<M> {
 fn message_log(ui: &mut egui::Ui, native: &[crate::LogLine], commands: &[String], live: [&str; 2]) {
     ui.heading("Message log");
     if !native.is_empty() {
-        let live = ui.label(live[0]);
-        ui.ctx()
-            .accesskit_node_builder(live.id, |b| b.set_live(accesskit::Live::Polite));
+        a11y::live_region(ui, live[0]);
     }
     egui::ScrollArea::vertical()
         .id_salt("native_log")
@@ -1011,9 +1022,7 @@ fn message_log(ui: &mut egui::Ui, native: &[crate::LogLine], commands: &[String]
         });
     if !commands.is_empty() {
         ui.separator();
-        let live = ui.label(live[1]);
-        ui.ctx()
-            .accesskit_node_builder(live.id, |b| b.set_live(accesskit::Live::Polite));
+        a11y::live_region(ui, live[1]);
     }
     egui::ScrollArea::vertical()
         .id_salt("command_log")

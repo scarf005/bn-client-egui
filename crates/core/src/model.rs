@@ -90,6 +90,11 @@ pub struct MenuChoice {
     pub group: Option<String>,
     /// A tab header of the menu rather than one of its entries.
     pub tab: bool,
+    /// The native cursor is on this row.
+    pub highlighted: bool,
+    /// How many of the row are chosen, and how many there are, for rows that take a count.
+    pub selected_count: Option<u64>,
+    pub available_count: Option<u64>,
     /// The engine's detail text for the row; empty when it has none.
     pub description: String,
     /// Label and value pairs shown beside the row.

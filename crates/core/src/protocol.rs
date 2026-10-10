@@ -208,9 +208,14 @@ pub struct Choice {
     pub enabled: bool,
     pub selectable: bool,
     pub selected: bool,
+    /// The native cursor row of a list menu.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub highlighted: Option<bool>,
     pub columns: Vec<Column>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub editor: Option<Editor>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected_count: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub available_count: Option<u64>,
 }
