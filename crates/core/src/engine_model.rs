@@ -62,6 +62,8 @@ pub struct EngineModel {
     /// Whether the client draws tiles now, and what the engine was last told.
     tiles: bool,
     tiles_told: bool,
+    /// The engine's `USE_TILES` and `TILES` options from its hello.
+    display: Option<(bool, String)>,
     /// The earliest time to tell the engine again after it refused.
     tiles_retry: Duration,
     transport: Box<dyn Transport>,
@@ -272,6 +274,7 @@ impl EngineModel {
         let mut m = Self {
             tiles,
             tiles_told: tiles,
+            display: None,
             tiles_retry: Duration::ZERO,
             transport,
             respawn: None,
@@ -541,6 +544,12 @@ impl EngineModel {
         };
         match kind {
             Pending::Hello => {
+                self.display = value["engine"]["display"].as_object().and_then(|d| {
+                    Some((
+                        d.get("tiles")?.as_bool()?,
+                        d.get("tileset")?.as_str()?.to_string(),
+                    ))
+                });
                 self.mark("hello");
                 self.subscribe();
             }
@@ -1100,6 +1109,10 @@ impl GameModel for EngineModel {
     fn set_waker(&mut self, waker: crate::transport::Waker) {
         self.transport.set_waker(waker.clone());
         self.waker = Some(waker);
+    }
+
+    fn display_default(&self) -> Option<(bool, String)> {
+        self.display.clone()
     }
 
     fn set_tiles(&mut self, tiles: bool) {

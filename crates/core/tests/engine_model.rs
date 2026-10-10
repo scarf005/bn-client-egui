@@ -1700,3 +1700,21 @@ fn a_second_snapshot_with_the_same_log_replaces_lines_instead_of_duplicating_the
     let shown: Vec<_> = m.native_log().iter().map(|l| l.shown()).collect();
     assert_eq!(shown, ["You wake up.", "Bang!", "Crash!"]);
 }
+
+#[test]
+fn the_engines_display_options_from_hello_are_the_default_map_mode() {
+    let mut hello = fixture("hello_result");
+    hello["result"]["engine"]["display"] = json!({"tiles": false, "tileset": "MSX"});
+    let (t, _h) = ScriptedTransport::new();
+    let t = t
+        .on("bn.hello", vec![hello])
+        .on("bn.subscribe", subscribe_reply());
+    let m = connected(t);
+    assert_eq!(m.display_default(), Some((false, "MSX".to_string())));
+    let (t, _h) = session();
+    assert_eq!(
+        connected(t).display_default(),
+        None,
+        "older engines publish none"
+    );
+}
