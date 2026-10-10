@@ -4,6 +4,7 @@ pub mod colors;
 pub mod engine_model;
 pub mod keys;
 pub mod launch;
+pub mod markup;
 pub mod model;
 pub mod protocol;
 pub mod replica;
