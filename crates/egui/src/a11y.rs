@@ -79,6 +79,17 @@ pub fn trap_tab(ctx: &egui::Context, ids: &[egui::Id]) {
     ctx.memory_mut(|m| m.request_focus(ids[next]));
 }
 
+/// A polite live region that paints nothing: the text is announced when it changes but is not shown,
+/// for content the screen already displays elsewhere.
+pub fn live_region(ui: &mut egui::Ui, text: &str) {
+    let region = ui.allocate_response(egui::Vec2::ZERO, egui::Sense::hover());
+    ui.ctx().accesskit_node_builder(region.id, |b| {
+        b.set_role(accesskit::Role::Label);
+        b.set_value(text);
+        b.set_live(accesskit::Live::Polite);
+    });
+}
+
 /// Turns an append-only log into the text of one polite live region: every line added since the
 /// last frame, joined in order, so a burst is read whole and history is never re-read.
 #[derive(Default)]

@@ -988,9 +988,7 @@ impl<M: GameModel> App<M> {
 fn message_log(ui: &mut egui::Ui, native: &[crate::LogLine], commands: &[String], live: [&str; 2]) {
     ui.heading("Message log");
     if !native.is_empty() {
-        let live = ui.label(live[0]);
-        ui.ctx()
-            .accesskit_node_builder(live.id, |b| b.set_live(accesskit::Live::Polite));
+        a11y::live_region(ui, live[0]);
     }
     egui::ScrollArea::vertical()
         .id_salt("native_log")
@@ -1004,9 +1002,7 @@ fn message_log(ui: &mut egui::Ui, native: &[crate::LogLine], commands: &[String]
         });
     if !commands.is_empty() {
         ui.separator();
-        let live = ui.label(live[1]);
-        ui.ctx()
-            .accesskit_node_builder(live.id, |b| b.set_live(accesskit::Live::Polite));
+        a11y::live_region(ui, live[1]);
     }
     egui::ScrollArea::vertical()
         .id_salt("command_log")
