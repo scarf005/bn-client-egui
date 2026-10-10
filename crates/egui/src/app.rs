@@ -76,6 +76,8 @@ pub struct App<M: GameModel> {
     cursor_placed: bool,
     crafting: crafting::Crafting,
     pickup: pickup::Pickup,
+    /// The engine's selected row of the open menu, to keep it in view when the wheel moves it.
+    menu_cursor: Option<String>,
     /// A click that arrived while a command was in flight, sent when the engine is free again.
     queued: Option<Queued>,
 }
@@ -112,6 +114,7 @@ impl<M: GameModel> App<M> {
             command_live: a11y::Announcer::default(),
             crafting: Default::default(),
             pickup: Default::default(),
+            menu_cursor: None,
             queued: None,
         }
     }
@@ -529,6 +532,30 @@ impl<M: GameModel> App<M> {
         let mut edited = None;
         let mut key_chosen = None;
         let mut cancel = ctx.input(|i| i.key_pressed(egui::Key::Escape)) && menu.can_cancel;
+        // The wheel moves the engine's cursor by its own steps, as in a native list; the list only
+        // follows the cursor, so one wheel does not scroll twice.
+        let engine_scroll = self.model.can_scroll_menu();
+        if engine_scroll {
+            // One engine step per wheel event, not per smoothed frame.
+            let steps = ctx.input(|i| {
+                i.raw
+                    .events
+                    .iter()
+                    .filter_map(|e| match e {
+                        egui::Event::MouseWheel { delta, .. } if delta.y != 0.0 => {
+                            Some(delta.y > 0.0)
+                        }
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>()
+            });
+            for up in steps {
+                if self.model.scroll_menu(up) {
+                    ctx.request_repaint();
+                }
+            }
+        }
+        let mut cursor_seen = None;
         let title = markup::plain(&menu.title);
         egui::Window::new(&title)
             .id(a11y::dialog_id(&title))
@@ -554,6 +581,10 @@ impl<M: GameModel> App<M> {
                 let mut described = None;
                 egui::ScrollArea::vertical()
                     .max_height(ctx.content_rect().height() * 0.6)
+                    .scroll_source(egui::scroll_area::ScrollSource {
+                        mouse_wheel: !engine_scroll,
+                        ..Default::default()
+                    })
                     .show(ui, |ui| {
                         if !menu.message.is_empty() {
                             ui.label(self.rich(ui, &menu.message));
@@ -585,6 +616,12 @@ impl<M: GameModel> App<M> {
                                     choice.selected,
                                 );
                                 ids.extend(button.enabled().then_some(button.id));
+                                if choice.selected {
+                                    cursor_seen = Some(choice.id.clone());
+                                    if self.menu_cursor.as_deref() != Some(&choice.id) {
+                                        button.scroll_to_me(None);
+                                    }
+                                }
                                 // The keyboard focus follows the engine's own cursor.
                                 let at_cursor = menu.focus.as_deref() == Some(choice.id.as_str());
                                 if (entered && i == 0 && tabs.is_empty() && menu.focus.is_none())
@@ -624,6 +661,7 @@ impl<M: GameModel> App<M> {
             });
         self.menu_ids = ids;
         self.menu_focus = menu.focus.clone();
+        self.menu_cursor = cursor_seen;
         self.focus_menu = entered && !focused;
         a11y::dialog(ctx, &title, &menu.message);
         if let (Some(field), Some(value)) = (&menu.field, key_chosen) {
@@ -791,14 +829,24 @@ impl<M: GameModel> App<M> {
         let hover = response.hover_pos();
         if let Some(p) = hover.filter(|p| self.last_hover != Some(*p)) {
             cursor = cell_at(p);
+            // The engine's own cursor follows the mouse while it is looking or aiming; otherwise the
+            // native mouse view describes the square.
+            if !self.model.aim(cursor) {
+                self.model.hover(cursor);
+            }
         }
         self.last_hover = hover;
+        // A click goes to the square it landed on, not to where the pointer was last seen hovering.
+        let clicked = response.interact_pointer_pos().map_or(cursor, cell_at);
         if response.clicked() {
-            self.go_to(cursor);
+            // A click while the engine owns the cursor moves or confirms it; otherwise it travels.
+            if !self.model.aim(clicked) {
+                self.go_to(clicked);
+            }
             ui.ctx().request_repaint();
         }
-        if response.secondary_clicked() {
-            self.menu_cell = cursor;
+        if response.secondary_clicked() && !self.model.context_click(clicked) {
+            self.menu_cell = clicked;
         }
         if self.refocus_map && self.model.menu().is_none() {
             self.refocus_map = false;
@@ -833,13 +881,25 @@ impl<M: GameModel> App<M> {
         }
         self.cursor = to_abs(cursor);
         response.clone().on_hover_ui_at_pointer(|ui| {
-            let desc = self.model.cell(cursor).desc;
-            if desc != "unknown" {
-                // A tooltip at the pointer gets almost no width to wrap in; one line never wraps.
-                ui.add(egui::Label::new(desc).wrap_mode(egui::TextWrapMode::Extend));
+            // The engine's own mouse-view text when it has answered for this square.
+            if let Some(lines) = self.model.hover_text(cursor) {
+                for line in lines {
+                    // A tooltip at the pointer gets almost no width to wrap in; one line never wraps.
+                    ui.add(egui::Label::new(line).wrap_mode(egui::TextWrapMode::Extend));
+                }
+            } else {
+                let desc = self.model.cell(cursor).desc;
+                if desc != "unknown" {
+                    ui.add(egui::Label::new(desc).wrap_mode(egui::TextWrapMode::Extend));
+                }
             }
         });
+        let native_context = self.model.native_context();
         let menu = response.context_menu(|ui| {
+            if native_context {
+                ui.close();
+                return;
+            }
             let at = self.menu_cell;
             if menu_item(ui, "Look") {
                 self.look(at);
@@ -851,7 +911,7 @@ impl<M: GameModel> App<M> {
                 ui.close();
             }
         });
-        if let Some(menu) = menu {
+        if let Some(menu) = menu.filter(|_| !native_context) {
             ui.ctx().accesskit_node_builder(menu.response.id, |b| {
                 b.set_role(accesskit::Role::Menu);
                 b.set_label("Map actions");
