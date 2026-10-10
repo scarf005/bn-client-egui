@@ -3,6 +3,7 @@ use crate::display::Display;
 use crate::text;
 use bn_client_core::{GameModel, Loading, LogLine, Pos, markup};
 use eframe::egui::{self, accesskit};
+use std::collections::VecDeque;
 
 mod crafting;
 
@@ -72,14 +73,20 @@ pub struct App<M: GameModel> {
     cursor_placed: bool,
     crafting: crafting::Crafting,
     /// A click that arrived while a command was in flight, sent when the engine is free again.
-    queued: Option<Queued>,
+    /// Input pressed while a command ran, in order; each goes out as soon as the one before it is done.
+    queued: VecDeque<Queued>,
     /// The loading step the list was last scrolled to; scrolling again every frame would repaint forever.
     scrolled_to: Option<usize>,
 }
 
 enum Queued {
     Action(String),
+    Key(String),
 }
+
+/// How much input may wait for a running command. A held key repeats faster than the engine can step, and
+/// releasing it must stop the walk soon.
+const QUEUE: usize = 2;
 
 impl<M: GameModel> App<M> {
     pub fn new(model: M) -> Self {
@@ -107,7 +114,7 @@ impl<M: GameModel> App<M> {
             native_live: a11y::Announcer::default(),
             command_live: a11y::Announcer::default(),
             crafting: Default::default(),
-            queued: None,
+            queued: VecDeque::new(),
             scrolled_to: None,
         }
     }
@@ -322,7 +329,10 @@ impl<M: GameModel> App<M> {
         };
         self.keys_consumed = false;
         for key in typed.into_iter().chain(named) {
-            if self.model.press(&key) {
+            if !self.model.busy() {
+                self.keys_consumed |= self.model.press(&key);
+            } else if self.model.key_bound(&key) {
+                self.enqueue(Queued::Key(key));
                 self.keys_consumed = true;
             }
         }
@@ -401,7 +411,7 @@ impl<M: GameModel> App<M> {
         if let Some(id) = invoke {
             ui.ctx().request_repaint();
             if self.model.busy() {
-                self.queued = Some(Queued::Action(id));
+                self.enqueue(Queued::Action(id));
             } else {
                 self.model.invoke_action(&id);
             }
@@ -409,15 +419,28 @@ impl<M: GameModel> App<M> {
     }
 
     /// Runs the click that waited for the engine to finish its previous command.
+    fn enqueue(&mut self, input: Queued) {
+        if self.queued.len() < QUEUE {
+            self.queued.push_back(input);
+        }
+    }
+
+    /// Sends the waiting input once the command in flight is done; a menu that has opened meanwhile
+    /// ends the wait, since the input was meant for the map.
     fn run_queued(&mut self) {
-        if self.model.busy() {
+        if self.model.busy() || self.queued.is_empty() {
             return;
         }
-        match self.queued.take() {
-            Some(Queued::Action(id)) => {
-                self.model.invoke_action(&id);
-            }
-            None => {}
+        if self.model.menu().is_some() {
+            self.queued.clear();
+        }
+        while !self.model.busy()
+            && let Some(input) = self.queued.pop_front()
+        {
+            match input {
+                Queued::Action(id) => self.model.invoke_action(&id),
+                Queued::Key(key) => self.model.press(&key),
+            };
         }
     }
 

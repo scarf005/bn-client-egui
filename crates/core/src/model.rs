@@ -204,6 +204,10 @@ pub trait GameModel {
     fn interrupt(&mut self) -> bool {
         false
     }
+    /// The game key would run an action if the model were not busy; the UI queues such keys meanwhile.
+    fn key_bound(&self, _key: &str) -> bool {
+        false
+    }
     /// A game key token (`g`, `SPACE`, `UP`); true if it ran an action.
     fn press(&mut self, _key: &str) -> bool {
         false

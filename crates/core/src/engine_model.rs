@@ -395,6 +395,18 @@ impl EngineModel {
         }
     }
 
+    /// The action the game key runs: the engine names the keys of its active context; the key settings only
+    /// serve older engines.
+    fn action_for(&self, key: &str) -> Option<String> {
+        let bound = self.keys.actions_for(key);
+        let boundary = self.replica.boundary()?;
+        let offered = boundary.actions.iter().find(|a| match &a.keys {
+            Some(keys) => keys.iter().any(|k| k == key),
+            None => bound.contains(&a.id.as_str()),
+        });
+        offered.map(|a| a.id.clone())
+    }
+
     fn submit(&mut self, operation: Operation) -> bool {
         let (Some(at), Some(b)) = (self.replica.at(), self.replica.boundary()) else {
             return false;
@@ -985,16 +997,12 @@ impl GameModel for EngineModel {
         !self.busy && self.invoke(&[id.into()])
     }
 
+    fn key_bound(&self, key: &str) -> bool {
+        self.action_for(key).is_some()
+    }
+
     fn press(&mut self, key: &str) -> bool {
-        let offered = self.replica.boundary().and_then(|b| {
-            // The engine names the keys of its active context; the key settings only serve older engines.
-            let bound = self.keys.actions_for(key);
-            b.actions.iter().find(|a| match &a.keys {
-                Some(keys) => keys.iter().any(|k| k == key),
-                None => bound.contains(&a.id.as_str()),
-            })
-        });
-        if let Some(id) = offered.map(|a| a.id.clone()) {
+        if let Some(id) = self.action_for(key) {
             return self.invoke_action(&id);
         }
         // A "press any key" popup has no key to bind: whatever is pressed acknowledges it.
