@@ -549,7 +549,7 @@ fn live_engine_long_wait_is_never_reported_as_stalled() {
 fn live_engine_opens_the_overmap_moves_its_cursor_and_closes_it() {
     let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
     let transport = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
-    let mut model = EngineModel::new(Box::new(transport));
+    let mut model = EngineModel::connect(Box::new(transport), true);
     wait_for(&mut model, "subscription", |m| m.live());
     choose_label(&mut model, "New Game");
     choose_label(&mut model, "Tutorial");
@@ -571,6 +571,11 @@ fn live_engine_opens_the_overmap_moves_its_cursor_and_closes_it() {
     assert!(first.cols > 10 && first.rows > 5);
     assert_eq!(first.cursor, first.player, "it opens on the player");
     assert!(first.legend.iter().any(|l| !l.trim().is_empty()));
+    // The client said it draws tiles: every square names a tile, the one under the player a known one.
+    assert_eq!(first.tiles.len(), (first.cols * first.rows) as usize);
+    let under = first.tile(first.cols / 2, first.rows / 2).unwrap();
+    println!("tile under the player: {under:?}");
+    assert!(!under.id.is_empty() && under.id != "unknown_terrain");
 
     let to = (first.cursor.0 + 3, first.cursor.1 - 2, first.cursor.2);
     model.overmap_cursor_to(to);
