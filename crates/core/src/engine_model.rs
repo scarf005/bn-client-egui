@@ -4,7 +4,7 @@ use crate::clock::Clock;
 use crate::colors::ColorMap;
 use crate::keys::KeyMap;
 use crate::model::{
-    ActionEntry, Cell, CommandStatus, GameModel, Loading, Menu, MenuChoice, Pos, Rgb,
+    ActionEntry, Cell, CommandStatus, GameModel, Loading, LogLine, Menu, MenuChoice, Pos, Rgb,
 };
 use crate::protocol::{
     self, Cell as WorldCell, Expect, Incoming, LoadingNotice, Look, Operation, Snapshot, Submit,
@@ -55,6 +55,7 @@ pub struct EngineModel {
     resized: Option<Duration>,
     clock: Clock,
     messages: Vec<String>,
+    native: Vec<LogLine>,
     ground: Vec<String>,
     inventory: Vec<String>,
     trace: Vec<(Instant, &'static str)>,
@@ -126,6 +127,7 @@ impl EngineModel {
             resized: None,
             clock: Clock::default(),
             messages: vec![],
+            native: vec![],
             ground: vec![],
             inventory: vec![],
             trace: vec![],
@@ -559,6 +561,25 @@ impl GameModel for EngineModel {
             self.handle(msg);
         }
         self.messages.extend(self.replica.take_log());
+        for line in self.replica.take_lines() {
+            let line = LogLine {
+                color: line.color.map(|name| self.colors.resolve(&name).0),
+                id: line.id,
+                text: line.text,
+                count: line.count,
+            };
+            // A repeat replaces the line it counts; ids are never reused, so search the tail only.
+            match self
+                .native
+                .iter_mut()
+                .rev()
+                .take(8)
+                .find(|l| !line.id.is_empty() && l.id == line.id)
+            {
+                Some(old) => *old = line,
+                None => self.native.push(line),
+            }
+        }
         self.send_viewport();
         self.refresh_view();
         self.refresh_items();
@@ -673,6 +694,10 @@ impl GameModel for EngineModel {
 
     fn messages(&self) -> &[String] {
         &self.messages
+    }
+
+    fn native_log(&self) -> &[LogLine] {
+        &self.native
     }
 
     fn say(&mut self, text: String) {

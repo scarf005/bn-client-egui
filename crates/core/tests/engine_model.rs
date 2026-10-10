@@ -198,7 +198,33 @@ fn duplicate_events_do_not_resubscribe_or_duplicate_messages() {
     h.push(fixture("events_42_message"));
     m.poll();
     assert_eq!(h.sent_methods().len(), 2);
-    assert_eq!(m.messages(), ["You walk east."]);
+    let shown: Vec<_> = m.native_log().iter().map(|l| l.shown()).collect();
+    assert_eq!(shown, ["You walk east."]);
+    assert!(
+        m.messages().is_empty(),
+        "native lines are not command lines"
+    );
+}
+
+fn logged(sequence: u32, id: &str, text: &str, count: u32) -> serde_json::Value {
+    serde_json::json!({"jsonrpc": "2.0", "method": "bn.events", "params": {"epoch": "e7f3", "events": [{
+        "sequence": sequence.to_string(), "revision": "32", "type": "message.logged",
+        "data": {"id": id, "text": text, "kind": "bad", "color": "c_red", "count": count}}]}})
+}
+
+#[test]
+fn native_log_keeps_order_colors_and_replaces_a_repeat_in_place() {
+    let (t, h) = session();
+    let mut m = connected(t);
+    h.push(fixture("events_41_walk"));
+    h.push(logged(42, "7", "You open the door.", 1));
+    h.push(logged(43, "8", "Bang!", 1));
+    h.push(logged(44, "8", "Bang!", 2));
+    m.poll();
+    let shown: Vec<_> = m.native_log().iter().map(|l| l.shown()).collect();
+    assert_eq!(shown, ["You open the door.", "Bang! x2"]);
+    assert!(m.native_log().iter().all(|l| l.color.is_some()));
+    assert_ne!(m.native_log()[0].color, Some(Rgb(0, 0, 0)));
 }
 
 #[test]
