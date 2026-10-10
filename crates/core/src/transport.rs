@@ -22,6 +22,11 @@ pub trait Transport {
     fn send(&mut self, msg: Value);
     /// The next parsed incoming message, without blocking.
     fn recv(&mut self) -> Option<Incoming>;
+    /// CPU time the engine has used so far in clock ticks, 0 where unknown. A busy engine is silent on
+    /// the wire while it loads a world; live tests count this as progress.
+    fn engine_cpu_ticks(&self) -> u64 {
+        0
+    }
 }
 
 pub fn request(id: u64, method: &str, params: Value) -> Value {
@@ -195,6 +200,19 @@ impl Transport for StdioTransport {
 
     fn recv(&mut self) -> Option<Incoming> {
         self.incoming.try_recv().ok()
+    }
+
+    /// `utime + stime` from `/proc/<pid>/stat` (Linux; 0 elsewhere).
+    fn engine_cpu_ticks(&self) -> u64 {
+        let stat = std::fs::read_to_string(format!("/proc/{}/stat", self.child.id())).ok();
+        // Fields after the parenthesised command name; utime and stime are the 12th and 13th of them.
+        let fields = stat
+            .as_deref()
+            .and_then(|s| s.rsplit_once(')'))
+            .map(|(_, f)| f);
+        fields
+            .map(|f| f.split_whitespace().skip(11).take(2))
+            .map_or(0, |t| t.filter_map(|v| v.parse::<u64>().ok()).sum())
     }
 }
 

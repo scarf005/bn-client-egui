@@ -1,14 +1,15 @@
 //! Needs a real engine build: `BN_ENGINE=/path/to/cataclysm-bn-tiles cargo test -p bn-client-core --test live_messages -- --ignored --nocapture`
 use bn_client_core::keys::KeyMap;
 use bn_client_core::transport::StdioTransport;
+use bn_client_core::watchdog::Watchdog;
 use bn_client_core::{EngineModel, GameModel};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 fn wait_for(model: &mut EngineModel, what: &str, mut done: impl FnMut(&EngineModel) -> bool) {
-    let deadline = Instant::now() + Duration::from_secs(90);
+    let mut watchdog = Watchdog::live();
     while !done(model) {
         assert!(
-            Instant::now() < deadline,
+            !watchdog.expired(model.received()),
             "timed out waiting for {what}: {:?}",
             model.messages()
         );
