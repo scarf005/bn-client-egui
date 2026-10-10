@@ -131,6 +131,14 @@ fn tabs_are_selectable_tabs_not_toggle_buttons() {
 fn actions_are_plain_buttons_not_toggle_buttons() {
     let (mut h, _script) = harness();
     h.run_steps(3);
+    h.event(egui::Event::Key {
+        key: egui::Key::P,
+        physical_key: None,
+        pressed: true,
+        repeat: false,
+        modifiers: egui::Modifiers::COMMAND,
+    });
+    h.run_steps(3);
     let action = h.get_by_label("Move right (RIGHT, l)");
     assert_eq!(action.accesskit_node().role(), accesskit::Role::Button);
     assert_eq!(action.accesskit_node().toggled(), None);
