@@ -1,6 +1,8 @@
 #![recursion_limit = "512"]
 mod common;
-use bn_client_egui::tileset::{self, Query, Tileset, Turn, mix};
+use bn_client_core::protocol::{ModTileset, Traits};
+use bn_client_egui::tileset::{self, PaintQuery, Query, Tileset, Turn, mix};
+use bn_client_egui::tint::{Blend, Paint};
 use common::game_root;
 
 fn load(tag: &str) -> Tileset {
@@ -257,4 +259,115 @@ fn a_mod_tileset_for_another_tileset_adds_nothing() {
     let set = Tileset::load(&root.join("gfx/test")).unwrap();
     assert!(set.choose(&query("vp_glass")).is_none());
     assert_eq!(set.sheets.len(), 2);
+}
+
+fn traits(pairs: &[(&str, &[&str])]) -> Traits {
+    pairs
+        .iter()
+        .map(|(k, v)| (k.to_string(), v.iter().map(|s| s.to_string()).collect()))
+        .collect()
+}
+
+/// A mod tileset of the root that only holds tints.
+fn add_tints(root: &std::path::Path, tints: serde_json::Value, pairs: serde_json::Value) {
+    let dir = root.join("data/json/external_tileset");
+    std::fs::create_dir_all(&dir).unwrap();
+    let config = serde_json::json!([
+        {"type": "mod_tileset", "compatibility": ["test"], "tints": tints, "tint_pairs": pairs}
+    ]);
+    std::fs::write(dir.join("tints.json"), config.to_string()).unwrap();
+}
+
+#[test]
+fn a_mutation_takes_the_paint_of_the_character_mutation_its_type_is_paired_with() {
+    let root = game_root("tints");
+    add_tints(
+        &root,
+        serde_json::json!([
+            {"id": "hair_black", "fg": "#383838", "blend_mode": "multiply"},
+            {"id": "SKIN_DARK", "fg": "#55381c80", "bg": {"color": "#102030", "blend_mode": "additive", "contrast": 1.5}}
+        ]),
+        serde_json::json!([{"source_type": "hair_color", "target_type": "hair_style", "override": true}]),
+    );
+    let set = Tileset::load(&root.join("gfx/test")).unwrap();
+    let query = |id: &'static str, types: &'static [String], traits: &'static Traits| PaintQuery {
+        id,
+        types,
+        flags: &[],
+        traits,
+    };
+    let (style, none): (&'static [String], &'static Traits) = (
+        Box::leak(vec!["hair_style".to_string()].into_boxed_slice()),
+        Box::leak(Box::new(Traits::new())),
+    );
+    let black: &'static Traits = Box::leak(Box::new(traits(&[("hair_color", &["hair_black"])])));
+    // The hair takes the color of the character's hair color mutation, multiplied in.
+    let (bg, fg) = set.mutation_paints(&query("hair_long", style, black));
+    assert_eq!(bg, None);
+    assert_eq!(
+        fg,
+        Some(Paint {
+            blend: Blend::Multiply,
+            ..Paint::of([56, 56, 56])
+        })
+    );
+    // Without a hair color mutation, or for another type, a mutation has only its own paint, if any.
+    assert_eq!(
+        set.mutation_paints(&query("hair_long", style, none)),
+        (None, None)
+    );
+    assert_eq!(
+        set.mutation_paints(&query("hair_long", &[], black)),
+        (None, None)
+    );
+    let (bg, fg) = set.mutation_paints(&query("SKIN_DARK", &[], none));
+    assert_eq!(
+        bg,
+        Some(Paint {
+            blend: Blend::Additive,
+            contrast: 1500,
+            ..Paint::of([16, 32, 48])
+        })
+    );
+    // The fourth pair of a color is its brightness in 128ths.
+    assert_eq!(
+        fg.map(|p| (p.color, p.brightness)),
+        Some(([85, 56, 28], 1000))
+    );
+}
+
+#[test]
+fn the_engines_list_of_mod_tilesets_replaces_the_search_of_the_data() {
+    let root = game_root("mod-list");
+    add_mod(
+        &root,
+        "found.json",
+        &["test"],
+        serde_json::json!([{"id": "vp_found", "fg": 0}]),
+    );
+    add_mod(
+        &root,
+        "listed.json",
+        &["test"],
+        serde_json::json!([{"id": "vp_listed", "fg": 0}]),
+    );
+    let dir = root.join("gfx/test");
+    let json = root.join("data/json");
+    let only = |name: &str| ModTileset {
+        path: json
+            .join("external_tileset")
+            .join(name)
+            .display()
+            .to_string(),
+        base: json.display().to_string(),
+        index: 1,
+        compatibility: vec!["test".into()],
+    };
+    let set = Tileset::load_with(&dir, Some(&[only("listed.json")])).unwrap();
+    assert!(set.choose(&query("vp_listed")).is_some());
+    assert!(set.choose(&query("vp_found")).is_none());
+    // The search of the data finds both, in file order.
+    let both = Tileset::load(&dir).unwrap();
+    let sprite = |id: &str| both.choose(&query(id)).unwrap().fg.unwrap().sprite;
+    assert_eq!((sprite("vp_found"), sprite("vp_listed")), (10, 14));
 }

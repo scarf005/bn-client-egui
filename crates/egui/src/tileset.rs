@@ -1,6 +1,8 @@
 //! The game's graphical tilesets: `gfx/<name>/tile_config.json` and its sprite sheets, read the way
 //! `cata_tiles` reads them, so the sprite chosen for a cell follows the native view.
 
+use crate::tint::{Blend, Paint};
+use bn_client_core::protocol::{ModTileset, Traits};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -50,6 +52,10 @@ struct Config {
     /// The old format: one sheet, named by `tileset.txt`.
     #[serde(default)]
     tiles: Vec<TileDef>,
+    #[serde(default)]
+    tints: Vec<TintDef>,
+    #[serde(default)]
+    tint_pairs: Vec<PairDef>,
 }
 
 #[derive(Deserialize)]
@@ -125,12 +131,57 @@ struct MaskDef {
 /// A tileset a game file adds to the ones whose names it lists.
 #[derive(Deserialize)]
 struct ModConfig {
-    #[serde(rename = "type")]
-    kind: String,
     #[serde(default)]
     compatibility: Vec<String>,
     #[serde(rename = "tiles-new", default)]
     sheets: Vec<SheetDef>,
+    #[serde(default)]
+    tints: Vec<TintDef>,
+    #[serde(default)]
+    tint_pairs: Vec<PairDef>,
+}
+
+/// The paint of a mutation: by color, or with its own blend and adjustments.
+#[derive(Deserialize)]
+struct TintDef {
+    id: String,
+    fg: Option<ColorDef>,
+    bg: Option<ColorDef>,
+    blend_mode: Option<String>,
+    contrast: Option<f32>,
+    saturation: Option<f32>,
+    brightness: Option<f32>,
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum ColorDef {
+    Plain(String),
+    Detailed {
+        color: Option<String>,
+        blend_mode: Option<String>,
+        contrast: Option<f32>,
+        saturation: Option<f32>,
+        brightness: Option<f32>,
+    },
+}
+
+/// A mutation type whose color a tileset takes from the mutations of another type.
+#[derive(Deserialize)]
+struct PairDef {
+    source_type: String,
+    target_type: String,
+}
+
+/// The foreground and background paint of a mutation.
+pub type Paints = (Option<Paint>, Option<Paint>);
+
+/// What picks the paint of a mutation overlay: the mutation and the character's mutations by type.
+pub struct PaintQuery<'a> {
+    pub id: &'a str,
+    pub types: &'a [String],
+    pub flags: &'a [String],
+    pub traits: &'a Traits,
 }
 
 /// One sprite, the rotations of a tile (2 or 4 sprites), or weighted variants of either.
@@ -245,6 +296,9 @@ pub struct Tileset {
     pub pixelscale: f32,
     pub sheets: Vec<Sheet>,
     tiles: HashMap<String, Tile>,
+    /// Paints by mutation id, and the mutation types whose paints a type takes.
+    tints: HashMap<String, Paints>,
+    tint_pairs: HashMap<String, String>,
 }
 
 /// What to draw for one thing in a cell.
@@ -320,8 +374,14 @@ const MULTITILE_KEYS: [&str; 8] = [
 ];
 
 impl Tileset {
-    /// Reads the tileset in `dir`: `tileset.txt` names its JSON and, for the old format, its image.
+    /// Reads the tileset in `dir` with the mod tilesets found in the game's data: `tileset.txt` names its JSON
+    /// and, for the old format, its image.
     pub fn load(dir: &Path) -> Result<Self, String> {
+        Self::load_with(dir, None)
+    }
+
+    /// Reads the tileset in `dir` with the mod tilesets the engine lists, or those found in the game's data.
+    pub fn load_with(dir: &Path, mods: Option<&[ModTileset]>) -> Result<Self, String> {
         let text = std::fs::read_to_string(dir.join("tileset.txt")).unwrap_or_default();
         let json = setting(&text, "JSON").unwrap_or_else(|| "tile_config.json".into());
         let image = setting(&text, "TILESET").unwrap_or_else(|| "tiles.png".into());
@@ -350,18 +410,93 @@ impl Tileset {
             pixelscale: 1.0,
             sheets: vec![],
             tiles: HashMap::new(),
+            tints: HashMap::new(),
+            tint_pairs: HashMap::new(),
         };
         set.add_sheets(sheets, dir)?;
+        set.add_tints(config.tints, config.tint_pairs);
         let name = setting(&text, "NAME").unwrap_or_default();
         // Sprites of the files the game adds to this tileset come after its own.
-        if let Some(root) = dir.parent().and_then(Path::parent) {
-            // The sheets of a game file are named from the folder of the game's JSON.
-            let json = root.join("data/json");
-            for config in mod_tilesets(&json.join("external_tileset"), &name) {
-                let _ = set.add_sheets(config.sheets, &json);
+        let found = match (mods, dir.parent().and_then(Path::parent)) {
+            (Some(list), _) => list.to_vec(),
+            (None, Some(root)) => scan_mods(root),
+            (None, None) => vec![],
+        };
+        for file in found.iter().filter(|m| m.compatibility.contains(&name)) {
+            let Some(config) = mod_config(file) else {
+                continue;
+            };
+            if set.add_sheets(config.sheets, Path::new(&file.base)).is_ok() {
+                set.add_tints(config.tints, config.tint_pairs);
             }
         }
         Ok(set)
+    }
+
+    fn add_tints(&mut self, tints: Vec<TintDef>, pairs: Vec<PairDef>) {
+        for def in tints {
+            let paint = |color: &Option<ColorDef>| {
+                let top = def.contrast.is_some() || def.saturation.is_some();
+                match color.as_ref()? {
+                    ColorDef::Plain(text) => {
+                        let (color, hex) = parse_color(text)?;
+                        let by = |value: Option<f32>, own: f32| {
+                            value.unwrap_or(if top { 1.0 } else { own })
+                        };
+                        Some(Paint {
+                            color,
+                            blend: Blend::named(def.blend_mode.as_deref().unwrap_or("")),
+                            contrast: milli(by(def.contrast, 1.0)),
+                            saturation: milli(by(def.saturation, 1.0)),
+                            brightness: milli(if top { by(def.brightness, 1.0) } else { hex }),
+                        })
+                    }
+                    // An object cannot go with a top level contrast or saturation.
+                    ColorDef::Detailed { .. } if top => None,
+                    ColorDef::Detailed {
+                        color,
+                        blend_mode,
+                        contrast,
+                        saturation,
+                        brightness,
+                    } => {
+                        let (color, hex) = parse_color(color.as_deref()?)?;
+                        Some(Paint {
+                            color,
+                            blend: Blend::named(blend_mode.as_deref().unwrap_or("")),
+                            contrast: milli(contrast.unwrap_or(1.0)),
+                            saturation: milli(saturation.unwrap_or(1.0)),
+                            brightness: milli(brightness.unwrap_or(hex)),
+                        })
+                    }
+                }
+            };
+            let (bg, fg) = (paint(&def.bg), paint(&def.fg));
+            if bg.is_some() || fg.is_some() {
+                self.tints.insert(def.id, (bg, fg));
+            }
+        }
+        for pair in pairs {
+            self.tint_pairs.insert(pair.target_type, pair.source_type);
+        }
+    }
+
+    /// The paint the game gives the sprite of a mutation: that of the character's mutation of the type that
+    /// the mutation's types or flags take their color from, else the mutation's own.
+    pub fn mutation_paints(&self, q: &PaintQuery) -> Paints {
+        let by_source = |key: &String| {
+            let source = self.tint_pairs.get(key)?;
+            q.traits
+                .get(source)?
+                .iter()
+                .find_map(|id| self.tints.get(id).copied())
+        };
+        q.types
+            .iter()
+            .find_map(by_source)
+            .or_else(|| q.flags.iter().find_map(by_source))
+            .or_else(|| self.tints.get(q.id).copied())
+            .unwrap_or((None, None))
     }
 
     /// Adds sheets that follow the ones loaded; their tiles number sprites from the first of them.
@@ -527,8 +662,30 @@ impl Tile {
     }
 }
 
-/// The mod tilesets under `dir` that list `name`, in file order.
-fn mod_tilesets(dir: &Path, name: &str) -> Vec<ModConfig> {
+/// A paint as `#rrggbb`, or `#rrggbbmm` with the brightness the last pair stands for, in thousandths.
+fn parse_color(text: &str) -> Option<([u8; 3], f32)> {
+    let hex = text.strip_prefix('#')?;
+    if !hex.bytes().all(|b| b.is_ascii_hexdigit()) || ![6, 8].contains(&hex.len()) {
+        return None;
+    }
+    let pair = |i: usize| u8::from_str_radix(&hex[i..i + 2], 16).ok();
+    let brightness = if hex.len() == 8 {
+        pair(6).map_or(1.0, |m| f32::from(m) / 128.0)
+    } else {
+        1.0
+    };
+    Some(([pair(0)?, pair(2)?, pair(4)?], brightness))
+}
+
+fn milli(value: f32) -> u32 {
+    (value * 1000.0).round().max(0.0) as u32
+}
+
+/// The mod tilesets under `<root>/data/json/external_tileset`, in file order.
+fn scan_mods(root: &Path) -> Vec<ModTileset> {
+    let base = root.join("data/json");
+    let dir = base.join("external_tileset");
+    let base = base.display().to_string();
     let mut files = std::fs::read_dir(dir)
         .into_iter()
         .flatten()
@@ -540,19 +697,44 @@ fn mod_tilesets(dir: &Path, name: &str) -> Vec<ModConfig> {
     files
         .into_iter()
         .flat_map(|file| {
-            let json = std::fs::read(&file)
-                .ok()
-                .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok());
-            let json = match json {
-                Some(serde_json::Value::Array(list)) => list,
-                other => other.into_iter().collect(),
-            };
-            json.into_iter()
-                .filter_map(|v| serde_json::from_value::<ModConfig>(v).ok())
-                .filter(|c| c.kind == "mod_tileset" && c.compatibility.iter().any(|n| n == name))
-                .collect::<Vec<_>>()
+            let found = mod_objects(&file)
+                .iter()
+                .filter_map(|v| serde_json::from_value::<ModConfig>(v.clone()).ok())
+                .map(|c| c.compatibility)
+                .collect::<Vec<_>>();
+            let base = base.clone();
+            found
+                .into_iter()
+                .enumerate()
+                .map(move |(i, compatibility)| ModTileset {
+                    path: file.display().to_string(),
+                    base: base.clone(),
+                    index: i as u32 + 1,
+                    compatibility,
+                })
         })
         .collect()
+}
+
+/// The `mod_tileset` objects of a game data file.
+fn mod_objects(file: &Path) -> Vec<serde_json::Value> {
+    let json = std::fs::read(file)
+        .ok()
+        .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok());
+    let all = match json {
+        Some(serde_json::Value::Array(list)) => list,
+        other => other.into_iter().collect(),
+    };
+    all.into_iter()
+        .filter(|v| v["type"] == "mod_tileset")
+        .collect()
+}
+
+/// The `mod_tileset` a listed game data file holds.
+fn mod_config(file: &ModTileset) -> Option<ModConfig> {
+    let objects = mod_objects(Path::new(&file.path));
+    let object = objects.get((file.index as usize).checked_sub(1)?)?;
+    serde_json::from_value(object.clone()).ok()
 }
 
 /// The turn the game applies for its rotation index: quarter turns, 4 mirrors.
