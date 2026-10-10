@@ -178,6 +178,9 @@ impl<M: GameModel> App<M> {
         if self.pending_since.is_some() && !self.settled() {
             ui.ctx().request_repaint_after(SETTLE);
         }
+        if ui.ctx().input(|i| i.key_pressed(egui::Key::Escape)) {
+            self.model.interrupt();
+        }
         self.walk(ui.ctx());
         self.game_keys(ui.ctx());
         if self.model.menu().is_none() {
@@ -245,14 +248,20 @@ impl<M: GameModel> App<M> {
     }
 
     /// The pressed control's name and stage, announced politely; stays until the next command.
-    fn status(&self, ui: &mut egui::Ui) {
+    fn status(&mut self, ui: &mut egui::Ui) {
         let text = self
             .model
             .command()
             .map_or_else(|| "Ready".into(), |s| format!("{}: {}", s.label, s.stage));
-        let label = ui.label(text);
-        ui.ctx()
-            .accesskit_node_builder(label.id, |b| b.set_live(accesskit::Live::Polite));
+        ui.horizontal(|ui| {
+            let label = ui.label(text);
+            ui.ctx()
+                .accesskit_node_builder(label.id, |b| b.set_live(accesskit::Live::Polite));
+            // Stops a wait or other activity, like the native interrupt key.
+            if self.model.busy() && ui.button("Interrupt").clicked() {
+                self.model.interrupt();
+            }
+        });
     }
 
     /// The command in flight has lasted long enough to show; shorter ones never blink the controls.

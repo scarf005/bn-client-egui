@@ -141,6 +141,9 @@ impl<M: GameModel> TuiApp<M> {
         if self.model.loading().is_some() {
             return;
         }
+        if key.code == KeyCode::Esc && self.model.interrupt() {
+            return;
+        }
         if let Some(menu) = self.menu() {
             return self.menu_key(&menu, key.code);
         }
@@ -355,6 +358,10 @@ impl<M: GameModel> TuiApp<M> {
             .model
             .command()
             .map_or_else(|| "Ready".into(), |s| format!("{}: {}", s.label, s.stage));
+        let command = match self.model.busy() {
+            true => format!("{command} [Esc: interrupt]"),
+            false => command,
+        };
         let Some(at) = self.cursor else {
             return command;
         };

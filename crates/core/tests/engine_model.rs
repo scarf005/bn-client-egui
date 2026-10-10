@@ -784,3 +784,53 @@ fn a_click_outside_the_engines_view_is_ignored_without_a_message() {
     assert!(m.travel(Pos { x: 35, y: 12 }));
     assert_eq!(submits(&h).len(), 1);
 }
+
+fn not_ready() -> Value {
+    json!({"jsonrpc":"2.0","id":null,"error":{"code":1000,"message":"x","data":{"kind":"not_ready"}}})
+}
+
+#[test]
+fn interrupt_sends_bn_interrupt_while_a_command_is_in_flight() {
+    let (t, h) = session();
+    let mut m = connected(t.on("bn.command.submit", walk_reply()).on(
+        "bn.interrupt",
+        vec![json!({"jsonrpc":"2.0","id":null,"result":{}})],
+    ));
+    assert!(m.step_toward(Pos { x: 30, y: 12 }));
+    assert!(m.busy());
+    assert!(m.interrupt());
+    m.poll();
+    assert_eq!(h.sent_methods().last().unwrap(), "bn.interrupt");
+    assert_eq!(h.sent().last().unwrap()["params"], json!({}));
+    assert!(m.messages().is_empty(), "{:?}", m.messages());
+}
+
+#[test]
+fn interrupt_with_no_command_in_flight_sends_nothing() {
+    let (t, h) = session();
+    let mut m = connected(t);
+    assert!(!m.interrupt());
+    assert!(!h.sent_methods().contains(&"bn.interrupt".to_string()));
+}
+
+#[test]
+fn a_not_ready_interrupt_is_explained_once() {
+    let (t, _h) = session();
+    let mut m = connected(
+        t.on("bn.command.submit", walk_reply())
+            .on("bn.interrupt", vec![not_ready()])
+            .on("bn.interrupt", vec![not_ready()]),
+    );
+    assert!(m.step_toward(Pos { x: 30, y: 12 }));
+    assert!(m.interrupt());
+    m.poll();
+    assert!(m.interrupt());
+    m.poll();
+    let said: Vec<_> = m
+        .messages()
+        .iter()
+        .filter(|l| l.contains("nothing to interrupt"))
+        .collect();
+    assert_eq!(said.len(), 1, "{:?}", m.messages());
+    assert!(!m.messages().iter().any(|l| l.contains("not_ready")));
+}

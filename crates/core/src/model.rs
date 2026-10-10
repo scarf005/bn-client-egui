@@ -144,6 +144,11 @@ pub trait GameModel {
     fn invoke_action(&mut self, _id: &str) -> bool {
         false
     }
+    /// Asks the engine to interrupt the activity a command is running (wait, craft, ...), as the
+    /// native interrupt key does. False when no command is in flight.
+    fn interrupt(&mut self) -> bool {
+        false
+    }
     /// A game key token (`g`, `SPACE`, `UP`); true if it ran an action.
     fn press(&mut self, _key: &str) -> bool {
         false

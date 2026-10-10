@@ -377,3 +377,51 @@ fn live_engine_saved_character_is_listed_on_the_load_tab_and_loads_after_relaunc
     drop(model);
     std::fs::remove_dir_all(dir).unwrap();
 }
+
+#[test]
+#[ignore = "requires BN_ENGINE built with bn.interrupt"]
+fn live_engine_interrupts_a_long_wait_and_the_stop_question_is_a_menu() {
+    let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
+    let transport = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
+    let mut model = EngineModel::new(Box::new(transport));
+    wait_for(&mut model, "subscription", |m| m.live());
+    choose_label(&mut model, "New Game");
+    choose_label(&mut model, "Tutorial");
+    wait_for(&mut model, "the tutorial map", |m| m.size().x > 0);
+    wait_for(&mut model, "idle", |m| !m.busy());
+    dismiss_popups(&mut model);
+
+    // A short wait first lets the tutorial's lessons pop up and be closed.
+    assert!(model.invoke_action("wait"));
+    choose_label(&mut model, "5 minutes");
+    dismiss_popups(&mut model);
+
+    assert!(model.invoke_action("wait"));
+    wait_for(&mut model, "the wait menu", |m| m.menu().is_some());
+    wait_for(&mut model, "the command to finish", |m| !m.busy());
+    let id = model
+        .menu()
+        .unwrap()
+        .choices
+        .iter()
+        .find(|c| c.label.starts_with("6 hours"))
+        .expect("6 hours")
+        .id
+        .clone();
+    model.choose(&id);
+    assert!(model.busy());
+    std::thread::sleep(Duration::from_secs(1));
+    assert!(model.interrupt(), "a command is running");
+    wait_for(&mut model, "the stop question", |m| {
+        m.menu()
+            .is_some_and(|menu| menu.choices.iter().any(|c| c.label == "Yes"))
+    });
+    wait_for(&mut model, "the command to finish", |m| !m.busy());
+    choose_label(&mut model, "Yes");
+    wait_for(&mut model, "the menu to close", |m| m.menu().is_none());
+    assert!(
+        !model.messages().iter().any(|l| l.contains("Engine error")),
+        "{:?}",
+        model.messages()
+    );
+}

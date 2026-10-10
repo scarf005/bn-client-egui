@@ -31,6 +31,7 @@ enum Pending {
     Subscribe,
     Submit,
     Viewport,
+    Interrupt,
 }
 
 pub struct EngineModel {
@@ -310,6 +311,16 @@ impl EngineModel {
                 s.finished = true;
             }
         }
+        if matches!(kind, Pending::Interrupt) {
+            // The engine had no activity running; say so once, not per key press.
+            if result.is_err() {
+                let text = "There is nothing to interrupt.".to_string();
+                if self.messages.last() != Some(&text) {
+                    self.messages.push(text);
+                }
+            }
+            return;
+        }
         let value = match result {
             Ok(v) => v,
             Err(e) => {
@@ -328,7 +339,7 @@ impl EngineModel {
                 Ok(s) => self.replica.begin(s),
                 Err(e) => self.messages.push(format!("Bad snapshot: {e}")),
             },
-            Pending::Viewport => {}
+            Pending::Viewport | Pending::Interrupt => {}
             Pending::Submit => {
                 self.mark("received");
                 self.command_id = value["command_id"].as_str().map(String::from);
@@ -600,6 +611,13 @@ impl GameModel for EngineModel {
     }
 
     fn busy(&self) -> bool {
+        self.busy
+    }
+
+    fn interrupt(&mut self) -> bool {
+        if self.busy {
+            self.call("bn.interrupt", json!({}), Pending::Interrupt);
+        }
         self.busy
     }
 
