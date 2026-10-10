@@ -23,7 +23,11 @@ fn shown(width: f32) -> (String, f32) {
         .with_size(egui::vec2(width, 200.0))
         .build_ui(move |ui| bn_client_egui::sidebar::show(ui, &lines));
     let label = h.get_by_label_contains("R LEG");
-    let text = label.accesskit_node().value().unwrap_or_default().to_string();
+    let text = label
+        .accesskit_node()
+        .value()
+        .unwrap_or_default()
+        .to_string();
     (text, label.rect().width())
 }
 
