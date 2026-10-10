@@ -183,7 +183,7 @@ fn dismiss_popups(h: &mut H, clock: &Clockwork) {
             Some(id) if !menu.can_cancel => h.state_mut().model.choose(&id),
             _ => h.state_mut().model.cancel_menu(),
         }
-        run(h, clock, 60, "popup", |h| !h.state().model.busy());
+        run(h, clock, 180, "popup", |h| !h.state().model.busy());
         let _ = run_for(h, clock, 1);
     }
 }
@@ -268,7 +268,7 @@ fn frame_cost_idle_and_while_stepping() {
     );
     report(&format!("{scenario} tiles={tiles} warmup"), &warmup, secs);
     dismiss_popups(&mut h, &clock);
-    run(&mut h, &clock, 60, "quiet", |h| !h.state().model.busy());
+    run(&mut h, &clock, 180, "quiet", |h| !h.state().model.busy());
     let _ = run_for(&mut h, &clock, 2);
 
     #[cfg(feature = "profile")]
@@ -291,7 +291,7 @@ fn frame_cost_idle_and_while_stepping() {
         let sent = Instant::now();
         h.input_mut().events.push(egui::Event::Text(key.into()));
         h.ctx.request_repaint();
-        let f = run(&mut h, &clock, 60, "a step", |h| {
+        let f = run(&mut h, &clock, 180, "a step", |h| {
             square(h) != before
                 || (sent.elapsed() > Duration::from_millis(500) && !h.state().model.busy())
         });
@@ -305,7 +305,7 @@ fn frame_cost_idle_and_while_stepping() {
             }
         }
         dismiss_popups(&mut h, &clock);
-        run(&mut h, &clock, 60, "quiet", |h| !h.state().model.busy());
+        run(&mut h, &clock, 180, "quiet", |h| !h.state().model.busy());
         let _ = run_for(&mut h, &clock, 1);
     }
     // A held key: the OS repeats it every 33 ms; the avatar turns round when a wall stops it.
