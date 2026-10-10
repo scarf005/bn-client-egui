@@ -1186,6 +1186,9 @@ impl GameModel for EngineModel {
                     selected: c.selected,
                     group: c.pane_id.clone(),
                     tab: tab(c),
+                    highlighted: c.highlighted.unwrap_or(false),
+                    selected_count: c.selected_count,
+                    available_count: c.available_count,
                     description: c.description.clone(),
                     columns: c
                         .columns
