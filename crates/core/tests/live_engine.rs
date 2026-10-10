@@ -37,6 +37,20 @@ fn choose_label(model: &mut EngineModel, label: &str) {
     wait_for(model, &format!("{label} to finish"), |m| !m.busy());
 }
 
+/// The tutorial greets and teaches with pop-ups; they are menus too and each closes with its only choice.
+fn dismiss_popups(model: &mut EngineModel) {
+    while let Some(menu) = model.menu() {
+        let id = menu.choices.first().map(|c| c.id.clone());
+        match id {
+            Some(id) if !menu.can_cancel => model.choose(&id),
+            _ => model.cancel_menu(),
+        }
+        wait_for(model, "popup closing", |m| !m.busy());
+        std::thread::sleep(Duration::from_millis(500));
+        model.poll();
+    }
+}
+
 #[test]
 #[ignore = "requires BN_ENGINE pointing at an engine binary"]
 fn live_engine_starts_the_tutorial_and_walks_one_step() {
@@ -73,17 +87,7 @@ fn live_engine_non_movement_action_opens_a_menu_that_can_be_cancelled() {
     choose_label(&mut model, "Tutorial");
     wait_for(&mut model, "the tutorial map", |m| m.size().x > 0);
     wait_for(&mut model, "idle", |m| !m.busy());
-    // The tutorial greets with pop-ups; they are menus too and each closes with its only choice.
-    while let Some(menu) = model.menu() {
-        let id = menu.choices.first().map(|c| c.id.clone());
-        match id {
-            Some(id) if !menu.can_cancel => model.choose(&id),
-            _ => model.cancel_menu(),
-        }
-        wait_for(&mut model, "popup closing", |m| !m.busy());
-        std::thread::sleep(Duration::from_millis(500));
-        model.poll();
-    }
+    dismiss_popups(&mut model);
 
     let actions = model.actions();
     let inventory = actions
@@ -139,4 +143,80 @@ fn live_engine_shows_a_loading_screen_while_the_tutorial_loads() {
         "and went away once the map showed"
     );
     println!("{} loading states, last: {:?}", seen.len(), seen.last());
+}
+
+#[test]
+#[ignore = "requires BN_ENGINE built with the travel operation"]
+fn live_engine_travel_click_plans_a_route_and_a_second_click_walks_it() {
+    let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
+    let transport = StdioTransport::spawn(engine.as_ref()).expect("engine starts");
+    let mut model = EngineModel::new(Box::new(transport));
+
+    wait_for(&mut model, "subscription", |m| m.live());
+    choose_label(&mut model, "New Game");
+    choose_label(&mut model, "Tutorial");
+    wait_for(&mut model, "the tutorial map", |m| m.size().x > 0);
+    wait_for(&mut model, "idle", |m| !m.busy());
+    dismiss_popups(&mut model);
+
+    let start = model.player();
+    assert!(model.route().is_empty(), "nothing is planned yet");
+    // Known non-wall squares around; the engine answers a click on a reachable one with a route.
+    let (w, h) = (model.size().x, model.size().y);
+    let reach = |p: Pos| (p.x - start.x).abs().max((p.y - start.y).abs());
+    let mut candidates = (0..h)
+        .flat_map(|y| (0..w).map(move |x| Pos { x, y }))
+        .filter(|&p| (2..=12).contains(&reach(p)))
+        .filter(|&p| {
+            let desc = model.cell(p).desc;
+            desc != "unknown" && !desc.contains("wall")
+        })
+        .collect::<Vec<_>>();
+    candidates.sort_by_key(|&p| std::cmp::Reverse(reach(p)));
+    assert!(!candidates.is_empty(), "no known square in view");
+    // Prefer a square the straight walk cannot reach: its route goes around walls or through a door.
+    let mut best: Option<(Pos, i32)> = None;
+    for at in candidates.into_iter().take(60) {
+        wait_for(&mut model, "idle", |m| !m.busy());
+        assert!(model.travel(at), "the click was handled");
+        wait_for(&mut model, "the click to finish", |m| !m.busy());
+        if model.route().last() != Some(&at) {
+            continue;
+        }
+        let detour = model.route().len() as i32 - reach(at);
+        if best.is_none_or(|(_, d)| detour > d) {
+            best = Some((at, detour));
+        }
+        if detour > 0 {
+            break;
+        }
+    }
+    let (target, detour) = best.expect("the engine planned a route to some square");
+    println!("target {target:?}, route detour {detour} squares beyond the straight distance");
+    assert_eq!(model.player(), start, "the first click only plans");
+    assert!(model.route().len() >= 2, "{:?}", model.route());
+
+    // The tutorial pops up lessons on the way, which stops a native auto-move like any interrupt;
+    // dismiss them and click again until the avatar stands on the square.
+    let (ox, oy) = (model.origin().x, model.origin().y);
+    let goal = (target.x + ox, target.y + oy);
+    let here = |m: &EngineModel| (m.player().x + m.origin().x, m.player().y + m.origin().y);
+    for _ in 0..8 {
+        if here(&model) == goal {
+            break;
+        }
+        let at = Pos {
+            x: goal.0 - model.origin().x,
+            y: goal.1 - model.origin().y,
+        };
+        assert!(model.travel(at));
+        wait_for(&mut model, "the click to finish", |m| !m.busy());
+        dismiss_popups(&mut model);
+    }
+    assert_eq!(
+        here(&model),
+        goal,
+        "the avatar stands on the clicked square"
+    );
+    assert!(model.route().is_empty(), "arriving clears the route");
 }
