@@ -51,6 +51,9 @@ pub struct Look {
     /// `left` or `right`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub facing: Option<String>,
+    /// Items on the square when there are several, on the displayed item.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stack: Option<u32>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -108,6 +111,12 @@ pub struct Entity {
     /// Sprites drawn over a character, bottom first.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub overlays: Vec<Look>,
+    /// `hostile`, `friendly`, `neutral` or `any`: how the creature regards the avatar.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attitude: Option<String>,
+    /// The creature is aware of the avatar.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub aware: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub statuses: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

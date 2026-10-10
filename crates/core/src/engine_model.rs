@@ -9,8 +9,8 @@ use crate::model::{
     Menu, MenuChoice, MenuField, Pos, Rgb,
 };
 use crate::protocol::{
-    self, Cell as WorldCell, Expect, Incoming, Known, LoadingNotice, Look, Operation, Snapshot,
-    Submit, WorldPos,
+    self, Cell as WorldCell, Entity, Expect, Incoming, Known, LoadingNotice, Look, Operation,
+    Snapshot, Submit, WorldPos,
 };
 use crate::replica::{Outcome, Replica};
 use crate::transport::{Transport, request};
@@ -712,6 +712,65 @@ impl EngineModel {
             .collect()
     }
 
+    /// The cell without its square seed.
+    fn cell_at(&self, at: Pos) -> Cell {
+        let unknown = Cell {
+            glyph: ' ',
+            color: Rgb(128, 128, 128),
+            desc: "unknown".into(),
+            ..Cell::default()
+        };
+        let Some(p) = self.abs(at) else {
+            return unknown;
+        };
+        let world = self.replica.cell(&p.dim, p.x, p.y, p.z);
+        let mut layers = world.map_or(vec![], |c| self.layers(c));
+        if self.avatar_pos() == Some(&p)
+            && let Some(avatar) = self.replica.avatar()
+            && let Some(look) = &avatar.look
+        {
+            let seed = u32::from(avatar.name.bytes().next().unwrap_or(0));
+            layers.push(self.layer(look, seed));
+            layers.extend(self.overlays(look, &avatar.overlays, seed));
+        }
+        let entity = self
+            .replica
+            .entities()
+            .find(|e| e.at == p && e.look.is_some());
+        if let Some(e) = entity {
+            let look = e.look.as_ref().expect("filtered on look");
+            let desc = e.name.clone().unwrap_or_else(|| look_name(look));
+            layers.push(self.layer(look, id_seed(&e.id)));
+            layers.extend(self.overlays(look, &e.overlays, id_seed(&e.id)));
+            layers.extend(self.attitude(e));
+            return Cell {
+                layers,
+                remembered: false,
+                light: world
+                    .and_then(|c| c.light.as_ref()?.as_u64())
+                    .map(|l| l as u8),
+                ..self.styled(look, desc)
+            };
+        }
+        match world {
+            Some(c) => match top_look(c) {
+                Some(l) => Cell {
+                    layers,
+                    remembered: c.known == Known::Remembered,
+                    light: c.light.as_ref().and_then(Value::as_u64).map(|l| l as u8),
+                    ..self.styled(l, look_name(l))
+                },
+                None => Cell {
+                    glyph: '?',
+                    color: Rgb(128, 128, 128),
+                    desc: "sensed".into(),
+                    ..Cell::default()
+                },
+            },
+            None => unknown,
+        }
+    }
+
     /// What a cell draws, bottom first, in the order of the native view: terrain, furniture, trap,
     /// field, item, vehicle part; a cell only remembered draws its memorized terrain and overlay.
     fn layers(&self, c: &WorldCell) -> Vec<Layer> {
@@ -734,11 +793,30 @@ impl EngineModel {
         };
         looks
             .into_iter()
-            .map(|l| {
+            .flat_map(|l| {
                 let seeded = !matches!(l.kind.as_str(), "item" | "trap");
-                self.layer(l, if seeded { seed } else { 0 })
+                let stacked = l.stack.is_some_and(|n| n > 1);
+                // The native view highlights a pile right over its displayed item.
+                let mark = stacked.then(|| self.marker("highlight_item"));
+                [Some(self.layer(l, if seeded { seed } else { 0 })), mark]
             })
+            .flatten()
             .collect()
+    }
+
+    /// A sprite the tileset may have and that stands for nothing else: it draws nothing without one.
+    fn marker(&self, id: &str) -> Layer {
+        Layer {
+            id: id.into(),
+            ..Layer::default()
+        }
+    }
+
+    /// The overlay the native view puts over a monster or NPC for how it regards the avatar.
+    fn attitude(&self, e: &Entity) -> Option<Layer> {
+        let attitude = e.attitude.as_ref()?;
+        let aware = if e.aware { "_sees_player" } else { "" };
+        Some(self.marker(&format!("overlay_{attitude}{aware}")))
     }
 }
 
@@ -867,59 +945,10 @@ impl GameModel for EngineModel {
     }
 
     fn cell(&self, at: Pos) -> Cell {
-        let unknown = Cell {
-            glyph: ' ',
-            color: Rgb(128, 128, 128),
-            desc: "unknown".into(),
-            ..Cell::default()
-        };
-        let Some(p) = self.abs(at) else {
-            return unknown;
-        };
-        let world = self.replica.cell(&p.dim, p.x, p.y, p.z);
-        let mut layers = world.map_or(vec![], |c| self.layers(c));
-        if self.avatar_pos() == Some(&p)
-            && let Some(avatar) = self.replica.avatar()
-            && let Some(look) = &avatar.look
-        {
-            let seed = u32::from(avatar.name.bytes().next().unwrap_or(0));
-            layers.push(self.layer(look, seed));
-            layers.extend(self.overlays(look, &avatar.overlays, seed));
-        }
-        let entity = self
-            .replica
-            .entities()
-            .find(|e| e.at == p && e.look.is_some());
-        if let Some(e) = entity {
-            let look = e.look.as_ref().expect("filtered on look");
-            let desc = e.name.clone().unwrap_or_else(|| look_name(look));
-            layers.push(self.layer(look, id_seed(&e.id)));
-            layers.extend(self.overlays(look, &e.overlays, id_seed(&e.id)));
-            return Cell {
-                layers,
-                remembered: false,
-                light: world
-                    .and_then(|c| c.light.as_ref()?.as_u64())
-                    .map(|l| l as u8),
-                ..self.styled(look, desc)
-            };
-        }
-        match world {
-            Some(c) => match top_look(c) {
-                Some(l) => Cell {
-                    layers,
-                    remembered: c.known == Known::Remembered,
-                    light: c.light.as_ref().and_then(Value::as_u64).map(|l| l as u8),
-                    ..self.styled(l, look_name(l))
-                },
-                None => Cell {
-                    glyph: '?',
-                    color: Rgb(128, 128, 128),
-                    desc: "sensed".into(),
-                    ..Cell::default()
-                },
-            },
-            None => unknown,
+        let square = self.abs(at).map_or(0, |p| square_seed(&p));
+        Cell {
+            square,
+            ..self.cell_at(at)
         }
     }
 
