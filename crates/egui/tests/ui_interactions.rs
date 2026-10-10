@@ -597,3 +597,85 @@ fn typing_in_a_text_prompt_runs_no_game_action() {
         "typing sends fills, never the game's own action"
     );
 }
+
+fn popup_with(message: &str) -> Value {
+    let mut ack = choice("acknowledge", "Cancel popup");
+    ack["description"] = "QUIT".into();
+    popup(true, message, ack)
+}
+
+#[test]
+fn a_popups_confirm_button_is_where_it_was_whatever_its_text_length() {
+    let mut tops = vec![];
+    for message in [
+        "Short.",
+        "A much longer popup.\nIt has\nmany\nlines\nof text.",
+    ] {
+        let (mut h, script) = harness();
+        h.run_steps(3);
+        script.push(show(
+            41,
+            json!([{"id":"QUIT","name":"Cancel popup","keys":["ESC"]}]),
+            popup_with(message),
+        ));
+        h.run_steps(4);
+        let button = h
+            .get_all_by_role_and_label(egui::accesskit::Role::MenuItem, "Cancel popup")
+            .next()
+            .expect("the confirm row");
+        tops.push(button.rect().min.y);
+    }
+    assert_eq!(tops[0], tops[1], "{tops:?}");
+}
+
+#[test]
+fn space_right_after_a_popup_closes_does_not_reach_the_game_until_the_hold_ends() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    script.push(show(
+        41,
+        json!([{"id":"jump","name":"Jump","keys":["SPACE"]}]),
+        popup_with("Welcome."),
+    ));
+    h.run_steps(3);
+    h.key_press(egui::Key::Space);
+    h.run_steps(2);
+    assert_eq!(submits(&script).len(), 1, "the popup took the Space");
+    script.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{
+        "epoch":"e7f3","command_id":"c:5","stage":"completed"}}));
+    script.push(show(
+        42,
+        json!([{"id":"jump","name":"Jump","keys":["SPACE"]}]),
+        Value::Null,
+    ));
+    h.run_steps(3);
+    h.event(egui::Event::Text(" ".into()));
+    h.run_steps(2);
+    assert_eq!(
+        submits(&script).len(),
+        1,
+        "held back while the player is still dismissing"
+    );
+    // A burst keeps the hold alive: each Space within 500 ms of the last held one is held too.
+    for _ in 0..4 {
+        h.state()
+            .clock()
+            .advance(std::time::Duration::from_millis(300));
+        h.event(egui::Event::Text(" ".into()));
+        h.run_steps(2);
+    }
+    assert_eq!(
+        submits(&script).len(),
+        1,
+        "a steady burst never reaches the game"
+    );
+    h.state()
+        .clock()
+        .advance(std::time::Duration::from_millis(600));
+    h.event(egui::Event::Text(" ".into()));
+    h.run_steps(2);
+    assert_eq!(
+        submits(&script).last(),
+        Some(&json!({"kind":"action","action_id":"jump"}))
+    );
+}

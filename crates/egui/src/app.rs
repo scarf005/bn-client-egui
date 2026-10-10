@@ -19,6 +19,9 @@ const SETTLE: std::time::Duration = std::time::Duration::from_millis(150);
 const SIDEBAR_SHARE: f32 = 0.25;
 const SIDEBAR_WIDTH: (f32, f32) = (280.0, 480.0);
 
+/// After a popup closes, Space is held back until it has been quiet this long: the player is still dismissing.
+const POPUP_SPACE_HOLD: std::time::Duration = std::time::Duration::from_millis(500);
+
 /// Side length of one map cell in points.
 pub const CELL: f32 = 16.0;
 
@@ -73,6 +76,12 @@ pub struct App<M: GameModel> {
     log_height: Option<f32>,
     /// Title of the menu that last took focus, so a menu is entered once, not on every frame.
     menu_title: Option<String>,
+    /// The popup message that already took its one key press, so a burst of Space cannot reach the game behind it.
+    ack_key: Option<String>,
+    /// When the last popup closed, to hold Space back for a moment.
+    ack_closed: Option<std::time::Duration>,
+    /// The menu on screen last frame was a popup.
+    in_popup: bool,
     /// A menu opened and its first control has not taken focus yet (it may be disabled for a frame).
     focus_menu: bool,
     /// The menu just closed; the map takes focus back.
@@ -137,6 +146,9 @@ impl<M: GameModel> App<M> {
             palette: None,
             log_height: None,
             menu_title: None,
+            ack_key: None,
+            ack_closed: None,
+            in_popup: false,
             focus_menu: false,
             refocus_map: false,
             cursor_placed: false,
@@ -468,7 +480,28 @@ impl<M: GameModel> App<M> {
         if self.palette.is_some() {
             return;
         }
-        for key in typed.into_iter().chain(named) {
+        let mut keys = typed.into_iter().chain(named).collect::<Vec<_>>();
+        match menu.as_ref().filter(|m| m.acknowledges()) {
+            // A popup takes one key; the rest of a burst would land on the game it covers.
+            Some(m) if self.ack_key.as_ref() == Some(&m.message) => keys.clear(),
+            Some(m) => {
+                keys.truncate(1);
+                self.ack_key = (!keys.is_empty()).then(|| m.message.clone());
+            }
+            None => {
+                self.ack_key = None;
+                let now = self.clock.now();
+                let held = self
+                    .ack_closed
+                    .is_some_and(|t| now.saturating_sub(t) < POPUP_SPACE_HOLD);
+                // Each Space held back extends the hold: only a pause lets a Space through.
+                if held && keys.iter().any(|k| k == "SPACE") {
+                    self.ack_closed = Some(now);
+                }
+                keys.retain(|k| !(held && k == "SPACE"));
+            }
+        }
+        for key in keys {
             if !self.model.busy() {
                 self.keys_consumed |= self.model.press(&key);
             } else if self.model.key_bound(&key) {

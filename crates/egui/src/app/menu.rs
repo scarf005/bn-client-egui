@@ -12,6 +12,9 @@ impl<M: GameModel> App<M> {
             self.focus_menu = false;
             self.menu_ids.clear();
             self.refocus_map |= self.menu_title.take().is_some();
+            if std::mem::take(&mut self.in_popup) {
+                self.ack_closed = Some(self.clock.now());
+            }
             return;
         };
         let entered = self.focus_menu
@@ -26,6 +29,7 @@ impl<M: GameModel> App<M> {
             self.focus_menu = entered && !focused;
             return;
         }
+        self.in_popup = menu.acknowledges();
         a11y::trap_tab(ctx, self.trapped_by_menu());
         let mut ids = Vec::new();
         let mut focused = false;
@@ -108,14 +112,9 @@ impl<M: GameModel> App<M> {
                         ..Default::default()
                     })
                     .show(ui, |ui| {
-                        if menu.screen {
-                            // A composed screen: columns line up only in a fixed-width font.
-                            ui.add(
-                                egui::Label::new(egui::RichText::new(&menu.message).monospace())
-                                    .wrap_mode(egui::TextWrapMode::Extend),
-                            );
-                        } else if !menu.message.is_empty() {
-                            ui.label(self.rich(ui, &menu.message));
+                        // A popup's one button comes first, so it is where the last one was whatever the text.
+                        if !menu.acknowledges() {
+                            self.menu_message(ui, &menu);
                         }
                         if menu.field.as_ref().is_some_and(|f| f.kind == "key") {
                             key_chosen = editor::key_prompt(ui);
@@ -182,6 +181,9 @@ impl<M: GameModel> App<M> {
                                     chosen = Some(choice.id.clone());
                                 }
                             });
+                        }
+                        if menu.acknowledges() {
+                            self.menu_message(ui, &menu);
                         }
                     });
                 if self.model.actions().iter().any(|a| a.id == "FILTER") && menu.field.is_none() {
@@ -272,6 +274,18 @@ impl<M: GameModel> App<M> {
             ui.add(egui::Label::new(text::job(&runs, &font)).wrap_mode(egui::TextWrapMode::Extend));
         }
         ui.spacing_mut().item_spacing.y = 4.0;
+    }
+
+    fn menu_message(&self, ui: &mut egui::Ui, menu: &bn_client_core::Menu) {
+        if menu.screen {
+            // A composed screen: columns line up only in a fixed-width font.
+            ui.add(
+                egui::Label::new(egui::RichText::new(&menu.message).monospace())
+                    .wrap_mode(egui::TextWrapMode::Extend),
+            );
+        } else if !menu.message.is_empty() {
+            ui.label(self.rich(ui, &menu.message));
+        }
     }
 
     /// An entry's labelled values; a `<name> color` column colours the value of `<name>`, and a column
