@@ -314,7 +314,8 @@ fn tabbed(sequence: u32, selected: &str) -> Value {
         .collect();
     show(
         sequence,
-        json!([]),
+        json!([{"id":"NEXT_TAB","name":"Next tab","keys":["TAB"]},
+               {"id":"PREV_TAB","name":"Previous tab","keys":["BACKTAB"]}]),
         json!({"schema_id":"s:tabs","kind":"choices","context":"PLAYER_INFO","title":"Info",
             "message":"","allow_cancel":true,"choices":choices,"choice_total":5,
             "allow_set_count":false,"compat":{"focus":{},"panes":panes}}),
@@ -339,6 +340,26 @@ fn only_the_selected_tabs_entries_are_listed_and_an_entryless_tab_keeps_its_tab_
         "tabs stay tabs when the tab has no entries"
     );
     assert!(menu.entries().is_empty());
+}
+
+#[test]
+fn tab_and_shift_tab_are_the_engines_tab_keys_on_a_tabbed_screen() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    script.push(tabbed(41, "stats"));
+    h.run_steps(3);
+    h.key_press(egui::Key::Tab);
+    h.run_steps(2);
+    script.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{
+        "epoch":"e7f3","command_id":"c:5","stage":"completed"}}));
+    script.push(tabbed(42, "skills"));
+    h.run_steps(3);
+    h.key_press_modifiers(egui::Modifiers::SHIFT, egui::Key::Tab);
+    h.run_steps(2);
+    assert_eq!(
+        submits(&script),
+        ["NEXT_TAB", "PREV_TAB"].map(|id| json!({"kind":"action","action_id":id}))
+    );
 }
 
 #[test]
