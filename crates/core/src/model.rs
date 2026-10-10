@@ -258,6 +258,10 @@ pub trait GameModel {
     fn drop_item(&mut self, index: usize);
     /// Client-side lines: command results and errors.
     fn messages(&self) -> &[String];
+    /// The avatar's sidebar as coloured lines; empty before the engine reports one.
+    fn sidebar(&self) -> Vec<crate::sidebar::Line> {
+        vec![]
+    }
     /// The game's own message log, oldest first.
     fn native_log(&self) -> &[LogLine] {
         &[]

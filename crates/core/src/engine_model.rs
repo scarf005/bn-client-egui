@@ -907,6 +907,12 @@ impl GameModel for EngineModel {
         &self.messages
     }
 
+    fn sidebar(&self) -> Vec<crate::sidebar::Line> {
+        self.replica
+            .avatar()
+            .map_or(vec![], |a| crate::sidebar::lines(a, &self.colors))
+    }
+
     fn native_log(&self) -> &[LogLine] {
         &self.native
     }
