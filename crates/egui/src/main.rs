@@ -1,6 +1,7 @@
 use bn_client_egui::colors::ColorMap;
 use bn_client_egui::fonts;
 use bn_client_egui::keys::KeyMap;
+use bn_client_egui::theme;
 use bn_client_egui::transport::{StdioTransport, game_root};
 use bn_client_egui::{App, EngineModel, FakeModel, GameModel};
 use std::path::PathBuf;
@@ -11,8 +12,12 @@ const USAGE: &str =
 fn run(model: impl GameModel + 'static, root: Option<PathBuf>) -> eframe::Result {
     eframe::run_native(
         "Cataclysm: Bright Nights client",
-        eframe::NativeOptions::default(),
+        eframe::NativeOptions {
+            viewport: eframe::egui::ViewportBuilder::default().with_inner_size([1280.0, 800.0]),
+            ..Default::default()
+        },
         Box::new(move |cc| {
+            theme::apply(&cc.egui_ctx);
             if let Some(root) = &root {
                 fonts::install(&cc.egui_ctx, root);
             }
