@@ -1,14 +1,19 @@
+pub mod clock;
 pub mod color_table;
 pub mod colors;
 pub mod engine_model;
 pub mod keys;
+pub mod launch;
 pub mod model;
 pub mod protocol;
 pub mod replica;
 pub mod sidebar;
 pub mod transport;
+pub mod watchdog;
 
+pub use clock::Clock;
 pub use engine_model::EngineModel;
 pub use model::{
-    ActionEntry, Cell, CommandStatus, FakeModel, GameModel, Loading, Menu, MenuChoice, Pos, Rgb,
+    ActionEntry, Cell, CommandStatus, FakeModel, GameModel, Loading, LogLine, Menu, MenuChoice,
+    Pos, Rgb,
 };

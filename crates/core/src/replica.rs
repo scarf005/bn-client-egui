@@ -17,6 +17,16 @@ pub enum Outcome {
     Resubscribe(&'static str),
 }
 
+/// A `message.logged` event: a new line, or a repeat that replaces the line with the same `id`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LoggedLine {
+    pub id: String,
+    pub text: String,
+    /// The game's colour name for the message type.
+    pub color: Option<String>,
+    pub count: u32,
+}
+
 #[derive(Default)]
 pub struct Replica {
     at: Option<At>,
@@ -32,6 +42,7 @@ pub struct Replica {
     /// `(parts expected, next part index)` while a snapshot is loading.
     loading: Option<(u32, u32)>,
     log: Vec<String>,
+    lines: Vec<LoggedLine>,
 }
 
 fn seq(s: &str) -> Option<u64> {
@@ -104,10 +115,21 @@ impl Replica {
             last += 1;
         }
         for e in fresh {
-            if matches!(e.kind.as_str(), "message.logged" | "sound.heard")
-                && let Some(text) = e.data.as_ref().and_then(|d| d["text"].as_str())
+            if let Some(data) = &e.data
+                && let Some(text) = data["text"].as_str()
             {
-                self.log.push(text.to_string());
+                match e.kind.as_str() {
+                    "message.logged" => self.lines.push(LoggedLine {
+                        id: data["id"].as_str().unwrap_or_default().to_string(),
+                        text: text.to_string(),
+                        color: data["color"].as_str().map(str::to_string),
+                        count: data["count"]
+                            .as_u64()
+                            .map_or(1, |n| n.clamp(1, 1 << 31) as u32),
+                    }),
+                    "sound.heard" => self.log.push(text.to_string()),
+                    _ => {}
+                }
             }
             self.apply(e.changes);
             if let Some(at) = &mut self.at {
@@ -214,7 +236,12 @@ impl Replica {
         self.cells.get(dim)?.get(&(x, y, z))
     }
 
-    /// Messages and sounds since the last call.
+    /// Message-log lines since the last call, in log order.
+    pub fn take_lines(&mut self) -> Vec<LoggedLine> {
+        std::mem::take(&mut self.lines)
+    }
+
+    /// Sounds since the last call.
     pub fn take_log(&mut self) -> Vec<String> {
         std::mem::take(&mut self.log)
     }

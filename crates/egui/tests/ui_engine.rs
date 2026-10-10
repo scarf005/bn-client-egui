@@ -1,7 +1,7 @@
 mod common;
 use bn_client_egui::app::CELL;
 use bn_client_egui::transport::ScriptHandle;
-use bn_client_egui::{App, EngineModel, GameModel};
+use bn_client_egui::{App, Clock, EngineModel, GameModel};
 use common::{fixture, session};
 use eframe::egui::{self, accesskit};
 use egui_kittest::Harness;
@@ -14,12 +14,13 @@ type H<'a> = Harness<'a, App<EngineModel>>;
 fn harness<'a>() -> (H<'a>, ScriptHandle) {
     let (t, h) = session();
     let t = t.on("bn.command.submit", vec![fixture("submit_result")]);
-    let model = EngineModel::new(Box::new(t));
+    let clock = Clock::manual();
+    let model = EngineModel::new(Box::new(t)).with_clock(clock.clone());
     let harness = Harness::builder()
         .with_size(egui::vec2(1100.0, 800.0))
         .build_ui_state(
             |ui, app: &mut App<EngineModel>| app.show(ui),
-            App::new(model),
+            App::new(model).with_clock(clock),
         );
     (harness, h)
 }
@@ -228,7 +229,7 @@ fn pressed_choice_is_highlighted_and_others_wait_once_the_command_outlasts_a_bli
     open_menu(&mut h, &script);
     click_choice(&mut h);
     h.run_steps(2);
-    std::thread::sleep(SETTLE);
+    h.state().clock().advance(SETTLE);
     h.run_steps(2);
     let pressed = h.get_by_label("combat knife");
     assert_eq!(
@@ -431,7 +432,7 @@ fn action_palette_keeps_its_layout_when_a_long_command_disables_it() {
     let before = h.get_by_label("Move right (RIGHT, l)").rect();
     click_map(&mut h, (22.5, 40.5));
     h.run_steps(2);
-    std::thread::sleep(SETTLE);
+    h.state().clock().advance(SETTLE);
     h.run_steps(3);
     let during = h.get_by_label("Move right (RIGHT, l)");
     assert!(
@@ -439,4 +440,30 @@ fn action_palette_keeps_its_layout_when_a_long_command_disables_it() {
         "disabled once it lasts"
     );
     assert_eq!(during.rect(), before, "same size and place");
+}
+
+#[test]
+fn native_log_lines_show_with_repeat_count_and_only_the_newest_is_announced() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    script.push(fixture("events_41_walk"));
+    for (sequence, id, text, count) in [
+        (42, "7", "You open the door.", 1),
+        (43, "8", "Bang!", 1),
+        (44, "8", "Bang!", 2),
+    ] {
+        script.push(json!({"jsonrpc": "2.0", "method": "bn.events", "params": {"epoch": "e7f3",
+            "events": [{"sequence": sequence.to_string(), "revision": "32", "type": "message.logged",
+            "data": {"id": id, "text": text, "kind": "bad", "color": "c_red", "count": count}}]}}));
+    }
+    h.run_steps(3);
+    h.get_by_label("You open the door.");
+    let live: Vec<String> = h
+        .root()
+        .children_recursive()
+        .filter(|n| n.accesskit_node().live() == accesskit::Live::Polite)
+        .filter_map(|n| n.accesskit_node().value())
+        .collect();
+    assert!(live.iter().any(|v| v == "Bang! x2"), "{live:?}");
+    assert!(!live.iter().any(|v| v.contains("door")), "{live:?}");
 }

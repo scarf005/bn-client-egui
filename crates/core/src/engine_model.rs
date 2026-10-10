@@ -1,9 +1,10 @@
 //! `GameModel` backed by a live engine connection.
 
+use crate::clock::Clock;
 use crate::colors::ColorMap;
 use crate::keys::KeyMap;
 use crate::model::{
-    ActionEntry, Cell, CommandStatus, GameModel, Loading, Menu, MenuChoice, Pos, Rgb,
+    ActionEntry, Cell, CommandStatus, GameModel, Loading, LogLine, Menu, MenuChoice, Pos, Rgb,
 };
 use crate::protocol::{
     self, Cell as WorldCell, Expect, Incoming, LoadingNotice, Look, Operation, Snapshot, Submit,
@@ -13,7 +14,7 @@ use crate::replica::{Outcome, Replica};
 use crate::transport::{Transport, request};
 use serde_json::{Value, json};
 use std::collections::HashMap;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 /// The map window asked for until the UI reports its own size.
 const VIEW: Pos = Pos { x: 40, y: 25 };
@@ -51,11 +52,14 @@ pub struct EngineModel {
     wanted: Pos,
     /// The size the engine was last told, and when the UI last asked for another one.
     declared: Pos,
-    resized: Option<Instant>,
+    resized: Option<Duration>,
+    clock: Clock,
     messages: Vec<String>,
+    native: Vec<LogLine>,
     ground: Vec<String>,
     inventory: Vec<String>,
     trace: Vec<(Instant, &'static str)>,
+    received: u64,
     colors: ColorMap,
     keys: KeyMap,
     loading: Option<Loading>,
@@ -121,10 +125,13 @@ impl EngineModel {
             wanted: VIEW,
             declared: VIEW,
             resized: None,
+            clock: Clock::default(),
             messages: vec![],
+            native: vec![],
             ground: vec![],
             inventory: vec![],
             trace: vec![],
+            received: 0,
             colors: ColorMap::default(),
             keys: KeyMap::default(),
             loading: None,
@@ -145,6 +152,12 @@ impl EngineModel {
         m
     }
 
+    /// Times the resize debounce with `clock`, so tests can advance it instead of sleeping.
+    pub fn with_clock(mut self, clock: Clock) -> Self {
+        self.clock = clock;
+        self
+    }
+
     /// Uses the game's own palette for look colours.
     pub fn with_colors(mut self, colors: ColorMap) -> Self {
         self.colors = colors;
@@ -158,6 +171,11 @@ impl EngineModel {
     }
 
     /// Timestamped protocol milestones (`submit`, `received`, stage names, `events`) since the last call.
+    /// How many engine messages have arrived so far; live tests use it to tell progress from a stall.
+    pub fn received(&self) -> u64 {
+        self.received
+    }
+
     pub fn take_trace(&mut self) -> Vec<(Instant, &'static str)> {
         std::mem::take(&mut self.trace)
     }
@@ -460,7 +478,7 @@ impl EngineModel {
     fn send_viewport(&mut self) {
         let settled = self
             .resized
-            .is_some_and(|at| at.elapsed() >= RESIZE_DEBOUNCE);
+            .is_some_and(|at| self.clock.now().saturating_sub(at) >= RESIZE_DEBOUNCE);
         if settled && self.wanted != self.declared && self.replica.at().is_some() {
             self.declared = self.wanted;
             self.resized = None;
@@ -539,9 +557,29 @@ impl EngineModel {
 impl GameModel for EngineModel {
     fn poll(&mut self) {
         while let Some(msg) = self.transport.recv() {
+            self.received += 1;
             self.handle(msg);
         }
         self.messages.extend(self.replica.take_log());
+        for line in self.replica.take_lines() {
+            let line = LogLine {
+                color: line.color.map(|name| self.colors.resolve(&name).0),
+                id: line.id,
+                text: line.text,
+                count: line.count,
+            };
+            // A repeat replaces the line it counts; ids are never reused, so search the tail only.
+            match self
+                .native
+                .iter_mut()
+                .rev()
+                .take(8)
+                .find(|l| !line.id.is_empty() && l.id == line.id)
+            {
+                Some(old) => *old = line,
+                None => self.native.push(line),
+            }
+        }
         self.send_viewport();
         self.refresh_view();
         self.refresh_items();
@@ -664,6 +702,10 @@ impl GameModel for EngineModel {
             .map_or(vec![], |a| crate::sidebar::lines(a, &self.colors))
     }
 
+    fn native_log(&self) -> &[LogLine] {
+        &self.native
+    }
+
     fn say(&mut self, text: String) {
         self.messages.push(text);
     }
@@ -687,7 +729,7 @@ impl GameModel for EngineModel {
         };
         if cells != self.wanted {
             self.wanted = cells;
-            self.resized = Some(Instant::now());
+            self.resized = Some(self.clock.now());
         }
     }
 

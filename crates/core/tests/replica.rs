@@ -85,8 +85,13 @@ fn events_apply_in_sequence_and_move_the_avatar() {
     assert_eq!(r.at().unwrap().sequence, "41");
     assert_eq!(r.at().unwrap().revision, "32");
     assert_eq!(r.events(events("events_42_message")), Outcome::Applied);
-    assert_eq!(r.take_log(), ["You walk east."]);
-    assert!(r.take_log().is_empty(), "log is drained once");
+    let lines = r.take_lines();
+    assert_eq!(lines.len(), 1);
+    assert_eq!(
+        (lines[0].text.as_str(), lines[0].count),
+        ("You walk east.", 1)
+    );
+    assert!(r.take_lines().is_empty(), "log is drained once");
     assert_eq!(r.events(events("events_43_menu")), Outcome::Applied);
     assert_eq!(
         r.boundary()

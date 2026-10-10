@@ -7,6 +7,7 @@ use std::collections::{HashMap, VecDeque};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -62,32 +63,76 @@ impl Trace {
     }
 }
 
-/// Engine child process speaking JSON-RPC on stdin/stdout, with private user/config dirs.
+/// Which user and config directories the engine runs with.
+#[derive(clap::Args, Clone, Debug, Default, PartialEq, Eq)]
+pub struct Profile {
+    /// Run in a private throwaway profile deleted on exit, instead of the engine's own default profile
+    #[arg(id = "fresh", long = "fresh-profile", env = "BN_FRESH_PROFILE")]
+    pub fresh: bool,
+    /// Engine `--userdir` (saves); ignored with --fresh-profile
+    #[arg(long, value_name = "PATH")]
+    pub userdir: Option<PathBuf>,
+    /// Engine `--configdir` (options, keybindings); ignored with --fresh-profile
+    #[arg(long, value_name = "PATH")]
+    pub configdir: Option<PathBuf>,
+}
+
+impl Profile {
+    pub fn fresh() -> Self {
+        Self {
+            fresh: true,
+            ..Self::default()
+        }
+    }
+}
+
+/// Engine child process speaking JSON-RPC on stdin/stdout.
 pub struct StdioTransport {
     child: Child,
     out: Sender<String>,
     incoming: Receiver<Incoming>,
     waker: Arc<Mutex<Option<Waker>>>,
-    dir: PathBuf,
+    /// The throwaway profile directory, removed on drop.
+    dir: Option<PathBuf>,
 }
 
 impl StdioTransport {
+    /// Runs the engine on its own default user and config directories (your real saves and options).
     pub fn spawn(engine: &Path) -> std::io::Result<Self> {
-        let dir = std::env::temp_dir().join(format!("bn-client-{}", std::process::id()));
-        let (user, config) = (dir.join("user"), dir.join("config"));
-        std::fs::create_dir_all(&user)?;
-        std::fs::create_dir_all(&config)?;
+        Self::spawn_with(engine, &Profile::default())
+    }
+
+    /// Runs the engine in a private throwaway profile, for tests.
+    pub fn spawn_fresh(engine: &Path) -> std::io::Result<Self> {
+        Self::spawn_with(engine, &Profile::fresh())
+    }
+
+    pub fn spawn_with(engine: &Path, profile: &Profile) -> std::io::Result<Self> {
+        let (dir, userdir, configdir) = if profile.fresh {
+            static SPAWNED: AtomicUsize = AtomicUsize::new(0);
+            let n = SPAWNED.fetch_add(1, Ordering::Relaxed);
+            let dir = std::env::temp_dir().join(format!("bn-client-{}-{n}", std::process::id()));
+            let (user, config) = (dir.join("user"), dir.join("config"));
+            std::fs::create_dir_all(&user)?;
+            std::fs::create_dir_all(&config)?;
+            (Some(dir), Some(user), Some(config))
+        } else {
+            (None, profile.userdir.clone(), profile.configdir.clone())
+        };
         let mut command = Command::new(engine);
         if let Some(root) = game_root(engine, std::env::var_os("BN_ROOT").map(PathBuf::from)) {
             command
                 .arg("--basepath")
                 .arg(format!("{}/", root.display()));
         }
+        command.args(["--client", "mcp"]);
+        if let Some(user) = &userdir {
+            command.arg("--userdir").arg(user);
+        }
+        if let Some(config) = &configdir {
+            command.arg("--configdir").arg(config);
+        }
         let mut child = command
-            .args(["--client", "mcp", "--userdir"])
-            .arg(&user)
-            .arg("--configdir")
-            .arg(&config)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
@@ -157,7 +202,9 @@ impl Drop for StdioTransport {
     fn drop(&mut self) {
         let _ = self.child.kill();
         let _ = self.child.wait();
-        let _ = std::fs::remove_dir_all(&self.dir);
+        if let Some(dir) = &self.dir {
+            let _ = std::fs::remove_dir_all(dir);
+        }
     }
 }
 

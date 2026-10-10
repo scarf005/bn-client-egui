@@ -1,14 +1,15 @@
 //! Needs a real engine build: `BN_ENGINE=/path/to/cataclysm-bn-tiles cargo test -p bn-client-core --test live_doors -- --ignored --nocapture`
 use bn_client_core::keys::KeyMap;
 use bn_client_core::transport::StdioTransport;
+use bn_client_core::watchdog::Watchdog;
 use bn_client_core::{EngineModel, GameModel, Pos};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 fn wait_for(model: &mut EngineModel, what: &str, mut done: impl FnMut(&EngineModel) -> bool) {
-    let deadline = Instant::now() + Duration::from_secs(90);
+    let mut watchdog = Watchdog::live();
     while !done(model) {
         assert!(
-            Instant::now() < deadline,
+            !watchdog.expired(model.received()),
             "timed out waiting for {what}: {:?}",
             model.messages()
         );
@@ -56,7 +57,7 @@ fn live_engine_click_on_an_adjacent_closed_door_opens_it() {
     let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
     let root = bn_client_core::transport::game_root(engine.as_ref(), None);
     let keys = root.as_deref().map_or_else(KeyMap::default, KeyMap::load);
-    let t = StdioTransport::spawn(engine.as_ref()).expect("engine starts");
+    let t = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
     let mut m = EngineModel::new(Box::new(t)).with_keys(keys);
     wait_for(&mut m, "subscription", |m| m.live());
     choose_label(&mut m, "New Game");

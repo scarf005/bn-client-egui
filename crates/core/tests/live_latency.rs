@@ -1,6 +1,7 @@
 //! Per-step and start-up latency against a real engine:
 //! `BN_ENGINE=... cargo test --release --test live_latency -- --ignored --nocapture`
 use bn_client_core::transport::StdioTransport;
+use bn_client_core::watchdog::Watchdog;
 use bn_client_core::{EngineModel, GameModel, Pos};
 use std::sync::{Mutex, OnceLock, mpsc};
 use std::time::{Duration, Instant};
@@ -9,14 +10,14 @@ static WAKE: OnceLock<Mutex<mpsc::Receiver<()>>> = OnceLock::new();
 
 fn pump(model: &mut EngineModel, what: &str, done: impl Fn(&EngineModel) -> bool) -> Instant {
     let wake = WAKE.get().unwrap();
-    let deadline = Instant::now() + Duration::from_secs(120);
+    let mut watchdog = Watchdog::live();
     loop {
         model.poll();
         if done(model) {
             return Instant::now();
         }
         assert!(
-            Instant::now() < deadline,
+            !watchdog.expired(model.received()),
             "timeout: {what}: {:?}",
             model.messages()
         );
@@ -54,7 +55,7 @@ fn ms(a: Instant, b: Instant) -> f64 {
 fn measure_startup_and_steps() {
     let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
     let t0 = Instant::now();
-    let transport = StdioTransport::spawn(engine.as_ref()).unwrap();
+    let transport = StdioTransport::spawn_fresh(engine.as_ref()).unwrap();
     let mut model = EngineModel::new(Box::new(transport));
     let (tx, rx) = mpsc::channel();
     let tx = Mutex::new(tx);

@@ -6,6 +6,7 @@ license = "AGPL-3.0-only"
 
 [dependencies]
 bn-client-core = { path = "../core" }
+clap = "=4.6.7"
 eframe = "=0.36.2"
 egui_extras = { version = "=0.36.2", features = ["image", "file"] }
 image = { version = "=0.25.10", default-features = false, features = ["png", "jpeg", "webp"] }

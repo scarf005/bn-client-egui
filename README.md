@@ -7,14 +7,28 @@ Cataclysm: Bright Nights, built on egui/eframe (AccessKit). The UI talks to a
 
 License: undecided (no LICENSE file yet).
 
-    cargo run -p bn-client-egui                # fake model
-    cargo run -p bn-client-egui -- --engine /path/to/cataclysm-bn-tiles   # or BN_ENGINE=...; real engine
+    cargo run --release -p bn-client-egui      # finds the engine itself (see below)
+    cargo run -p bn-client-egui -- --fake      # in-memory fake model, no engine
+    cargo install --path crates/egui           # then just `bn-client-egui` (same for crates/tui: `bn-client-tui`)
     cargo test    # egui_kittest UI tests, protocol fixtures, reconstruction, scripted engine
 
-The engine is started as `<engine> --client mcp --userdir <tmp> --configdir <tmp>` with private
-temporary directories. Terminal client over the same model (`Ctrl-C` quits, arrows/vi-keys/game keys act, Up/Down/Enter/Esc in menus):
+Engine lookup (first hit wins; `--help` lists the same): `--engine PATH`, `BN_ENGINE`, `cataclysm-bn-tiles` /
+`cataclysm-bn` (+ `.exe`) next to the client executable or in its parent directory, the path saved in
+`$XDG_CONFIG_HOME/bn-client/config.json` (`~/.config/bn-client/config.json`; rewritten after every successful start),
+then `PATH`. If nothing is found the client exits with the list of searched places. Game data comes from `BN_ROOT`,
+else the nearest ancestor of the chosen engine containing `data/json`. So run once with
+`--engine /path/to/cataclysm-bn-tiles` and later runs need no arguments.
 
-    cargo run -p bn-client-tui -- --engine /path/to/cataclysm-bn-tiles
+The engine is started as `<engine> --client mcp` on its own default user and config directories, so your
+saves, options and keybindings are used (Load tab, Save and Quit work as in Tiles). `--userdir PATH` /
+`--configdir PATH` override them; `--fresh-profile` (or `BN_FRESH_PROFILE=1`) uses a private throwaway profile.
+Live tests always use one.
+
+Terminal client over the same model (`Ctrl-C` quits; arrows/vi-keys/game keys walk and act; main menu tabs on Left/Right, entries on Up/Down/Enter/Esc;
+`x` or `;` starts a look cursor: move it, Enter shows the route, Enter again walks, Esc leaves; left click travels the same way;
+`Tab` lists the actions, PageUp/PageDown scroll the message log; the terminal size is declared to the engine as the map viewport):
+
+    cargo run -p bn-client-tui                 # same engine lookup; --fake for the fake model
 
 Crates: `crates/core` (protocol, transport, replica, models, colours, keys), `crates/egui`, `crates/tui`.
 Live integration tests (ignored by default, need an engine build; the TUI one drives its key handling):
