@@ -21,8 +21,10 @@ const SHADOW: Color32 = Color32::from_gray(170);
 /// The choice that survives a restart.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Settings {
-    /// Draw sprites; false draws ASCII glyphs.
-    pub tiles: bool,
+    /// Draw sprites (true) or ASCII glyphs (false); absent until the player chooses, so the engine's
+    /// `USE_TILES` option decides.
+    #[serde(default)]
+    pub tiles: Option<bool>,
     /// The `TILES` name of the tileset; the game's default when absent.
     pub tileset: Option<String>,
     /// Play no shot, explosion or floating-text overlays on the map.
@@ -33,7 +35,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            tiles: true,
+            tiles: None,
             tileset: None,
             reduced_motion: false,
         }
@@ -264,6 +266,8 @@ pub struct Display {
     atlas: Option<Atlas>,
     /// Why the chosen tileset is not in use.
     problem: Option<String>,
+    /// The engine's `USE_TILES` and `TILES` options, for what the player has not chosen.
+    engine: Option<(bool, String)>,
     /// Sprites drawn by the last map paint.
     drawn: usize,
     /// Squares of the last map paint that lie on the hidden-lighting sprite.
@@ -285,6 +289,7 @@ impl Display {
             tilesets: root.map_or(vec![], tileset::available),
             atlas: None,
             problem: None,
+            engine: None,
             drawn: 0,
             hidden: 0,
         };
@@ -295,10 +300,12 @@ impl Display {
     /// The tileset to use: the chosen one, else the game's default, else the first.
     fn chosen(&self) -> Option<&TilesetInfo> {
         let by_name = |name: &str| self.tilesets.iter().find(|t| t.name == name);
+        let engine = self.engine.as_ref().map(|(_, name)| name.as_str());
         self.settings
             .tileset
             .as_deref()
             .and_then(by_name)
+            .or_else(|| engine.and_then(by_name))
             .or_else(|| by_name(DEFAULT_TILESET))
             .or(self.tilesets.first())
     }
@@ -307,7 +314,7 @@ impl Display {
     fn open(&mut self) {
         self.atlas = None;
         self.problem = None;
-        if !self.settings.tiles || !self.rooted {
+        if !self.wants_tiles() || !self.rooted {
             return;
         }
         let Some(dir) = self.chosen().map(|t| t.dir.clone()) else {
@@ -317,6 +324,22 @@ impl Display {
         match Tileset::load(&dir) {
             Ok(tileset) => self.atlas = Some(Atlas::start(tileset)),
             Err(e) => self.problem = Some(e),
+        }
+    }
+
+    /// Sprites are wanted: the player's choice, else the engine's option, else yes.
+    fn wants_tiles(&self) -> bool {
+        self.settings
+            .tiles
+            .or(self.engine.as_ref().map(|(tiles, _)| *tiles))
+            .unwrap_or(true)
+    }
+
+    /// Takes the engine's `USE_TILES` and `TILES` options as the default for choices not yet made.
+    pub fn follow_engine(&mut self, options: Option<(bool, String)>) {
+        if self.engine != options {
+            self.engine = options;
+            self.open();
         }
     }
 
@@ -385,15 +408,15 @@ impl Display {
         ui.horizontal(|ui| {
             for (tiles, label) in [(true, "Tiles"), (false, "ASCII")] {
                 if ui
-                    .selectable_label(self.settings.tiles == tiles, label)
+                    .selectable_label(self.wants_tiles() == tiles, label)
                     .clicked()
                 {
-                    self.settings.tiles = tiles;
+                    self.settings.tiles = Some(tiles);
                 }
             }
             let shown = self.chosen().map_or("none".to_string(), |t| t.view.clone());
             let mut pick = None;
-            ui.add_enabled_ui(self.settings.tiles, |ui| {
+            ui.add_enabled_ui(self.wants_tiles(), |ui| {
                 egui::ComboBox::from_label("Tileset")
                     .selected_text(shown)
                     .show_ui(ui, |ui| {
@@ -599,7 +622,7 @@ pub fn tiles_wanted(root: Option<&Path>, path: Option<&Path>) -> bool {
         .and_then(|p| std::fs::read(p).ok())
         .and_then(|b| serde_json::from_slice::<Settings>(&b).ok())
         .unwrap_or_default();
-    settings.tiles && root.is_some_and(|r| !tileset::available(r).is_empty())
+    settings.tiles.unwrap_or(true) && root.is_some_and(|r| !tileset::available(r).is_empty())
 }
 
 /// One sprite at its place in the cell, turned as the tileset asks; false when its sheet is not loaded.

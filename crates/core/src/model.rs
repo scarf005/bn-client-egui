@@ -378,6 +378,10 @@ pub trait GameModel {
     fn route(&self) -> Vec<Pos> {
         vec![]
     }
+    /// The engine's `USE_TILES` and `TILES` options, when it publishes them: the map mode a new profile starts in.
+    fn display_default(&self) -> Option<(bool, String)> {
+        None
+    }
     /// Says whether the client draws tiles now, so the engine sends tile ids where it has them.
     fn set_tiles(&mut self, _tiles: bool) {}
     /// The overmap screen, while it is open.
