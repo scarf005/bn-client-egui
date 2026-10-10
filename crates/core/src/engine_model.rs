@@ -4,11 +4,12 @@ use crate::clock::Clock;
 use crate::colors::ColorMap;
 use crate::keys::KeyMap;
 use crate::model::{
-    ActionEntry, Cell, CommandStatus, GameModel, Loading, LogLine, Menu, MenuChoice, Pos, Rgb,
+    ActionEntry, Cell, CommandStatus, GameModel, Layer, Loading, LogLine, Menu, MenuChoice, Pos,
+    Rgb,
 };
 use crate::protocol::{
-    self, Cell as WorldCell, Expect, Incoming, LoadingNotice, Look, Operation, Snapshot, Submit,
-    WorldPos,
+    self, Cell as WorldCell, Expect, Incoming, Known, LoadingNotice, Look, Operation, Snapshot,
+    Submit, WorldPos,
 };
 use crate::replica::{Outcome, Replica};
 use crate::transport::{Transport, request};
@@ -31,6 +32,7 @@ enum Pending {
     Subscribe,
     Submit,
     Viewport,
+    Interrupt,
 }
 
 pub struct EngineModel {
@@ -71,7 +73,7 @@ pub struct EngineModel {
 }
 
 fn look_name(l: &Look) -> String {
-    l.id.clone().unwrap_or_else(|| l.glyph.clone())
+    (l.name.clone().or_else(|| l.id.clone())).unwrap_or_else(|| l.glyph.clone())
 }
 
 fn glyph(l: &Look) -> char {
@@ -91,6 +93,17 @@ fn top_look(c: &WorldCell) -> Option<&Look> {
             .memory
             .as_ref()
             .map(|m| m.overlay.as_ref().unwrap_or(&m.terrain)))
+}
+
+/// The game's per-tile seed for weighted sprite variants: the square's coordinates mixed into an integer.
+fn square_seed(p: &WorldPos) -> u32 {
+    (p.x as u32).wrapping_add((p.y as u32).wrapping_mul(65536))
+}
+
+/// A stable seed for a creature; the game seeds monsters by address and characters by name or id.
+fn id_seed(id: &str) -> u32 {
+    id.bytes()
+        .fold(2166136261, |h, b| (h ^ u32::from(b)).wrapping_mul(16777619))
 }
 
 /// Native registered-action id for a one-square move.
@@ -310,6 +323,16 @@ impl EngineModel {
                 s.finished = true;
             }
         }
+        if matches!(kind, Pending::Interrupt) {
+            // The engine had no activity running; say so once, not per key press.
+            if result.is_err() {
+                let text = "There is nothing to interrupt.".to_string();
+                if self.messages.last() != Some(&text) {
+                    self.messages.push(text);
+                }
+            }
+            return;
+        }
         let value = match result {
             Ok(v) => v,
             Err(e) => {
@@ -328,7 +351,7 @@ impl EngineModel {
                 Ok(s) => self.replica.begin(s),
                 Err(e) => self.messages.push(format!("Bad snapshot: {e}")),
             },
-            Pending::Viewport => {}
+            Pending::Viewport | Pending::Interrupt => {}
             Pending::Submit => {
                 self.mark("received");
                 self.command_id = value["command_id"].as_str().map(String::from);
@@ -550,7 +573,71 @@ impl EngineModel {
             color,
             bg,
             desc,
+            ..Cell::default()
         }
+    }
+
+    /// The sprite request for one look; `seed` is the game's choice among weighted variants.
+    fn layer(&self, look: &Look, seed: u32) -> Layer {
+        let (color, bg) = self.colors.resolve(&look.color);
+        Layer {
+            id: look
+                .tile
+                .clone()
+                .or_else(|| look.id.clone())
+                .unwrap_or_default(),
+            fallbacks: look.looks_like.clone(),
+            subtile: look.subtile.clone(),
+            rotation: look.rotation.unwrap_or(0),
+            mirrored: look.facing.as_deref() == Some("left"),
+            creature: matches!(look.kind.as_str(), "monster" | "npc" | "avatar"),
+            seed,
+            glyph: glyph(look),
+            color,
+            bg,
+        }
+    }
+
+    /// A character's overlays, which face as it does; an overlay without a sprite draws nothing.
+    fn overlays(&self, body: &Look, overlays: &[Look], seed: u32) -> Vec<Layer> {
+        overlays
+            .iter()
+            .map(|overlay| Layer {
+                mirrored: body.facing.as_deref() == Some("left"),
+                creature: true,
+                glyph: '\0',
+                ..self.layer(overlay, seed)
+            })
+            .collect()
+    }
+
+    /// What a cell draws, bottom first, in the order of the native view: terrain, furniture, trap,
+    /// field, item, vehicle part; a cell only remembered draws its memorized terrain and overlay.
+    fn layers(&self, c: &WorldCell) -> Vec<Layer> {
+        let seed = square_seed(&c.at);
+        let live = [
+            c.terrain.as_ref(),
+            c.furniture.as_ref(),
+            c.traps.last(),
+            c.fields.last().map(|f| &f.look),
+            c.items.last(),
+            c.vehicle.as_ref(),
+        ];
+        let looks = match live.iter().any(Option::is_some) {
+            true => live.into_iter().flatten().collect::<Vec<_>>(),
+            false => c
+                .memory
+                .iter()
+                .flat_map(|m| std::iter::once(&m.terrain).chain(m.overlay.as_ref()))
+                .collect(),
+        };
+        looks
+            .into_iter()
+            .map(|l| {
+                let seeded = !matches!(l.kind.as_str(), "item" | "trap");
+                self.layer(l, if seeded { seed } else { 0 })
+            })
+            .collect()
     }
 }
 
@@ -603,6 +690,13 @@ impl GameModel for EngineModel {
         self.busy
     }
 
+    fn interrupt(&mut self) -> bool {
+        if self.busy {
+            self.call("bn.interrupt", json!({}), Pending::Interrupt);
+        }
+        self.busy
+    }
+
     fn size(&self) -> Pos {
         if self.replica.ready() && self.origin.is_some() {
             self.shown()
@@ -615,12 +709,22 @@ impl GameModel for EngineModel {
         let unknown = Cell {
             glyph: ' ',
             color: Rgb(128, 128, 128),
-            bg: None,
             desc: "unknown".into(),
+            ..Cell::default()
         };
         let Some(p) = self.abs(at) else {
             return unknown;
         };
+        let world = self.replica.cell(&p.dim, p.x, p.y, p.z);
+        let mut layers = world.map_or(vec![], |c| self.layers(c));
+        if self.avatar_pos() == Some(&p)
+            && let Some(avatar) = self.replica.avatar()
+            && let Some(look) = &avatar.look
+        {
+            let seed = u32::from(avatar.name.bytes().next().unwrap_or(0));
+            layers.push(self.layer(look, seed));
+            layers.extend(self.overlays(look, &avatar.overlays, seed));
+        }
         let entity = self
             .replica
             .entities()
@@ -628,20 +732,38 @@ impl GameModel for EngineModel {
         if let Some(e) = entity {
             let look = e.look.as_ref().expect("filtered on look");
             let desc = e.name.clone().unwrap_or_else(|| look_name(look));
-            return self.styled(look, desc);
+            layers.push(self.layer(look, id_seed(&e.id)));
+            layers.extend(self.overlays(look, &e.overlays, id_seed(&e.id)));
+            return Cell {
+                layers,
+                remembered: false,
+                light: world
+                    .and_then(|c| c.light.as_ref()?.as_u64())
+                    .map(|l| l as u8),
+                ..self.styled(look, desc)
+            };
         }
-        match self.replica.cell(&p.dim, p.x, p.y, p.z) {
+        match world {
             Some(c) => match top_look(c) {
-                Some(l) => self.styled(l, look_name(l)),
+                Some(l) => Cell {
+                    layers,
+                    remembered: c.known == Known::Remembered,
+                    light: c.light.as_ref().and_then(Value::as_u64).map(|l| l as u8),
+                    ..self.styled(l, look_name(l))
+                },
                 None => Cell {
                     glyph: '?',
                     color: Rgb(128, 128, 128),
-                    bg: None,
                     desc: "sensed".into(),
+                    ..Cell::default()
                 },
             },
             None => unknown,
         }
+    }
+
+    fn season(&self) -> Option<String> {
+        self.replica.environment()?.season.clone()
     }
 
     fn player(&self) -> Pos {

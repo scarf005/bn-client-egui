@@ -57,7 +57,10 @@ fn the_map_gets_most_of_the_window_and_the_sidebar_sits_beside_it() {
             "sidebar {sidebar_width} of {size:?}"
         );
         assert!(map.min.x < 20.0, "map starts at the left edge: {map:?}");
-        assert!(map.min.y < 60.0, "map starts under the bar: {map:?}");
+        assert!(
+            map.min.y < 100.0,
+            "map starts under the bar and display controls: {map:?}"
+        );
     }
 }
 

@@ -1,3 +1,5 @@
+use crate::a11y;
+use crate::display::Display;
 use bn_client_core::{GameModel, Loading, Pos};
 use eframe::egui::{self, accesskit};
 
@@ -55,10 +57,26 @@ pub struct App<M: GameModel> {
     images: bool,
     /// Game root, for files the engine names relative to it (loading images).
     root: Option<std::path::PathBuf>,
+    /// Where the display choice is kept; none keeps it only for this run.
+    settings: Option<std::path::PathBuf>,
+    display: Display,
     /// A typed key already ran an engine action this frame.
     keys_consumed: bool,
     /// The action palette's search text while it is open.
     palette: Option<String>,
+    /// Title of the menu that last took focus, so a menu is entered once, not on every frame.
+    menu_title: Option<String>,
+    /// A menu opened and its first control has not taken focus yet (it may be disabled for a frame).
+    focus_menu: bool,
+    /// The menu just closed; the map takes focus back.
+    refocus_map: bool,
+    /// What the two message lists announce, so a burst in one frame is read whole.
+    native_live: a11y::Announcer,
+    command_live: a11y::Announcer,
+    /// The enabled controls of the open menu, in Tab order, as of the last frame.
+    menu_ids: Vec<egui::Id>,
+    /// The cursor has been put on the player since the map first appeared.
+    cursor_placed: bool,
 }
 
 impl<M: GameModel> App<M> {
@@ -76,8 +94,17 @@ impl<M: GameModel> App<M> {
             wired: false,
             images: false,
             root: None,
+            settings: None,
+            display: Display::new(None, None),
             keys_consumed: false,
             palette: None,
+            menu_title: None,
+            focus_menu: false,
+            refocus_map: false,
+            cursor_placed: false,
+            menu_ids: Vec::new(),
+            native_live: a11y::Announcer::default(),
+            command_live: a11y::Announcer::default(),
         }
     }
 
@@ -103,7 +130,20 @@ impl<M: GameModel> App<M> {
 
     pub fn with_root(mut self, root: std::path::PathBuf) -> Self {
         self.root = Some(root);
+        self.display = Display::new(self.root.as_deref(), self.settings.clone());
         self
+    }
+
+    /// Keeps the tiles or ASCII choice and the tileset in this file between runs.
+    pub fn with_settings(mut self, path: std::path::PathBuf) -> Self {
+        self.settings = Some(path);
+        self.display = Display::new(self.root.as_deref(), self.settings.clone());
+        self
+    }
+
+    /// The map display: tiles or ASCII, and the tileset.
+    pub fn display(&self) -> &Display {
+        &self.display
     }
 
     /// Native-style loading screen: splash image, current step as live text, the step list.
@@ -159,6 +199,7 @@ impl<M: GameModel> App<M> {
             self.wired = true;
         }
         self.model.poll();
+        a11y::name_window(ui.ctx(), "Cataclysm: Bright Nights client");
         self.pending_since = self
             .model
             .busy()
@@ -178,6 +219,9 @@ impl<M: GameModel> App<M> {
         }
         if self.pending_since.is_some() && !self.settled() {
             ui.ctx().request_repaint_after(SETTLE);
+        }
+        if ui.ctx().input(|i| i.key_pressed(egui::Key::Escape)) {
+            self.model.interrupt();
         }
         self.walk(ui.ctx());
         self.palette_keys(ui.ctx());
@@ -262,14 +306,20 @@ impl<M: GameModel> App<M> {
         });
     }
 
-    fn status(&self, ui: &mut egui::Ui) {
+    fn status(&mut self, ui: &mut egui::Ui) {
         let text = self
             .model
             .command()
             .map_or_else(|| "Ready".into(), |s| format!("{}: {}", s.label, s.stage));
-        let label = ui.label(text);
-        ui.ctx()
-            .accesskit_node_builder(label.id, |b| b.set_live(accesskit::Live::Polite));
+        ui.horizontal(|ui| {
+            let label = ui.label(text);
+            ui.ctx()
+                .accesskit_node_builder(label.id, |b| b.set_live(accesskit::Live::Polite));
+            // Stops a wait or other activity, like the native interrupt key.
+            if self.model.busy() && ui.button("Interrupt").clicked() {
+                self.model.interrupt();
+            }
+        });
     }
 
     /// The command in flight has lasted long enough to show; shorter ones never blink the controls.
@@ -295,10 +345,12 @@ impl<M: GameModel> App<M> {
                 .command()
                 .is_some_and(|s| !s.finished && s.target.as_deref() == Some(id));
         let usable = enabled && !(settled && self.model.busy());
-        ui.add_enabled(
+        let button = ui.add_enabled(
             usable,
             egui::Button::new(text).selected(pending || highlighted),
-        )
+        );
+        a11y::button(ui.ctx(), button.id, pending);
+        button
     }
 
     /// One step per frame toward the destination.
@@ -350,12 +402,16 @@ impl<M: GameModel> App<M> {
     }
 
     fn map(&mut self, ui: &mut egui::Ui) {
+        self.display.update(ui.ctx());
+        self.display.controls(ui);
+        let cell_px = self.display.cell(CELL);
+        self.display.begin();
         // The room left for the map, less the status line above it, in whole cells.
         let room =
             ui.available_size() - egui::vec2(0.0, ui.text_style_height(&egui::TextStyle::Body));
         self.model.set_viewport(Pos {
-            x: (room.x / CELL) as i32,
-            y: (room.y / CELL) as i32,
+            x: (room.x / cell_px) as i32,
+            y: (room.y / cell_px) as i32,
         });
         let size = self.model.size();
         if size.x <= 0 || size.y <= 0 {
@@ -368,6 +424,9 @@ impl<M: GameModel> App<M> {
             y: self.cursor.y.clamp(0, size.y - 1),
         };
         let player = self.model.player();
+        if !std::mem::replace(&mut self.cursor_placed, true) {
+            self.cursor = player;
+        }
         let route = self.model.route();
         let mut status = format!(
             "Player at ({}, {}). Cursor ({}, {}): {}.",
@@ -389,7 +448,7 @@ impl<M: GameModel> App<M> {
         ui.ctx()
             .accesskit_node_builder(status_label.id, |b| b.set_live(accesskit::Live::Polite));
         let (response, painter) = ui.allocate_painter(
-            egui::vec2(size.x as f32 * CELL, size.y as f32 * CELL),
+            egui::vec2(size.x as f32 * cell_px, size.y as f32 * cell_px),
             egui::Sense::click().union(egui::Sense::focusable_noninteractive()),
         );
         response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Other, true, "Map"));
@@ -398,7 +457,7 @@ impl<M: GameModel> App<M> {
             b.set_description(status.as_str());
         });
         let cell_at = |p: egui::Pos2| {
-            let v = (p - response.rect.min) / CELL;
+            let v = (p - response.rect.min) / cell_px;
             Pos {
                 x: (v.x as i32).clamp(0, size.x - 1),
                 y: (v.y as i32).clamp(0, size.y - 1),
@@ -416,6 +475,10 @@ impl<M: GameModel> App<M> {
         }
         if response.secondary_clicked() {
             self.menu_cell = self.cursor;
+        }
+        if self.refocus_map && self.model.menu().is_none() {
+            self.refocus_map = false;
+            response.request_focus();
         }
         if response.has_focus() {
             // Keep arrow keys from moving egui's focus away from the map.
@@ -466,20 +529,29 @@ impl<M: GameModel> App<M> {
                 b.set_label("Map actions");
             });
         }
-        let font = egui::FontId::monospace(CELL - 2.0);
+        let font = egui::FontId::monospace(cell_px - 2.0);
+        let tiles = self.display.tiles();
+        let season = self.model.season();
+        if tiles {
+            painter.rect_filled(response.rect, 0.0, egui::Color32::BLACK);
+        }
         for y in 0..size.y {
             for x in 0..size.x {
                 let cell = self.model.cell(Pos { x, y });
-                let center = response.rect.min + egui::vec2(x as f32 + 0.5, y as f32 + 0.5) * CELL;
+                let origin = response.rect.min + egui::vec2(x as f32, y as f32) * cell_px;
+                let square = egui::Rect::from_min_size(origin, egui::Vec2::splat(cell_px));
+                if tiles
+                    && self
+                        .display
+                        .paint(&painter, square, &cell, season.as_deref())
+                {
+                    continue;
+                }
                 if let Some(bg) = cell.bg {
-                    painter.rect_filled(
-                        egui::Rect::from_center_size(center, egui::Vec2::splat(CELL)),
-                        0.0,
-                        rgb(bg),
-                    );
+                    painter.rect_filled(square, 0.0, rgb(bg));
                 }
                 painter.text(
-                    center,
+                    square.center(),
                     egui::Align2::CENTER_CENTER,
                     cell.glyph,
                     font.clone(),
@@ -489,8 +561,8 @@ impl<M: GameModel> App<M> {
         }
         let rect = |p: Pos| {
             egui::Rect::from_min_size(
-                response.rect.min + egui::vec2(p.x as f32, p.y as f32) * CELL,
-                egui::Vec2::splat(CELL),
+                response.rect.min + egui::vec2(p.x as f32, p.y as f32) * cell_px,
+                egui::Vec2::splat(cell_px),
             )
         };
         for (i, p) in route.iter().enumerate() {
@@ -516,14 +588,18 @@ impl<M: GameModel> App<M> {
                 egui::StrokeKind::Inside,
             );
         }
-        let center = rect(player).center();
-        painter.text(
-            center,
-            egui::Align2::CENTER_CENTER,
-            '@',
-            font,
-            egui::Color32::YELLOW,
-        );
+        // The tile view draws the avatar as its own sprite.
+        let avatar_sprite =
+            tiles && (self.model.cell(player).layers.last()).is_some_and(|l| l.creature);
+        if !avatar_sprite {
+            painter.text(
+                rect(player).center(),
+                egui::Align2::CENTER_CENTER,
+                '@',
+                font,
+                egui::Color32::YELLOW,
+            );
+        }
         painter.rect_stroke(
             rect(self.cursor),
             0.0,

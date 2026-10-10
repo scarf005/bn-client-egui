@@ -651,3 +651,23 @@ fn long_menu_messages_wrap_inside_the_popup_for_latin_and_korean_text() {
     assert_eq!(s.matches("word").count(), 30);
     assert!(s.contains("combat"), "choices still shown:\n{s}");
 }
+
+fn interrupts(h: &ScriptHandle) -> usize {
+    h.sent_methods()
+        .iter()
+        .filter(|m| *m == "bn.interrupt")
+        .count()
+}
+
+#[test]
+fn esc_interrupts_the_running_command_and_the_status_line_says_so() {
+    let (mut app, h) = engine();
+    app.handle_key(key(KeyCode::Esc));
+    assert_eq!(interrupts(&h), 0, "nothing is running");
+    assert!(!text(&render(&mut app)).contains("Esc: interrupt"));
+    app.handle_key(ch('l'));
+    assert!(app.model.busy());
+    assert!(text(&render(&mut app)).contains("Esc: interrupt"));
+    app.handle_key(key(KeyCode::Esc));
+    assert_eq!(interrupts(&h), 1);
+}

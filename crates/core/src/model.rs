@@ -5,15 +5,46 @@ pub struct Pos {
 }
 
 /// 8-bit sRGB colour.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Rgb(pub u8, pub u8, pub u8);
 
+/// One thing drawn in a cell, with what a tileset needs to pick its sprite the way the game does and
+/// the glyph that stands in for it when the tileset has none.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Layer {
+    /// Tile id to look up first.
+    pub id: String,
+    /// The game data's fallback ids, nearest first.
+    pub fallbacks: Vec<String>,
+    /// Multitile key the engine's tile selection chose.
+    pub subtile: Option<String>,
+    /// Quarter turns of the engine's tile selection: 0 north, 1 west, 2 south, 3 east.
+    pub rotation: u8,
+    /// A creature faces left; its sprite is mirrored.
+    pub mirrored: bool,
+    /// Whether the thing is a character or monster, whose sprites keep their facing.
+    pub creature: bool,
+    /// Picks between the weighted variants of a sprite, like the game's per-tile seed.
+    pub seed: u32,
+    /// What stands in for the sprite when the tileset has none; NUL for an overlay, which then draws nothing.
+    pub glyph: char,
+    pub color: Rgb,
+    pub bg: Option<Rgb>,
+}
+
+#[derive(Default)]
 pub struct Cell {
     pub glyph: char,
     pub color: Rgb,
     /// Background behind the glyph, when the game colour has one.
     pub bg: Option<Rgb>,
     pub desc: String,
+    /// What is drawn here from the bottom up; empty when the model offers no sprites.
+    pub layers: Vec<Layer>,
+    /// Only remembered, not in sight.
+    pub remembered: bool,
+    /// The game's light level of a square in sight: 0 dark, 1 low, 2 bright only, 3 lit, 4 bright.
+    pub light: Option<u8>,
 }
 
 /// One line of the game's own message log. A repeat of the newest line keeps its `id` and raises
@@ -144,6 +175,11 @@ pub trait GameModel {
     fn invoke_action(&mut self, _id: &str) -> bool {
         false
     }
+    /// Asks the engine to interrupt the activity a command is running (wait, craft, ...), as the
+    /// native interrupt key does. False when no command is in flight.
+    fn interrupt(&mut self) -> bool {
+        false
+    }
     /// A game key token (`g`, `SPACE`, `UP`); true if it ran an action.
     fn press(&mut self, _key: &str) -> bool {
         false
@@ -166,6 +202,10 @@ pub trait GameModel {
     }
     fn choose(&mut self, _choice_id: &str) {}
     fn cancel_menu(&mut self) {}
+    /// Season of the game calendar (`spring`, `summer`, `autumn`, `winter`), which picks seasonal sprites.
+    fn season(&self) -> Option<String> {
+        None
+    }
     fn size(&self) -> Pos;
     fn cell(&self, at: Pos) -> Cell;
     fn player(&self) -> Pos;
@@ -219,8 +259,8 @@ impl GameModel for FakeModel {
             return Cell {
                 glyph: '#',
                 color: Rgb(180, 180, 180),
-                bg: None,
                 desc: "a wall".into(),
+                ..Cell::default()
             };
         }
         let (glyph, color, desc) = match (at.x * 7 + at.y * 13) % 11 {
@@ -231,8 +271,8 @@ impl GameModel for FakeModel {
         Cell {
             glyph,
             color,
-            bg: None,
             desc: desc.into(),
+            ..Cell::default()
         }
     }
 

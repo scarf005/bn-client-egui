@@ -2,7 +2,7 @@
 
 use super::App;
 use bn_client_core::GameModel;
-use eframe::egui::{self, accesskit};
+use eframe::egui;
 
 impl<M: GameModel> App<M> {
     /// The opened palette's search text is typed text, not game keys.
@@ -65,9 +65,6 @@ impl<M: GameModel> App<M> {
                                     false => format!("{} ({})", a.name, a.keys.join(", ")),
                                 };
                                 let button = self.control(ui, label, &a.id, true, false);
-                                ui.ctx().accesskit_node_builder(button.id, |b| {
-                                    b.set_role(accesskit::Role::MenuItem)
-                                });
                                 if button.clicked() {
                                     invoke = Some(a.id.clone());
                                 }

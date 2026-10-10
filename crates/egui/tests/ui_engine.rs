@@ -443,7 +443,7 @@ fn action_palette_keeps_its_layout_when_a_long_command_disables_it() {
 }
 
 #[test]
-fn native_log_lines_show_with_repeat_count_and_only_the_newest_is_announced() {
+fn native_log_lines_show_with_repeat_count_and_the_new_ones_are_announced_together() {
     let (mut h, script) = harness();
     h.run_steps(3);
     script.push(fixture("events_41_walk"));
@@ -464,6 +464,44 @@ fn native_log_lines_show_with_repeat_count_and_only_the_newest_is_announced() {
         .filter(|n| n.accesskit_node().live() == accesskit::Live::Polite)
         .filter_map(|n| n.accesskit_node().value())
         .collect();
-    assert!(live.iter().any(|v| v == "Bang! x2"), "{live:?}");
-    assert!(!live.iter().any(|v| v.contains("door")), "{live:?}");
+    assert!(
+        live.iter().any(|v| v == "You open the door. Bang! x2"),
+        "{live:?}"
+    );
+}
+
+fn interrupts(script: &ScriptHandle) -> usize {
+    let methods = script.sent_methods();
+    methods.iter().filter(|m| *m == "bn.interrupt").count()
+}
+
+#[test]
+fn escape_interrupts_the_running_command_but_does_nothing_when_idle() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    h.key_press(egui::Key::Escape);
+    h.run_steps(2);
+    assert_eq!(interrupts(&script), 0, "nothing is running");
+    open_palette(&mut h);
+    h.get_by_label("Move left (LEFT, h)").click();
+    h.run_steps(2);
+    h.key_press(egui::Key::Escape);
+    h.run_steps(2);
+    assert_eq!(interrupts(&script), 1);
+}
+
+#[test]
+fn status_line_offers_interrupt_only_while_a_command_runs() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    assert!(h.query_by_label("Interrupt").is_none());
+    open_palette(&mut h);
+    h.get_by_label("Move left (LEFT, h)").click();
+    h.run_steps(2);
+    h.get_by_label("Interrupt").click();
+    h.run_steps(2);
+    assert_eq!(interrupts(&script), 1);
+    script.push(notice("completed", None));
+    h.run_steps(3);
+    assert!(h.query_by_label("Interrupt").is_none());
 }

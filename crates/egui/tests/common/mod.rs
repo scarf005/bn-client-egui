@@ -35,3 +35,47 @@ pub fn connected(script: ScriptedTransport) -> EngineModel {
     assert!(m.live());
     m
 }
+
+/// A game root holding one 4x4 tileset `test` whose sheets are solid colours: `a.png` has sprites 0 to 7
+/// (red, green, blue, ... one per cell) and `b.png` sprites 8 and 9. The root is new for every call.
+pub fn game_root(tag: &str) -> std::path::PathBuf {
+    let root = std::env::temp_dir().join(format!("bn-client-tiles-{}-{tag}", std::process::id()));
+    let dir = root.join("gfx/test");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("tileset.txt"),
+        "# A test tileset\nNAME: test\nVIEW: Test Set\nJSON: tile_config.json\nTILESET: a.png\n",
+    )
+    .unwrap();
+    let sheet = |name: &str, cells: u32| {
+        let mut image = image::RgbaImage::new(4 * cells.min(4), 4 * cells.div_ceil(4));
+        for (x, y, px) in image.enumerate_pixels_mut() {
+            let n = (y / 4) * 4 + x / 4;
+            *px = image::Rgba([40 + 25 * n as u8, 255 - 25 * n as u8, 128, 255]);
+        }
+        image.save(dir.join(name)).unwrap();
+    };
+    sheet("a.png", 8);
+    sheet("b.png", 2);
+    let config = serde_json::json!({
+        "tile_info": [{"width": 4, "height": 4}],
+        "tiles-new": [
+            {"file": "a.png", "tiles": [
+                {"id": ["t_floor", "t_dirt"], "fg": 0},
+                {"id": "t_wall", "fg": 1, "multitile": true, "additional_tiles": [
+                    {"id": "edge", "fg": [2, 3]},
+                    {"id": "corner", "fg": 4}
+                ]},
+                {"id": "t_wall_season_winter", "fg": 5},
+                {"id": "grass", "fg": [{"weight": 1, "sprite": 5}, {"weight": 3, "sprite": 6}]},
+                {"id": ["mon_a", "mon_b", "mon_zombie"], "fg": 7}
+            ]},
+            {"file": "b.png", "sprite_offset_x": 1, "sprite_offset_y": -2, "tiles": [
+                {"id": "two_sheets", "fg": 8, "bg": 9}
+            ]},
+            {"file": "missing_fallback.png", "tiles": [], "ascii": []}
+        ]
+    });
+    std::fs::write(dir.join("tile_config.json"), config.to_string()).unwrap();
+    root
+}
