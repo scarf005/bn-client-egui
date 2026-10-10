@@ -332,6 +332,16 @@ pub struct Event {
     pub changes: Changes,
 }
 
+/// One line of the native message log, as `message.logged` events and snapshots carry it.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct LoggedMessage {
+    pub id: String,
+    pub text: String,
+    pub kind: String,
+    pub color: String,
+    pub count: u32,
+}
+
 /// Result of `bn.subscribe`; `parts` snapshot-part notifications follow.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Snapshot {
@@ -351,6 +361,9 @@ pub struct Snapshot {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub route: Vec<WorldPos>,
     pub entities: Vec<Entity>,
+    /// The newest message log lines, oldest first; omitted when the log is empty.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub messages: Vec<LoggedMessage>,
     pub parts: u32,
 }
 
