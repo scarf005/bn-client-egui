@@ -49,25 +49,39 @@ fn pick(app: &mut App, label: &str) {
     press(app, KeyCode::Enter);
 }
 
-/// Switches the main menu to the tab named `label` with Right.
+/// Switches the main menu to the tab named `label` with Left or Right, whichever is nearer in tab order.
 fn tab(app: &mut App, label: &str) {
-    let on = |a: &mut App| {
-        a.model
-            .menu()
-            .is_some_and(|m| m.tabs().iter().any(|t| t.selected && t.label == label))
+    // (index of the selected tab, index of `label`) in the tab row.
+    let positions = |a: &mut App| {
+        let menu = a.model.menu()?;
+        let tabs = menu.tabs();
+        Some((
+            tabs.iter().position(|t| t.selected)?,
+            tabs.iter().position(|t| t.label == label)?,
+        ))
     };
-    wait(app, label, |a| {
-        a.model.menu().is_some_and(|m| !m.tabs().is_empty())
-    });
+    wait(app, label, |a| positions(a).is_some());
     for _ in 0..20 {
-        if on(app) {
+        let (at, want) = positions(app).expect("tab row");
+        if at == want {
             return;
         }
-        press(app, KeyCode::Right);
+        press(
+            app,
+            if want < at {
+                KeyCode::Left
+            } else {
+                KeyCode::Right
+            },
+        );
         std::thread::sleep(Duration::from_millis(300));
         app.model.poll();
     }
-    assert!(on(app), "tab {label}");
+    assert_eq!(
+        positions(app).map(|(at, want)| at == want),
+        Some(true),
+        "tab {label}"
+    );
 }
 
 #[test]
