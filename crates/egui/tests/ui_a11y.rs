@@ -220,3 +220,27 @@ fn tab_and_shift_tab_stay_inside_an_open_menu() {
     h.run_steps(3);
     assert_eq!(focused_label(&h), cancel);
 }
+
+#[test]
+fn item_rows_have_one_focusable_control_named_with_the_item() {
+    use bn_client_egui::FakeModel;
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(1100.0, 800.0))
+        .build_ui_state(
+            |ui, app: &mut App<FakeModel>| app.show(ui),
+            App::new(FakeModel::default()),
+        );
+    h.run_steps(3);
+    for item in ["Rusty knife", "Tin can", "Flashlight"] {
+        let stops: Vec<_> = h
+            .get_all_by_label_contains(item)
+            .filter(|n| {
+                n.accesskit_node()
+                    .data()
+                    .supports_action(accesskit::Action::Focus)
+            })
+            .map(|n| n.accesskit_node().label())
+            .collect();
+        assert_eq!(stops.len(), 1, "{item}: {stops:?}");
+    }
+}

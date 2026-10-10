@@ -635,8 +635,8 @@ impl<M: GameModel> App<M> {
                         ui.set_min_size(egui::vec2(ui.available_width(), 200.0));
                         for (index, name) in items.iter().enumerate() {
                             ui.horizontal(|ui| {
-                                let grip =
-                                    ui.add(egui::Label::new(name).sense(egui::Sense::drag()));
+                                // Drag only: the button after it is the row's one keyboard stop.
+                                let grip = ui.add(egui::Label::new(name).sense(egui::Sense::DRAG));
                                 grip.dnd_set_drag_payload(Dragged {
                                     from: column,
                                     index,
