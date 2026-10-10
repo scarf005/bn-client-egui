@@ -267,6 +267,27 @@ pub struct Interaction {
     pub field: Option<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub target: Option<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub overmap: Option<OvermapWire>,
+}
+
+/// The native overmap window as drawn: `[glyph, foreground, background]` per cell, row-major,
+/// with curses color indexes, and the sidebar text.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OvermapWire {
+    pub origin: WorldPos,
+    pub player: WorldPos,
+    pub cols: usize,
+    pub rows: usize,
+    pub cells: Vec<Vec<(String, u8, u8)>>,
+    pub legend: Vec<String>,
+    pub notes: Vec<OvermapNote>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OvermapNote {
+    pub pos: WorldPos,
+    pub text: String,
 }
 
 /// Interaction boundary: what the engine is waiting for right now.

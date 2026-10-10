@@ -1,3 +1,4 @@
+#![recursion_limit = "512"]
 mod common;
 use bn_client_egui::app::CELL;
 use bn_client_egui::transport::ScriptHandle;
@@ -645,6 +646,69 @@ mod failures {
         assert_eq!(second.sent_methods()[..2], ["bn.hello", "bn.subscribe"]);
         h.get_by_label("Map");
         assert!(h.query_by_label("Restart").is_none());
+    }
+}
+
+mod overmap {
+    use super::*;
+
+    fn open_overmap<'a>() -> (H<'a>, ScriptHandle) {
+        let (mut h, script) = harness();
+        h.run_steps(3);
+        script.push(common::overmap_event(100));
+        h.run_steps(3);
+        (h, script)
+    }
+
+    #[test]
+    fn the_overmap_replaces_the_map_and_names_the_cursor_square() {
+        let (h, _script) = open_overmap();
+        h.get_by_label("Overmap view");
+        h.get_by_label("Overmap (100, 200, 0).");
+        assert!(
+            h.query_by_label("Map").is_none(),
+            "the map is not drawn under it"
+        );
+        h.get_by_label("  forest");
+    }
+
+    #[test]
+    fn clicking_a_square_moves_the_cursor_and_clicking_the_cursor_travels() {
+        let (mut h, script) = open_overmap();
+        let origin = h.get_by_label("Overmap view").rect().min;
+        let click = |h: &mut H, col: f32, row: f32| {
+            let pos = origin + egui::vec2((col + 0.5) * CELL, (row + 0.5) * CELL);
+            h.hover_at(pos);
+            h.run_steps(1);
+            for pressed in [true, false] {
+                h.event(egui::Event::PointerButton {
+                    pos,
+                    button: egui::PointerButton::Primary,
+                    pressed,
+                    modifiers: egui::Modifiers::NONE,
+                });
+                h.run_steps(1);
+            }
+            h.run_steps(2);
+        };
+        // Cell (3, 0) is square (101, 199).
+        click(&mut h, 3.0, 0.0);
+        let ops = operations(&script);
+        assert_eq!(
+            ops.last().unwrap(),
+            &json!({"kind":"set_target","pos":{"dim":"","x":101,"y":199,"z":0}})
+        );
+    }
+
+    #[test]
+    fn escape_leaves_the_overmap_through_the_engines_quit_action() {
+        let (mut h, script) = open_overmap();
+        h.key_press(egui::Key::Escape);
+        h.run_steps(2);
+        assert_eq!(
+            operations(&script).last().unwrap(),
+            &json!({"kind":"action","action_id":"QUIT"})
+        );
     }
 }
 

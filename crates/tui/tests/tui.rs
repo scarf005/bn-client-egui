@@ -1,3 +1,4 @@
+#![recursion_limit = "512"]
 mod common;
 use bn_client_core::transport::ScriptHandle;
 use bn_client_core::{EngineModel, FakeModel, GameModel, Pos, Rgb};
@@ -815,6 +816,61 @@ fn a_dead_engine_shows_stderr_and_r_restarts_it() {
     assert!(app.model.failure().is_none());
     assert_eq!(second.sent_methods()[..2], ["bn.hello", "bn.subscribe"]);
     assert!(!text(&render(&mut app)).contains("The engine stopped."));
+}
+
+mod overmap {
+    use super::*;
+
+    fn open_overmap() -> (TuiApp<EngineModel>, ScriptHandle) {
+        let (mut app, h) = engine();
+        h.push(common::overmap_event(100));
+        app.model.poll();
+        (app, h)
+    }
+
+    fn last_operation(h: &ScriptHandle) -> Value {
+        submits(h).last().unwrap()["params"]["operation"].clone()
+    }
+
+    #[test]
+    fn the_overmap_is_drawn_with_the_cursor_note_and_legend() {
+        let (mut app, _h) = open_overmap();
+        let screen = text(&render(&mut app));
+        assert!(screen.contains("Overmap (100, 200, 0)"), "{screen}");
+        assert!(
+            screen.contains("Note: cache") || !screen.contains("Note:"),
+            "{screen}"
+        );
+        assert!(screen.contains("forest"), "{screen}");
+        assert!(
+            screen.contains("@"),
+            "the player marker is part of the cells"
+        );
+        assert!(!screen.contains("Map"), "the map is not drawn under it");
+    }
+
+    #[test]
+    fn a_click_moves_the_cursor_and_esc_closes() {
+        let (mut app, h) = open_overmap();
+        render(&mut app);
+        let click = |col: u16, row: u16| MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: col,
+            row,
+            modifiers: KeyModifiers::NONE,
+        };
+        // Cell (3, 0) is square (101, 199).
+        app.handle_mouse(click(3, 0));
+        assert_eq!(
+            last_operation(&h),
+            json!({"kind":"set_target","pos":{"dim":"","x":101,"y":199,"z":0}})
+        );
+        h.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{
+            "epoch":"e7f3","command_id":"c:5","stage":"completed"}}));
+        app.model.poll();
+        app.handle_key(key(KeyCode::Esc));
+        assert_eq!(last_operation(&h), json!({"kind":"cancel"}));
+    }
 }
 
 #[test]

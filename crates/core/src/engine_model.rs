@@ -6,7 +6,7 @@ use crate::keys;
 use crate::markup::{self, Run};
 use crate::model::{
     ActionEntry, Cell, CommandStatus, Failure, FailureKind, GameModel, Layer, Loading, LogLine,
-    Menu, MenuChoice, MenuField, Pos, Rgb,
+    Menu, MenuChoice, MenuField, Overmap, OvermapCell, Pos, Rgb,
 };
 use crate::protocol::{
     self, Cell as WorldCell, Entity, Expect, Incoming, Known, LoadingNotice, Look, Operation,
@@ -1239,8 +1239,68 @@ impl GameModel for EngineModel {
         })
     }
 
+    fn overmap(&self) -> Option<Overmap> {
+        let i = self.replica.boundary()?.interaction.as_ref()?;
+        let wire = i.overmap.as_ref()?;
+        let at = |p: &WorldPos| (p.x, p.y, p.z);
+        let cursor =
+            serde_json::from_value::<WorldPos>(i.target.as_ref()?["current"].clone()).ok()?;
+        let black = Rgb(0, 0, 0);
+        let cells = wire
+            .cells
+            .iter()
+            .flatten()
+            .map(|(glyph, fg, bg)| {
+                let bg = self.colors.index(*bg);
+                OvermapCell {
+                    glyph: glyph.clone(),
+                    color: self.colors.index(*fg),
+                    bg: (bg != black).then_some(bg),
+                }
+            })
+            .collect();
+        Some(Overmap {
+            cols: wire.cols as i32,
+            rows: wire.rows as i32,
+            cells,
+            origin: at(&wire.origin),
+            cursor: at(&cursor),
+            player: at(&wire.player),
+            legend: wire.legend.clone(),
+            notes: wire
+                .notes
+                .iter()
+                .map(|n| (at(&n.pos), n.text.clone()))
+                .collect(),
+        })
+    }
+
+    fn overmap_cursor_to(&mut self, at: (i32, i32, i32)) {
+        if self.overmap().is_some() && !self.busy {
+            self.submit(Operation::SetTarget {
+                candidate_id: None,
+                pos: Some(WorldPos {
+                    dim: String::new(),
+                    x: at.0,
+                    y: at.1,
+                    z: at.2,
+                }),
+            });
+        }
+    }
+
+    fn close_overmap(&mut self) {
+        if self.overmap().is_some() && !self.busy {
+            self.submit(Operation::Cancel);
+        }
+    }
+
     fn focus(&self) -> Option<Pos> {
         let i = self.replica.boundary()?.interaction.as_ref()?;
+        if i.overmap.is_some() {
+            // The overmap's cursor is an overmap square, not a map square.
+            return None;
+        }
         let at = serde_json::from_value::<WorldPos>(i.target.as_ref()?["current"].clone()).ok()?;
         let (ox, oy) = self.origin?;
         Some(Pos {
