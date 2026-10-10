@@ -1,6 +1,7 @@
 use crate::a11y;
 use crate::display::Display;
 use crate::editor;
+use crate::effects::Effects;
 use crate::text;
 use bn_client_core::{Failure, GameModel, Loading, LogLine, Pos, keys, markup};
 use eframe::egui::{self, accesskit};
@@ -76,6 +77,8 @@ pub struct App<M: GameModel> {
     crafting: crafting::Crafting,
     /// A click that arrived while a command was in flight, sent when the engine is free again.
     queued: Option<Queued>,
+    /// Shots, explosions and floating text now playing on the map.
+    effects: Effects,
 }
 
 enum Queued {
@@ -110,6 +113,7 @@ impl<M: GameModel> App<M> {
             command_live: a11y::Announcer::default(),
             crafting: Default::default(),
             queued: None,
+            effects: Effects::default(),
         }
     }
 
@@ -144,6 +148,11 @@ impl<M: GameModel> App<M> {
         self.settings = Some(path);
         self.display = Display::new(self.root.as_deref(), self.settings.clone());
         self
+    }
+
+    /// How many map animations are playing now.
+    pub fn playing_effects(&self) -> usize {
+        self.effects.len()
     }
 
     /// The map display: tiles or ASCII, and the tileset.
@@ -708,6 +717,11 @@ impl<M: GameModel> App<M> {
             x: (room.x / cell_px) as i32,
             y: (room.y / cell_px) as i32,
         });
+        // Facts are always taken, so a long pause never replays them; reduced motion drops them.
+        let now = ui.input(|i| i.time);
+        let produced = self.model.take_effects();
+        self.effects
+            .add(now, produced, self.display.reduced_motion());
         let size = self.model.size();
         if size.x <= 0 || size.y <= 0 {
             ui.label("No map loaded");
@@ -913,6 +927,37 @@ impl<M: GameModel> App<M> {
             egui::Stroke::new(1.0, egui::Color32::WHITE),
             egui::StrokeKind::Inside,
         );
+        let display = &mut self.display;
+        self.effects
+            .paint(&painter, now, cell_px, rect, |square, shape| {
+                let bn_client_core::Shape::Projectile {
+                    glyph,
+                    sprite,
+                    color,
+                    ..
+                } = shape
+                else {
+                    return false;
+                };
+                let mut layer = bn_client_core::Layer {
+                    id: sprite.clone().unwrap_or_default(),
+                    fallbacks: vec!["animation_bullet_normal".into()],
+                    glyph: *glyph,
+                    color: *color,
+                    ..Default::default()
+                };
+                if layer.id.is_empty() {
+                    layer.id = "animation_bullet_normal".into();
+                }
+                let cell = bn_client_core::Cell {
+                    layers: vec![layer],
+                    ..Default::default()
+                };
+                display.paint(&painter, square, &cell, None)
+            });
+        if self.effects.active() {
+            ui.ctx().request_repaint();
+        }
     }
 
     fn items(&mut self, ui: &mut egui::Ui) {

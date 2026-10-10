@@ -23,6 +23,9 @@ pub struct Settings {
     pub tiles: bool,
     /// The `TILES` name of the tileset; the game's default when absent.
     pub tileset: Option<String>,
+    /// Play no shot, explosion or floating-text overlays on the map.
+    #[serde(default)]
+    pub reduced_motion: bool,
 }
 
 impl Default for Settings {
@@ -30,6 +33,7 @@ impl Default for Settings {
         Self {
             tiles: true,
             tileset: None,
+            reduced_motion: false,
         }
     }
 }
@@ -314,6 +318,11 @@ impl Display {
         self.atlas.is_some()
     }
 
+    /// The player asked for no map animation.
+    pub fn reduced_motion(&self) -> bool {
+        self.settings.reduced_motion
+    }
+
     /// The choice kept between runs.
     pub fn settings(&self) -> &Settings {
         &self.settings
@@ -376,6 +385,7 @@ impl Display {
             if let Some(problem) = &self.problem {
                 ui.label(format!("Tileset unavailable: {problem}"));
             }
+            ui.checkbox(&mut self.settings.reduced_motion, "Reduced motion");
         });
         if self.settings != before {
             self.save();
