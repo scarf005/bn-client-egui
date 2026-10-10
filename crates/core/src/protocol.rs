@@ -128,6 +128,9 @@ pub struct Stat {
     pub id: String,
     pub label: String,
     pub value: Value,
+    /// Native colour name, when the sidebar colours the stat.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -144,6 +147,8 @@ pub struct Avatar {
     /// Carried items; optional on the wire (absent and empty both mean nothing carried).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub inventory: Option<Vec<InventoryItem>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sidebar: Option<Sidebar>,
     /// The stacks on the avatar's own square; absent from engines that predate it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ground: Option<Vec<InventoryItem>>,
@@ -207,6 +212,8 @@ pub struct Choice {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub editor: Option<Editor>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected_count: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub available_count: Option<u64>,
 }
 
@@ -250,6 +257,9 @@ pub struct Interaction {
     pub context: String,
     pub title: String,
     pub message: String,
+    /// Fixed-width lines drawn above the menu: the main menu's title art and version.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub banner: Option<Vec<String>>,
     pub allow_cancel: bool,
     pub allow_set_count: bool,
     pub choices: Vec<Choice>,
@@ -581,6 +591,8 @@ pub enum Incoming {
     Command(CommandNotice),
     Resync(Resync),
     Loading(LoadingNotice),
+    /// The engine's heartbeat while an activity runs; it only shows the engine is alive.
+    Progress,
     /// Notification this client does not know; ignored.
     Unknown(String),
     /// A line that is not valid protocol JSON.
@@ -609,6 +621,7 @@ pub fn parse_message(msg: &Value) -> Result<Incoming, serde_json::Error> {
             "bn.command" => Incoming::Command(params(msg)?),
             "bn.resync" => Incoming::Resync(params(msg)?),
             "bn.loading" => Incoming::Loading(params(msg)?),
+            "bn.progress" => Incoming::Progress,
             other => Incoming::Unknown(other.to_string()),
         });
     }
@@ -621,4 +634,90 @@ pub fn parse_message(msg: &Value) -> Result<Incoming, serde_json::Error> {
         None => Ok(msg.get("result").cloned().unwrap_or(Value::Null)),
     };
     Ok(Incoming::Response { id, result })
+}
+
+/// Text the engine's sidebar prints, in a native colour name.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SidebarText {
+    pub text: String,
+    pub color: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SidebarLimb {
+    pub id: String,
+    pub label: SidebarText,
+    pub hp: i64,
+    pub hp_max: i64,
+    pub color: String,
+    pub broken: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Morale {
+    pub level: i64,
+    pub face: String,
+    pub color: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Stamina {
+    pub current: i64,
+    pub max: i64,
+    pub color: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Speed {
+    pub value: i64,
+    pub color: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Movement {
+    pub counter: i64,
+    /// `walk`, `run`, `crouch` or `prone`.
+    pub mode: String,
+    pub color: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SafeMode {
+    pub enabled: bool,
+    pub color: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DayTime {
+    pub season: String,
+    pub day: i64,
+    /// The watch time, else the approximate time of day; empty underground.
+    pub clock: String,
+    pub has_watch: bool,
+}
+
+/// The native classic sidebar of the avatar, as the engine reports it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Sidebar {
+    pub limbs: Vec<SidebarLimb>,
+    pub pain: SidebarText,
+    pub hunger: SidebarText,
+    pub thirst: SidebarText,
+    pub fatigue: SidebarText,
+    pub focus: i64,
+    pub morale: Morale,
+    pub stamina: Stamina,
+    pub speed: Speed,
+    pub movement: Movement,
+    pub temperature: SidebarText,
+    pub power: SidebarText,
+    pub safe_mode: SafeMode,
+    pub location: SidebarText,
+    pub weather: SidebarText,
+    pub time: DayTime,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ambient_temperature: Option<String>,
+    pub weapon: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub style: Option<SidebarText>,
 }

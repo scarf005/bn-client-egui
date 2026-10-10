@@ -128,6 +128,11 @@ pub struct MenuChoice {
     pub group: Option<String>,
     /// A tab header of the menu rather than one of its entries.
     pub tab: bool,
+    /// The native cursor is on this row.
+    pub highlighted: bool,
+    /// How many of the row are chosen, and how many there are, for rows that take a count.
+    pub selected_count: Option<u64>,
+    pub available_count: Option<u64>,
     /// The engine's detail text for the row; empty when it has none.
     pub description: String,
     /// Label and value pairs shown beside the row.
@@ -153,6 +158,8 @@ pub struct Menu {
     pub context: String,
     pub title: String,
     pub message: String,
+    /// Lines drawn above the menu in a fixed-width font, with colour tags.
+    pub banner: Vec<String>,
     pub choices: Vec<MenuChoice>,
     /// How many choices the engine has in all; more than `choices.len()` until the rest is fetched.
     pub total: usize,
@@ -163,6 +170,9 @@ pub struct Menu {
     pub pane: Option<String>,
     /// The row the engine's own cursor is on, which its navigation keys move.
     pub focus: Option<String>,
+    /// The engine's composed screen of a view it has no structured interaction for: only text to
+    /// show, driven by the keys of the view's actions.
+    pub screen: bool,
 }
 
 impl Menu {
@@ -204,6 +214,16 @@ pub struct CommandStatus {
     pub stage: String,
     /// The command reached a terminal stage.
     pub finished: bool,
+    /// Every stage the command went through, oldest first, so ones that pass within a frame are kept.
+    pub history: Vec<String>,
+}
+
+impl CommandStatus {
+    pub fn set_stage(&mut self, stage: String, finished: bool) {
+        self.history.push(stage.clone());
+        self.stage = stage;
+        self.finished = finished;
+    }
 }
 
 /// Engine loading screen: a title, the steps seen so far and the one in progress.
@@ -329,6 +349,10 @@ pub trait GameModel {
     fn drop_item(&mut self, index: usize);
     /// Client-side lines: command results and errors.
     fn messages(&self) -> &[String];
+    /// The avatar's sidebar as coloured lines; empty before the engine reports one.
+    fn sidebar(&self) -> Vec<crate::sidebar::Line> {
+        vec![]
+    }
     /// The game's own message log, oldest first.
     fn native_log(&self) -> &[LogLine] {
         &[]

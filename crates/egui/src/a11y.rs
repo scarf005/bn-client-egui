@@ -51,7 +51,8 @@ pub fn button(ctx: &egui::Context, id: egui::Id, pressed: bool) {
 }
 
 /// Keeps Tab and Shift+Tab inside `ids` (a modal's controls, in order): focus wraps at either end
-/// and returns from outside. Call every frame the modal is open, before it is drawn.
+/// and returns from outside. Call every frame the modal is open, before it is drawn. A text field
+/// among `ids` must also be passed to `text_field` after it is drawn.
 pub fn trap_tab(ctx: &egui::Context, ids: &[egui::Id]) {
     let focused = ctx.memory(|m| m.focused());
     let at = focused.and_then(|f| ids.iter().position(|id| *id == f));
@@ -79,19 +80,65 @@ pub fn trap_tab(ctx: &egui::Context, ids: &[egui::Id]) {
     ctx.memory_mut(|m| m.request_focus(ids[next]));
 }
 
+/// Keeps a drawn text field's own Tab from moving focus past `trap_tab`; a text field sets its filter
+/// while it is drawn, which replaces the one `trap_tab` set.
+pub fn text_field(ctx: &egui::Context, id: egui::Id) {
+    ctx.memory_mut(|m| {
+        if m.has_focus(id) {
+            m.set_focus_lock_filter(
+                id,
+                egui::EventFilter {
+                    tab: true,
+                    horizontal_arrows: true,
+                    vertical_arrows: true,
+                    escape: false,
+                },
+            )
+        }
+    });
+}
+
+/// A polite live region that paints nothing: the text is announced when it changes but is not shown,
+/// for content the screen already displays elsewhere.
+pub fn live_region(ui: &mut egui::Ui, text: &str) {
+    let region = ui.allocate_response(egui::Vec2::ZERO, egui::Sense::hover());
+    ui.ctx().accesskit_node_builder(region.id, |b| {
+        b.set_role(accesskit::Role::Label);
+        b.set_value(text);
+        b.set_live(accesskit::Live::Polite);
+    });
+}
+
 /// Turns an append-only log into the text of one polite live region: every line added since the
 /// last frame, joined in order, so a burst is read whole and history is never re-read.
 #[derive(Default)]
 pub struct Announcer {
+    changed: bool,
+    sep: &'static str,
     seen: Option<usize>,
     last: String,
     text: String,
 }
 
 impl Announcer {
+    /// Joins a burst with `sep`.
+    pub fn new(sep: &'static str) -> Self {
+        Self {
+            sep,
+            ..Self::default()
+        }
+    }
+
+    /// Whether the last `update` found new lines.
+    pub fn changed(&self) -> bool {
+        self.changed
+    }
+
     pub fn update(&mut self, lines: &[String]) -> &str {
+        self.changed = true;
         let Some(last) = lines.last() else {
             self.seen = Some(0);
+            self.changed = false;
             return &self.text;
         };
         let first = match self.seen {
@@ -100,9 +147,12 @@ impl Announcer {
             // A repeat counter changed the newest line in place.
             Some(seen) if seen == lines.len() && *last != self.last => seen - 1,
             Some(seen) if seen > lines.len() => 0,
-            Some(_) => return &self.text,
+            Some(_) => {
+                self.changed = false;
+                return &self.text;
+            }
         };
-        self.text = lines[first..].join(" ");
+        self.text = lines[first..].join(self.sep);
         self.seen = Some(lines.len());
         self.last.clone_from(last);
         &self.text

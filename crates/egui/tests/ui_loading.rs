@@ -120,7 +120,9 @@ fn the_games_webp_loading_images_decode() {
     egui_extras::install_image_loaders(&ctx);
     let uri = format!("file://{}", webp.display());
     let mut result = None;
-    for _ in 0..200 {
+    // Decoding runs on another thread; a loaded machine can take far longer than a quiet one.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    while std::time::Instant::now() < deadline {
         ctx.run_ui(egui::RawInput::default(), |_| {})
             .textures_delta
             .clear();

@@ -104,6 +104,8 @@ pub struct EngineModel {
     travel_from: Option<WorldPos>,
     /// An item picked or dropped from the panels: the native menu opens, this finishes it.
     chore: Option<Chore>,
+    /// The main menu was showing at the last poll; coming back to it ends the game whose lines are kept.
+    at_main_menu: bool,
 }
 
 /// One panel button press, carried through the native selection menu it opens.
@@ -277,6 +279,7 @@ impl EngineModel {
             status: None,
             travel_from: None,
             chore: None,
+            at_main_menu: false,
         };
         m.call(
             "bn.hello",
@@ -305,8 +308,12 @@ impl EngineModel {
 
     /// Silence that counts as a stall while a request is outstanding.
     pub fn with_stall(mut self, stall: Duration) -> Self {
-        self.stall = stall;
+        self.set_stall(stall);
         self
+    }
+
+    pub fn set_stall(&mut self, stall: Duration) {
+        self.stall = stall;
     }
 
     /// Uses the game's own palette for look colours.
@@ -315,12 +322,13 @@ impl EngineModel {
         self
     }
 
-    /// Timestamped protocol milestones (`submit`, `received`, stage names, `events`) since the last call.
-    /// How many engine messages have arrived so far; live tests use it to tell progress from a stall.
+    /// Engine messages received plus CPU ticks the engine has used; live tests use it to tell progress
+    /// from a stall, since a loading engine is silent but busy.
     pub fn received(&self) -> u64 {
-        self.received
+        self.received + self.transport.engine_cpu_ticks()
     }
 
+    /// Timestamped protocol milestones (`submit`, `received`, stage names, `events`) since the last call.
     pub fn take_trace(&mut self) -> Vec<(Instant, &'static str)> {
         std::mem::take(&mut self.trace)
     }
@@ -381,7 +389,7 @@ impl EngineModel {
                                 && from.as_ref() == self.avatar_pos()
                                 && self.replica.route().is_empty();
                             if stuck {
-                                "done: no route there"
+                                "done: You can't travel there."
                             } else {
                                 "done"
                             }
@@ -395,8 +403,7 @@ impl EngineModel {
                         other => other.into(),
                     };
                     if let Some(s) = &mut self.status {
-                        s.stage = stage;
-                        s.finished = n.is_terminal();
+                        s.set_stage(stage, n.is_terminal());
                     }
                 }
                 if n.is_terminal() && self.command_id.as_deref() == Some(&n.command_id) {
@@ -427,7 +434,7 @@ impl EngineModel {
                     LoadingNotice::Done(_) => None,
                 };
             }
-            Incoming::Unknown(_) => {}
+            Incoming::Progress | Incoming::Unknown(_) => {}
             Incoming::Malformed(e) => self.messages.push(format!("Bad engine message: {e}")),
             Incoming::Closed => {
                 self.connected = false;
@@ -456,8 +463,7 @@ impl EngineModel {
             self.busy = false;
             let kind = e.data.as_ref().map_or(e.message.clone(), error_kind);
             if let Some(s) = &mut self.status {
-                s.stage = format!("rejected: {}", explain(&kind));
-                s.finished = true;
+                s.set_stage(format!("rejected: {}", explain(&kind)), true);
             }
         }
         if matches!(kind, Pending::Interrupt) {
@@ -501,7 +507,7 @@ impl EngineModel {
                 self.mark("received");
                 self.command_id = value["command_id"].as_str().map(String::from);
                 if let Some(s) = self.status.as_mut().filter(|s| s.stage == "sent") {
-                    s.stage = "accepted".into();
+                    s.set_stage("accepted".into(), false);
                 }
             }
         }
@@ -578,6 +584,7 @@ impl EngineModel {
             target,
             stage: "sent".into(),
             finished: false,
+            history: vec!["sent".into()],
         }
     }
 
@@ -974,6 +981,12 @@ impl GameModel for EngineModel {
                 None => self.native.push(line),
             }
         }
+        let at_main_menu = self.menu().is_some_and(|m| m.context == "MAIN_MENU");
+        if at_main_menu && !std::mem::replace(&mut self.at_main_menu, true) {
+            self.messages.clear();
+            self.native.clear();
+        }
+        self.at_main_menu = at_main_menu;
         self.send_viewport();
         self.refresh_view();
         self.refresh_items();
@@ -1120,12 +1133,20 @@ impl GameModel for EngineModel {
         &self.messages
     }
 
+    fn sidebar(&self) -> Vec<crate::sidebar::Line> {
+        self.replica
+            .avatar()
+            .map_or(vec![], |a| crate::sidebar::lines(a, &self.colors))
+    }
+
     fn native_log(&self) -> &[LogLine] {
         &self.native
     }
 
     fn say(&mut self, text: String) {
-        self.messages.push(text);
+        if self.messages.last() != Some(&text) {
+            self.messages.push(text);
+        }
     }
 
     fn take_effects(&mut self) -> Vec<Effect> {
@@ -1287,12 +1308,27 @@ impl GameModel for EngineModel {
             c.pane_id.is_none()
                 && (pane_of(&c.label).is_some() || (pane_labels.is_empty() && paned))
         };
+        // The cursor travels as `compat.focus`; a popup row's description is its action id, for tools.
+        let focus = i
+            .compat
+            .as_ref()
+            .and_then(|c| c["focus"]["choice_id"].as_str());
+        let actions = self.replica.boundary().map_or(&[][..], |b| &b.actions);
+        let described = |text: &str| {
+            let machine = actions.iter().any(|a| a.id == text);
+            if machine {
+                String::new()
+            } else {
+                text.to_string()
+            }
+        };
         Some(Menu {
             context: i.context.clone(),
             field,
             can_set_count: i.allow_set_count,
             title: i.title.clone(),
             message: i.message.clone(),
+            banner: i.banner.clone().unwrap_or_default(),
             total: i.choice_total as usize,
             choices: all()
                 .map(|c| MenuChoice {
@@ -1303,7 +1339,10 @@ impl GameModel for EngineModel {
                     selected: c.selected,
                     group: c.pane_id.clone(),
                     tab: tab(c),
-                    description: c.description.clone(),
+                    highlighted: Some(c.id.as_str()) == focus,
+                    selected_count: c.selected_count,
+                    available_count: c.available_count,
+                    description: described(&c.description),
                     columns: c
                         .columns
                         .iter()
@@ -1316,6 +1355,7 @@ impl GameModel for EngineModel {
             pane: all()
                 .find(|c| tab(c) && c.selected)
                 .and_then(|c| pane_of(&c.label).map(String::from)),
+            screen: i.kind == "custom",
             focus: i
                 .compat
                 .as_ref()

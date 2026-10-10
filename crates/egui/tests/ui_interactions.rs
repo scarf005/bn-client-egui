@@ -10,17 +10,30 @@ use serde_json::{Value, json};
 
 type H<'a> = Harness<'a, App<EngineModel>>;
 
+fn open_palette(h: &mut H) {
+    h.event(egui::Event::Key {
+        key: egui::Key::P,
+        physical_key: None,
+        pressed: true,
+        repeat: false,
+        modifiers: egui::Modifiers::COMMAND,
+    });
+    h.run_steps(3);
+}
+
 fn harness<'a>() -> (H<'a>, ScriptHandle) {
     let (t, h) = session();
     let t = (0..6).fold(t, |t, _| {
         t.on("bn.command.submit", vec![fixture("submit_result")])
     });
-    let model = EngineModel::new(Box::new(t));
+    // A manual clock: the settle delay never elapses on a loaded machine.
+    let clock = bn_client_core::Clock::manual();
+    let model = EngineModel::new(Box::new(t)).with_clock(clock.clone());
     let harness = Harness::builder()
         .with_size(egui::vec2(1100.0, 800.0))
         .build_ui_state(
             |ui, app: &mut App<EngineModel>| app.show(ui),
-            App::new(model),
+            App::new(model).with_clock(clock),
         );
     (harness, h)
 }
@@ -122,6 +135,7 @@ fn a_popup_shows_one_dismiss_control_and_no_context_name_as_title() {
         popup(true, "Welcome to the tutorial!", ack),
     ));
     h.run_steps(3);
+    open_palette(&mut h);
     h.get_by_label("Welcome to the tutorial!");
     assert!(h.query_by_label("POPUP_WAIT").is_none());
     assert!(
@@ -185,6 +199,7 @@ fn actions_the_engine_gives_no_key_are_not_listed() {
         Value::Null,
     ));
     h.run_steps(3);
+    open_palette(&mut h);
     h.get_by_label("Pick up (g)");
     assert!(h.query_by_label("COORDINATE").is_none());
 }
@@ -339,6 +354,7 @@ fn a_click_during_a_command_is_sent_when_it_finishes_instead_of_being_lost() {
     h.run_steps(3);
     h.event(egui::Event::Text("k".into()));
     h.run_steps(1);
+    open_palette(&mut h);
     h.get_by_label("Ascend Stairs (<)").click();
     h.run_steps(2);
     assert_eq!(submits(&script).len(), 1, "the engine is still busy");
@@ -476,5 +492,108 @@ fn a_menus_rebound_keys_move_and_confirm_through_the_engine_and_focus_follows_it
     assert_eq!(
         submits(&script),
         ["DOWN", "CONFIRM"].map(|id| json!({"kind":"action","action_id":id}))
+    );
+}
+
+fn screen(sequence: u32) -> Value {
+    show(
+        sequence,
+        json!([{"id":"NEXT_TAB","name":"Next tab","keys":["TAB"]},
+               {"id":"QUIT","name":"Cancel","keys":["ESC"]}]),
+        json!({"schema_id":"s:screen","kind":"custom","context":"NEW_CHAR_STATS","title":"",
+            "message":"Strength:    8\nDexterity:   8","allow_cancel":false,"choices":[],
+            "choice_total":0,"allow_set_count":false}),
+    )
+}
+
+#[test]
+fn a_composed_screen_is_shown_as_text_and_every_key_including_tab_is_the_engines() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    script.push(screen(41));
+    h.run_steps(4);
+    assert!(h.state().model.menu().unwrap().screen);
+    h.get_by_label_contains("Strength:    8");
+    h.key_press(egui::Key::Tab);
+    h.run_steps(2);
+    assert_eq!(
+        submits(&script),
+        [json!({"kind":"action","action_id":"NEXT_TAB"})]
+    );
+}
+
+#[test]
+fn leaving_look_mode_puts_the_cursor_back_on_the_player() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    script.push(look_mode(41, 9));
+    h.run_steps(3);
+    script.push(show(42, json!([]), Value::Null));
+    h.run_steps(3);
+    let me = h.state().model.player();
+    let status = format!("Cursor ({}, {})", me.x, me.y);
+    let map = h.get_by_label("Map");
+    let description = map.accesskit_node().description().unwrap_or_default();
+    assert!(description.contains(&status), "{status} in {description}");
+}
+
+fn text_prompt(value: &str) -> Value {
+    json!({"schema_id":"s:filter","kind":"field","context":"STRING_INPUT","title":"Set filter",
+        "message":"","allow_cancel":true,"choices":[],"choice_total":0,"allow_set_count":false,
+        "field":{"id":"field:text","label":"Filter:","description":"","value":value,
+            "type":"text","max_length":30,"printable":false}})
+}
+
+#[test]
+fn a_text_prompt_is_typed_into_a_box_and_enter_sends_it() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    script.push(show(41, json!([]), text_prompt("old")));
+    h.run_steps(3);
+    let edit = h.get_by_label("Filter:");
+    edit.click();
+    h.run_steps(2);
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+    h.run_steps(1);
+    h.get_by_label("Filter:").type_text("shirt");
+    h.run_steps(2);
+    // Every change is sent as a fill that keeps the prompt open; the engine takes the next one once
+    // the command in flight is done, and Enter submits the newest text.
+    let typed = submits(&script);
+    assert!(!typed.is_empty());
+    assert!(
+        typed
+            .iter()
+            .all(|s| s["kind"] == "fill" && s["submit"] == false),
+        "{typed:?}"
+    );
+    script.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{
+        "epoch":"e7f3","command_id":"c:5","stage":"completed"}}));
+    h.run_steps(2);
+    h.key_press(egui::Key::Enter);
+    h.run_steps(3);
+    let last = submits(&script).pop().unwrap();
+    assert_eq!(
+        last,
+        json!({"kind":"fill","field_id":"field:text","value":"shirt","submit":true})
+    );
+}
+
+#[test]
+fn typing_in_a_text_prompt_runs_no_game_action() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    script.push(show(
+        41,
+        json!([{"id":"WIELD","name":"Wield","keys":["w"]}]),
+        text_prompt(""),
+    ));
+    h.run_steps(3);
+    h.get_by_label("Filter:").click();
+    h.get_by_label("Filter:").type_text("w");
+    h.run_steps(3);
+    assert!(
+        submits(&script).iter().all(|s| s["kind"] == "fill"),
+        "typing sends fills, never the game's own action"
     );
 }
