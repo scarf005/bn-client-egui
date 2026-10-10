@@ -171,6 +171,9 @@ impl<M: GameModel> App<M> {
             }
         }
         egui::Panel::top("status").show(ui, |ui| self.status(ui));
+        egui::Panel::left("sidebar")
+            .resizable(false)
+            .show(ui, |ui| crate::sidebar::show(ui, &self.model.sidebar()));
         egui::Panel::left("actions")
             .resizable(false)
             .show(ui, |ui| self.actions(ui));

@@ -147,6 +147,7 @@ fn by_def(def: &str, v: &Value) -> Result<Value, String> {
         "resync_notification" => round_trip::<Resync>(v),
         "application_error" => round_trip::<ApplicationError>(v),
         "pos" => round_trip::<WorldPos>(v),
+        "avatar" => round_trip::<Avatar>(v),
         "loading_notification" => round_trip::<LoadingNotice>(v),
         other => Err(format!("no type for {other}")),
     }
