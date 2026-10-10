@@ -12,7 +12,9 @@ License: undecided (no LICENSE file yet).
     cargo test    # egui_kittest UI tests, protocol fixtures, reconstruction, scripted engine
 
 The engine is started as `<engine> --client mcp --userdir <tmp> --configdir <tmp>` with private
-temporary directories. Terminal client over the same model (`Ctrl-C` quits, arrows/vi-keys/game keys act, Up/Down/Enter/Esc in menus):
+temporary directories. Terminal client over the same model (`Ctrl-C` quits; arrows/vi-keys/game keys walk and act; main menu tabs on Left/Right, entries on Up/Down/Enter/Esc;
+`x` or `;` starts a look cursor: move it, Enter shows the route, Enter again walks, Esc leaves; left click travels the same way;
+`Tab` lists the actions, PageUp/PageDown scroll the message log; the terminal size is declared to the engine as the map viewport):
 
     cargo run -p bn-client-tui -- --engine /path/to/cataclysm-bn-tiles
 
