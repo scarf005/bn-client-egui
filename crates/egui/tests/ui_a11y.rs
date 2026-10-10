@@ -198,3 +198,86 @@ fn the_map_cursor_starts_on_the_player() {
     let at = player.strip_prefix("Player at ").expect(&desc);
     assert!(rest.starts_with(at), "{desc}");
 }
+
+#[test]
+fn tab_and_shift_tab_stay_inside_an_open_menu() {
+    let (mut h, script) = harness();
+    open_menu(&mut h, &script);
+    let mut seen = vec![focused_label(&h)];
+    for _ in 0..3 {
+        h.key_press(egui::Key::Tab);
+        h.run_steps(3);
+        seen.push(focused_label(&h));
+    }
+    let entry = Some("combat knife".to_string());
+    let cancel = Some("Cancel".to_string());
+    // The disabled "tin can" is skipped; the cycle is knife, Cancel, knife, Cancel.
+    assert_eq!(seen, [entry.clone(), cancel.clone(), entry, cancel.clone()]);
+    h.key_press_modifiers(egui::Modifiers::SHIFT, egui::Key::Tab);
+    h.run_steps(3);
+    assert_eq!(focused_label(&h).as_deref(), Some("combat knife"));
+    h.key_press_modifiers(egui::Modifiers::SHIFT, egui::Key::Tab);
+    h.run_steps(3);
+    assert_eq!(focused_label(&h), cancel);
+}
+
+#[test]
+fn item_rows_have_one_focusable_control_named_with_the_item() {
+    use bn_client_egui::FakeModel;
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(1100.0, 800.0))
+        .build_ui_state(
+            |ui, app: &mut App<FakeModel>| app.show(ui),
+            App::new(FakeModel::default()),
+        );
+    h.run_steps(3);
+    for item in ["Rusty knife", "Tin can", "Flashlight"] {
+        let stops: Vec<_> = h
+            .get_all_by_label_contains(item)
+            .filter(|n| {
+                n.accesskit_node()
+                    .data()
+                    .supports_action(accesskit::Action::Focus)
+            })
+            .map(|n| n.accesskit_node().label())
+            .collect();
+        assert_eq!(stops.len(), 1, "{item}: {stops:?}");
+    }
+}
+
+fn log_line(script: &ScriptHandle, sequence: u32, id: &str, text: &str, count: u32) {
+    script.push(
+        json!({"jsonrpc": "2.0", "method": "bn.events", "params": {"epoch": "e7f3",
+        "events": [{"sequence": sequence.to_string(), "revision": "32", "type": "message.logged",
+        "data": {"id": id, "text": text, "kind": "bad", "color": "c_red", "count": count}}]}}),
+    );
+}
+
+fn announced(h: &H) -> Vec<String> {
+    h.root()
+        .children_recursive()
+        .filter(|n| n.accesskit_node().live() == accesskit::Live::Polite)
+        .filter_map(|n| n.accesskit_node().value())
+        .collect()
+}
+
+#[test]
+fn messages_arriving_in_one_frame_are_announced_together_and_only_once() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    script.push(fixture("events_41_walk"));
+    log_line(&script, 42, "7", "You open the door.", 1);
+    log_line(&script, 43, "8", "Bang!", 1);
+    log_line(&script, 44, "8", "Bang!", 2);
+    h.run_steps(3);
+    let live = announced(&h);
+    assert!(
+        live.iter().any(|v| v == "You open the door. Bang! x2"),
+        "{live:?}"
+    );
+    log_line(&script, 45, "9", "Crash!", 1);
+    h.run_steps(3);
+    let live = announced(&h);
+    assert!(live.iter().any(|v| v == "Crash!"), "{live:?}");
+    assert!(!live.iter().any(|v| v.contains("door")), "{live:?}");
+}

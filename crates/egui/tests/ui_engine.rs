@@ -427,7 +427,7 @@ fn actions_panel_keeps_its_layout_when_a_long_command_disables_it() {
 }
 
 #[test]
-fn native_log_lines_show_with_repeat_count_and_only_the_newest_is_announced() {
+fn native_log_lines_show_with_repeat_count_and_the_new_ones_are_announced_together() {
     let (mut h, script) = harness();
     h.run_steps(3);
     script.push(fixture("events_41_walk"));
@@ -448,8 +448,10 @@ fn native_log_lines_show_with_repeat_count_and_only_the_newest_is_announced() {
         .filter(|n| n.accesskit_node().live() == accesskit::Live::Polite)
         .filter_map(|n| n.accesskit_node().value())
         .collect();
-    assert!(live.iter().any(|v| v == "Bang! x2"), "{live:?}");
-    assert!(!live.iter().any(|v| v.contains("door")), "{live:?}");
+    assert!(
+        live.iter().any(|v| v == "You open the door. Bang! x2"),
+        "{live:?}"
+    );
 }
 
 fn interrupts(script: &ScriptHandle) -> usize {

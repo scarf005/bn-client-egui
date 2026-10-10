@@ -31,6 +31,9 @@ pub struct At {
 pub struct Look {
     pub kind: String,
     pub id: Option<String>,
+    /// The player-facing name, when the engine sends one; otherwise only `id` identifies it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
     pub glyph: String,
     pub color: String,
     /// Sprite id when it differs from `id` (corpses, characters, vehicle parts).

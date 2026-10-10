@@ -969,3 +969,18 @@ fn creatures_and_the_avatar_draw_over_the_terrain_with_their_overlays() {
     let plain = at(2, 2);
     assert_eq!((plain.glyph, plain.layers.len()), ('.', 1));
 }
+
+#[test]
+fn a_look_with_a_display_name_is_described_by_it_instead_of_its_id() {
+    let (t, h) = session();
+    let mut m = connected(t);
+    let at = json!({"dim":"","x":5,"y":4,"z":0});
+    let floor =
+        json!({"kind":"terrain","id":"t_floor","name":"floor","glyph":".","color":"c_cyan"});
+    h.push(cell_event(
+        41,
+        json!({"at": at, "known": "visible", "terrain": floor}),
+    ));
+    m.poll();
+    assert_eq!(m.cell(Pos { x: 22, y: 12 }).desc, "floor");
+}

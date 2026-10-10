@@ -73,7 +73,7 @@ pub struct EngineModel {
 }
 
 fn look_name(l: &Look) -> String {
-    l.id.clone().unwrap_or_else(|| l.glyph.clone())
+    (l.name.clone().or_else(|| l.id.clone())).unwrap_or_else(|| l.glyph.clone())
 }
 
 fn glyph(l: &Look) -> char {

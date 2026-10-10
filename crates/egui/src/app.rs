@@ -1,6 +1,6 @@
 use crate::a11y;
 use crate::display::Display;
-use bn_client_core::{GameModel, Loading, Pos};
+use bn_client_core::{GameModel, Loading, LogLine, Pos};
 use eframe::egui::{self, accesskit};
 
 /// A command must outlast this before the controls show it; keeps short commands from blinking the UI.
@@ -60,6 +60,11 @@ pub struct App<M: GameModel> {
     focus_menu: bool,
     /// The menu just closed; the map takes focus back.
     refocus_map: bool,
+    /// What the two message lists announce, so a burst in one frame is read whole.
+    native_live: a11y::Announcer,
+    command_live: a11y::Announcer,
+    /// The enabled controls of the open menu, in Tab order, as of the last frame.
+    menu_ids: Vec<egui::Id>,
     /// The cursor has been put on the player since the map first appeared.
     cursor_placed: bool,
 }
@@ -86,6 +91,9 @@ impl<M: GameModel> App<M> {
             focus_menu: false,
             refocus_map: false,
             cursor_placed: false,
+            menu_ids: Vec::new(),
+            native_live: a11y::Announcer::default(),
+            command_live: a11y::Announcer::default(),
         }
     }
 
@@ -310,7 +318,7 @@ impl<M: GameModel> App<M> {
             usable,
             egui::Button::new(text).selected(pending || highlighted),
         );
-        a11y::button(ui.ctx(), button.id);
+        a11y::button(ui.ctx(), button.id, pending);
         button
     }
 
@@ -340,11 +348,14 @@ impl<M: GameModel> App<M> {
     fn menu(&mut self, ctx: &egui::Context) {
         let Some(menu) = self.model.menu() else {
             self.focus_menu = false;
+            self.menu_ids.clear();
             self.refocus_map |= self.menu_title.take().is_some();
             return;
         };
         let entered = self.focus_menu
             | (self.menu_title.replace(menu.title.clone()).as_ref() != Some(&menu.title));
+        a11y::trap_tab(ctx, &self.menu_ids);
+        let mut ids = Vec::new();
         let mut focused = false;
         let mut chosen = None;
         let mut cancel = ctx.input(|i| i.key_pressed(egui::Key::Escape)) && menu.can_cancel;
@@ -360,6 +371,7 @@ impl<M: GameModel> App<M> {
                         let button =
                             self.control(ui, tab.label.clone(), &tab.id, tab.enabled, tab.selected);
                         a11y::tab(ui.ctx(), button.id, tab.selected);
+                        ids.extend(button.enabled().then_some(button.id));
                         if entered && tab.selected {
                             button.request_focus();
                             focused = button.has_focus();
@@ -372,6 +384,7 @@ impl<M: GameModel> App<M> {
                 for (i, choice) in menu.entries().into_iter().enumerate() {
                     let button =
                         self.control(ui, choice.label.clone(), &choice.id, choice.enabled, false);
+                    ids.extend(button.enabled().then_some(button.id));
                     if entered && i == 0 && tabs.is_empty() {
                         button.request_focus();
                         focused = button.has_focus();
@@ -386,14 +399,13 @@ impl<M: GameModel> App<M> {
                         chosen = Some(choice.id.clone());
                     }
                 }
-                if menu.can_cancel
-                    && ui
-                        .add_enabled(!self.model.busy(), egui::Button::new("Cancel"))
-                        .clicked()
-                {
-                    cancel = true;
+                if menu.can_cancel {
+                    let button = ui.add_enabled(!self.model.busy(), egui::Button::new("Cancel"));
+                    ids.extend(button.enabled().then_some(button.id));
+                    cancel |= button.clicked();
                 }
             });
+        self.menu_ids = ids;
         self.focus_menu = entered && !focused;
         a11y::dialog(ctx, &menu.title, &menu.message);
         if let Some(id) = chosen {
@@ -673,8 +685,8 @@ impl<M: GameModel> App<M> {
                         ui.set_min_size(egui::vec2(ui.available_width(), 200.0));
                         for (index, name) in items.iter().enumerate() {
                             ui.horizontal(|ui| {
-                                let grip =
-                                    ui.add(egui::Label::new(name).sense(egui::Sense::drag()));
+                                // Drag only: the button after it is the row's one keyboard stop.
+                                let grip = ui.add(egui::Label::new(name).sense(egui::Sense::DRAG));
                                 grip.dnd_set_drag_payload(Dragged {
                                     from: column,
                                     index,
@@ -711,17 +723,26 @@ impl<M: GameModel> App<M> {
     }
 
     fn log(&mut self, ui: &mut egui::Ui) {
-        message_log(ui, self.model.native_log(), self.model.messages());
+        let native = self.model.native_log();
+        let shown = native.iter().map(LogLine::shown).collect::<Vec<_>>();
+        let native_live = self.native_live.update(&shown).to_owned();
+        let command_live = self.command_live.update(self.model.messages()).to_owned();
+        message_log(
+            ui,
+            native,
+            self.model.messages(),
+            [&native_live, &command_live],
+        );
     }
 }
 
 /// The message log panel: the game's own lines in their native colours, then the client's command
-/// results and errors in a separate scroll area. The newest line of each is a polite live region,
-/// so history is never re-announced.
-fn message_log(ui: &mut egui::Ui, native: &[crate::LogLine], commands: &[String]) {
+/// results and errors in a separate scroll area. What each list gained since the last frame is a
+/// polite live region, so history is never re-announced.
+fn message_log(ui: &mut egui::Ui, native: &[crate::LogLine], commands: &[String], live: [&str; 2]) {
     ui.heading("Message log");
-    if let Some(latest) = native.last() {
-        let live = ui.label(latest.shown());
+    if !native.is_empty() {
+        let live = ui.label(live[0]);
         ui.ctx()
             .accesskit_node_builder(live.id, |b| b.set_live(accesskit::Live::Polite));
     }
@@ -735,9 +756,9 @@ fn message_log(ui: &mut egui::Ui, native: &[crate::LogLine], commands: &[String]
                 ui.label(line.color.map_or(text.clone(), |c| text.color(rgb(c))));
             }
         });
-    if let Some(latest) = commands.last() {
+    if !commands.is_empty() {
         ui.separator();
-        let live = ui.label(latest);
+        let live = ui.label(live[1]);
         ui.ctx()
             .accesskit_node_builder(live.id, |b| b.set_live(accesskit::Live::Polite));
     }

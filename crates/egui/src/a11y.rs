@@ -39,10 +39,72 @@ pub fn tab(ctx: &egui::Context, id: egui::Id, selected: bool) {
     });
 }
 
-/// A plain button; egui reports every button drawn `selected` as a toggle.
-pub fn button(ctx: &egui::Context, id: egui::Id) {
+/// A button that reads as pressed only while `pressed`; egui reports every button drawn `selected`
+/// as a toggle, pressed or not.
+pub fn button(ctx: &egui::Context, id: egui::Id, pressed: bool) {
     ctx.accesskit_node_builder(id, |b| {
         b.set_role(accesskit::Role::Button);
-        b.clear_toggled();
+        if !pressed {
+            b.clear_toggled();
+        }
     });
+}
+
+/// Keeps Tab and Shift+Tab inside `ids` (a modal's controls, in order): focus wraps at either end
+/// and returns from outside. Call every frame the modal is open, before it is drawn.
+pub fn trap_tab(ctx: &egui::Context, ids: &[egui::Id]) {
+    let focused = ctx.memory(|m| m.focused());
+    let at = focused.and_then(|f| ids.iter().position(|id| *id == f));
+    if let Some(f) = focused.filter(|_| at.is_some()) {
+        // Leave Tab to us instead of letting egui walk to the widgets behind the modal.
+        ctx.memory_mut(|m| {
+            m.set_focus_lock_filter(
+                f,
+                egui::EventFilter {
+                    tab: true,
+                    ..Default::default()
+                },
+            )
+        });
+    }
+    let (pressed, back) = ctx.input(|i| (i.key_pressed(egui::Key::Tab), i.modifiers.shift));
+    let n = ids.len();
+    let next = match (at, back) {
+        _ if !pressed || n == 0 => return,
+        (Some(i), false) => (i + 1) % n,
+        (Some(i), true) => (i + n - 1) % n,
+        (None, false) => 0,
+        (None, true) => n - 1,
+    };
+    ctx.memory_mut(|m| m.request_focus(ids[next]));
+}
+
+/// Turns an append-only log into the text of one polite live region: every line added since the
+/// last frame, joined in order, so a burst is read whole and history is never re-read.
+#[derive(Default)]
+pub struct Announcer {
+    seen: Option<usize>,
+    last: String,
+    text: String,
+}
+
+impl Announcer {
+    pub fn update(&mut self, lines: &[String]) -> &str {
+        let Some(last) = lines.last() else {
+            self.seen = Some(0);
+            return &self.text;
+        };
+        let first = match self.seen {
+            None => lines.len() - 1,
+            Some(seen) if seen < lines.len() => seen,
+            // A repeat counter changed the newest line in place.
+            Some(seen) if seen == lines.len() && *last != self.last => seen - 1,
+            Some(seen) if seen > lines.len() => 0,
+            Some(_) => return &self.text,
+        };
+        self.text = lines[first..].join(" ");
+        self.seen = Some(lines.len());
+        self.last.clone_from(last);
+        &self.text
+    }
 }
