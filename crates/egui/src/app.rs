@@ -122,6 +122,8 @@ pub struct App<M: GameModel> {
     menu_cursor: Option<String>,
     /// Input pressed while a command ran, in order; each goes out as soon as the one before it is done.
     queued: VecDeque<Queued>,
+    /// The palette's Options entry went through the main menu; when it opens, its Options row is chosen.
+    open_options: Option<std::time::Duration>,
     /// The loading step the list was last scrolled to; scrolling again every frame would repaint forever.
     scrolled_to: Option<usize>,
 }
@@ -176,6 +178,7 @@ impl<M: GameModel> App<M> {
             pickup: Default::default(),
             menu_cursor: None,
             queued: VecDeque::new(),
+            open_options: None,
             scrolled_to: None,
         }
     }
@@ -303,6 +306,7 @@ impl<M: GameModel> App<M> {
         }
         self.model.poll();
         self.display.follow_engine(self.model.display_default());
+        self.display.follow_mods(self.model.mod_tilesets());
         self.model.set_tiles(self.display.tiles());
         a11y::name_window(ui.ctx(), "Cataclysm: Bright Nights client");
         self.pending_since = self

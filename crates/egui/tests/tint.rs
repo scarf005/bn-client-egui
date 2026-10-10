@@ -1,4 +1,9 @@
-use bn_client_egui::tint::tint_pixel;
+use bn_client_egui::tint::{Blend, Paint, tint_pixel};
+
+type Pixel = [u8; 3];
+/// A sprite pixel, its paint, its mask pixel and the result the game prints.
+type Masked = (Pixel, Pixel, Pixel, Pixel);
+type Blended = (Blend, Pixel, Pixel, Pixel, Pixel);
 
 #[test]
 fn a_tinted_pixel_equals_the_games_blend() {
@@ -35,7 +40,7 @@ fn a_tinted_pixel_equals_the_games_blend() {
     ];
     for (base, paint, expected) in cases {
         assert_eq!(
-            tint_pixel(base, paint, None),
+            tint_pixel(base, Paint::of(paint), None),
             expected,
             "{base:?} painted {paint:?}"
         );
@@ -45,7 +50,7 @@ fn a_tinted_pixel_equals_the_games_blend() {
 #[test]
 fn a_masked_pixel_equals_the_games_mask_blend() {
     // (sprite pixel, paint, mask pixel, result) printed by the game's blend with a mask (cata_tiles.cpp).
-    let cases: [([u8; 3], [u8; 3], [u8; 3], [u8; 3]); 30] = [
+    let cases: [Masked; 30] = [
         (
             [200, 40, 40],
             [247, 251, 245],
@@ -154,7 +159,7 @@ fn a_masked_pixel_equals_the_games_mask_blend() {
     ];
     for (base, paint, mask, expected) in cases {
         assert_eq!(
-            tint_pixel(base, paint, Some(mask)),
+            tint_pixel(base, Paint::of(paint), Some(mask)),
             expected,
             "{base:?} painted {paint:?} through {mask:?}"
         );
@@ -164,9 +169,474 @@ fn a_masked_pixel_equals_the_games_mask_blend() {
 #[test]
 fn a_mask_without_red_leaves_the_sprite_alone_and_the_default_mask_is_the_unmasked_blend() {
     let (base, paint) = ([12, 34, 38], [247, 251, 245]);
-    assert_eq!(tint_pixel(base, paint, Some([0, 255, 255])), base);
     assert_eq!(
-        tint_pixel(base, paint, Some([255, 127, 127])),
-        tint_pixel(base, paint, None)
+        tint_pixel(base, Paint::of(paint), Some([0, 255, 255])),
+        base
     );
+    assert_eq!(
+        tint_pixel(base, Paint::of(paint), Some([255, 127, 127])),
+        tint_pixel(base, Paint::of(paint), None)
+    );
+}
+
+#[test]
+fn every_blend_equals_the_games_blend() {
+    // (blend, sprite pixel, paint, mask pixel, result) printed by the game's blend (cata_tiles.cpp).
+    let cases: [Blended; 60] = [
+        (
+            Blend::Tint,
+            [200, 40, 40],
+            [56, 56, 56],
+            [64, 200, 30],
+            [198, 79, 79],
+        ),
+        (
+            Blend::Tint,
+            [200, 40, 40],
+            [103, 83, 18],
+            [64, 200, 30],
+            [199, 69, 38],
+        ),
+        (
+            Blend::Tint,
+            [12, 34, 38],
+            [183, 136, 0],
+            [255, 127, 127],
+            [45, 35, 7],
+        ),
+        (
+            Blend::Tint,
+            [128, 128, 128],
+            [56, 56, 56],
+            [64, 200, 30],
+            [125, 125, 125],
+        ),
+        (
+            Blend::Tint,
+            [128, 128, 128],
+            [103, 83, 18],
+            [64, 200, 30],
+            [127, 122, 106],
+        ),
+        (
+            Blend::Tint,
+            [250, 240, 20],
+            [183, 136, 0],
+            [255, 255, 127],
+            [251, 186, 0],
+        ),
+        (
+            Blend::Additive,
+            [200, 40, 40],
+            [56, 56, 56],
+            [255, 127, 127],
+            [255, 96, 96],
+        ),
+        (
+            Blend::Additive,
+            [200, 40, 40],
+            [103, 83, 18],
+            [255, 127, 127],
+            [255, 123, 58],
+        ),
+        (
+            Blend::Additive,
+            [12, 34, 38],
+            [183, 136, 0],
+            [255, 255, 127],
+            [195, 170, 38],
+        ),
+        (
+            Blend::Additive,
+            [128, 128, 128],
+            [56, 56, 56],
+            [255, 127, 127],
+            [184, 184, 184],
+        ),
+        (
+            Blend::Additive,
+            [128, 128, 128],
+            [103, 83, 18],
+            [255, 127, 127],
+            [231, 211, 146],
+        ),
+        (
+            Blend::Additive,
+            [250, 240, 20],
+            [183, 136, 0],
+            [64, 200, 30],
+            [251, 243, 20],
+        ),
+        (
+            Blend::Subtract,
+            [200, 40, 40],
+            [56, 56, 56],
+            [255, 255, 127],
+            [1, 0, 0],
+        ),
+        (
+            Blend::Subtract,
+            [200, 40, 40],
+            [103, 83, 18],
+            [255, 255, 127],
+            [48, 0, 0],
+        ),
+        (
+            Blend::Subtract,
+            [12, 34, 38],
+            [183, 136, 0],
+            [64, 200, 30],
+            [8, 25, 28],
+        ),
+        (
+            Blend::Subtract,
+            [128, 128, 128],
+            [56, 56, 56],
+            [255, 255, 127],
+            [0, 0, 0],
+        ),
+        (
+            Blend::Subtract,
+            [128, 128, 128],
+            [103, 83, 18],
+            [255, 255, 127],
+            [0, 0, 0],
+        ),
+        (
+            Blend::Subtract,
+            [250, 240, 20],
+            [183, 136, 0],
+            [255, 127, 127],
+            [178, 121, 0],
+        ),
+        (
+            Blend::Multiply,
+            [200, 40, 40],
+            [56, 56, 56],
+            [64, 200, 30],
+            [160, 31, 31],
+        ),
+        (
+            Blend::Multiply,
+            [200, 40, 40],
+            [103, 83, 18],
+            [64, 200, 30],
+            [169, 32, 30],
+        ),
+        (
+            Blend::Multiply,
+            [12, 34, 38],
+            [183, 136, 0],
+            [255, 127, 127],
+            [8, 18, 0],
+        ),
+        (
+            Blend::Multiply,
+            [128, 128, 128],
+            [56, 56, 56],
+            [64, 200, 30],
+            [102, 102, 102],
+        ),
+        (
+            Blend::Multiply,
+            [128, 128, 128],
+            [103, 83, 18],
+            [64, 200, 30],
+            [108, 106, 98],
+        ),
+        (
+            Blend::Multiply,
+            [250, 240, 20],
+            [183, 136, 0],
+            [255, 255, 127],
+            [178, 127, 0],
+        ),
+        (
+            Blend::Normal,
+            [200, 40, 40],
+            [56, 56, 56],
+            [255, 127, 127],
+            [56, 56, 56],
+        ),
+        (
+            Blend::Normal,
+            [200, 40, 40],
+            [103, 83, 18],
+            [255, 127, 127],
+            [103, 83, 18],
+        ),
+        (
+            Blend::Normal,
+            [12, 34, 38],
+            [183, 136, 0],
+            [255, 255, 127],
+            [183, 136, 0],
+        ),
+        (
+            Blend::Normal,
+            [128, 128, 128],
+            [56, 56, 56],
+            [255, 127, 127],
+            [56, 56, 56],
+        ),
+        (
+            Blend::Normal,
+            [128, 128, 128],
+            [103, 83, 18],
+            [255, 127, 127],
+            [103, 83, 18],
+        ),
+        (
+            Blend::Normal,
+            [250, 240, 20],
+            [183, 136, 0],
+            [64, 200, 30],
+            [233, 213, 14],
+        ),
+        (
+            Blend::Divide,
+            [200, 40, 40],
+            [56, 56, 56],
+            [255, 255, 127],
+            [3, 0, 0],
+        ),
+        (
+            Blend::Divide,
+            [200, 40, 40],
+            [103, 83, 18],
+            [255, 255, 127],
+            [1, 0, 2],
+        ),
+        (
+            Blend::Divide,
+            [12, 34, 38],
+            [183, 136, 0],
+            [64, 200, 30],
+            [8, 25, 38],
+        ),
+        (
+            Blend::Divide,
+            [128, 128, 128],
+            [56, 56, 56],
+            [255, 255, 127],
+            [2, 2, 2],
+        ),
+        (
+            Blend::Divide,
+            [128, 128, 128],
+            [103, 83, 18],
+            [255, 255, 127],
+            [1, 1, 7],
+        ),
+        (
+            Blend::Divide,
+            [250, 240, 20],
+            [183, 136, 0],
+            [255, 127, 127],
+            [1, 1, 20],
+        ),
+        (
+            Blend::Screen,
+            [200, 40, 40],
+            [56, 56, 56],
+            [64, 200, 30],
+            [192, 29, 29],
+        ),
+        (
+            Blend::Screen,
+            [200, 40, 40],
+            [103, 83, 18],
+            [64, 200, 30],
+            [197, 29, 29],
+        ),
+        (
+            Blend::Screen,
+            [12, 34, 38],
+            [183, 136, 0],
+            [255, 127, 127],
+            [119, 50, 0],
+        ),
+        (
+            Blend::Screen,
+            [128, 128, 128],
+            [56, 56, 56],
+            [64, 200, 30],
+            [110, 110, 110],
+        ),
+        (
+            Blend::Screen,
+            [128, 128, 128],
+            [103, 83, 18],
+            [64, 200, 30],
+            [122, 117, 100],
+        ),
+        (
+            Blend::Screen,
+            [250, 240, 20],
+            [183, 136, 0],
+            [255, 255, 127],
+            [253, 242, 0],
+        ),
+        (
+            Blend::Softlight,
+            [200, 40, 40],
+            [56, 56, 56],
+            [255, 127, 127],
+            [174, 20, 20],
+        ),
+        (
+            Blend::Softlight,
+            [200, 40, 40],
+            [103, 83, 18],
+            [255, 127, 127],
+            [190, 28, 10],
+        ),
+        (
+            Blend::Softlight,
+            [12, 34, 38],
+            [183, 136, 0],
+            [255, 255, 127],
+            [16, 35, 5],
+        ),
+        (
+            Blend::Softlight,
+            [128, 128, 128],
+            [56, 56, 56],
+            [255, 127, 127],
+            [91, 91, 91],
+        ),
+        (
+            Blend::Softlight,
+            [128, 128, 128],
+            [103, 83, 18],
+            [255, 127, 127],
+            [115, 105, 72],
+        ),
+        (
+            Blend::Softlight,
+            [250, 240, 20],
+            [183, 136, 0],
+            [64, 200, 30],
+            [250, 240, 15],
+        ),
+        (
+            Blend::Hardlight,
+            [200, 40, 40],
+            [56, 56, 56],
+            [255, 255, 127],
+            [88, 17, 17],
+        ),
+        (
+            Blend::Hardlight,
+            [200, 40, 40],
+            [103, 83, 18],
+            [255, 255, 127],
+            [161, 26, 5],
+        ),
+        (
+            Blend::Hardlight,
+            [12, 34, 38],
+            [183, 136, 0],
+            [64, 200, 30],
+            [38, 37, 28],
+        ),
+        (
+            Blend::Hardlight,
+            [128, 128, 128],
+            [56, 56, 56],
+            [255, 255, 127],
+            [56, 56, 56],
+        ),
+        (
+            Blend::Hardlight,
+            [128, 128, 128],
+            [103, 83, 18],
+            [255, 255, 127],
+            [103, 83, 18],
+        ),
+        (
+            Blend::Hardlight,
+            [250, 240, 20],
+            [183, 136, 0],
+            [255, 127, 127],
+            [253, 241, 0],
+        ),
+        (
+            Blend::Overlay,
+            [200, 40, 40],
+            [56, 56, 56],
+            [64, 200, 30],
+            [192, 34, 34],
+        ),
+        (
+            Blend::Overlay,
+            [200, 40, 40],
+            [103, 83, 18],
+            [64, 200, 30],
+            [197, 36, 31],
+        ),
+        (
+            Blend::Overlay,
+            [12, 34, 38],
+            [183, 136, 0],
+            [255, 127, 127],
+            [17, 36, 0],
+        ),
+        (
+            Blend::Overlay,
+            [128, 128, 128],
+            [56, 56, 56],
+            [64, 200, 30],
+            [109, 109, 109],
+        ),
+        (
+            Blend::Overlay,
+            [128, 128, 128],
+            [103, 83, 18],
+            [64, 200, 30],
+            [121, 116, 100],
+        ),
+        (
+            Blend::Overlay,
+            [250, 240, 20],
+            [183, 136, 0],
+            [255, 255, 127],
+            [253, 241, 0],
+        ),
+    ];
+    for (blend, base, color, mask, expected) in cases {
+        let paint = Paint {
+            blend,
+            ..Paint::of(color)
+        };
+        assert_eq!(
+            tint_pixel(base, paint, Some(mask)),
+            expected,
+            "{blend:?} {base:?} painted {color:?} through {mask:?}"
+        );
+    }
+}
+
+#[test]
+fn contrast_saturation_and_brightness_adjust_the_result_like_the_game() {
+    let cases: [([u8; 3], [u8; 3]); 4] = [
+        ([200, 40, 40], [72, 10, 0]),
+        ([12, 34, 38], [0, 0, 0]),
+        ([128, 128, 128], [40, 29, 0]),
+        ([250, 240, 20], [95, 67, 0]),
+    ];
+    let paint = Paint {
+        blend: Blend::Multiply,
+        contrast: 1250,
+        saturation: 1500,
+        brightness: 500,
+        ..Paint::of([183, 136, 0])
+    };
+    for (base, expected) in cases {
+        assert_eq!(
+            tint_pixel(base, paint, Some([255, 127, 127])),
+            expected,
+            "{base:?}"
+        );
+    }
 }
