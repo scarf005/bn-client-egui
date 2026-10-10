@@ -1523,6 +1523,12 @@ impl GameModel for EngineModel {
                         area: text("area_label"),
                         storage: text("storage_kind"),
                         filter: text("filter"),
+                        blocked: p["blocked_areas"]
+                            .as_array()
+                            .into_iter()
+                            .flatten()
+                            .filter_map(|a| a.as_str().map(String::from))
+                            .collect(),
                     }
                 })
                 .collect(),

@@ -290,12 +290,16 @@ impl<M: GameModel> App<M> {
                                             continue;
                                         };
                                         let on = pane.area == area;
+                                        let blocked = pane.blocked.iter().any(|b| b == action);
                                         let b = ui
                                             .add_enabled(
                                                 has(action) && !self.model.busy(),
-                                                egui::Button::new(mark)
-                                                    .selected(on)
-                                                    .min_size(egui::vec2(24.0, 0.0)),
+                                                egui::Button::new(
+                                                    egui::RichText::new(mark)
+                                                        .color(area_color(on, blocked)),
+                                                )
+                                                .selected(on)
+                                                .min_size(egui::vec2(24.0, 0.0)),
                                             )
                                             .on_hover_text(area);
                                         a11y::tab(ui.ctx(), b.id, on);

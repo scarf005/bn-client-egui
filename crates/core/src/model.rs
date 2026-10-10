@@ -170,6 +170,8 @@ pub struct MenuPane {
     pub area: String,
     pub storage: String,
     pub filter: String,
+    /// Actions of the areas this pane cannot put items in; the native picker draws them red.
+    pub blocked: Vec<String>,
 }
 
 /// The engine's current interaction, rendered generically.
