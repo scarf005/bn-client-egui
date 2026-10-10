@@ -1518,3 +1518,39 @@ fn a_client_line_repeating_the_newest_one_is_not_added_again() {
     m.say("You see a wall at (4, 5).".into());
     assert_eq!(m.messages().len(), 3, "{:?}", m.messages());
 }
+
+#[test]
+fn query_popup_rows_do_not_carry_the_action_id_as_a_description() {
+    let mut menu = crafting("favorites");
+    menu["actions"] = json!([{"id": "YES", "name": "Yes", "keys": ["y"]}, {"id": "NO", "name": "No", "keys": ["n"]}]);
+    let rows = ["Yes", "No"].map(|label| {
+        let id = label.to_uppercase();
+        json!({"id": format!("option:{id}"), "label": label, "description": id, "denial": "",
+            "enabled": true, "selectable": true, "selected": false, "columns": []})
+    });
+    menu["interaction"]["context"] = json!("YESNO");
+    menu["interaction"]["choices"] = json!(rows);
+    let (t, h) = session();
+    let mut m = connected(t);
+    h.push(change(41, json!({"interaction": menu})));
+    m.poll();
+    let menu = m.menu().unwrap();
+    assert!(
+        menu.choices.iter().all(|c| c.description.is_empty()),
+        "{:?}",
+        menu.choices
+    );
+    // Text that is not an action id stays.
+    let mut real = crafting("weapon");
+    real["actions"] = json!([{"id": "YES", "name": "Yes"}]);
+    h.push(change(42, json!({"interaction": real})));
+    m.poll();
+    let kept = m
+        .menu()
+        .unwrap()
+        .choices
+        .into_iter()
+        .find(|c| c.id == "recipe:aa")
+        .unwrap();
+    assert!(kept.description.starts_with("Time to complete"));
+}
