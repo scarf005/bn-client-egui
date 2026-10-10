@@ -168,7 +168,7 @@ impl<M: GameModel> App<M> {
         ui.spacing_mut().item_spacing.y = 0.0;
         for line in lines {
             let runs = self.model.styled(line);
-            ui.label(text::job(&runs, &font));
+            ui.add(egui::Label::new(text::job(&runs, &font)).wrap_mode(egui::TextWrapMode::Extend));
         }
         ui.spacing_mut().item_spacing.y = 4.0;
     }
