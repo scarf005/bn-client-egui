@@ -229,3 +229,56 @@ fn switching_between_tiles_and_ascii_tells_the_engine_without_a_restart() {
     let methods = script.sent_methods();
     assert_eq!(methods.iter().filter(|m| *m == "bn.viewport").count(), 2);
 }
+
+fn session_with_display(tiles: bool) -> ScriptedTransport {
+    let mut hello = fixture("hello_result");
+    hello["result"]["engine"]["display"] = json!({"tiles": tiles, "tileset": "test"});
+    let (t, _) = ScriptedTransport::new();
+    t.on("bn.hello", vec![hello]).on(
+        "bn.subscribe",
+        vec![
+            fixture("subscribe_result"),
+            fixture("snapshot_part_0"),
+            fixture("snapshot_part_1"),
+        ],
+    )
+}
+
+fn harness_with(root: &Path, settings: PathBuf, t: ScriptedTransport) -> H<'static> {
+    let app = App::new(EngineModel::new(Box::new(t)))
+        .with_root(root.to_path_buf())
+        .with_settings(settings);
+    Harness::builder()
+        .with_size(egui::vec2(1100.0, 800.0))
+        .build_ui_state(|ui, app: &mut App<EngineModel>| app.show(ui), app)
+}
+
+#[test]
+fn with_no_saved_choice_the_map_starts_in_the_mode_the_engines_options_say() {
+    let root = game_root("ui-engine-default");
+    let mut off = harness_with(&root, root.join("off.json"), session_with_display(false));
+    off.run_steps(4);
+    assert!(!off.state().display().tiles(), "USE_TILES is off: ASCII");
+    let mut on = harness_with(&root, root.join("on.json"), session_with_display(true));
+    settle(&mut on);
+    assert!(on.state().display().tiles());
+    assert!(
+        !root.join("off.json").exists(),
+        "following the engine is not a choice and saves nothing"
+    );
+}
+
+#[test]
+fn a_saved_choice_wins_over_the_engines_options() {
+    let root = game_root("ui-saved-wins");
+    let settings = root.join("config/settings.json");
+    std::fs::create_dir_all(settings.parent().unwrap()).unwrap();
+    std::fs::write(
+        &settings,
+        json!({"tiles": true, "tileset": null}).to_string(),
+    )
+    .unwrap();
+    let mut h = harness_with(&root, settings, session_with_display(false));
+    settle(&mut h);
+    assert!(h.state().display().tiles());
+}
