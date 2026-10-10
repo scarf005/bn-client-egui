@@ -1066,7 +1066,9 @@ impl EngineModel {
             let cell = self
                 .replica
                 .cell(&p.dim, p.x, p.y, p.z - i32::from(depth))?;
-            (cell.known == Known::Visible && cell.terrain.is_some()).then_some((cell, depth))
+            // A roof seen from above a vehicle has no terrain published, only the part.
+            (cell.known == Known::Visible && (cell.terrain.is_some() || cell.vehicle.is_some()))
+                .then_some((cell, depth))
         })
     }
 

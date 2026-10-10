@@ -76,15 +76,20 @@ fn overlay(base: u8, blend: u8) -> u8 {
     mixed.clamp(0, 255) as u8
 }
 
-/// One pixel of a sprite painted with `target`.
-pub fn tint_pixel(base: [u8; 3], target: [u8; 3]) -> [u8; 3] {
+/// One pixel of a sprite painted with `target`. A tint mask pixel sets how much of the paint's hue, saturation
+/// and value each channel takes (red: how far the colour moves, green: saturation, blue: value); without a mask
+/// the sprite is painted whole, with the saturation and value halfway.
+pub fn tint_pixel(base: [u8; 3], target: [u8; 3], mask: Option<[u8; 3]>) -> [u8; 3] {
     let (b, t) = (rgb2hsv(base), rgb2hsv(target));
-    let lerp = |a: i32, b: i32| ((b * 127 + a * (255 - 127)) / 255) as u16;
-    let tinted = Hsv {
+    let [red, green, blue] = mask.unwrap_or([255, 127, 127]);
+    let lerp =
+        |a: i32, b: i32, by: u8| ((b * i32::from(by) + a * (255 - i32::from(by))) / 255) as u16;
+    let tinted = hsv2rgb(Hsv {
         h: t.h,
-        s: lerp(i32::from(b.s.min(t.s)), i32::from(t.s)),
-        v: lerp(i32::from(b.v), i32::from(overlay(b.v, t.v))) as u8,
-    };
+        s: lerp(i32::from(b.s.min(t.s)), i32::from(t.s), green),
+        v: lerp(i32::from(b.v), i32::from(overlay(b.v, t.v)), blue) as u8,
+    });
+    let moved = [0, 1, 2].map(|i| lerp(i32::from(base[i]), i32::from(tinted[i]), red) as u8);
     // The game converts the result through HSV once more before it is stored.
-    hsv2rgb(rgb2hsv(hsv2rgb(tinted)))
+    hsv2rgb(rgb2hsv(moved))
 }

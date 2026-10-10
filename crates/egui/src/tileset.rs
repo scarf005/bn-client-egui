@@ -100,6 +100,8 @@ struct TileDef {
     rotates: Option<bool>,
     #[serde(default)]
     additional_tiles: Vec<SubDef>,
+    #[serde(default)]
+    masks: Vec<MaskDef>,
 }
 
 #[derive(Deserialize)]
@@ -107,6 +109,28 @@ struct SubDef {
     id: String,
     fg: Option<Sprites>,
     bg: Option<Sprites>,
+    #[serde(default)]
+    masks: Vec<MaskDef>,
+}
+
+/// Sprites that say where, and how much, a tile takes the tint of what it is painted with.
+#[derive(Deserialize)]
+struct MaskDef {
+    #[serde(rename = "type")]
+    kind: String,
+    fg: Option<Sprites>,
+    bg: Option<Sprites>,
+}
+
+/// A tileset a game file adds to the ones whose names it lists.
+#[derive(Deserialize)]
+struct ModConfig {
+    #[serde(rename = "type")]
+    kind: String,
+    #[serde(default)]
+    compatibility: Vec<String>,
+    #[serde(rename = "tiles-new", default)]
+    sheets: Vec<SheetDef>,
 }
 
 /// One sprite, the rotations of a tile (2 or 4 sprites), or weighted variants of either.
@@ -136,10 +160,10 @@ enum Choice {
 struct Variants(Vec<(u32, Vec<u32>)>);
 
 impl Variants {
-    fn new(sprites: Option<Sprites>) -> Self {
+    fn new(sprites: Option<Sprites>, offset: u32) -> Self {
         let keep = |ids: Vec<i64>| {
             ids.into_iter()
-                .filter_map(|i| u32::try_from(i).ok())
+                .filter_map(|i| Some(u32::try_from(i).ok()? + offset))
                 .collect::<Vec<_>>()
         };
         Self(match sprites {
@@ -159,21 +183,30 @@ impl Variants {
         })
     }
 
-    /// The variant `random` selects, like the game's weighted list.
-    fn pick(&self, random: u32) -> Option<&[u32]> {
+    /// The number of the variant `random` selects, like the game's weighted list.
+    fn pick(&self, random: u32) -> Option<usize> {
         let total = self.0.iter().map(|(w, _)| *w).sum::<u32>();
         if total == 0 {
             return None;
         }
         if self.0.len() == 1 {
-            return Some(&self.0[0].1);
+            return Some(0);
         }
         let target = random % total + 1;
         let mut seen = 0;
-        self.0.iter().find_map(|(weight, ids)| {
+        self.0.iter().position(|(weight, _)| {
             seen += weight;
-            (seen >= target).then_some(ids.as_slice())
+            seen >= target
         })
+    }
+
+    /// The sprite of variant `variant` for a rotation: the only one, or the rotation's own.
+    fn sprite(&self, variant: usize, rotation: u8) -> Option<u32> {
+        let ids = &self.0.get(variant)?.1;
+        match ids.len() {
+            1 => Some(ids[0]),
+            n => ids.get(usize::from(rotation) % n.max(1)).copied(),
+        }
     }
 }
 
@@ -181,6 +214,9 @@ impl Variants {
 struct Tile {
     fg: Variants,
     bg: Variants,
+    /// The tint masks of `fg` and `bg`, one per sprite; empty when the tile is painted whole.
+    fg_mask: Variants,
+    bg_mask: Variants,
     rotates: bool,
     multitile: bool,
     /// Multitile keys this tile defines (`center`, `edge`, ...).
@@ -239,6 +275,8 @@ pub enum Turn {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Placed {
     pub sprite: u32,
+    /// The sprite that masks where a paint tints this one.
+    pub mask: Option<u32>,
     pub turn: Turn,
 }
 
@@ -313,7 +351,24 @@ impl Tileset {
             sheets: vec![],
             tiles: HashMap::new(),
         };
-        let mut first = 0;
+        set.add_sheets(sheets, dir)?;
+        let name = setting(&text, "NAME").unwrap_or_default();
+        // Sprites of the files the game adds to this tileset come after its own.
+        if let Some(root) = dir.parent().and_then(Path::parent) {
+            // The sheets of a game file are named from the folder of the game's JSON.
+            let json = root.join("data/json");
+            for config in mod_tilesets(&json.join("external_tileset"), &name) {
+                let _ = set.add_sheets(config.sheets, &json);
+            }
+        }
+        Ok(set)
+    }
+
+    /// Adds sheets that follow the ones loaded; their tiles number sprites from the first of them.
+    fn add_sheets(&mut self, sheets: Vec<SheetDef>, dir: &Path) -> Result<(), String> {
+        let tile = self.tile;
+        let start = self.sheets.last().map_or(0, |s| s.first + s.count);
+        let mut first = start;
         for def in sheets {
             let file = dir.join(&def.file);
             let sprite = (
@@ -328,7 +383,7 @@ impl Tileset {
             };
             let columns = (size.0 / sprite.0.max(1)).max(1);
             let count = columns * (size.1 / sprite.1.max(1));
-            set.sheets.push(Sheet {
+            self.sheets.push(Sheet {
                 file,
                 sprite,
                 offset: (def.sprite_offset_x, def.sprite_offset_y),
@@ -340,13 +395,13 @@ impl Tileset {
             });
             first += count;
             for entry in def.tiles {
-                set.add(entry);
+                self.add(entry, start);
             }
         }
-        Ok(set)
+        Ok(())
     }
 
-    fn add(&mut self, entry: TileDef) {
+    fn add(&mut self, entry: TileDef, offset: u32) {
         let ids = match entry.id {
             Ids::One(id) => vec![id],
             Ids::Many(ids) => ids,
@@ -362,26 +417,18 @@ impl Tileset {
                     let part = MULTITILE_KEYS.contains(&sub.id.as_str());
                     self.tiles.insert(
                         format!("{id}_{}", sub.id),
-                        Tile {
-                            fg: Variants::new(sub.fg.clone()),
-                            bg: Variants::new(sub.bg.clone()),
-                            rotates: true,
-                            part,
-                            ..Tile::default()
-                        },
+                        Tile::new(&sub.fg, &sub.bg, &sub.masks, offset)
+                            .with(|t| (t.rotates, t.part) = (true, part)),
                     );
                 }
             }
             self.tiles.insert(
                 id,
-                Tile {
-                    fg: Variants::new(entry.fg.clone()),
-                    bg: Variants::new(entry.bg.clone()),
-                    rotates: entry.rotates.unwrap_or(entry.multitile),
-                    multitile: entry.multitile,
-                    subtiles: if entry.multitile { subtiles } else { vec![] },
-                    part: false,
-                },
+                Tile::new(&entry.fg, &entry.bg, &entry.masks, offset).with(|t| {
+                    t.rotates = entry.rotates.unwrap_or(entry.multitile);
+                    t.multitile = entry.multitile;
+                    t.subtiles = if entry.multitile { subtiles } else { vec![] };
+                }),
             );
         }
     }
@@ -418,23 +465,21 @@ impl Tileset {
         };
         let varied = tile.fg.0.len() > 1 || tile.bg.0.len() > 1;
         let random = if varied { mix(q.seed) } else { 0 };
-        let place = |variants: &Variants, foreground: bool| {
-            let ids = variants.pick(random)?;
-            let sprite = if ids.len() == 1 {
-                ids[0]
-            } else {
-                *ids.get(usize::from(rotation) % ids.len().max(1))?
-            };
+        let place = |variants: &Variants, masks: &Variants, foreground: bool| {
+            let variant = variants.pick(random)?;
+            let sprite = variants.sprite(variant, rotation)?;
             // A single sprite turns with the tile; a background only when the tile asks for it.
-            let turns = ids.len() == 1 && (foreground || (tile.rotates && !tile.part));
+            let single = variants.0[variant].1.len() == 1;
+            let turns = single && (foreground || (tile.rotates && !tile.part));
             Some(Placed {
                 sprite,
+                mask: masks.sprite(variant, rotation),
                 turn: if turns { turn_of(rotation) } else { Turn::None },
             })
         };
         Some(Chosen {
-            bg: place(&tile.bg, false),
-            fg: place(&tile.fg, true),
+            bg: place(&tile.bg, &tile.bg_mask, false),
+            fg: place(&tile.fg, &tile.fg_mask, true),
         })
     }
 
@@ -447,6 +492,67 @@ impl Tileset {
         let sheet = &self.sheets[n];
         (sprite - sheet.first < sheet.count).then_some((n, sprite - sheet.first))
     }
+}
+
+impl Tile {
+    fn new(fg: &Option<Sprites>, bg: &Option<Sprites>, masks: &[MaskDef], offset: u32) -> Self {
+        let (fg, bg) = (
+            Variants::new(fg.clone(), offset),
+            Variants::new(bg.clone(), offset),
+        );
+        let tint = masks.iter().find(|m| m.kind == "tint");
+        let mask = |sprites: &Variants, masks: Option<&Option<Sprites>>| {
+            let masks = Variants::new(masks.and_then(Clone::clone), offset);
+            // Masks that do not match their sprites are dropped, as the game does.
+            let fits = masks.0.len() == sprites.0.len()
+                && masks
+                    .0
+                    .iter()
+                    .zip(&sprites.0)
+                    .all(|(m, s)| (m.0, m.1.len()) == (s.0, s.1.len()));
+            if fits { masks } else { Variants::default() }
+        };
+        Self {
+            fg_mask: mask(&fg, tint.map(|m| &m.fg)),
+            bg_mask: mask(&bg, tint.map(|m| &m.bg)),
+            fg,
+            bg,
+            ..Self::default()
+        }
+    }
+
+    fn with(mut self, set: impl FnOnce(&mut Self)) -> Self {
+        set(&mut self);
+        self
+    }
+}
+
+/// The mod tilesets under `dir` that list `name`, in file order.
+fn mod_tilesets(dir: &Path, name: &str) -> Vec<ModConfig> {
+    let mut files = std::fs::read_dir(dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.extension().is_some_and(|e| e == "json"))
+        .collect::<Vec<_>>();
+    files.sort();
+    files
+        .into_iter()
+        .flat_map(|file| {
+            let json = std::fs::read(&file)
+                .ok()
+                .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok());
+            let json = match json {
+                Some(serde_json::Value::Array(list)) => list,
+                other => other.into_iter().collect(),
+            };
+            json.into_iter()
+                .filter_map(|v| serde_json::from_value::<ModConfig>(v).ok())
+                .filter(|c| c.kind == "mod_tileset" && c.compatibility.iter().any(|n| n == name))
+                .collect::<Vec<_>>()
+        })
+        .collect()
 }
 
 /// The turn the game applies for its rotation index: quarter turns, 4 mirrors.
