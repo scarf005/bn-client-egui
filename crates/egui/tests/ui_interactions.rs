@@ -521,3 +521,18 @@ fn a_composed_screen_is_shown_as_text_and_every_key_including_tab_is_the_engines
         [json!({"kind":"action","action_id":"NEXT_TAB"})]
     );
 }
+
+#[test]
+fn leaving_look_mode_puts_the_cursor_back_on_the_player() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    script.push(look_mode(41, 9));
+    h.run_steps(3);
+    script.push(show(42, json!([]), Value::Null));
+    h.run_steps(3);
+    let me = h.state().model.player();
+    let status = format!("Cursor ({}, {})", me.x, me.y);
+    let map = h.get_by_label("Map");
+    let description = map.accesskit_node().description().unwrap_or_default();
+    assert!(description.contains(&status), "{status} in {description}");
+}

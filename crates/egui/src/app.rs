@@ -82,6 +82,8 @@ pub struct App<M: GameModel> {
     menu_focus: Option<String>,
     /// The cursor has been put on the player since the map first appeared.
     cursor_placed: bool,
+    /// The engine's look cursor was up at the last frame.
+    was_looking: bool,
     crafting: crafting::Crafting,
     pickup: pickup::Pickup,
     /// A click that arrived while a command was in flight, sent when the engine is free again.
@@ -115,6 +117,7 @@ impl<M: GameModel> App<M> {
             focus_menu: false,
             refocus_map: false,
             cursor_placed: false,
+            was_looking: false,
             menu_ids: Vec::new(),
             menu_focus: None,
             native_live: a11y::Announcer::default(),
@@ -567,9 +570,14 @@ impl<M: GameModel> App<M> {
             x: view.x + origin.x,
             y: view.y + origin.y,
         };
-        if let Some(focus) = self.model.focus() {
+        let looking = self.model.focus();
+        if let Some(focus) = looking {
             self.cursor = to_abs(focus);
+        } else if std::mem::take(&mut self.was_looking) {
+            // Native shows no cursor outside look mode: it goes back to the player.
+            self.cursor = to_abs(self.model.player());
         }
+        self.was_looking = looking.is_some();
         let player = self.model.player();
         if !std::mem::replace(&mut self.cursor_placed, true) {
             self.cursor = to_abs(player);
