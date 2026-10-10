@@ -64,7 +64,8 @@ fn glyph(l: &Look) -> char {
     l.glyph.chars().next().unwrap_or('?')
 }
 
-/// The topmost thing drawn in a cell: item, field, furniture, terrain, then remembered terrain.
+/// The topmost thing drawn in a cell: item, field, furniture, terrain, then what memory holds
+/// (its furniture or other overlay over its terrain).
 fn top_look(c: &WorldCell) -> Option<&Look> {
     c.vehicle
         .as_ref()
@@ -72,7 +73,10 @@ fn top_look(c: &WorldCell) -> Option<&Look> {
         .or(c.fields.last().map(|f| &f.look))
         .or(c.furniture.as_ref())
         .or(c.terrain.as_ref())
-        .or(c.memory.as_ref().map(|m| &m.terrain))
+        .or(c
+            .memory
+            .as_ref()
+            .map(|m| m.overlay.as_ref().unwrap_or(&m.terrain)))
 }
 
 /// Native registered-action id for a one-square move.
@@ -222,8 +226,8 @@ impl EngineModel {
                         && n.error.as_ref().is_some_and(|e| e == "stale_epoch");
                     if n.stage != "completed" && !swap {
                         self.rejected = self.walking;
-                        let why = n.error.as_ref().map_or(n.stage.clone(), error_kind);
-                        self.messages.push(format!("Command {}: {why}.", n.stage));
+                        let reason = n.error.as_ref().map(error_kind);
+                        self.report_failure(&n.stage, reason.as_deref());
                     }
                 }
             }
@@ -295,6 +299,21 @@ impl EngineModel {
                     s.stage = "accepted".into();
                 }
             }
+        }
+    }
+
+    /// Logs a failed command; a repeat of the last line (a click held on an unreachable square) adds none.
+    fn report_failure(&mut self, stage: &str, reason: Option<&str>) {
+        let travel = self.status.as_ref().is_some_and(|s| s.label == "Travel");
+        let text = match reason {
+            Some("validation_failed") if travel => {
+                "Travel rejected: that square is outside the map window the engine can resolve."
+                    .to_string()
+            }
+            _ => format!("Command {stage}: {}.", reason.unwrap_or(stage)),
+        };
+        if self.messages.last() != Some(&text) {
+            self.messages.push(text);
         }
     }
 

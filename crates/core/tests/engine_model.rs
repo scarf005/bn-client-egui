@@ -600,3 +600,68 @@ fn travel_that_planned_a_route_is_simply_done() {
     m.poll();
     assert_eq!(m.command().unwrap().stage, "done");
 }
+
+fn cell_event(sequence: u64, cell: Value) -> Value {
+    json!({"jsonrpc":"2.0","method":"bn.events","params":{"epoch":"e7f3","events":[{
+        "sequence": sequence.to_string(), "revision": (sequence - 9).to_string(),
+        "type": "cells.seen", "changes": { "cells": [cell] }}]}})
+}
+
+#[test]
+fn remembered_furniture_stays_drawn_from_its_memory_overlay() {
+    let (t, h) = session();
+    let mut m = connected(t);
+    let at = json!({"dim":"","x":5,"y":4,"z":0});
+    let view = Pos { x: 22, y: 12 };
+    let floor = json!({"kind":"terrain","id":"t_floor","glyph":".","color":"c_cyan"});
+    let bench = json!({"kind":"furniture","id":"f_bench","glyph":"{","color":"c_light_gray"});
+
+    h.push(cell_event(
+        41,
+        json!({"at": at, "known": "visible", "terrain": floor, "furniture": bench}),
+    ));
+    m.poll();
+    assert_eq!(m.cell(view).desc, "f_bench", "seen furniture draws");
+
+    h.push(cell_event(
+        42,
+        json!({"at": at, "known": "remembered", "memory": {"terrain": floor, "overlay": bench}}),
+    ));
+    m.poll();
+    let remembered = m.cell(view);
+    assert_eq!(
+        (remembered.glyph, remembered.desc.as_str()),
+        ('{', "f_bench")
+    );
+
+    h.push(cell_event(
+        43,
+        json!({"at": at, "known": "remembered", "memory": {"terrain": floor}}),
+    ));
+    m.poll();
+    assert_eq!(
+        m.cell(view).glyph,
+        '.',
+        "bare remembered floor draws terrain"
+    );
+}
+
+#[test]
+fn travel_to_a_square_the_engine_cannot_resolve_is_reported_once_in_words() {
+    let (t, h) = session();
+    let mut m = connected(
+        t.on("bn.command.submit", walk_reply())
+            .on("bn.command.submit", walk_reply()),
+    );
+    for id in ["c:5", "c:5"] {
+        assert!(m.travel(Pos { x: 39, y: 12 }));
+        h.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{
+            "epoch":"e7f3","command_id":id,"stage":"rejected","error":"validation_failed"}}));
+        m.poll();
+        assert!(!m.busy());
+    }
+    assert_eq!(
+        m.messages(),
+        ["Travel rejected: that square is outside the map window the engine can resolve."]
+    );
+}
