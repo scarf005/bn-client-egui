@@ -408,6 +408,32 @@ impl Display {
         self.hidden = 0;
     }
 
+    /// Whether the tileset has a sprite for the layer.
+    pub fn has_sprite(&self, layer: &Layer) -> bool {
+        self.atlas
+            .as_ref()
+            .is_some_and(|a| a.tileset.choose(&query(layer, None)).is_some())
+    }
+
+    /// Draws one tile into `rect` when the tileset has a sprite for it; false draws nothing.
+    pub fn paint_sprite(&mut self, painter: &egui::Painter, rect: Rect, layer: &Layer) -> bool {
+        let Some(atlas) = &mut self.atlas else {
+            return false;
+        };
+        atlas.request(Fx::Plain);
+        let scale = (
+            rect.width() / atlas.tileset.tile.0 as f32,
+            rect.height() / atlas.tileset.tile.1 as f32,
+        );
+        let chosen = atlas.tileset.choose(&query(layer, None));
+        let sprites = chosen.iter().flat_map(|c| [c.bg, c.fg]).flatten();
+        let mut any = false;
+        for placed in sprites {
+            any |= draw_sprite(painter, atlas, rect, scale, placed, Fx::Plain);
+        }
+        any
+    }
+
     /// Draws a cell's layers into `rect`, bottom first, the way the game's tile view does: sprites where
     /// the tileset has them and the glyph of the thing where it has none. A square nothing is known about is only the hidden
     /// backdrop; false when even that has no sprite.

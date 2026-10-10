@@ -927,34 +927,8 @@ impl<M: GameModel> App<M> {
             egui::Stroke::new(1.0, egui::Color32::WHITE),
             egui::StrokeKind::Inside,
         );
-        let display = &mut self.display;
         self.effects
-            .paint(&painter, now, cell_px, rect, |square, shape| {
-                let bn_client_core::Shape::Projectile {
-                    glyph,
-                    sprite,
-                    color,
-                    ..
-                } = shape
-                else {
-                    return false;
-                };
-                let mut layer = bn_client_core::Layer {
-                    id: sprite.clone().unwrap_or_default(),
-                    fallbacks: vec!["animation_bullet_normal".into()],
-                    glyph: *glyph,
-                    color: *color,
-                    ..Default::default()
-                };
-                if layer.id.is_empty() {
-                    layer.id = "animation_bullet_normal".into();
-                }
-                let cell = bn_client_core::Cell {
-                    layers: vec![layer],
-                    ..Default::default()
-                };
-                display.paint(&painter, square, &cell, None)
-            });
+            .paint(&painter, now, cell_px, rect, &mut self.display);
         if self.effects.active() {
             ui.ctx().request_repaint();
         }
