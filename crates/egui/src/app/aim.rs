@@ -154,6 +154,8 @@ impl<M: GameModel> App<M> {
                             "MOVE_ITEM_STACK",
                             "Move the whole selected stack",
                         ),
+                        ("Examine", "EXAMINE", "Read the selected item's description"),
+                        ("Sort", "SORT", "Change the sorting of the source pane"),
                     ] {
                         self.aim_button(ui, &mut out, (label, action, tip), has(action));
                     }
