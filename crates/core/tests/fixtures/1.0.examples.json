@@ -1531,7 +1531,11 @@
                   "text": " crit",
                   "color": "yellow"
                 }
-              ]
+              ],
+              "scroll": {
+                "x": 0,
+                "y": -1
+              }
             },
             "display": {
               "duration_ms": 80
