@@ -67,6 +67,8 @@ pub struct App<M: GameModel> {
     keys_consumed: bool,
     /// The action palette's search text while it is open.
     palette: Option<String>,
+    /// The message log's height once the user has dragged its edge.
+    log_height: Option<f32>,
     /// Title of the menu that last took focus, so a menu is entered once, not on every frame.
     menu_title: Option<String>,
     /// A menu opened and its first control has not taken focus yet (it may be disabled for a frame).
@@ -76,8 +78,11 @@ pub struct App<M: GameModel> {
     /// What the two message lists announce, so a burst in one frame is read whole.
     native_live: a11y::Announcer,
     command_live: a11y::Announcer,
+    status_live: a11y::Announcer,
     /// The enabled controls of the open menu, in Tab order, as of the last frame.
     menu_ids: Vec<egui::Id>,
+    /// The same for the action palette.
+    palette_ids: Vec<egui::Id>,
     /// Where the engine's cursor was in the open menu, so keyboard focus can follow it.
     menu_focus: Option<String>,
     /// The cursor has been put on the player since the map first appeared.
@@ -113,14 +118,17 @@ impl<M: GameModel> App<M> {
             display: Display::new(None, None),
             keys_consumed: false,
             palette: None,
+            log_height: None,
             menu_title: None,
             focus_menu: false,
             refocus_map: false,
             cursor_placed: false,
             menu_ids: Vec::new(),
+            palette_ids: Vec::new(),
             menu_focus: None,
-            native_live: a11y::Announcer::default(),
-            command_live: a11y::Announcer::default(),
+            native_live: a11y::Announcer::new(" "),
+            command_live: a11y::Announcer::new(" "),
+            status_live: a11y::Announcer::new(", "),
             crafting: Default::default(),
             pickup: Default::default(),
             menu_cursor: None,
@@ -298,12 +306,20 @@ impl<M: GameModel> App<M> {
             }
         }
         egui::Panel::top("bar").show(ui, |ui| self.bar(ui));
+        if self.model.menu().is_some_and(|m| m.context == "MAIN_MENU") {
+            // The title screen is only its menu: no map, sidebar or log of a game that is not running.
+            self.menu(ui.ctx());
+            return;
+        }
         egui::Panel::right("sidebar")
             .default_size(
                 (ui.available_width() * SIDEBAR_SHARE).clamp(SIDEBAR_WIDTH.0, SIDEBAR_WIDTH.1),
             )
             .size_range(SIDEBAR_WIDTH.0..=SIDEBAR_WIDTH.1)
-            .show(ui, |ui| self.sidebar_panel(ui));
+            .show(ui, |ui| {
+                ui.set_min_width(ui.available_width());
+                self.sidebar_panel(ui)
+            });
         label_resize_handle(ui.ctx(), "sidebar", "Resize sidebar");
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE.fill(egui::Color32::BLACK))
@@ -443,6 +459,13 @@ impl<M: GameModel> App<M> {
             .command()
             .filter(|s| !(s.finished && s.stage == "done"))
             .map_or_else(|| "Ready".into(), |s| format!("{}: {}", s.label, s.stage));
+        // Every stage reached since the last frame is said, even one that is not shown afterwards.
+        let news = self
+            .model
+            .command()
+            .map(|s| (s.label, self.status_live.update(&s.history).to_owned()))
+            .filter(|_| self.status_live.changed());
+        let text = news.map_or(text, |(label, stages)| format!("{label}: {stages}"));
         ui.horizontal(|ui| {
             let label = ui.label(text);
             ui.ctx()

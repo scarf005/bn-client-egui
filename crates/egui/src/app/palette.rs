@@ -1,8 +1,9 @@
 //! Searchable list of everything the engine accepts, opened from the top bar or with Ctrl+P.
 
 use super::{App, Queued};
+use crate::a11y;
 use bn_client_core::{GameModel, markup};
-use eframe::egui;
+use eframe::egui::{self, accesskit};
 
 impl<M: GameModel> App<M> {
     /// The opened palette's search text is typed text, not game keys.
@@ -12,12 +13,22 @@ impl<M: GameModel> App<M> {
         }
     }
 
+    /// The menu's controls, unless the palette sits on top of it and owns Tab.
+    pub(super) fn trapped_by_menu(&self) -> &[egui::Id] {
+        match self.palette {
+            Some(_) => &[],
+            None => &self.menu_ids,
+        }
+    }
+
     pub(super) fn palette(&mut self, ctx: &egui::Context) {
         let Some(mut query) = self.palette.take() else {
+            // Closed since the last frame, by any route: the map takes focus back.
+            self.refocus_map |= !std::mem::take(&mut self.palette_ids).is_empty();
             return;
         };
         let mut invoke = None;
-        let close = ctx.input(|i| i.key_pressed(egui::Key::Escape));
+        let close = ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
         let needle = query.to_lowercase();
         let mut actions = self
             .model
@@ -35,7 +46,11 @@ impl<M: GameModel> App<M> {
                 .split_whitespace()
                 .any(|w| w.starts_with(&needle))
         });
+        a11y::trap_tab(ctx, &self.palette_ids);
+        let entered = self.palette_ids.is_empty();
+        let mut ids = Vec::new();
         egui::Window::new("Actions")
+            .id(a11y::dialog_id("Actions"))
             .anchor(egui::Align2::CENTER_TOP, super::dialog_offset(ctx))
             .collapsible(false)
             .resizable(false)
@@ -49,7 +64,9 @@ impl<M: GameModel> App<M> {
                 search.widget_info(|| {
                     egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Search actions")
                 });
-                if !search.has_focus() && !search.lost_focus() {
+                a11y::text_field(ui.ctx(), search.id);
+                ids.push(search.id);
+                if entered {
                     search.request_focus();
                 }
                 if search.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
@@ -69,6 +86,10 @@ impl<M: GameModel> App<M> {
                                     ),
                                 };
                                 let button = self.control(ui, label, &a.id, true, false);
+                                ui.ctx().accesskit_node_builder(button.id, |b| {
+                                    b.set_role(accesskit::Role::MenuItem)
+                                });
+                                ids.push(button.id);
                                 if button.clicked() {
                                     invoke = Some(a.id.clone());
                                 }
@@ -76,6 +97,8 @@ impl<M: GameModel> App<M> {
                         });
                     });
             });
+        a11y::dialog(ctx, "Actions", "");
+        self.palette_ids = ids;
         match invoke {
             Some(id) => {
                 ctx.request_repaint();

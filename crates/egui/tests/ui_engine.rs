@@ -647,3 +647,24 @@ mod failures {
         assert!(h.query_by_label("Restart").is_none());
     }
 }
+
+#[test]
+fn the_title_screen_is_only_its_menu() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    h.get_by_label("Message log");
+    let mut menu = fixture("events_43_menu");
+    menu["params"]["events"][0]["changes"]["interaction"]["interaction"]["context"] =
+        json!("MAIN_MENU");
+    script.push(fixture("events_41_walk"));
+    script.push(fixture("events_42_message"));
+    script.push(menu);
+    h.run_steps(4);
+    h.get_by_label("combat knife");
+    for panel in ["Message log", "Ground", "Inventory", "Map"] {
+        assert!(
+            h.query_by_label(panel).is_none(),
+            "{panel} belongs to a running game"
+        );
+    }
+}

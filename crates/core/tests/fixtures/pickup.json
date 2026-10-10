@@ -41,7 +41,6 @@
      "denial": "",
      "selectable": true,
      "selected": false,
-     "highlighted": true,
      "columns": [
       {
        "label": "Type",
@@ -58,7 +57,6 @@
      "denial": "",
      "selectable": true,
      "selected": true,
-     "highlighted": false,
      "columns": [
       {
        "label": "Type",
@@ -68,7 +66,13 @@
      "available_count": 3,
      "selected_count": 2
     }
-   ]
+   ],
+   "compat": {
+    "focus": {
+     "choice_id": "pickup:b"
+    },
+    "panes": []
+   }
   }
  }
 }
