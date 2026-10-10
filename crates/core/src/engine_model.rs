@@ -6,7 +6,8 @@ use crate::keys;
 use crate::markup::{self, Run};
 use crate::model::{
     ActionEntry, Cell, CommandStatus, Effect, Failure, FailureKind, GameModel, Layer, Loading,
-    LogLine, Menu, MenuChoice, MenuField, Overmap, OvermapCell, OvermapTile, Pos, Rgb, Shape,
+    LogLine, Menu, MenuChoice, MenuField, MenuPane, Overmap, OvermapCell, OvermapTile, Pos, Rgb,
+    Shape,
 };
 use crate::protocol::{
     self, Cell as WorldCell, Entity, Expect, Incoming, Known, LoadingNotice, Look, Operation,
@@ -1462,6 +1463,21 @@ impl GameModel for EngineModel {
                         .map(|col| (col.label.clone(), col.value.clone()))
                         .collect(),
                     editor: c.editor.clone(),
+                })
+                .collect(),
+            panes: pane_labels
+                .iter()
+                .filter(|p| p["area_label"].as_str().is_some_and(|a| !a.is_empty()))
+                .map(|p| {
+                    let text = |k: &str| p[k].as_str().unwrap_or_default().to_string();
+                    MenuPane {
+                        id: text("id"),
+                        label: text("label"),
+                        role: text("role"),
+                        area: text("area_label"),
+                        storage: text("storage_kind"),
+                        filter: text("filter"),
+                    }
                 })
                 .collect(),
             can_cancel: i.allow_cancel,

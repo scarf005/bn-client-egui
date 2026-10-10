@@ -1718,3 +1718,45 @@ fn the_engines_display_options_from_hello_are_the_default_map_mode() {
         "older engines publish none"
     );
 }
+
+#[test]
+fn a_two_pane_menu_publishes_its_panes_with_area_role_and_filter() {
+    let text = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/aim.json"
+    ))
+    .unwrap();
+    let boundary = serde_json::from_str::<Value>(&text).unwrap()["aim"].clone();
+    let (t, h) = session();
+    let mut m = connected(t);
+    h.push(change(41, json!({"interaction": boundary})));
+    m.poll();
+    let menu = m.menu().unwrap();
+    assert_eq!(menu.context, "ADVANCED_INVENTORY");
+    let panes = menu
+        .panes
+        .iter()
+        .map(|p| {
+            (
+                p.label.as_str(),
+                p.role.as_str(),
+                p.area.as_str(),
+                p.storage.as_str(),
+            )
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        panes,
+        [
+            ("Left pane", "source", "Directly below you", "ground"),
+            ("Right pane", "destination", "Worn Items", "worn")
+        ]
+    );
+    let in_left = menu
+        .choices
+        .iter()
+        .filter(|c| c.group.as_deref() == Some("pane:1"))
+        .count();
+    assert_eq!(in_left, 2);
+    assert!(m.actions().iter().any(|a| a.id == "ITEMS_CE"));
+}
