@@ -871,6 +871,9 @@ fn tiled_session() -> EngineModel {
             ]}),
         json!({"at": {"dim": "", "x": 9, "y": 6, "z": -1}, "known": "visible", "light": 3,
             "terrain": {"kind": "terrain", "id": "t_dirt", "glyph": ".", "color": "brown"}}),
+        json!({"at": {"dim": "", "x": 10, "y": 6, "z": -1}, "known": "visible", "light": 3,
+            "vehicle": {"kind": "vehicle_part", "id": "roof", "glyph": "#", "color": "white",
+                "tile": "vp_roof", "tint": {"fg": "#f7fbf5"}}}),
         json!({"at": {"dim": "", "x": 9, "y": 5, "z": -1}, "known": "remembered",
             "memory": {"terrain": {"kind": "terrain", "id": "t_grass", "glyph": "\"", "color": "green"}}}),
         json!({"at": {"dim": "", "x": 9, "y": 7, "z": 0}, "known": "remembered",
@@ -1576,6 +1579,14 @@ fn a_square_in_sight_below_open_air_is_drawn_with_its_depth_and_only_when_in_sig
         .map(|l| l.id.as_str())
         .collect::<Vec<_>>();
     assert_eq!((layers, open.depth), (vec!["t_dirt"], 1));
+    // A vehicle roof seen through open air has no terrain of its own and is drawn all the same.
+    let roof = at(10, 6);
+    let layers = roof
+        .layers
+        .iter()
+        .map(|l| l.id.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!((layers, roof.depth), (vec!["vp_roof"], 1));
     // A level below that is only remembered stays hidden, and the avatar's own level has no depth.
     assert!(at(9, 5).layers.is_empty());
     assert_eq!(at(9, 8).depth, 0);
