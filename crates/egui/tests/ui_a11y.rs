@@ -1,7 +1,7 @@
 //! What a screen reader gets from the AccessKit tree: names, roles, selection and focus.
 mod common;
 use bn_client_egui::transport::ScriptHandle;
-use bn_client_egui::{App, EngineModel};
+use bn_client_egui::{App, EngineModel, GameModel};
 use common::{fixture, session};
 use eframe::egui::{self, accesskit};
 use egui_kittest::Harness;
@@ -382,4 +382,39 @@ fn closing_the_palette_returns_focus_to_the_map() {
     h.key_press(egui::Key::Escape);
     h.run_steps(4);
     assert_eq!(focused_label(&h).as_deref(), Some("Map"));
+}
+
+#[test]
+fn escape_closes_only_the_palette_opened_over_a_menu() {
+    let (mut h, script) = harness();
+    open_menu(&mut h, &script);
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::P);
+    h.run_steps(3);
+    h.key_press(egui::Key::Escape);
+    h.run_steps(4);
+    assert!(h.state().model.menu().is_some());
+    assert!(
+        script
+            .sent()
+            .iter()
+            .all(|m| m["method"] != "bn.command.submit"),
+        "no cancel was submitted"
+    );
+}
+
+#[test]
+fn tab_in_a_palette_opened_over_a_menu_stays_in_the_palette() {
+    let (mut h, script) = harness();
+    open_menu(&mut h, &script);
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::P);
+    h.run_steps(3);
+    for _ in 0..3 {
+        h.key_press(egui::Key::Tab);
+        h.run_steps(3);
+        let at = focused_label(&h).expect("something is focused");
+        assert!(
+            at == "Search actions" || at.contains('(') || at.starts_with("Move"),
+            "focus left the palette: {at}"
+        );
+    }
 }

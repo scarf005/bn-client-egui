@@ -26,14 +26,16 @@ impl<M: GameModel> App<M> {
             self.focus_menu = entered && !focused;
             return;
         }
-        a11y::trap_tab(ctx, &self.menu_ids);
+        a11y::trap_tab(ctx, self.trapped_by_menu());
         let mut ids = Vec::new();
         let mut focused = false;
         let mut chosen = None;
         let follows = self.menu_focus != menu.focus;
         let mut edited = None;
         let mut key_chosen = None;
-        let mut cancel = ctx.input(|i| i.key_pressed(egui::Key::Escape)) && menu.can_cancel;
+        let mut cancel = self.palette.is_none()
+            && ctx.input(|i| i.key_pressed(egui::Key::Escape))
+            && menu.can_cancel;
         let title = markup::plain(&menu.title);
         egui::Window::new(&title)
             .id(a11y::dialog_id(&title))

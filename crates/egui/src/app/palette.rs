@@ -13,6 +13,14 @@ impl<M: GameModel> App<M> {
         }
     }
 
+    /// The menu's controls, unless the palette sits on top of it and owns Tab.
+    pub(super) fn trapped_by_menu(&self) -> &[egui::Id] {
+        match self.palette {
+            Some(_) => &[],
+            None => &self.menu_ids,
+        }
+    }
+
     pub(super) fn palette(&mut self, ctx: &egui::Context) {
         let Some(mut query) = self.palette.take() else {
             // Closed since the last frame, by any route: the map takes focus back.
@@ -20,7 +28,7 @@ impl<M: GameModel> App<M> {
             return;
         };
         let mut invoke = None;
-        let close = ctx.input(|i| i.key_pressed(egui::Key::Escape));
+        let close = ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
         let needle = query.to_lowercase();
         let mut actions = self
             .model

@@ -14,13 +14,15 @@ pub struct Pickup {
 impl<M: GameModel> App<M> {
     /// Draws the menu; true when it took keyboard focus (on `entered`) this frame.
     pub(super) fn pickup(&mut self, ctx: &egui::Context, menu: &Menu, entered: bool) -> bool {
-        a11y::trap_tab(ctx, &self.menu_ids);
+        a11y::trap_tab(ctx, self.trapped_by_menu());
         let mut ids = Vec::new();
         let mut focused = false;
         let mut chosen = None;
         let mut count = None;
         let mut confirm = false;
-        let mut cancel = ctx.input(|i| i.key_pressed(egui::Key::Escape)) && menu.can_cancel;
+        let mut cancel = self.palette.is_none()
+            && ctx.input(|i| i.key_pressed(egui::Key::Escape))
+            && menu.can_cancel;
         let rows = menu.choices.iter().filter(|c| !c.tab).collect::<Vec<_>>();
         let title = bn_client_core::markup::plain(&menu.title);
         egui::Window::new(&title)
