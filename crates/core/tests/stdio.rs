@@ -1,6 +1,6 @@
 #![cfg(unix)]
-use bn_client_egui::protocol::Incoming;
-use bn_client_egui::transport::{StdioTransport, Transport, request};
+use bn_client_core::protocol::Incoming;
+use bn_client_core::transport::{StdioTransport, Transport, request};
 use serde_json::json;
 use std::os::unix::fs::PermissionsExt;
 use std::time::{Duration, Instant};
@@ -41,7 +41,7 @@ fn stdio_transport_passes_private_dirs_and_speaks_line_delimited_json() {
     let args = v["args"].as_str().unwrap();
     assert!(args.starts_with("--client mcp --userdir "), "{args}");
     assert!(
-        args.contains("bn-client-egui-") && args.contains("--configdir"),
+        args.contains("bn-client-") && args.contains("--configdir"),
         "{args}"
     );
     assert!(matches!(recv(&mut t), Incoming::Malformed(_)));

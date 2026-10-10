@@ -1,5 +1,5 @@
-use bn_client_egui::colors::ColorMap;
-use eframe::egui::Color32;
+use bn_client_core::Rgb;
+use bn_client_core::colors::ColorMap;
 
 const COLORS: &str = r#"[{"type":"colordef","BLACK":[0,0,0],"RED":[255,0,0],"GREEN":[0,110,0],"BROWN":[97,56,28],
 "BLUE":[10,10,220],"MAGENTA":[139,58,98],"CYAN":[0,150,180],"GRAY":[150,150,150],"DGRAY":[99,99,99],
@@ -10,8 +10,8 @@ fn map() -> ColorMap {
     ColorMap::from_json(COLORS).unwrap()
 }
 
-fn rgb(r: u8, g: u8, b: u8) -> Color32 {
-    Color32::from_rgb(r, g, b)
+fn rgb(r: u8, g: u8, b: u8) -> Rgb {
+    Rgb(r, g, b)
 }
 
 #[test]

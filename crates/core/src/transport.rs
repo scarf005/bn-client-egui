@@ -51,7 +51,7 @@ pub struct StdioTransport {
 
 impl StdioTransport {
     pub fn spawn(engine: &Path) -> std::io::Result<Self> {
-        let dir = std::env::temp_dir().join(format!("bn-client-egui-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("bn-client-{}", std::process::id()));
         let (user, config) = (dir.join("user"), dir.join("config"));
         std::fs::create_dir_all(&user)?;
         std::fs::create_dir_all(&config)?;

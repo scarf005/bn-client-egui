@@ -1,4 +1,4 @@
-use bn_client_egui::protocol::{self, Incoming, Snapshot};
+use bn_client_core::protocol::{self, Incoming, Snapshot};
 use serde_json::{Value, json};
 
 fn fixtures() -> serde_json::Map<String, Value> {

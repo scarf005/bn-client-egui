@@ -1,4 +1,4 @@
-use bn_client_egui::keys::KeyMap;
+use bn_client_core::keys::KeyMap;
 
 const JSON: &str = r#"[
  {"type":"keybinding","id":"pickup","category":"DEFAULTMODE","name":"Pick up","bindings":[{"input_method":"keyboard","key":"g"}]},

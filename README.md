@@ -7,14 +7,14 @@ Cataclysm: Bright Nights, built on egui/eframe (AccessKit). The UI talks to a
 
 License: undecided (no LICENSE file yet).
 
-    cargo run                                  # fake model
-    cargo run -- --engine /path/to/cataclysm-bn-tiles   # or BN_ENGINE=...; real engine
+    cargo run -p bn-client-egui                # fake model
+    cargo run -p bn-client-egui -- --engine /path/to/cataclysm-bn-tiles   # or BN_ENGINE=...; real engine
     cargo test    # egui_kittest UI tests, protocol fixtures, reconstruction, scripted engine
 
 The engine is started as `<engine> --client mcp --userdir <tmp> --configdir <tmp>` with private
 temporary directories. Live integration test (ignored by default, needs an engine build):
 
-    BN_ENGINE=/path/to/cataclysm-bn-tiles cargo test --test live_engine -- --ignored
+    BN_ENGINE=/path/to/cataclysm-bn-tiles cargo test -p bn-client-core --test live_engine -- --ignored
 
 `tests/fixtures/1.0.examples.json` is the contract lane's file (round-trip tested exactly);
 `tests/fixtures/design-1.0.json` is a hand-written session from the design doc, not captured from an engine;

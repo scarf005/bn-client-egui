@@ -2,13 +2,12 @@
 
 use crate::colors::ColorMap;
 use crate::keys::KeyMap;
-use crate::model::{ActionEntry, Cell, GameModel, Menu, MenuChoice, Pos};
+use crate::model::{ActionEntry, Cell, GameModel, Menu, MenuChoice, Pos, Rgb};
 use crate::protocol::{
     self, Cell as WorldCell, Expect, Incoming, Look, Operation, Snapshot, Submit, WorldPos,
 };
 use crate::replica::{Outcome, Replica};
 use crate::transport::{Transport, request};
-use eframe::egui::Color32;
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::time::Instant;
@@ -105,7 +104,7 @@ impl EngineModel {
         };
         m.call(
             "bn.hello",
-            json!(protocol::HelloParams::new("bn-client-egui")),
+            json!(protocol::HelloParams::new("bn-client")),
             Pending::Hello,
         );
         m
@@ -377,7 +376,7 @@ impl GameModel for EngineModel {
     fn cell(&self, at: Pos) -> Cell {
         let unknown = Cell {
             glyph: ' ',
-            color: Color32::GRAY,
+            color: Rgb(128, 128, 128),
             bg: None,
             desc: "unknown".into(),
         };
@@ -398,7 +397,7 @@ impl GameModel for EngineModel {
                 Some(l) => self.styled(l, look_name(l)),
                 None => Cell {
                     glyph: '?',
-                    color: Color32::GRAY,
+                    color: Rgb(128, 128, 128),
                     bg: None,
                     desc: "sensed".into(),
                 },

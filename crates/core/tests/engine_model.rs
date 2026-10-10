@@ -1,10 +1,10 @@
 mod common;
-use bn_client_egui::transport::ScriptedTransport;
-use bn_client_egui::{EngineModel, GameModel, Pos};
+use bn_client_core::transport::ScriptedTransport;
+use bn_client_core::{EngineModel, GameModel, Pos, Rgb};
 use common::{connected, fixture, session, subscribe_reply};
 use serde_json::{Value, json};
 
-fn submits(h: &bn_client_egui::transport::ScriptHandle) -> Vec<Value> {
+fn submits(h: &bn_client_core::transport::ScriptHandle) -> Vec<Value> {
     h.sent()
         .into_iter()
         .filter(|m| m["method"] == "bn.command.submit")
@@ -314,7 +314,7 @@ fn origin_reports_the_view_offset_so_targets_survive_recentering() {
 
 #[test]
 fn cell_colors_come_from_the_game_palette() {
-    use bn_client_egui::colors::ColorMap;
+    use bn_client_core::colors::ColorMap;
     let json = r#"[{"type":"colordef","BLACK":[0,0,0],"RED":[1,0,0],"GREEN":[2,0,0],"BROWN":[3,0,0],
     "BLUE":[4,0,0],"MAGENTA":[5,0,0],"CYAN":[6,0,0],"GRAY":[7,0,0],"DGRAY":[8,0,0],"LRED":[9,0,0],
     "LGREEN":[10,0,0],"YELLOW":[11,0,0],"LBLUE":[12,0,0],"LMAGENTA":[13,0,0],"LCYAN":[14,0,0],"WHITE":[15,0,0]}]"#;
@@ -322,14 +322,11 @@ fn cell_colors_come_from_the_game_palette() {
     let mut m = EngineModel::new(Box::new(t)).with_colors(ColorMap::from_json(json).unwrap());
     m.poll();
     // The zombie is light_green, palette slot 10.
-    assert_eq!(
-        m.cell(Pos { x: 23, y: 12 }).color,
-        eframe::egui::Color32::from_rgb(10, 0, 0)
-    );
+    assert_eq!(m.cell(Pos { x: 23, y: 12 }).color, Rgb(10, 0, 0));
 }
 
 fn with_keys(t: ScriptedTransport) -> EngineModel {
-    use bn_client_egui::keys::KeyMap;
+    use bn_client_core::keys::KeyMap;
     let json = r#"[{"id":"pickup","category":"DEFAULTMODE","bindings":[{"input_method":"keyboard","key":"g"}]}]"#;
     let mut m =
         EngineModel::new(Box::new(t)).with_keys(KeyMap::from_json(json, "DEFAULTMODE").unwrap());

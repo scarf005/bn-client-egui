@@ -1,7 +1,7 @@
 //! Per-step and start-up latency against a real engine:
 //! `BN_ENGINE=... cargo test --release --test live_latency -- --ignored --nocapture`
-use bn_client_egui::transport::StdioTransport;
-use bn_client_egui::{EngineModel, GameModel, Pos};
+use bn_client_core::transport::StdioTransport;
+use bn_client_core::{EngineModel, GameModel, Pos};
 use std::sync::{Mutex, OnceLock, mpsc};
 use std::time::{Duration, Instant};
 

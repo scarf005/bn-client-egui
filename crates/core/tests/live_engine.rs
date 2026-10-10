@@ -1,7 +1,7 @@
 //! Needs a real engine build: `BN_ENGINE=/path/to/cataclysm-bn-tiles cargo test --test live_engine -- --ignored`
-use bn_client_egui::keys::KeyMap;
-use bn_client_egui::transport::StdioTransport;
-use bn_client_egui::{EngineModel, GameModel, Pos};
+use bn_client_core::keys::KeyMap;
+use bn_client_core::transport::StdioTransport;
+use bn_client_core::{EngineModel, GameModel, Pos};
 use std::time::{Duration, Instant};
 
 fn wait_for(model: &mut EngineModel, what: &str, done: impl Fn(&EngineModel) -> bool) {
@@ -64,7 +64,7 @@ fn live_engine_starts_the_tutorial_and_walks_one_step() {
 fn live_engine_non_movement_action_opens_a_menu_that_can_be_cancelled() {
     let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
     let transport = StdioTransport::spawn(engine.as_ref()).expect("engine starts");
-    let root = bn_client_egui::transport::game_root(engine.as_ref(), None);
+    let root = bn_client_core::transport::game_root(engine.as_ref(), None);
     let keys = root.as_deref().map_or_else(KeyMap::default, KeyMap::load);
     let mut model = EngineModel::new(Box::new(transport)).with_keys(keys);
 

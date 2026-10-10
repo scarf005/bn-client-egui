@@ -2,7 +2,7 @@
 //! own palette from `data/raw/colors.json` and its name table from `src/color.cpp`.
 
 use crate::color_table::NAMED;
-use eframe::egui::Color32;
+use crate::model::Rgb;
 use serde_json::Value;
 use std::path::Path;
 
@@ -14,12 +14,12 @@ const KEYS: [&str; 16] = [
 
 #[derive(Clone, Debug)]
 pub struct ColorMap {
-    palette: [Color32; 16],
+    palette: [Rgb; 16],
 }
 
 impl Default for ColorMap {
     fn default() -> Self {
-        let rgb = |r, g, b| Color32::from_rgb(r, g, b);
+        let rgb = Rgb;
         Self {
             palette: [
                 rgb(60, 60, 60),
@@ -47,11 +47,11 @@ impl ColorMap {
     pub fn from_json(text: &str) -> Option<Self> {
         let json: Value = serde_json::from_str(text).ok()?;
         let def = json.as_array()?.iter().find(|e| e["type"] == "colordef")?;
-        let mut palette = [Color32::BLACK; 16];
+        let mut palette = [Rgb(0, 0, 0); 16];
         for (slot, key) in palette.iter_mut().zip(KEYS) {
             let c = def[key].as_array()?;
             let ch = |i: usize| u8::try_from(c.get(i)?.as_u64()?).ok();
-            *slot = Color32::from_rgb(ch(0)?, ch(1)?, ch(2)?);
+            *slot = Rgb(ch(0)?, ch(1)?, ch(2)?);
         }
         Some(Self { palette })
     }
@@ -65,7 +65,7 @@ impl ColorMap {
     }
 
     /// Foreground, and background when it is not black. Unknown names read as `c_light_gray`.
-    pub fn resolve(&self, name: &str) -> (Color32, Option<Color32>) {
+    pub fn resolve(&self, name: &str) -> (Rgb, Option<Rgb>) {
         let full = if name.contains('_') && name.as_bytes().get(1) == Some(&b'_') {
             name.to_string()
         } else {

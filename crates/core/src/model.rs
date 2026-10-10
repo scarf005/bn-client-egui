@@ -1,16 +1,18 @@
-use eframe::egui::Color32;
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Pos {
     pub x: i32,
     pub y: i32,
 }
 
+/// 8-bit sRGB colour.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Rgb(pub u8, pub u8, pub u8);
+
 pub struct Cell {
     pub glyph: char,
-    pub color: Color32,
+    pub color: Rgb,
     /// Background behind the glyph, when the game colour has one.
-    pub bg: Option<Color32>,
+    pub bg: Option<Rgb>,
     pub desc: String,
 }
 
@@ -119,15 +121,15 @@ impl GameModel for FakeModel {
         if at.x == 20 && at.y != 12 {
             return Cell {
                 glyph: '#',
-                color: Color32::from_rgb(180, 180, 180),
+                color: Rgb(180, 180, 180),
                 bg: None,
                 desc: "a wall".into(),
             };
         }
         let (glyph, color, desc) = match (at.x * 7 + at.y * 13) % 11 {
-            0 => ('T', Color32::from_rgb(40, 160, 60), "a tree"),
-            1 => ('~', Color32::from_rgb(70, 120, 220), "shallow water"),
-            _ => ('.', Color32::from_rgb(130, 130, 110), "open grass"),
+            0 => ('T', Rgb(40, 160, 60), "a tree"),
+            1 => ('~', Rgb(70, 120, 220), "shallow water"),
+            _ => ('.', Rgb(130, 130, 110), "open grass"),
         };
         Cell {
             glyph,

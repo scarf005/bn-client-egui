@@ -17,6 +17,10 @@ struct Dragged {
     index: usize,
 }
 
+fn rgb(c: bn_client_core::Rgb) -> egui::Color32 {
+    egui::Color32::from_rgb(c.0, c.1, c.2)
+}
+
 /// A menu button that screen readers announce as a menu item.
 fn menu_item(ui: &mut egui::Ui, text: &str) -> bool {
     let button = ui.button(text);
@@ -293,7 +297,7 @@ impl<M: GameModel> App<M> {
                     painter.rect_filled(
                         egui::Rect::from_center_size(center, egui::Vec2::splat(CELL)),
                         0.0,
-                        bg,
+                        rgb(bg),
                     );
                 }
                 painter.text(
@@ -301,7 +305,7 @@ impl<M: GameModel> App<M> {
                     egui::Align2::CENTER_CENTER,
                     cell.glyph,
                     font.clone(),
-                    cell.color,
+                    rgb(cell.color),
                 );
             }
         }

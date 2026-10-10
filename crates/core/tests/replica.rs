@@ -1,5 +1,5 @@
-use bn_client_egui::protocol::{self, EventsParams, Incoming, Resync, Snapshot, SnapshotPart};
-use bn_client_egui::replica::{Outcome, Replica};
+use bn_client_core::protocol::{self, EventsParams, Incoming, Resync, Snapshot, SnapshotPart};
+use bn_client_core::replica::{Outcome, Replica};
 use serde_json::Value;
 
 fn fixture(name: &str) -> Value {
@@ -182,7 +182,7 @@ fn begin_discards_previous_state() {
 
 #[test]
 fn changes_apply_coverage_cells_forgotten_and_gone_in_order() {
-    use bn_client_egui::protocol::{Changes, Coverage, Event, Gone, WorldPos};
+    use bn_client_core::protocol::{Changes, Coverage, Event, Gone, WorldPos};
     let pos = |x, y| WorldPos {
         dim: "".into(),
         x,

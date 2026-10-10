@@ -1,6 +1,6 @@
 #![allow(dead_code)]
-use bn_client_egui::transport::{ScriptHandle, ScriptedTransport};
-use bn_client_egui::{EngineModel, GameModel};
+use bn_client_core::transport::{ScriptHandle, ScriptedTransport};
+use bn_client_core::{EngineModel, GameModel};
 use serde_json::Value;
 
 pub fn fixture(name: &str) -> Value {
