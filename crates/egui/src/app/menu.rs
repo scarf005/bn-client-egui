@@ -161,7 +161,11 @@ impl<M: GameModel> App<M> {
                                 continue;
                             }
                             ui.horizontal(|ui| {
-                                let text = self.rich(ui, &choice.label);
+                                let text = if choice.id == "acknowledge" {
+                                    dismiss_text(&choice.label).into()
+                                } else {
+                                    self.rich(ui, &choice.label)
+                                };
                                 let button = self.control(
                                     ui,
                                     text,
@@ -191,6 +195,8 @@ impl<M: GameModel> App<M> {
                                         b.set_description(markup::plain(&choice.denial));
                                     }
                                     if choice.id == "acknowledge" {
+                                        // Screen readers keep the engine's own name for the row.
+                                        b.set_label(markup::plain(&choice.label));
                                         b.set_description("Space or Enter closes this popup");
                                     }
                                 });
