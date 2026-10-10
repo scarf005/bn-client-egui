@@ -3,7 +3,7 @@
 mod crafting;
 mod settings;
 
-use bn_client_core::{ActionEntry, Failure, GameModel, Loading, Menu, Pos, Rgb, keys};
+use bn_client_core::{ActionEntry, Failure, GameModel, Loading, Menu, Overmap, Pos, Rgb, keys};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
@@ -28,6 +28,9 @@ pub struct TuiApp<M: GameModel> {
     destination: Option<Pos>,
     /// Where the map cells were last drawn, for mouse clicks.
     map_cells: Rect,
+    /// Where the overmap's cells were last drawn, and the overmap they show.
+    overmap_cells: Rect,
+    overmap_shown: Option<Overmap>,
     /// View coordinates of the first drawn cell.
     map_first: Pos,
     /// The action list popup is open, with its highlighted row.
@@ -94,6 +97,8 @@ impl<M: GameModel> TuiApp<M> {
             cursor: None,
             destination: None,
             map_cells: Rect::default(),
+            overmap_cells: Rect::default(),
+            overmap_shown: None,
             map_first: Pos { x: 0, y: 0 },
             actions_open: None,
             log_back: 0,
@@ -189,6 +194,10 @@ impl<M: GameModel> TuiApp<M> {
                 return;
             }
             if stopped {
+                return;
+            }
+            if self.model.overmap().is_some() {
+                self.model.close_overmap();
                 return;
             }
         }
@@ -357,6 +366,13 @@ impl<M: GameModel> TuiApp<M> {
 
     /// Left click on a map cell moves the look cursor there and travels; the first click shows the route.
     pub fn handle_mouse(&mut self, ev: MouseEvent) {
+        if let Some(om) = self
+            .overmap_shown
+            .clone()
+            .filter(|_| self.model.overmap().is_some())
+        {
+            return self.overmap_mouse(&om, ev);
+        }
         let area = self.map_cells;
         let inside = (area.x..area.x + area.width).contains(&ev.column)
             && (area.y..area.y + area.height).contains(&ev.row);
@@ -372,9 +388,77 @@ impl<M: GameModel> TuiApp<M> {
         self.go_to(view);
     }
 
+    /// A click moves the overmap cursor to the square; a click on the cursor travels there.
+    fn overmap_mouse(&mut self, om: &Overmap, ev: MouseEvent) {
+        let area = self.overmap_cells;
+        let inside = (area.x..area.x + area.width).contains(&ev.column)
+            && (area.y..area.y + area.height).contains(&ev.row);
+        if ev.kind != MouseEventKind::Down(MouseButton::Left) || !inside {
+            return;
+        }
+        let at = om.square(i32::from(ev.column - area.x), i32::from(ev.row - area.y));
+        if at == om.cursor {
+            self.model.invoke_action("CHOOSE_DESTINATION");
+        } else {
+            self.model.overmap_cursor_to(at);
+        }
+    }
+
+    /// The overmap window as the game drew it, the cursor reversed, with the sidebar beside it.
+    fn draw_overmap(&mut self, f: &mut Frame, om: &Overmap) {
+        let [grid, legend] = Layout::horizontal([
+            Constraint::Length(om.cols.clamp(0, i32::from(u16::MAX)) as u16),
+            Constraint::Min(10),
+        ])
+        .areas(f.area());
+        let cells = Rect::new(
+            grid.x,
+            grid.y,
+            grid.width,
+            (om.rows.clamp(0, i32::from(u16::MAX)) as u16).min(grid.height),
+        );
+        self.overmap_cells = cells;
+        self.overmap_shown = Some(om.clone());
+        let cursor = (om.cursor.0 - om.origin.0, om.cursor.1 - om.origin.1);
+        let lines = (0..i32::from(cells.height)).map(|row| {
+            let spans = (0..i32::from(cells.width)).map(|col| {
+                let Some(cell) = om.cell(col, row) else {
+                    return Span::raw(" ");
+                };
+                let mut style = Style::new().fg(color(cell.color));
+                if let Some(bg) = cell.bg {
+                    style = style.bg(color(bg));
+                }
+                if (col, row) == cursor {
+                    style = style.add_modifier(Modifier::REVERSED);
+                }
+                let glyph = if cell.glyph.is_empty() {
+                    " "
+                } else {
+                    &cell.glyph
+                };
+                Span::styled(glyph.to_string(), style)
+            });
+            Line::from(spans.collect::<Vec<_>>())
+        });
+        f.render_widget(Paragraph::new(lines.collect::<Vec<_>>()), cells);
+        let mut sidebar = vec![Line::from(format!(
+            "Overmap ({}, {}, {})",
+            om.cursor.0, om.cursor.1, om.cursor.2
+        ))];
+        if let Some(note) = om.note(om.cursor) {
+            sidebar.push(Line::from(format!("Note: {note}")));
+        }
+        sidebar.extend(om.legend.iter().map(|l| Line::from(l.clone())));
+        f.render_widget(Paragraph::new(sidebar), legend);
+    }
+
     pub fn draw(&mut self, f: &mut Frame) {
         if let Some(failure) = self.model.failure() {
             return Self::draw_failure(f, &failure);
+        }
+        if let Some(om) = self.model.overmap() {
+            return self.draw_overmap(f, &om);
         }
         if let Some(loading) = self.model.loading() {
             return Self::draw_loading(f, &loading);

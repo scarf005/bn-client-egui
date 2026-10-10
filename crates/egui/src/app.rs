@@ -2,7 +2,7 @@ use crate::a11y;
 use crate::display::Display;
 use crate::editor;
 use crate::text;
-use bn_client_core::{Failure, GameModel, Loading, LogLine, Pos, keys, markup};
+use bn_client_core::{Failure, GameModel, Loading, LogLine, Overmap, Pos, keys, markup};
 use eframe::egui::{self, accesskit};
 
 mod crafting;
@@ -295,7 +295,10 @@ impl<M: GameModel> App<M> {
         egui::Panel::right("items")
             .resizable(false)
             .show(ui, |ui| self.items(ui));
-        self.map(ui);
+        match self.model.overmap() {
+            Some(overmap) => self.overmap(ui, &overmap),
+            None => self.map(ui),
+        }
         self.menu(ui.ctx());
     }
 
@@ -713,6 +716,115 @@ impl<M: GameModel> App<M> {
         let desc = self.model.cell(at).desc;
         self.model
             .say(format!("You see {desc} at ({}, {}).", at.x, at.y));
+    }
+
+    /// The native overmap window, glyph by glyph, with its sidebar. Hovering names the square; a click
+    /// moves the cursor there, and a click on the cursor travels there, like the map's route and go.
+    fn overmap(&mut self, ui: &mut egui::Ui, om: &Overmap) {
+        let status = |at: (i32, i32, i32)| {
+            let note = om
+                .note(at)
+                .map_or_else(String::new, |t| format!(" Note: {t}."));
+            let here = if at == om.player {
+                " You are here."
+            } else {
+                ""
+            };
+            format!("Overmap ({}, {}, {}).{here}{note}", at.0, at.1, at.2)
+        };
+        let status_label = ui.label(status(om.cursor));
+        ui.ctx()
+            .accesskit_node_builder(status_label.id, |b| b.set_live(accesskit::Live::Polite));
+        let cell_px = self.display.cell(CELL);
+        let font = egui::FontId::monospace(cell_px - 2.0);
+        ui.horizontal_top(|ui| {
+            let (response, painter) = ui.allocate_painter(
+                egui::vec2(om.cols as f32 * cell_px, om.rows as f32 * cell_px),
+                egui::Sense::click(),
+            );
+            response.widget_info(|| {
+                egui::WidgetInfo::labeled(egui::WidgetType::Other, true, "Overmap view")
+            });
+            ui.ctx().accesskit_node_builder(response.id, |b| {
+                b.set_role(accesskit::Role::Canvas);
+                b.set_description(status(om.cursor));
+            });
+            painter.rect_filled(response.rect, 0.0, egui::Color32::BLACK);
+            for row in 0..om.rows {
+                for col in 0..om.cols {
+                    let Some(cell) = om.cell(col, row) else {
+                        continue;
+                    };
+                    let square = egui::Rect::from_min_size(
+                        response.rect.min + egui::vec2(col as f32, row as f32) * cell_px,
+                        egui::Vec2::splat(cell_px),
+                    );
+                    if let Some(bg) = cell.bg {
+                        painter.rect_filled(square, 0.0, rgb(bg));
+                    }
+                    if !cell.glyph.trim().is_empty() {
+                        painter.text(
+                            square.center(),
+                            egui::Align2::CENTER_CENTER,
+                            &cell.glyph,
+                            font.clone(),
+                            rgb(cell.color),
+                        );
+                    }
+                }
+            }
+            let rect_of = |at: (i32, i32, i32)| {
+                egui::Rect::from_min_size(
+                    response.rect.min
+                        + egui::vec2((at.0 - om.origin.0) as f32, (at.1 - om.origin.1) as f32)
+                            * cell_px,
+                    egui::Vec2::splat(cell_px),
+                )
+            };
+            painter.rect_stroke(
+                rect_of(om.cursor),
+                0.0,
+                egui::Stroke::new(1.0, egui::Color32::WHITE),
+                egui::StrokeKind::Inside,
+            );
+            let square_at = |p: egui::Pos2| {
+                let v = (p - response.rect.min) / cell_px;
+                om.square(
+                    (v.x as i32).clamp(0, om.cols - 1),
+                    (v.y as i32).clamp(0, om.rows - 1),
+                )
+            };
+            response.clone().on_hover_ui_at_pointer(|ui| {
+                if let Some(p) = response.hover_pos() {
+                    ui.add(
+                        egui::Label::new(status(square_at(p)))
+                            .wrap_mode(egui::TextWrapMode::Extend),
+                    );
+                }
+            });
+            if let Some(p) = response
+                .interact_pointer_pos()
+                .filter(|_| response.clicked())
+            {
+                let at = square_at(p);
+                if at == om.cursor {
+                    self.model.invoke_action("CHOOSE_DESTINATION");
+                } else {
+                    self.model.overmap_cursor_to(at);
+                }
+                ui.ctx().request_repaint();
+            }
+            egui::ScrollArea::vertical().show(ui, |ui| {
+                ui.vertical(|ui| {
+                    for line in &om.legend {
+                        ui.add(
+                            egui::Label::new(egui::RichText::new(line).monospace())
+                                .wrap_mode(egui::TextWrapMode::Extend),
+                        );
+                    }
+                });
+            });
+        });
     }
 
     fn map(&mut self, ui: &mut egui::Ui) {

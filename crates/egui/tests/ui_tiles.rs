@@ -1,3 +1,4 @@
+#![recursion_limit = "512"]
 mod common;
 use bn_client_egui::transport::ScriptedTransport;
 use bn_client_egui::{App, EngineModel, GameModel};

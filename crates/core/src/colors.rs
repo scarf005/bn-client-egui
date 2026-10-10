@@ -64,6 +64,11 @@ impl ColorMap {
             .unwrap_or_default()
     }
 
+    /// A curses colour index (0-15); anything above reads as white.
+    pub fn index(&self, index: u8) -> Rgb {
+        self.palette[usize::from(index.min(15))]
+    }
+
     /// Foreground, and background when it is not black. Unknown names read as `c_light_gray`.
     pub fn resolve(&self, name: &str) -> (Rgb, Option<Rgb>) {
         let full = if name.contains('_') && name.as_bytes().get(1) == Some(&b'_') {

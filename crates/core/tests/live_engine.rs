@@ -543,3 +543,53 @@ fn live_engine_long_wait_is_never_reported_as_stalled() {
     choose_label(&mut model, "Yes");
     assert!(model.failure().is_none());
 }
+
+#[test]
+#[ignore = "requires BN_ENGINE with the structured overmap"]
+fn live_engine_opens_the_overmap_moves_its_cursor_and_closes_it() {
+    let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
+    let transport = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
+    let mut model = EngineModel::new(Box::new(transport));
+    wait_for(&mut model, "subscription", |m| m.live());
+    choose_label(&mut model, "New Game");
+    choose_label(&mut model, "Tutorial");
+    wait_for(&mut model, "the tutorial map", |m| m.size().x > 0);
+    wait_for(&mut model, "idle", |m| !m.busy());
+    dismiss_popups(&mut model);
+
+    assert!(model.invoke_action("map"), "the overmap action is offered");
+    wait_for(&mut model, "the overmap", |m| m.overmap().is_some());
+    wait_for(&mut model, "idle", |m| !m.busy());
+    let first = model.overmap().unwrap();
+    println!(
+        "overmap {}x{} cursor {:?} legend {:?}",
+        first.cols,
+        first.rows,
+        first.cursor,
+        first.legend.iter().take(3).collect::<Vec<_>>()
+    );
+    assert!(first.cols > 10 && first.rows > 5);
+    assert_eq!(first.cursor, first.player, "it opens on the player");
+    assert!(first.legend.iter().any(|l| !l.trim().is_empty()));
+
+    let to = (first.cursor.0 + 3, first.cursor.1 - 2, first.cursor.2);
+    model.overmap_cursor_to(to);
+    wait_for(&mut model, "the cursor to move", |m| {
+        m.overmap().is_some_and(|o| o.cursor == to)
+    });
+    wait_for(&mut model, "idle", |m| !m.busy());
+    let moved = model.overmap().unwrap();
+    assert_eq!(
+        moved.origin.0,
+        first.origin.0 + 3,
+        "the view follows the cursor"
+    );
+    assert_eq!(moved.player, first.player);
+
+    model.close_overmap();
+    wait_for(&mut model, "the overmap to close", |m| {
+        m.overmap().is_none()
+    });
+    wait_for(&mut model, "idle", |m| !m.busy());
+    assert!(model.failure().is_none());
+}
