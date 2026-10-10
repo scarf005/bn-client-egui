@@ -12,13 +12,18 @@ use serde_json::json;
 type H<'a> = Harness<'a, App<EngineModel>>;
 
 fn harness<'a>() -> (H<'a>, ScriptHandle) {
+    described(&["Wall", "A zombie is here."])
+}
+
+/// A harness whose engine answers every `bn.world.describe` with `lines`.
+fn described<'a>(lines: &[&str]) -> (H<'a>, ScriptHandle) {
     let (t, h) = session();
     let t = t
         .on("bn.command.submit", vec![fixture("submit_result")])
         .on("bn.command.submit", vec![fixture("submit_result")])
         .on(
             "bn.world.describe",
-            vec![json!({"jsonrpc":"2.0","id":0,"result":{"lines":["Wall","A zombie is here."]}})],
+            vec![json!({"jsonrpc":"2.0","id":0,"result":{"lines":lines}})],
         );
     let model = EngineModel::new(Box::new(t));
     let harness = Harness::builder()
@@ -517,4 +522,18 @@ fn shift_f10_on_the_map_is_the_right_click_on_the_cursor_square() {
         .filter(|o| o["kind"] == "context")
         .collect();
     assert_eq!(contexts.len(), 1, "{contexts:?}");
+}
+
+#[test]
+fn blank_native_lines_and_a_final_period_do_not_garble_the_cursor_description() {
+    let (mut h, _script) = described(&[" ", "Unseen."]);
+    h.run_steps(3);
+    h.get_by_label("Map").focus();
+    h.run_steps(6);
+    let said = h
+        .get_by_label("Map")
+        .accesskit_node()
+        .description()
+        .unwrap_or_default();
+    assert!(said.ends_with(": Unseen."), "{said}");
 }

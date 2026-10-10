@@ -735,7 +735,14 @@ impl<M: GameModel> App<M> {
             // The engine's mouse-view text when it has answered for this square.
             self.model
                 .hover_text(cursor)
-                .map_or_else(|| self.model.cell(cursor).desc, |lines| lines.join(" "))
+                .map_or_else(
+                    || self.model.cell(cursor).desc,
+                    |lines| {
+                        let lines = lines.iter().map(|l| l.trim()).filter(|l| !l.is_empty());
+                        lines.collect::<Vec<_>>().join(" ")
+                    },
+                )
+                .trim_end_matches('.')
         );
         if let Some(end) = route.last() {
             status += &format!(
