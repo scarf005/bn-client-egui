@@ -158,6 +158,22 @@ fn top_look(c: &WorldCell) -> Option<&Look> {
             .map(|m| m.overlay.as_ref().unwrap_or(&m.terrain)))
 }
 
+/// One channel of a look's paint.
+fn paint(look: &Look, pick: impl Fn(&protocol::Tint) -> Option<&str>) -> Option<Rgb> {
+    let [r, g, b] = parse_hex(pick(look.tint.as_ref()?)?)?;
+    Some(Rgb(r, g, b))
+}
+
+/// `#rrggbb` to its channels.
+fn parse_hex(text: &str) -> Option<[u8; 3]> {
+    let digits = text.strip_prefix('#').filter(|d| d.len() == 6)?;
+    let channel = |i: usize| u8::from_str_radix(digits.get(i..i + 2)?, 16).ok();
+    Some([channel(0)?, channel(2)?, channel(4)?])
+}
+
+/// How many levels down open air is looked through.
+const MAX_DEPTH: u8 = 10;
+
 /// The game's per-tile seed for weighted sprite variants: the square's coordinates mixed into an integer.
 fn square_seed(p: &WorldPos) -> u32 {
     (p.x as u32).wrapping_add((p.y as u32).wrapping_mul(65536))
@@ -907,6 +923,8 @@ impl EngineModel {
             mirrored: look.facing.as_deref() == Some("left"),
             creature: matches!(look.kind.as_str(), "monster" | "npc" | "avatar"),
             seed,
+            tint_bg: paint(look, |t| t.bg.as_deref()),
+            tint_fg: paint(look, |t| t.fg.as_deref()),
             glyph: glyph(look),
             color,
             bg,
@@ -938,7 +956,11 @@ impl EngineModel {
             return unknown;
         };
         let world = self.replica.cell(&p.dim, p.x, p.y, p.z);
-        let mut layers = world.map_or(vec![], |c| self.layers(c));
+        // Nothing published here but a square in sight below: open air, through which the game draws it.
+        let lower = (world.is_none()).then(|| self.below(&p)).flatten();
+        let mut layers = world
+            .or(lower.map(|(c, _)| c))
+            .map_or(vec![], |c| self.layers(c));
         if self.avatar_pos() == Some(&p)
             && let Some(avatar) = self.replica.avatar()
             && let Some(look) = &avatar.look
@@ -957,6 +979,7 @@ impl EngineModel {
             layers.push(self.layer(look, id_seed(&e.id)));
             layers.extend(self.overlays(look, &e.overlays, id_seed(&e.id)));
             layers.extend(self.attitude(e));
+            layers.extend(self.revival(world));
             return Cell {
                 layers,
                 remembered: false,
@@ -966,6 +989,7 @@ impl EngineModel {
                 ..self.styled(look, desc)
             };
         }
+        layers.extend(self.revival(world));
         match world {
             Some(c) => match top_look(c) {
                 Some(l) => Cell {
@@ -981,7 +1005,12 @@ impl EngineModel {
                     ..Cell::default()
                 },
             },
-            None => unknown,
+            None => Cell {
+                layers,
+                depth: lower.map_or(0, |(_, depth)| depth),
+                light: lower.and_then(|(c, _)| c.light.as_ref()?.as_u64().map(|l| l as u8)),
+                ..unknown
+            },
         }
     }
 
@@ -1024,6 +1053,23 @@ impl EngineModel {
             id: id.into(),
             ..Layer::default()
         }
+    }
+
+    /// The nearest square in sight under `p`, with how far down it is.
+    fn below(&self, p: &WorldPos) -> Option<(&WorldCell, u8)> {
+        (1..=MAX_DEPTH).find_map(|depth| {
+            let cell = self
+                .replica
+                .cell(&p.dim, p.x, p.y, p.z - i32::from(depth))?;
+            (cell.known == Known::Visible && cell.terrain.is_some()).then_some((cell, depth))
+        })
+    }
+
+    /// The mark over a square holding a corpse that can rise: the last thing the native view draws.
+    fn revival(&self, world: Option<&WorldCell>) -> Option<Layer> {
+        world
+            .is_some_and(|c| c.reviving)
+            .then(|| self.marker("zombie_revival_indicator"))
     }
 
     /// The overlay the native view puts over a monster or NPC for how it regards the avatar.

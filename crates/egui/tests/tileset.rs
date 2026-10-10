@@ -184,6 +184,8 @@ fn a_tileset_without_tile_info_is_refused() {
 fn the_filters_for_low_light_and_memory_equal_the_games_pixel_functions() {
     use bn_client_egui::display::Fx;
     // Values printed by the game's color_pixel_grayscale and color_pixel_sepia (sdl_utils.cpp).
+    // The haze laid over levels seen through open air is a flat cyan.
+    assert_eq!(Fx::ZOverlay.pixel([9, 9, 9]), [128, 255, 255]);
     for (pixel, shadow, memory) in [
         ([200, 100, 50], [72; 3], [125, 107, 80]),
         ([255, 255, 255], [158; 3], [241, 220, 163]),

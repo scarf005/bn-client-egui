@@ -640,8 +640,12 @@
                 "vp_frame"
               ],
               "subtile": "open",
-              "rotation": 3
-            }
+              "rotation": 3,
+              "tint": {
+                "fg": "#445566"
+              }
+            },
+            "reviving": true
           },
           {
             "at": {
@@ -1288,6 +1292,7 @@
             "revision": "34",
             "type": "message.logged",
             "command": "c:5",
+            "changes": {},
             "data": {
               "id": "7",
               "text": "You open the door.",
@@ -1301,6 +1306,7 @@
             "revision": "34",
             "type": "message.logged",
             "command": "c:5",
+            "changes": {},
             "data": {
               "id": "7",
               "text": "You open the door.",
@@ -2485,6 +2491,19 @@
         "parts": 0
       },
       "why": "a log line has the shape of a message.logged line: its text is not empty"
+    },
+    {
+      "name": "vehicle tint that is not a hex color",
+      "def": "look",
+      "value": {
+        "kind": "vehicle_part",
+        "id": "door",
+        "glyph": "+",
+        "color": "white",
+        "tint": {
+          "fg": "gray"
+        }
+      }
     }
   ]
 }
