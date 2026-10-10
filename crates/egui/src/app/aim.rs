@@ -292,7 +292,8 @@ impl<M: GameModel> App<M> {
                     ui.set_min_height(120.0);
                     for row in rows {
                         ui.horizontal(|ui| {
-                            let shown = ui.selectable_label(row.highlighted, &row.label);
+                            let text = self.rich(ui, &row.label);
+                            let shown = ui.selectable_label(row.highlighted, text);
                             let label =
                                 ui.interact(shown.rect, shown.id, egui::Sense::click_and_drag());
                             label.dnd_set_drag_payload(Dragged {
@@ -301,6 +302,7 @@ impl<M: GameModel> App<M> {
                             });
                             ui.ctx().accesskit_node_builder(label.id, |b| {
                                 b.set_role(accesskit::Role::ListBoxOption);
+                                b.set_label(bn_client_core::markup::plain(&row.label));
                             });
                             if label.clicked() {
                                 out.todo.push(Step::Choose(row.id.clone()));

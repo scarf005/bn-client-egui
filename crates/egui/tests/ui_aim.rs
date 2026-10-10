@@ -186,3 +186,25 @@ fn a_pane_filter_is_typed_in_its_own_box_and_sent_through_the_native_filter() {
     finished(&mut h, &script);
     assert_eq!(operations(&script).last(), Some(&action("FILTER")));
 }
+
+#[test]
+fn colour_tags_in_an_item_name_are_drawn_as_colour_and_not_as_text() {
+    let (t, script) = session();
+    let t = t.on("bn.command.submit", vec![fixture("submit_result")]);
+    let clock = Clock::manual();
+    let model = EngineModel::new(Box::new(t)).with_clock(clock.clone());
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(1300.0, 800.0))
+        .build_ui_state(
+            |ui, app: &mut App<EngineModel>| app.show(ui),
+            App::new(model).with_clock(clock),
+        );
+    h.run_steps(3);
+    let mut boundary = aim();
+    boundary["interaction"]["choices"][0]["label"] =
+        json!("<color_c_light_green>||</color> long-sleeved shirt");
+    script.push(event(41, boundary));
+    h.run_steps(4);
+    h.get_by_label("|| long-sleeved shirt");
+    assert!(h.query_by_label_contains("<color").is_none());
+}
