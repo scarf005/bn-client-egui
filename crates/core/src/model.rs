@@ -16,6 +16,29 @@ pub struct Cell {
     pub desc: String,
 }
 
+/// One line of the game's own message log. A repeat of the newest line keeps its `id` and raises
+/// `count`; the client shows it as "text x2" in place of the earlier line.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LogLine {
+    /// The engine's identity of the line; empty when the engine sent none.
+    pub id: String,
+    pub text: String,
+    /// The game's colour for the message type.
+    pub color: Option<Rgb>,
+    pub count: u32,
+}
+
+impl LogLine {
+    /// The line as the game prints it, with the repeat count.
+    pub fn shown(&self) -> String {
+        if self.count > 1 {
+            format!("{} x{}", self.text, self.count)
+        } else {
+            self.text.clone()
+        }
+    }
+}
+
 /// One selectable row of the engine's current interaction menu.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MenuChoice {
@@ -152,7 +175,12 @@ pub trait GameModel {
     fn inventory(&self) -> &[String];
     fn pick_up(&mut self, index: usize);
     fn drop_item(&mut self, index: usize);
+    /// Client-side lines: command results and errors.
     fn messages(&self) -> &[String];
+    /// The game's own message log, oldest first.
+    fn native_log(&self) -> &[LogLine] {
+        &[]
+    }
     fn say(&mut self, text: String);
 }
 

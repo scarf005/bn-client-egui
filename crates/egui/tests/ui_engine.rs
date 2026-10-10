@@ -424,3 +424,29 @@ fn actions_panel_keeps_its_layout_when_a_long_command_disables_it() {
     );
     assert_eq!(during.rect(), before, "same size and place");
 }
+
+#[test]
+fn native_log_lines_show_with_repeat_count_and_only_the_newest_is_announced() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    script.push(fixture("events_41_walk"));
+    for (sequence, id, text, count) in [
+        (42, "7", "You open the door.", 1),
+        (43, "8", "Bang!", 1),
+        (44, "8", "Bang!", 2),
+    ] {
+        script.push(json!({"jsonrpc": "2.0", "method": "bn.events", "params": {"epoch": "e7f3",
+            "events": [{"sequence": sequence.to_string(), "revision": "32", "type": "message.logged",
+            "data": {"id": id, "text": text, "kind": "bad", "color": "c_red", "count": count}}]}}));
+    }
+    h.run_steps(3);
+    h.get_by_label("You open the door.");
+    let live: Vec<String> = h
+        .root()
+        .children_recursive()
+        .filter(|n| n.accesskit_node().live() == accesskit::Live::Polite)
+        .filter_map(|n| n.accesskit_node().value())
+        .collect();
+    assert!(live.iter().any(|v| v == "Bang! x2"), "{live:?}");
+    assert!(!live.iter().any(|v| v.contains("door")), "{live:?}");
+}

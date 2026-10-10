@@ -611,23 +611,45 @@ impl<M: GameModel> App<M> {
     }
 
     fn log(&mut self, ui: &mut egui::Ui) {
-        ui.heading("Message log");
-        // Only the newest message is live, so history is never re-announced.
-        if let Some(latest) = self.model.messages().last() {
-            let live = ui.label(latest);
-            ui.ctx()
-                .accesskit_node_builder(live.id, |b| b.set_live(accesskit::Live::Polite));
-        }
-        egui::ScrollArea::vertical()
-            .max_height(100.0)
-            .stick_to_bottom(true)
-            .show(ui, |ui| {
-                let messages = self.model.messages();
-                for message in &messages[messages.len().saturating_sub(50)..] {
-                    ui.label(message);
-                }
-            });
+        message_log(ui, self.model.native_log(), self.model.messages());
     }
+}
+
+/// The message log panel: the game's own lines in their native colours, then the client's command
+/// results and errors in a separate scroll area. The newest line of each is a polite live region,
+/// so history is never re-announced.
+fn message_log(ui: &mut egui::Ui, native: &[crate::LogLine], commands: &[String]) {
+    ui.heading("Message log");
+    if let Some(latest) = native.last() {
+        let live = ui.label(latest.shown());
+        ui.ctx()
+            .accesskit_node_builder(live.id, |b| b.set_live(accesskit::Live::Polite));
+    }
+    egui::ScrollArea::vertical()
+        .id_salt("native_log")
+        .max_height(100.0)
+        .stick_to_bottom(true)
+        .show(ui, |ui| {
+            for line in &native[native.len().saturating_sub(100)..] {
+                let text = egui::RichText::new(line.shown());
+                ui.label(line.color.map_or(text.clone(), |c| text.color(rgb(c))));
+            }
+        });
+    if let Some(latest) = commands.last() {
+        ui.separator();
+        let live = ui.label(latest);
+        ui.ctx()
+            .accesskit_node_builder(live.id, |b| b.set_live(accesskit::Live::Polite));
+    }
+    egui::ScrollArea::vertical()
+        .id_salt("command_log")
+        .max_height(100.0)
+        .stick_to_bottom(true)
+        .show(ui, |ui| {
+            for message in &commands[commands.len().saturating_sub(50)..] {
+                ui.label(message);
+            }
+        });
 }
 
 impl<M: GameModel> eframe::App for App<M> {

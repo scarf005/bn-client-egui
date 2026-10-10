@@ -9,5 +9,6 @@ pub mod transport;
 
 pub use engine_model::EngineModel;
 pub use model::{
-    ActionEntry, Cell, CommandStatus, FakeModel, GameModel, Loading, Menu, MenuChoice, Pos, Rgb,
+    ActionEntry, Cell, CommandStatus, FakeModel, GameModel, Loading, LogLine, Menu, MenuChoice,
+    Pos, Rgb,
 };
