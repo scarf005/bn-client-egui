@@ -35,7 +35,7 @@ fn submits(h: &ScriptHandle) -> Vec<serde_json::Value> {
 fn engine_map_renders_and_a_click_submits_a_travel_through_the_protocol() {
     let (mut h, script) = harness();
     h.run_steps(3);
-    assert_eq!(script.sent_methods(), ["bn.hello", "bn.subscribe"]);
+    assert_eq!(script.sent_methods()[..2], ["bn.hello", "bn.subscribe"]);
     let origin = h.get_by_label("Map").rect().min;
     // The avatar is at view (20, 12); click two cells east of it.
     let pos = origin + egui::vec2(22.5 * CELL, 12.5 * CELL);
@@ -414,7 +414,8 @@ fn action_palette_does_not_blink_during_a_short_command() {
     h.run_steps(3);
     open_palette(&mut h);
     let before = h.get_by_label("Move right (RIGHT, l)").rect();
-    click_map(&mut h, (22.5, 12.5));
+    // Below the palette, which is open over the top of the map.
+    click_map(&mut h, (22.5, 40.5));
     h.run_steps(3);
     assert!(h.state().model.busy());
     let during = h.get_by_label("Move right (RIGHT, l)");
@@ -428,7 +429,7 @@ fn action_palette_keeps_its_layout_when_a_long_command_disables_it() {
     h.run_steps(3);
     open_palette(&mut h);
     let before = h.get_by_label("Move right (RIGHT, l)").rect();
-    click_map(&mut h, (22.5, 12.5));
+    click_map(&mut h, (22.5, 40.5));
     h.run_steps(2);
     std::thread::sleep(SETTLE);
     h.run_steps(3);

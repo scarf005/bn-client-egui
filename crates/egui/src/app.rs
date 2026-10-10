@@ -8,7 +8,7 @@ mod sidebar;
 /// A command must outlast this before the controls show it; keeps short commands from blinking the UI.
 const SETTLE: std::time::Duration = std::time::Duration::from_millis(150);
 
-/// The sidebar's share of the window width, and its limits in points.
+/// The sidebar's initial share of the window width, and its limits in points; independent of its content.
 const SIDEBAR_SHARE: f32 = 0.25;
 const SIDEBAR_WIDTH: (f32, f32) = (280.0, 480.0);
 
@@ -17,6 +17,19 @@ pub const CELL: f32 = 16.0;
 
 fn rgb(c: bn_client_core::Rgb) -> egui::Color32 {
     egui::Color32::from_rgb(c.0, c.1, c.2)
+}
+
+/// Every dialog opens at the top centre, 12% down, so the same click lands on the same control.
+fn dialog_offset(ctx: &egui::Context) -> [f32; 2] {
+    [0.0, ctx.content_rect().height() * 0.12]
+}
+
+/// Names the drag handle of the panel with this id for screen readers.
+fn label_resize_handle(ctx: &egui::Context, panel: &str, label: &str) {
+    ctx.accesskit_node_builder(egui::Id::new(panel).with("__resize"), |b| {
+        b.set_role(accesskit::Role::Splitter);
+        b.set_label(label);
+    });
 }
 
 /// A menu button that screen readers announce as a menu item.
@@ -83,6 +96,10 @@ impl<M: GameModel> App<M> {
 
     /// Native-style loading screen: splash image, current step as live text, the step list.
     fn loading(&self, ui: &mut egui::Ui, loading: &Loading) {
+        ui.vertical_centered(|ui| self.loading_content(ui, loading));
+    }
+
+    fn loading_content(&self, ui: &mut egui::Ui, loading: &Loading) {
         ui.heading(&loading.title);
         if let Some(step) = loading.entries.get(loading.index) {
             let status = format!(
@@ -171,11 +188,12 @@ impl<M: GameModel> App<M> {
         }
         egui::Panel::top("bar").show(ui, |ui| self.bar(ui));
         egui::Panel::right("sidebar")
-            .resizable(false)
-            .exact_size(
+            .default_size(
                 (ui.available_width() * SIDEBAR_SHARE).clamp(SIDEBAR_WIDTH.0, SIDEBAR_WIDTH.1),
             )
+            .size_range(SIDEBAR_WIDTH.0..=SIDEBAR_WIDTH.1)
             .show(ui, |ui| self.sidebar_panel(ui));
+        label_resize_handle(ui.ctx(), "sidebar", "Resize sidebar");
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE.fill(egui::Color32::BLACK))
             .show(ui, |ui| self.map(ui));

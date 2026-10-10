@@ -658,6 +658,12 @@ impl GameModel for EngineModel {
         &self.messages
     }
 
+    fn sidebar(&self) -> Vec<crate::sidebar::Line> {
+        self.replica
+            .avatar()
+            .map_or(vec![], |a| crate::sidebar::lines(a, &self.colors))
+    }
+
     fn say(&mut self, text: String) {
         self.messages.push(text);
     }

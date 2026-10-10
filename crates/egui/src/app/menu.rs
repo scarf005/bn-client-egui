@@ -13,11 +13,19 @@ impl<M: GameModel> App<M> {
         let mut chosen = None;
         let mut cancel = ctx.input(|i| i.key_pressed(egui::Key::Escape)) && menu.can_cancel;
         egui::Window::new(&menu.title)
-            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .anchor(egui::Align2::CENTER_TOP, super::dialog_offset(ctx))
             .collapsible(false)
             .resizable(false)
             .show(ctx, |ui| {
                 ui.set_min_width(520.0);
+                // Cancel sits right under the title, so it is at the same place for every dialog.
+                if menu.can_cancel
+                    && ui
+                        .add_enabled(!self.model.busy(), egui::Button::new("Cancel"))
+                        .clicked()
+                {
+                    cancel = true;
+                }
                 if !menu.message.is_empty() {
                     ui.label(&menu.message);
                 }
@@ -31,33 +39,30 @@ impl<M: GameModel> App<M> {
                         }
                     }
                 });
-                ui.with_layout(egui::Layout::top_down_justified(egui::Align::Min), |ui| {
-                    for choice in menu.entries() {
-                        let button = self.control(
-                            ui,
-                            choice.label.clone(),
-                            &choice.id,
-                            choice.enabled,
-                            false,
-                        );
-                        ui.ctx().accesskit_node_builder(button.id, |b| {
-                            b.set_role(accesskit::Role::MenuItem)
+                egui::ScrollArea::vertical()
+                    .max_height(ctx.content_rect().height() * 0.6)
+                    .show(ui, |ui| {
+                        ui.with_layout(egui::Layout::top_down_justified(egui::Align::Min), |ui| {
+                            for choice in menu.entries() {
+                                let button = self.control(
+                                    ui,
+                                    choice.label.clone(),
+                                    &choice.id,
+                                    choice.enabled,
+                                    false,
+                                );
+                                ui.ctx().accesskit_node_builder(button.id, |b| {
+                                    b.set_role(accesskit::Role::MenuItem)
+                                });
+                                if !choice.enabled && !choice.denial.is_empty() {
+                                    ui.label(&choice.denial);
+                                }
+                                if button.clicked() {
+                                    chosen = Some(choice.id.clone());
+                                }
+                            }
                         });
-                        if !choice.enabled && !choice.denial.is_empty() {
-                            ui.label(&choice.denial);
-                        }
-                        if button.clicked() {
-                            chosen = Some(choice.id.clone());
-                        }
-                    }
-                });
-                if menu.can_cancel
-                    && ui
-                        .add_enabled(!self.model.busy(), egui::Button::new("Cancel"))
-                        .clicked()
-                {
-                    cancel = true;
-                }
+                    });
             });
         if let Some(id) = chosen {
             ctx.request_repaint();

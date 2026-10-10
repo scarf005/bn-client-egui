@@ -36,7 +36,7 @@ impl<M: GameModel> App<M> {
                 .any(|w| w.starts_with(&needle))
         });
         egui::Window::new("Actions")
-            .anchor(egui::Align2::CENTER_TOP, [0.0, 48.0])
+            .anchor(egui::Align2::CENTER_TOP, super::dialog_offset(ctx))
             .collapsible(false)
             .resizable(false)
             .default_width(420.0)

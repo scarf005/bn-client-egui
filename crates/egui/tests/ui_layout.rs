@@ -155,3 +155,52 @@ fn the_palette_search_keeps_focus_for_the_accessibility_tree() {
             .is_focused()
     );
 }
+
+#[test]
+fn a_small_window_still_gives_the_map_most_of_the_width() {
+    let (mut h, _script) = harness(egui::vec2(700.0, 450.0));
+    h.run_steps(5);
+    let map = h.get_by_label("Map").rect();
+    let ground = h.get_by_label("Ground").rect();
+    assert!(map.width() >= 700.0 * 0.5, "map {map:?}");
+    assert!(map.max.x <= ground.min.x, "sidebar beside the map");
+}
+
+#[test]
+fn sidebar_width_does_not_change_with_its_content() {
+    let (mut h, script) = harness(egui::vec2(1100.0, 800.0));
+    h.run_steps(5);
+    let before = h.get_by_label("Ground").rect().min.x;
+    for name in ["events_41_walk", "events_42_message"] {
+        script.push(fixture(name));
+    }
+    h.run_steps(5);
+    assert_eq!(h.get_by_label("Ground").rect().min.x, before);
+}
+
+#[test]
+fn the_viewport_is_declared_once_while_the_window_keeps_its_size() {
+    let (mut h, script) = harness(egui::vec2(1100.0, 800.0));
+    h.run_steps(5);
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    h.run_steps(20);
+    let sent = script
+        .sent_methods()
+        .into_iter()
+        .filter(|m| m == "bn.viewport")
+        .count();
+    assert_eq!(sent, 1);
+}
+
+#[test]
+fn every_dialog_opens_at_the_same_place() {
+    let (mut h, _script) = harness(egui::vec2(1100.0, 800.0));
+    h.run_steps(3);
+    open_palette(&mut h);
+    let palette = h.get_by_label("Search actions").rect();
+    assert!(palette.min.y > 800.0 * 0.12, "12% down: {palette:?}");
+    assert!(
+        (palette.center().x - 550.0).abs() < 1.0,
+        "centered: {palette:?}"
+    );
+}

@@ -153,6 +153,10 @@ pub trait GameModel {
     fn pick_up(&mut self, index: usize);
     fn drop_item(&mut self, index: usize);
     fn messages(&self) -> &[String];
+    /// The avatar's sidebar as coloured lines; empty before the engine reports one.
+    fn sidebar(&self) -> Vec<crate::sidebar::Line> {
+        vec![]
+    }
     fn say(&mut self, text: String);
 }
 
