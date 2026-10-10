@@ -590,6 +590,32 @@ fn a_key_prompt_fills_its_field_with_the_next_key_and_a_function_key_by_its_name
     );
 }
 
+#[test]
+fn a_bare_text_prompt_is_a_field_that_enter_submits() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    for name in ["events_41_walk", "events_42_message"] {
+        script.push(fixture(name));
+    }
+    let mut menu = fixture("events_43_menu");
+    let interaction = &mut menu["params"]["events"][0]["changes"]["interaction"]["interaction"];
+    interaction["choices"] = json!([]);
+    interaction["field"] = json!({"id":"field:value","label":"World name","description":"",
+        "value":"","type":"text","max_length":-1,"printable":true});
+    script.push(menu);
+    h.run_steps(3);
+    let prompt = h.get_by_role(accesskit::Role::TextInput);
+    prompt.click();
+    prompt.type_text("Ada");
+    h.run_steps(2);
+    h.key_press(egui::Key::Enter);
+    h.run_steps(3);
+    assert_eq!(
+        operations(&script),
+        [json!({"kind":"fill","field_id":"field:value","value":"Ada","submit":true})]
+    );
+}
+
 mod failures {
     use super::*;
     use bn_client_core::transport::ScriptedTransport;

@@ -72,6 +72,8 @@ pub struct App<M: GameModel> {
     menu_ids: Vec<egui::Id>,
     /// Where the engine's cursor was in the open menu, so keyboard focus can follow it.
     menu_focus: Option<String>,
+    /// The text being typed into the open menu's field, with the id of the field it belongs to.
+    field_text: (String, String),
     /// The cursor has been put on the player since the map first appeared.
     cursor_placed: bool,
     crafting: crafting::Crafting,
@@ -108,6 +110,7 @@ impl<M: GameModel> App<M> {
             cursor_placed: false,
             menu_ids: Vec::new(),
             menu_focus: None,
+            field_text: Default::default(),
             native_live: a11y::Announcer::default(),
             command_live: a11y::Announcer::default(),
             crafting: Default::default(),
@@ -505,6 +508,7 @@ impl<M: GameModel> App<M> {
     fn menu(&mut self, ctx: &egui::Context) {
         let Some(menu) = self.model.menu() else {
             self.focus_menu = false;
+            self.field_text = Default::default();
             self.menu_ids.clear();
             self.refocus_map |= self.menu_title.take().is_some();
             return;
@@ -560,6 +564,27 @@ impl<M: GameModel> App<M> {
                         }
                         if menu.field.as_ref().is_some_and(|f| f.kind == "key") {
                             key_chosen = editor::key_prompt(ui);
+                        }
+                        // A bare text prompt (a world or character name): type, Enter submits.
+                        if let Some(field) = menu
+                            .field
+                            .as_ref()
+                            .filter(|f| matches!(f.kind.as_str(), "text" | "integer"))
+                            .filter(|_| menu.entries().is_empty())
+                        {
+                            if self.field_text.0 != field.id {
+                                self.field_text = (field.id.clone(), field.value.clone());
+                            }
+                            let edit = ui.add(
+                                egui::TextEdit::singleline(&mut self.field_text.1)
+                                    .hint_text(markup::plain(&field.label)),
+                            );
+                            if entered {
+                                edit.request_focus();
+                            }
+                            if edit.has_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                                key_chosen = Some(self.field_text.1.clone());
+                            }
                         }
                         for (i, choice) in menu.entries().into_iter().enumerate() {
                             if let Some(row) = &choice.editor {
