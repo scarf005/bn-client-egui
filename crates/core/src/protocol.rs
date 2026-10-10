@@ -426,6 +426,30 @@ pub struct RpcError {
     pub data: Option<Value>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LoadingImage {
+    /// Relative to the game root.
+    pub path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub author: Option<String>,
+}
+
+/// `bn.loading`: either progress (`title`, `entries`, `index`, `image`) or `done: true`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LoadingNotice {
+    pub epoch: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub entries: Vec<String>,
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub index: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image: Option<LoadingImage>,
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub done: bool,
+}
+
 /// One parsed line from the engine.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Incoming {
@@ -437,6 +461,7 @@ pub enum Incoming {
     Events(EventsParams),
     Command(CommandNotice),
     Resync(Resync),
+    Loading(LoadingNotice),
     /// Notification this client does not know; ignored.
     Unknown(String),
     /// A line that is not valid protocol JSON.
@@ -464,6 +489,7 @@ pub fn parse_message(msg: &Value) -> Result<Incoming, serde_json::Error> {
             "bn.events" => Incoming::Events(params(msg)?),
             "bn.command" => Incoming::Command(params(msg)?),
             "bn.resync" => Incoming::Resync(params(msg)?),
+            "bn.loading" => Incoming::Loading(params(msg)?),
             other => Incoming::Unknown(other.to_string()),
         });
     }

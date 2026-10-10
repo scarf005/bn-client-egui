@@ -43,6 +43,16 @@ pub struct ActionEntry {
     pub keys: Vec<String>,
 }
 
+/// Engine loading screen: a title, the steps seen so far and the one in progress.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Loading {
+    pub title: String,
+    pub entries: Vec<String>,
+    pub index: usize,
+    /// Splash image, relative to the game root.
+    pub image: Option<String>,
+}
+
 /// What the UI needs from the game: `FakeModel` in tests, `EngineModel` against a real engine.
 pub trait GameModel {
     /// Called once per frame: drain engine messages. No-op for synchronous models.
@@ -72,6 +82,10 @@ pub trait GameModel {
     /// A game key token (`g`, `SPACE`, `UP`); true if it ran an action.
     fn press(&mut self, _key: &str) -> bool {
         false
+    }
+    /// The engine's loading screen, while it is up.
+    fn loading(&self) -> Option<Loading> {
+        None
     }
     fn menu(&self) -> Option<Menu> {
         None

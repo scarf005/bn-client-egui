@@ -2,7 +2,7 @@
 
 use crate::colors::ColorMap;
 use crate::keys::KeyMap;
-use crate::model::{ActionEntry, Cell, GameModel, Menu, MenuChoice, Pos, Rgb};
+use crate::model::{ActionEntry, Cell, GameModel, Loading, Menu, MenuChoice, Pos, Rgb};
 use crate::protocol::{
     self, Cell as WorldCell, Expect, Incoming, Look, Operation, Snapshot, Submit, WorldPos,
 };
@@ -45,6 +45,7 @@ pub struct EngineModel {
     trace: Vec<(Instant, &'static str)>,
     colors: ColorMap,
     keys: KeyMap,
+    loading: Option<Loading>,
 }
 
 fn look_name(l: &Look) -> String {
@@ -101,6 +102,7 @@ impl EngineModel {
             trace: vec![],
             colors: ColorMap::default(),
             keys: KeyMap::default(),
+            loading: None,
         };
         m.call(
             "bn.hello",
@@ -185,6 +187,14 @@ impl EngineModel {
             Incoming::Resync(r) => {
                 let outcome = self.replica.resync(&r);
                 self.resubscribe_on(outcome);
+            }
+            Incoming::Loading(n) => {
+                self.loading = (!n.done).then(|| Loading {
+                    title: n.title.unwrap_or_default(),
+                    entries: n.entries,
+                    index: n.index,
+                    image: n.image.map(|i| i.path),
+                });
             }
             Incoming::Unknown(_) => {}
             Incoming::Malformed(e) => self.messages.push(format!("Bad engine message: {e}")),
@@ -460,6 +470,10 @@ impl GameModel for EngineModel {
 
     fn say(&mut self, text: String) {
         self.messages.push(text);
+    }
+
+    fn loading(&self) -> Option<Loading> {
+        self.loading.clone()
     }
 
     fn actions(&self) -> Vec<ActionEntry> {
