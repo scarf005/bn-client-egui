@@ -150,19 +150,28 @@ pub(super) fn message_log(
     if !native.is_empty() {
         a11y::live_region(ui, live[0]);
     }
-    egui::ScrollArea::vertical()
+    // The tops of last frame's lines, so the area ends between two of them and shows no half line.
+    let key = egui::Id::new("native_log_tops");
+    let (tops, total): (Vec<f32>, f32) = ui.data(|d| d.get_temp(key)).unwrap_or_default();
+    let room = whole_lines_height(&tops, total, ui.available_height() * 0.7);
+    let output = egui::ScrollArea::vertical()
         .id_salt("native_log")
-        .max_height(ui.available_height() * 0.7)
+        .max_height(room)
         .stick_to_bottom(true)
         .show(ui, |ui| {
+            let top = ui.next_widget_position().y;
+            let mut tops = Vec::new();
             for line in &native[native.len().saturating_sub(100)..] {
+                tops.push(ui.next_widget_position().y - top);
                 let text = egui::RichText::new(line.shown());
                 ui.label(
                     line.color
                         .map_or(text.clone(), |c| text.color(super::rgb(c))),
                 );
             }
+            tops
         });
+    ui.data_mut(|d| d.insert_temp(key, (output.inner, output.content_size.y)));
     if !commands.is_empty() {
         ui.separator();
         a11y::live_region(ui, live[1]);
@@ -178,6 +187,16 @@ pub(super) fn message_log(
         });
 }
 
+/// The height for a scroll area of lines starting at `tops` (`total` high in all) that holds at most
+/// `max`: the whole lines that fit, so no line is cut through.
+fn whole_lines_height(tops: &[f32], total: f32, max: f32) -> f32 {
+    if total <= max {
+        return max;
+    }
+    let first = tops.iter().find(|t| total - **t <= max);
+    first.or(tops.last()).map_or(max, |t| total - t)
+}
+
 #[cfg(test)]
 mod tests {
     use super::whole_lines_height;
@@ -186,10 +205,26 @@ mod tests {
     fn a_scroll_area_is_cut_between_lines_never_through_one() {
         // Lines of 20 and 40 points: tops at 0, 20, 60, 80; 100 points in all.
         let tops = [0.0, 20.0, 60.0, 80.0];
-        assert_eq!(whole_lines_height(&tops, 100.0, 200.0), 200.0, "all of it fits");
-        assert_eq!(whole_lines_height(&tops, 100.0, 70.0), 40.0, "the last two lines");
-        assert_eq!(whole_lines_height(&tops, 100.0, 45.0), 40.0, "part of a line is dropped");
-        assert_eq!(whole_lines_height(&tops, 100.0, 15.0), 20.0, "a line taller than the room still shows");
+        assert_eq!(
+            whole_lines_height(&tops, 100.0, 200.0),
+            200.0,
+            "all of it fits"
+        );
+        assert_eq!(
+            whole_lines_height(&tops, 100.0, 70.0),
+            40.0,
+            "the last two lines"
+        );
+        assert_eq!(
+            whole_lines_height(&tops, 100.0, 45.0),
+            40.0,
+            "part of a line is dropped"
+        );
+        assert_eq!(
+            whole_lines_height(&tops, 100.0, 15.0),
+            20.0,
+            "a line taller than the room still shows"
+        );
         assert_eq!(whole_lines_height(&[], 0.0, 50.0), 50.0);
     }
 }
