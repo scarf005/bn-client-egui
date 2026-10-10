@@ -34,6 +34,8 @@ pub struct EngineModel {
     busy: bool,
     command_id: Option<String>,
     rejected: bool,
+    /// The command in flight was a walking step; only its failure stops the walk.
+    walking: bool,
     origin: Option<(i32, i32)>,
     messages: Vec<String>,
     ground: Vec<String>,
@@ -108,6 +110,7 @@ impl EngineModel {
             busy: false,
             command_id: None,
             rejected: false,
+            walking: false,
             origin: None,
             messages: vec![],
             ground: vec![],
@@ -157,7 +160,7 @@ impl EngineModel {
                     self.busy = false;
                     self.command_id = None;
                     if n.stage != "completed" {
-                        self.rejected = true;
+                        self.rejected = self.walking;
                         let why = n.error.as_ref().map_or(n.stage.clone(), error_kind);
                         self.messages.push(format!("Command {}: {why}.", n.stage));
                     }
@@ -192,7 +195,7 @@ impl EngineModel {
             Err(e) => {
                 let why = e.data.as_ref().map_or(e.message.clone(), error_kind);
                 self.messages.push(format!("Engine error: {why}."));
-                self.rejected = matches!(kind, Pending::Submit);
+                self.rejected = matches!(kind, Pending::Submit) && self.walking;
                 return;
             }
         };
@@ -223,6 +226,7 @@ impl EngineModel {
         };
         self.busy = true;
         self.rejected = false;
+        self.walking = false;
         let params = serde_json::to_value(submit).expect("submit serializes");
         self.call("bn.command.submit", params, Pending::Submit);
         true
@@ -384,7 +388,9 @@ impl GameModel for EngineModel {
         let Some(id) = direction(dx, dy) else {
             return false;
         };
-        self.invoke(&[id.into()])
+        let sent = self.invoke(&[id.into()]);
+        self.walking = sent;
+        sent
     }
 
     fn ground(&self) -> &[String] {

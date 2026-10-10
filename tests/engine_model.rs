@@ -121,6 +121,23 @@ fn rejected_command_is_reported_and_blocks_the_walk_once() {
 }
 
 #[test]
+fn a_failed_non_walk_command_does_not_cancel_the_next_step() {
+    let (t, h) = session();
+    let mut m = connected(
+        t.on("bn.command.submit", walk_reply())
+            .on("bn.command.submit", walk_reply()),
+    );
+    m.pick_up(0);
+    h.push(fixture("command_rejected"));
+    m.poll();
+    assert!(
+        m.step_toward(Pos { x: 30, y: 12 }),
+        "only a rejected step stops the walk"
+    );
+    assert_eq!(submits(&h).len(), 2, "the step was submitted");
+}
+
+#[test]
 fn error_response_to_submit_frees_the_queue_and_reports_the_kind() {
     let (t, _h) = session();
     let err = json!({"jsonrpc":"2.0","id":null,"error":{"code":1000,"message":"busy","data":{"kind":"command_busy"}}});
