@@ -913,6 +913,7 @@ impl EngineModel {
             color,
             bg,
             desc,
+            id: look.id.clone().unwrap_or_default(),
             ..Cell::default()
         }
     }
@@ -1390,9 +1391,9 @@ impl GameModel for EngineModel {
 
     fn travel(&mut self, at: Pos) -> bool {
         // Like Tiles, walking into a closed door next to you opens it; the engine plans no route to one.
-        let (me, desc) = (self.player(), self.cell(at).desc);
+        let (me, id) = (self.player(), self.cell(at).id);
         let step = (at.x - me.x, at.y - me.y);
-        if desc.contains("door") && desc.ends_with("_c") && step.0.abs().max(step.1.abs()) == 1 {
+        if id.contains("door") && id.ends_with("_c") && step.0.abs().max(step.1.abs()) == 1 {
             if let (false, Some(id)) = (self.busy, direction(step.0, step.1)) {
                 self.invoke(&[id.into()]);
             }

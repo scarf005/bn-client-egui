@@ -59,7 +59,11 @@ pub struct Cell {
     pub color: Rgb,
     /// Background behind the glyph, when the game colour has one.
     pub bg: Option<Rgb>,
+    /// What a reader or a tooltip says: the display name when the engine sends one, else the id.
     pub desc: String,
+    /// The data id of the topmost look (`t_wall`), stable under translation; empty when nothing is known.
+    /// Code that decides by what is on a square matches this, never `desc`.
+    pub id: String,
     /// What is drawn here from the bottom up; empty when the model offers no sprites.
     pub layers: Vec<Layer>,
     /// Only remembered, not in sight.
