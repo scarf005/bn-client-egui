@@ -331,14 +331,18 @@ impl<M: GameModel> App<M> {
         self.walk(ui.ctx());
         self.palette_keys(ui.ctx());
         self.game_keys(ui.ctx(), interrupted);
-        if menu_forwards_keys(self.model.menu().as_ref()) {
-            // Arrow keys belong to the game, whichever widget was clicked last; Tab still moves focus.
+        let open = self.model.menu();
+        if menu_forwards_keys(open.as_ref()) {
+            // Arrow keys belong to the game, whichever widget was clicked last; Tab still moves focus,
+            // except on a tabbed screen where it is the engine's tab key.
+            let tab = open.as_ref().is_some_and(tab_is_engines);
             let ctx = ui.ctx();
             if let Some(id) = ctx.memory(|m| m.focused()) {
                 ctx.memory_mut(|m| {
                     m.set_focus_lock_filter(
                         id,
                         egui::EventFilter {
+                            tab,
                             horizontal_arrows: true,
                             vertical_arrows: true,
                             ..Default::default()
@@ -444,9 +448,9 @@ impl<M: GameModel> App<M> {
             // A composed screen has no widgets: every key, Tab included, is the engine's.
             None => false,
             Some(m) if m.screen => false,
-            Some(_) => {
-                token == "TAB"
-                    || token == "BACKTAB"
+            Some(m) => {
+                // Tab switches a tabbed screen's tab, unless a text box has the keyboard.
+                (matches!(token, "TAB" | "BACKTAB") && !tab_is_engines(m))
                     || (focused && matches!(token, "SPACE" | "RETURN"))
             }
         };
@@ -1045,6 +1049,11 @@ impl<M: GameModel> App<M> {
             ui.ctx().request_repaint();
         }
     }
+}
+
+/// Whether Tab and Shift+Tab are the engine's: its screen has tabs and no text box takes the keyboard.
+fn tab_is_engines(menu: &bn_client_core::Menu) -> bool {
+    menu.field.is_none() && !menu.tabs().is_empty()
 }
 
 /// Whether the keys pressed go to the engine: with no menu open, or in a menu that has no text field
