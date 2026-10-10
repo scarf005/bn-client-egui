@@ -35,6 +35,12 @@ pub struct Menu {
 pub trait GameModel {
     /// Called once per frame: drain engine messages. No-op for synchronous models.
     fn poll(&mut self) {}
+    /// Registers a callback the model runs (from any thread) when new engine data has arrived.
+    fn set_waker(&mut self, _waker: crate::transport::Waker) {}
+    /// Absolute map position of view cell (0, 0); lets a walk target survive the view scrolling.
+    fn origin(&self) -> Pos {
+        Pos { x: 0, y: 0 }
+    }
     /// True while the model keeps changing on its own and needs periodic repaints.
     fn live(&self) -> bool {
         false

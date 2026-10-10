@@ -49,3 +49,34 @@ fn stdio_transport_passes_private_dirs_and_speaks_line_delimited_json() {
     drop(t);
     std::fs::remove_dir_all(dir).unwrap();
 }
+
+#[test]
+fn waker_runs_for_every_incoming_message_so_the_ui_need_not_poll() {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    let dir = std::env::temp_dir().join(format!("bn-stdio-wake-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let engine = dir.join("fake-engine");
+    std::fs::write(
+        &engine,
+        "#!/bin/sh\nread line\nprintf '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}\\n'\n",
+    )
+    .unwrap();
+    std::fs::set_permissions(&engine, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let mut t = StdioTransport::spawn(&engine).unwrap();
+    let woken = Arc::new(AtomicUsize::new(0));
+    let w = woken.clone();
+    t.set_waker(Arc::new(move || {
+        w.fetch_add(1, Ordering::SeqCst);
+    }));
+    t.send(request(1, "bn.hello", json!({})));
+    assert!(matches!(recv(&mut t), Incoming::Response { .. }));
+    assert_eq!(recv(&mut t), Incoming::Closed);
+    assert_eq!(
+        woken.load(Ordering::SeqCst),
+        2,
+        "response and close each wake the UI"
+    );
+    drop(t);
+    std::fs::remove_dir_all(dir).unwrap();
+}

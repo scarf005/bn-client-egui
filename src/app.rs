@@ -31,6 +31,7 @@ pub struct App<M: GameModel> {
     menu_cell: Pos,
     destination: Option<Pos>,
     last_hover: Option<egui::Pos2>,
+    wired: bool,
 }
 
 impl<M: GameModel> App<M> {
@@ -42,14 +43,22 @@ impl<M: GameModel> App<M> {
             menu_cell: cursor,
             destination: None,
             last_hover: None,
+            wired: false,
         }
     }
 
     pub fn show(&mut self, ui: &mut egui::Ui) {
+        if !self.wired {
+            let ctx = ui.ctx().clone();
+            self.model
+                .set_waker(std::sync::Arc::new(move || ctx.request_repaint()));
+            self.wired = true;
+        }
         self.model.poll();
         if self.model.live() {
+            // Safety net only: incoming engine messages repaint through the waker.
             ui.ctx()
-                .request_repaint_after(std::time::Duration::from_millis(100));
+                .request_repaint_after(std::time::Duration::from_secs(1));
         }
         self.walk(ui.ctx());
         egui::Panel::bottom("log").show(ui, |ui| self.log(ui));
@@ -95,8 +104,14 @@ impl<M: GameModel> App<M> {
 
     /// One step per frame toward the destination.
     fn walk(&mut self, ctx: &egui::Context) {
-        let Some(target) = self.destination else {
+        let Some(dest) = self.destination else {
             return;
+        };
+        // The destination is stored in model coordinates, which the view may have scrolled since.
+        let origin = self.model.origin();
+        let target = Pos {
+            x: dest.x - origin.x,
+            y: dest.y - origin.y,
         };
         let moved = self.model.step_toward(target);
         if !moved {
@@ -104,9 +119,17 @@ impl<M: GameModel> App<M> {
         }
         if !moved || self.model.player() == target {
             self.destination = None;
-        } else {
+        } else if !self.model.busy() {
             ctx.request_repaint();
         }
+    }
+
+    fn walk_to(&mut self, view: Pos) {
+        let origin = self.model.origin();
+        self.destination = Some(Pos {
+            x: view.x + origin.x,
+            y: view.y + origin.y,
+        });
     }
 
     fn look(&mut self, at: Pos) {
@@ -161,7 +184,7 @@ impl<M: GameModel> App<M> {
         }
         self.last_hover = hover;
         if response.clicked() {
-            self.destination = Some(self.cursor);
+            self.walk_to(self.cursor);
         }
         if response.secondary_clicked() {
             self.menu_cell = self.cursor;
@@ -204,7 +227,7 @@ impl<M: GameModel> App<M> {
                 ui.close();
             }
             if menu_item(ui, "Move here") {
-                self.destination = Some(at);
+                self.walk_to(at);
                 ui.close();
             }
         });

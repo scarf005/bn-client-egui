@@ -10,7 +10,12 @@ use std::process::{Child, Command, Stdio};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 
+/// Called from the reader thread whenever a message arrives, e.g. to request a UI repaint.
+pub type Waker = Arc<dyn Fn() + Send + Sync>;
+
 pub trait Transport {
+    /// Registers a callback run for every incoming message.
+    fn set_waker(&mut self, _waker: Waker) {}
     /// Sends one JSON-RPC message (request or notification).
     fn send(&mut self, msg: Value);
     /// The next parsed incoming message, without blocking.
@@ -40,6 +45,7 @@ pub struct StdioTransport {
     child: Child,
     out: Sender<String>,
     incoming: Receiver<Incoming>,
+    waker: Arc<Mutex<Option<Waker>>>,
     dir: PathBuf,
 }
 
@@ -67,14 +73,23 @@ impl StdioTransport {
         let stdin = child.stdin.take().expect("piped stdin");
         let stdout = child.stdout.take().expect("piped stdout");
         let (tx, incoming) = mpsc::channel();
+        let waker: Arc<Mutex<Option<Waker>>> = Arc::default();
+        let wake = waker.clone();
+        let notify = move |msg| {
+            let sent = tx.send(msg).is_ok();
+            if let Some(w) = wake.lock().unwrap().as_ref() {
+                w();
+            }
+            sent
+        };
         std::thread::spawn(move || {
             for line in BufReader::new(stdout).lines() {
                 let Ok(line) = line else { break };
-                if !line.trim().is_empty() && tx.send(protocol::parse_line(&line)).is_err() {
+                if !line.trim().is_empty() && !notify(protocol::parse_line(&line)) {
                     return;
                 }
             }
-            let _ = tx.send(Incoming::Closed);
+            notify(Incoming::Closed);
         });
         let (out, lines) = mpsc::channel::<String>();
         std::thread::spawn(move || {
@@ -92,12 +107,17 @@ impl StdioTransport {
             child,
             out,
             incoming,
+            waker,
             dir,
         })
     }
 }
 
 impl Transport for StdioTransport {
+    fn set_waker(&mut self, waker: Waker) {
+        *self.waker.lock().unwrap() = Some(waker);
+    }
+
     fn send(&mut self, msg: Value) {
         let _ = self.out.send(msg.to_string());
     }

@@ -9,6 +9,7 @@ use crate::transport::{Transport, request};
 use eframe::egui::Color32;
 use serde_json::{Value, json};
 use std::collections::HashMap;
+use std::time::Instant;
 
 /// The visible window onto the engine's much larger coverage.
 const VIEW: Pos = Pos { x: 40, y: 25 };
@@ -40,6 +41,7 @@ pub struct EngineModel {
     messages: Vec<String>,
     ground: Vec<String>,
     inventory: Vec<String>,
+    trace: Vec<(Instant, &'static str)>,
 }
 
 fn look_name(l: &Look) -> String {
@@ -115,6 +117,7 @@ impl EngineModel {
             messages: vec![],
             ground: vec![],
             inventory: vec![],
+            trace: vec![],
         };
         m.call(
             "bn.hello",
@@ -122,6 +125,17 @@ impl EngineModel {
             Pending::Hello,
         );
         m
+    }
+
+    /// Timestamped protocol milestones (`submit`, `received`, stage names, `events`) since the last call.
+    pub fn take_trace(&mut self) -> Vec<(Instant, &'static str)> {
+        std::mem::take(&mut self.trace)
+    }
+
+    fn mark(&mut self, what: &'static str) {
+        if self.trace.len() < 4096 {
+            self.trace.push((Instant::now(), what));
+        }
     }
 
     fn call(&mut self, method: &str, params: Value, kind: Pending) {
@@ -151,11 +165,18 @@ impl EngineModel {
                 self.resubscribe_on(outcome);
             }
             Incoming::Events(e) if !self.subscribing => {
+                self.mark("events");
                 let outcome = self.replica.events(e);
                 self.resubscribe_on(outcome);
             }
             Incoming::Events(_) => {}
             Incoming::Command(n) => {
+                self.mark(match n.stage.as_str() {
+                    "validated" => "validated",
+                    "executing" => "executing",
+                    "completed" => "completed",
+                    _ => "stage",
+                });
                 if n.is_terminal() && self.command_id.as_deref() == Some(&n.command_id) {
                     self.busy = false;
                     self.command_id = None;
@@ -185,6 +206,7 @@ impl EngineModel {
             return;
         };
         if matches!(kind, Pending::Subscribe) {
+            self.mark("subscribed");
             self.subscribing = false;
         }
         if matches!(kind, Pending::Submit) && result.is_err() {
@@ -200,12 +222,16 @@ impl EngineModel {
             }
         };
         match kind {
-            Pending::Hello => self.subscribe(),
+            Pending::Hello => {
+                self.mark("hello");
+                self.subscribe();
+            }
             Pending::Subscribe => match serde_json::from_value::<Snapshot>(value) {
                 Ok(s) => self.replica.begin(s),
                 Err(e) => self.messages.push(format!("Bad snapshot: {e}")),
             },
             Pending::Submit => {
+                self.mark("received");
                 self.command_id = value["command_id"].as_str().map(String::from);
             }
         }
@@ -228,6 +254,7 @@ impl EngineModel {
         self.rejected = false;
         self.walking = false;
         let params = serde_json::to_value(submit).expect("submit serializes");
+        self.mark("submit");
         self.call("bn.command.submit", params, Pending::Submit);
         true
     }
@@ -312,6 +339,15 @@ impl GameModel for EngineModel {
         self.messages.extend(self.replica.take_log());
         self.refresh_view();
         self.refresh_items();
+    }
+
+    fn set_waker(&mut self, waker: crate::transport::Waker) {
+        self.transport.set_waker(waker);
+    }
+
+    fn origin(&self) -> Pos {
+        let (x, y) = self.origin.unwrap_or_default();
+        Pos { x, y }
     }
 
     fn live(&self) -> bool {

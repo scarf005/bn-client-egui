@@ -303,3 +303,11 @@ fn main_menu_snapshot_without_a_world_shows_the_menu_and_no_map() {
     assert_eq!(menu.title, "Cataclysm: Bright Nights");
     assert_eq!(menu.choices[0].label, "New Game");
 }
+
+#[test]
+fn origin_reports_the_view_offset_so_targets_survive_recentering() {
+    let (t, _h) = session();
+    let m = connected(t);
+    // Avatar (3, 4) is drawn at view (20, 12).
+    assert_eq!(m.origin(), Pos { x: -17, y: -8 });
+}
