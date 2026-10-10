@@ -373,7 +373,9 @@ impl<M: GameModel> App<M> {
         // Menus with a text field keep the keyboard for typing.
         let focused = ctx.memory(|m| m.focused()).is_some();
         let toolkit = |token: &str| match &menu {
+            // A composed screen has no widgets: every key, Tab included, is the engine's.
             None => false,
+            Some(m) if m.screen => false,
             Some(_) => {
                 token == "TAB"
                     || token == "BACKTAB"
