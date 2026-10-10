@@ -274,9 +274,13 @@ impl<M: GameModel> App<M> {
             }
         }
         egui::Panel::top("status").show(ui, |ui| self.status(ui));
-        egui::Panel::left("sidebar")
-            .resizable(false)
-            .show(ui, |ui| crate::sidebar::show(ui, &self.model.sidebar()));
+        // Without an avatar there is no sidebar, and an empty panel would only take width from the others.
+        let sidebar = self.model.sidebar();
+        if !sidebar.is_empty() {
+            egui::Panel::left("sidebar")
+                .resizable(false)
+                .show(ui, |ui| crate::sidebar::show(ui, &sidebar));
+        }
         egui::Panel::left("actions")
             .resizable(false)
             .show(ui, |ui| self.actions(ui));
