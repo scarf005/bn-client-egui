@@ -228,7 +228,10 @@ impl Replica {
         for g in c.gone {
             self.entities.remove(&g.id);
         }
-        self.avatar = c.avatar.or(self.avatar.take());
+        self.avatar = c
+            .avatar
+            .map(|change| change.apply(self.avatar.as_ref()))
+            .or(self.avatar.take());
         self.environment = c.environment.or(self.environment.take());
         if let Some(route) = c.route {
             self.route = route;
