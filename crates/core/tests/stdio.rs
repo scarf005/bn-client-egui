@@ -18,20 +18,29 @@ fn recv(t: &mut StdioTransport) -> Incoming {
     panic!("no message in 10 s");
 }
 
+/// Writes an executable script into `dir` and spawns it with `spawn`. Test threads run concurrently, and a
+/// child forked by another thread's `spawn` inherits our still-open write descriptor until it execs, which makes
+/// executing the script fail with ETXTBSY; the lock keeps writing and spawning from interleaving.
+fn spawn_script(
+    dir: &std::path::Path,
+    script: &str,
+    spawn: impl FnOnce(&std::path::Path) -> std::io::Result<StdioTransport>,
+) -> StdioTransport {
+    static SPAWN: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _guard = SPAWN.lock().unwrap_or_else(|e| e.into_inner());
+    std::fs::create_dir_all(dir).unwrap();
+    let engine = dir.join("fake-engine");
+    std::fs::write(&engine, script).unwrap();
+    std::fs::set_permissions(&engine, std::fs::Permissions::from_mode(0o755)).unwrap();
+    spawn(&engine).unwrap()
+}
+
 #[test]
 fn stdio_transport_passes_private_dirs_and_speaks_line_delimited_json() {
     let dir = std::env::temp_dir().join(format!("bn-stdio-test-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
-    let engine = dir.join("fake-engine");
     // Reads one request, answers it with the args it was started with, then exits.
-    std::fs::write(
-        &engine,
-        "#!/bin/sh\nread line\nprintf '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"args\":\"%s\"}}\\n' \"$*\"\nprintf 'not json\\n'\n",
-    )
-    .unwrap();
-    std::fs::set_permissions(&engine, std::fs::Permissions::from_mode(0o755)).unwrap();
-
-    let mut t = StdioTransport::spawn_fresh(&engine).unwrap();
+    let script = "#!/bin/sh\nread line\nprintf '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"args\":\"%s\"}}\\n' \"$*\"\nprintf 'not json\\n'\n";
+    let mut t = spawn_script(&dir, script, StdioTransport::spawn_fresh);
     t.send(request(1, "bn.hello", json!({})));
     let Incoming::Response {
         id: 1,
@@ -57,15 +66,8 @@ fn waker_runs_for_every_incoming_message_so_the_ui_need_not_poll() {
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
     let dir = std::env::temp_dir().join(format!("bn-stdio-wake-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
-    let engine = dir.join("fake-engine");
-    std::fs::write(
-        &engine,
-        "#!/bin/sh\nread line\nprintf '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}\\n'\n",
-    )
-    .unwrap();
-    std::fs::set_permissions(&engine, std::fs::Permissions::from_mode(0o755)).unwrap();
-    let mut t = StdioTransport::spawn_fresh(&engine).unwrap();
+    let script = "#!/bin/sh\nread line\nprintf '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}\\n'\n";
+    let mut t = spawn_script(&dir, script, StdioTransport::spawn_fresh);
     let woken = Arc::new(AtomicUsize::new(0));
     let w = woken.clone();
     t.set_waker(Arc::new(move || {
@@ -88,19 +90,11 @@ fn args_of(profile: Option<&Profile>) -> String {
     static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
     let n = N.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
     let dir = std::env::temp_dir().join(format!("bn-stdio-args-{}-{n}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
-    let engine = dir.join("fake-engine");
-    std::fs::write(
-        &engine,
-        "#!/bin/sh\nread line\nprintf '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"args\":\"%s\"}}\\n' \"$*\"\n",
-    )
-    .unwrap();
-    std::fs::set_permissions(&engine, std::fs::Permissions::from_mode(0o755)).unwrap();
-    let mut t = match profile {
-        Some(p) => StdioTransport::spawn_with(&engine, p),
-        None => StdioTransport::spawn(&engine),
-    }
-    .unwrap();
+    let script = "#!/bin/sh\nread line\nprintf '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"args\":\"%s\"}}\\n' \"$*\"\n";
+    let mut t = spawn_script(&dir, script, |engine| match profile {
+        Some(p) => StdioTransport::spawn_with(engine, p),
+        None => StdioTransport::spawn(engine),
+    });
     t.send(request(1, "bn.hello", json!({})));
     let Incoming::Response { result: Ok(v), .. } = recv(&mut t) else {
         panic!("expected the hello response")
