@@ -39,11 +39,14 @@ pub fn tab(ctx: &egui::Context, id: egui::Id, selected: bool) {
     });
 }
 
-/// A plain button; egui reports every button drawn `selected` as a toggle.
-pub fn button(ctx: &egui::Context, id: egui::Id) {
+/// A button that reads as pressed only while `pressed`; egui reports every button drawn `selected`
+/// as a toggle, pressed or not.
+pub fn button(ctx: &egui::Context, id: egui::Id, pressed: bool) {
     ctx.accesskit_node_builder(id, |b| {
         b.set_role(accesskit::Role::Button);
-        b.clear_toggled();
+        if !pressed {
+            b.clear_toggled();
+        }
     });
 }
 

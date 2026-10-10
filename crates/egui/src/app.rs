@@ -285,7 +285,7 @@ impl<M: GameModel> App<M> {
             usable,
             egui::Button::new(text).selected(pending || highlighted),
         );
-        a11y::button(ui.ctx(), button.id);
+        a11y::button(ui.ctx(), button.id, pending);
         button
     }
 
