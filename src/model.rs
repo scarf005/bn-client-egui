@@ -39,6 +39,10 @@ pub trait GameModel {
     fn live(&self) -> bool {
         false
     }
+    /// True while a submitted command has not finished; input is ignored until then.
+    fn busy(&self) -> bool {
+        false
+    }
     fn menu(&self) -> Option<Menu> {
         None
     }

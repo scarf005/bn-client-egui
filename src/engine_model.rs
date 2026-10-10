@@ -318,6 +318,10 @@ impl GameModel for EngineModel {
         self.connected
     }
 
+    fn busy(&self) -> bool {
+        self.busy
+    }
+
     fn size(&self) -> Pos {
         if self.replica.ready() && self.origin.is_some() {
             VIEW
