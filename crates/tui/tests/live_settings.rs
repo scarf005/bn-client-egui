@@ -46,6 +46,8 @@ fn pick(app: &mut App, label: &str) {
             .is_some_and(|m| m.choices.iter().any(|c| c.label.contains(label)))
     });
     for _ in 0..400 {
+        // The highlight moves when the engine reports the cursor, after the key's command.
+        wait(app, "the cursor to settle", |a| !a.model.busy());
         if app.selected_label().is_some_and(|l| l.contains(label)) {
             break;
         }
@@ -64,6 +66,16 @@ fn pick(app: &mut App, label: &str) {
         app.selected_label()
     );
     press(app, KeyCode::Enter);
+}
+
+/// Answers a Yes/No query with its Yes key: the query moves its cursor with Left and Right, not Down.
+fn answer_yes(app: &mut App) {
+    wait(app, "the question", |a| {
+        a.model
+            .menu()
+            .is_some_and(|m| m.choices.iter().any(|c| c.label == "Yes"))
+    });
+    press(app, KeyCode::Char('y'));
 }
 
 /// Switches the menu to the tab whose label contains `label`, stepping with Left or Right.
@@ -103,7 +115,7 @@ fn leave_saving(app: &mut App) {
         a.model.menu().is_some()
     });
     if context(app) != "MAIN_MENU" {
-        pick(app, "Yes");
+        answer_yes(app);
     }
     wait(app, "the main menu", |a| context(a) == "MAIN_MENU");
 }
@@ -178,7 +190,7 @@ fn live_tui_changes_an_option_and_rebinds_a_key_that_then_walks() {
         context(a) != "HELP_KEYBINDINGS" || unbound(a)
     });
     if context(&app) != "HELP_KEYBINDINGS" {
-        pick(&mut app, "Yes");
+        answer_yes(&mut app);
     }
     wait(&mut app, "the keys removed", |a| unbound(a));
     let add = mode(&app, "mode:add_global");
