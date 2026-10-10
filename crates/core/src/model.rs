@@ -71,9 +71,19 @@ pub enum Shape {
         color: Rgb,
     },
     /// An explosion starting at `at` and reaching `radius` squares.
-    Burst { at: Pos, radius: u32, color: Rgb },
+    Burst {
+        at: Pos,
+        radius: u32,
+        color: Rgb,
+        /// The tile id the native tiles draw it with.
+        tile: String,
+    },
     /// The squares one step of an explosion blasts, or its shrapnel lands on.
-    Blast { cells: Vec<Pos>, shrapnel: bool },
+    Blast {
+        cells: Vec<Pos>,
+        shrapnel: bool,
+        tile: String,
+    },
     /// Floating text rising from `at`, in colored segments.
     Text {
         at: Pos,

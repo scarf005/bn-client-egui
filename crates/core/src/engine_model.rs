@@ -75,6 +75,8 @@ pub struct EngineModel {
     inventory: Vec<String>,
     /// The engine's own names for the same rows; the native menus list items by these.
     ground_names: Vec<String>,
+    /// The tile each running explosion is drawn with, from its `explosion.started`.
+    explosion_tiles: HashMap<String, String>,
     inventory_names: Vec<String>,
     trace: Vec<(Instant, &'static str)>,
     received: u64,
@@ -179,10 +181,16 @@ impl EngineModel {
                 at: self.view_of(&d["at"])?,
                 radius: d["radius"].as_u64().unwrap_or(0) as u32,
                 color: color(&d["color"]),
+                tile: d["tile"].as_str().unwrap_or("explosion").to_string(),
             },
             "explosion.blast" | "explosion.shrapnel" => Shape::Blast {
                 cells: squares("cells"),
                 shrapnel: fact.kind == "explosion.shrapnel",
+                tile: self
+                    .explosion_tiles
+                    .get(d["explosion"].as_str().unwrap_or_default())
+                    .cloned()
+                    .unwrap_or_else(|| "explosion".into()),
             },
             "combat_text.shown" => Shape::Text {
                 at: self.view_of(&d["at"])?,
@@ -232,6 +240,7 @@ impl EngineModel {
             ground: vec![],
             inventory: vec![],
             ground_names: vec![],
+            explosion_tiles: HashMap::new(),
             inventory_names: vec![],
             trace: vec![],
             received: 0,
@@ -1085,8 +1094,25 @@ impl GameModel for EngineModel {
     }
 
     fn take_effects(&mut self) -> Vec<Effect> {
-        let facts = self.replica.take_facts();
-        facts.iter().filter_map(|f| self.effect_of(f)).collect()
+        let mut effects = vec![];
+        for fact in self.replica.take_facts() {
+            let id = fact.data["explosion"]
+                .as_str()
+                .unwrap_or_default()
+                .to_string();
+            match fact.kind.as_str() {
+                "explosion.started" => {
+                    let tile = fact.data["tile"].as_str().unwrap_or("explosion");
+                    self.explosion_tiles.insert(id, tile.to_string());
+                }
+                "explosion.ended" => {
+                    self.explosion_tiles.remove(&id);
+                }
+                _ => {}
+            }
+            effects.extend(self.effect_of(&fact));
+        }
+        effects
     }
 
     fn loading(&self) -> Option<Loading> {
