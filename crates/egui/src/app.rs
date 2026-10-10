@@ -295,6 +295,11 @@ impl<M: GameModel> App<M> {
             }
         }
         egui::Panel::top("bar").show(ui, |ui| self.bar(ui));
+        if self.model.menu().is_some_and(|m| m.context == "MAIN_MENU") {
+            // The title screen is only its menu: no map, sidebar or log of a game that is not running.
+            self.menu(ui.ctx());
+            return;
+        }
         egui::Panel::right("sidebar")
             .default_size(
                 (ui.available_width() * SIDEBAR_SHARE).clamp(SIDEBAR_WIDTH.0, SIDEBAR_WIDTH.1),
