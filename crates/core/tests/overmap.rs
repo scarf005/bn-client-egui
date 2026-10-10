@@ -24,10 +24,30 @@ fn overmap_event(cursor_x: i32) -> Value {
             "cols":4,"rows":3,
             "cells":[row("F"), row("f"), row("r")],
             "legend":["Overmap","  forest"],
-            "notes":[{"pos":{"dim":"","x":cursor_x - 1,"y":200,"z":0},"text":"cache"}]
+            "notes":[{"pos":{"dim":"","x":cursor_x - 1,"y":200,"z":0},"text":"cache"}],
+                "path":[{"dim":"","x":cursor_x + 1,"y":200,"z":0},{"dim":"","x":cursor_x + 2,"y":200,"z":0}]
         },
         "compat":{"panes":[]}
     }}}}]}})
+}
+
+/// The overmap event for a client that said it draws tiles: every square is `t_floor` but the
+/// top-right one, a `forest` that falls back to `t_dirt`.
+fn with_tiles(mut event: Value) -> Value {
+    let rows: Vec<Value> = (0..3)
+        .map(|row| {
+            let cells: Vec<Value> = (0..4)
+                .map(|col| match (col, row) {
+                    (3, 0) => json!(["forest", 1, ""]),
+                    _ => json!(["t_floor", 0, ""]),
+                })
+                .collect();
+            json!(cells)
+        })
+        .collect();
+    event["params"]["events"][0]["changes"]["interaction"]["interaction"]["overmap"]["tiles"] =
+        json!({"cells": rows, "looks_like": {"forest": ["t_dirt"], "t_floor": []}});
+    event
 }
 
 fn open() -> (EngineModel, bn_client_core::transport::ScriptHandle) {
@@ -85,4 +105,38 @@ fn closing_the_overmap_submits_cancel_and_a_closed_one_does_nothing() {
     closed.close_overmap();
     closed.overmap_cursor_to((1, 2, 3));
     assert!(!h2.sent_methods().contains(&"bn.command.submit".to_string()));
+}
+
+#[test]
+fn the_planned_route_and_the_tile_ids_come_with_the_overmap() {
+    let (m, _h) = open();
+    let om = m.overmap().unwrap();
+    assert_eq!(om.path, [(101, 200, 0), (102, 200, 0)]);
+    assert!(
+        om.tiles.is_empty() && om.tile(0, 0).is_none(),
+        "no tiles unless asked for"
+    );
+
+    let (t, h) = session();
+    let mut tiled = EngineModel::connect(Box::new(t), true);
+    tiled.poll();
+    h.push(with_tiles(overmap_event(100)));
+    tiled.poll();
+    let om = tiled.overmap().unwrap();
+    let forest = om.tile(3, 0).unwrap();
+    assert_eq!((forest.id.as_str(), forest.rotation), ("forest", 1));
+    assert_eq!(forest.fallbacks, ["t_dirt"]);
+    assert_eq!(om.tile(0, 0).unwrap().id, "t_floor");
+    assert!(om.tile(4, 0).is_none());
+}
+
+#[test]
+fn hello_says_tiles_only_for_a_client_that_draws_them() {
+    let hello_of = |tiles: bool| {
+        let (t, h) = session();
+        let _ = EngineModel::connect(Box::new(t), tiles);
+        h.sent()[0]["params"].clone()
+    };
+    assert_eq!(hello_of(true)["tiles"], true);
+    assert!(hello_of(false).get("tiles").is_none());
 }

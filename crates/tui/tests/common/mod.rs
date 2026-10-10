@@ -56,8 +56,28 @@ pub fn overmap_event(cursor_x: i32) -> Value {
             "cols":4,"rows":3,
             "cells":[row("F"), row("f"), row("r")],
             "legend":["Overmap","  forest"],
-            "notes":[{"pos":{"dim":"","x":cursor_x - 1,"y":200,"z":0},"text":"cache"}]
+            "notes":[{"pos":{"dim":"","x":cursor_x - 1,"y":200,"z":0},"text":"cache"}],
+                "path":[{"dim":"","x":cursor_x + 1,"y":200,"z":0},{"dim":"","x":cursor_x + 2,"y":200,"z":0}]
         },
         "compat":{"panes":[]}
     }}}}]}})
+}
+
+/// The overmap event for a client that said it draws tiles: every square is `t_floor` but the
+/// top-right one, a `forest` that falls back to `t_dirt`.
+pub fn with_tiles(mut event: Value) -> Value {
+    let rows: Vec<Value> = (0..3)
+        .map(|row| {
+            let cells: Vec<Value> = (0..4)
+                .map(|col| match (col, row) {
+                    (3, 0) => json!(["forest", 1, ""]),
+                    _ => json!(["t_floor", 0, ""]),
+                })
+                .collect();
+            json!(cells)
+        })
+        .collect();
+    event["params"]["events"][0]["changes"]["interaction"]["interaction"]["overmap"]["tiles"] =
+        json!({"cells": rows, "looks_like": {"forest": ["t_dirt"], "t_floor": []}});
+    event
 }

@@ -6,7 +6,7 @@ use crate::keys;
 use crate::markup::{self, Run};
 use crate::model::{
     ActionEntry, Cell, CommandStatus, Failure, FailureKind, GameModel, Layer, Loading, LogLine,
-    Menu, MenuChoice, MenuField, Overmap, OvermapCell, Pos, Rgb,
+    Menu, MenuChoice, MenuField, Overmap, OvermapCell, OvermapTile, Pos, Rgb,
 };
 use crate::protocol::{
     self, Cell as WorldCell, Entity, Expect, Incoming, Known, LoadingNotice, Look, Operation,
@@ -43,6 +43,7 @@ pub type Respawn = Box<dyn FnMut() -> std::io::Result<Box<dyn Transport>>>;
 const STALL: Duration = Duration::from_secs(120);
 
 pub struct EngineModel {
+    tiles: bool,
     transport: Box<dyn Transport>,
     respawn: Option<Respawn>,
     waker: Option<crate::transport::Waker>,
@@ -150,7 +151,13 @@ fn direction(dx: i32, dy: i32) -> Option<&'static str> {
 
 impl EngineModel {
     pub fn new(transport: Box<dyn Transport>) -> Self {
+        Self::connect(transport, false)
+    }
+
+    /// Starts the session; `tiles` says the client draws tiles, so the engine sends tile ids too.
+    pub fn connect(transport: Box<dyn Transport>, tiles: bool) -> Self {
         let mut m = Self {
+            tiles,
             transport,
             respawn: None,
             waker: None,
@@ -190,10 +197,12 @@ impl EngineModel {
         m.call(
             "bn.hello",
             json!(
-                protocol::HelloParams::new("bn-client").with_viewport(protocol::Viewport {
-                    cols: VIEW.x as u32,
-                    rows: VIEW.y as u32,
-                })
+                protocol::HelloParams::new("bn-client")
+                    .with_viewport(protocol::Viewport {
+                        cols: VIEW.x as u32,
+                        rows: VIEW.y as u32,
+                    })
+                    .with_tiles(tiles)
             ),
             Pending::Hello,
         );
@@ -907,7 +916,7 @@ impl GameModel for EngineModel {
         };
         match respawn() {
             Ok(transport) => {
-                let mut fresh = EngineModel::new(transport)
+                let mut fresh = EngineModel::connect(transport, self.tiles)
                     .with_clock(self.clock.clone())
                     .with_colors(self.colors.clone())
                     .with_stall(self.stall);
@@ -1271,6 +1280,22 @@ impl GameModel for EngineModel {
                 .notes
                 .iter()
                 .map(|n| (at(&n.pos), n.text.clone()))
+                .collect(),
+            path: wire.path.iter().map(at).collect(),
+            tiles: wire
+                .tiles
+                .iter()
+                .flat_map(|t| {
+                    t.cells
+                        .iter()
+                        .flatten()
+                        .map(|(id, rotation, subtile)| OvermapTile {
+                            id: id.clone(),
+                            rotation: *rotation,
+                            subtile: subtile.clone(),
+                            fallbacks: t.looks_like.get(id).cloned().unwrap_or_default(),
+                        })
+                })
                 .collect(),
         })
     }

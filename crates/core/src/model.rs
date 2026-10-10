@@ -202,6 +202,17 @@ pub struct OvermapCell {
     pub bg: Option<Rgb>,
 }
 
+/// What the tiles view draws on an overmap square.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OvermapTile {
+    pub id: String,
+    pub rotation: u8,
+    /// The multitile key, empty for a plain tile.
+    pub subtile: String,
+    /// Tile ids to try when the tileset has no sprite for `id`, nearest first.
+    pub fallbacks: Vec<String>,
+}
+
 /// The overmap screen (`m`): the native window's cells and sidebar, with the cursor.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Overmap {
@@ -215,6 +226,10 @@ pub struct Overmap {
     pub player: (i32, i32, i32),
     pub legend: Vec<String>,
     pub notes: Vec<((i32, i32, i32), String)>,
+    /// The planned travel route, nearest square first.
+    pub path: Vec<(i32, i32, i32)>,
+    /// Row-major like `cells`; empty unless the client said it draws tiles.
+    pub tiles: Vec<OvermapTile>,
 }
 
 impl Overmap {
@@ -226,6 +241,16 @@ impl Overmap {
     /// The absolute overmap square drawn in view cell `(col, row)`.
     pub fn square(&self, col: i32, row: i32) -> (i32, i32, i32) {
         (self.origin.0 + col, self.origin.1 + row, self.origin.2)
+    }
+
+    /// The tile of view cell `(col, row)`, when the engine sent tile ids.
+    pub fn tile(&self, col: i32, row: i32) -> Option<&OvermapTile> {
+        let inside = (0..self.cols).contains(&col) && (0..self.rows).contains(&row);
+        self.tiles.get(
+            usize::try_from(row * self.cols + col)
+                .ok()
+                .filter(|_| inside)?,
+        )
     }
 
     /// The note on this square, if any.

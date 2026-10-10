@@ -574,11 +574,18 @@ impl<M: GameModel> App<M> {
             };
             format!("Overmap ({}, {}, {}).{here}{note}", at.0, at.1, at.2)
         };
-        let status_label = ui.label(status(om.cursor));
+        let route = match om.path.len() {
+            0 => String::new(),
+            n => format!(" Route of {n} squares; click the cursor to go."),
+        };
+        let status_label = ui.label(status(om.cursor) + &route);
         ui.ctx()
             .accesskit_node_builder(status_label.id, |b| b.set_live(accesskit::Live::Polite));
+        self.display.update(ui.ctx());
+        self.display.begin();
         let cell_px = self.display.cell(CELL);
         let font = egui::FontId::monospace(cell_px - 2.0);
+        let mut jump = None;
         ui.horizontal_top(|ui| {
             let (response, painter) = ui.allocate_painter(
                 egui::vec2(om.cols as f32 * cell_px, om.rows as f32 * cell_px),
@@ -601,7 +608,17 @@ impl<M: GameModel> App<M> {
                         response.rect.min + egui::vec2(col as f32, row as f32) * cell_px,
                         egui::Vec2::splat(cell_px),
                     );
-                    if let Some(bg) = cell.bg {
+                    // With a tileset the terrain is its sprite; what lies over it (the player, notes, hordes)
+                    // stays a glyph, so a square is drawn as the glyph alone when it differs from plain terrain.
+                    let sprite = om
+                        .tile(col, row)
+                        .is_some_and(|tile| self.display.paint_overmap(&painter, square, tile));
+                    let at = om.square(col, row);
+                    let overlay = at == om.player || om.note(at).is_some() || om.path.contains(&at);
+                    if sprite && !overlay {
+                        continue;
+                    }
+                    if let Some(bg) = cell.bg.filter(|_| !sprite) {
                         painter.rect_filled(square, 0.0, rgb(bg));
                     }
                     if !cell.glyph.trim().is_empty() {
@@ -614,6 +631,21 @@ impl<M: GameModel> App<M> {
                         );
                     }
                 }
+            }
+            for (i, step) in om.path.iter().enumerate() {
+                let alpha = if i + 1 == om.path.len() { 140 } else { 70 };
+                painter.rect_filled(
+                    egui::Rect::from_min_size(
+                        response.rect.min
+                            + egui::vec2(
+                                (step.0 - om.origin.0) as f32,
+                                (step.1 - om.origin.1) as f32,
+                            ) * cell_px,
+                        egui::Vec2::splat(cell_px),
+                    ),
+                    0.0,
+                    egui::Color32::from_rgba_unmultiplied(0, 200, 255, alpha),
+                );
             }
             let rect_of = |at: (i32, i32, i32)| {
                 egui::Rect::from_min_size(
@@ -664,9 +696,22 @@ impl<M: GameModel> App<M> {
                                 .wrap_mode(egui::TextWrapMode::Extend),
                         );
                     }
+                    if !om.notes.is_empty() {
+                        ui.separator();
+                        ui.heading("Notes");
+                    }
+                    for (at, text) in &om.notes {
+                        let link = ui.link(format!("({}, {}) {text}", at.0, at.1));
+                        if link.clicked() {
+                            jump = Some(*at);
+                        }
+                    }
                 });
             });
         });
+        if let Some(at) = jump {
+            self.model.overmap_cursor_to(at);
+        }
     }
 
     fn map(&mut self, ui: &mut egui::Ui) {

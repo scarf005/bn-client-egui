@@ -81,7 +81,7 @@ fn main() -> std::io::Result<()> {
         eprintln!("{e}");
         std::process::exit(1);
     });
-    let opened = open_engine(&engine, &cli.launch.profile).unwrap_or_else(|e| {
+    let opened = open_engine(&engine, &cli.launch.profile, false).unwrap_or_else(|e| {
         eprintln!("{e}");
         std::process::exit(1);
     });

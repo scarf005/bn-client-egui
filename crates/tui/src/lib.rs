@@ -30,6 +30,8 @@ pub struct TuiApp<M: GameModel> {
     map_cells: Rect,
     /// Where the overmap's cells were last drawn, and the overmap they show.
     overmap_cells: Rect,
+    /// Where the overmap's note list was last drawn, one note per row.
+    overmap_notes: Rect,
     overmap_shown: Option<Overmap>,
     /// View coordinates of the first drawn cell.
     map_first: Pos,
@@ -98,6 +100,7 @@ impl<M: GameModel> TuiApp<M> {
             destination: None,
             map_cells: Rect::default(),
             overmap_cells: Rect::default(),
+            overmap_notes: Rect::default(),
             overmap_shown: None,
             map_first: Pos { x: 0, y: 0 },
             actions_open: None,
@@ -390,6 +393,15 @@ impl<M: GameModel> TuiApp<M> {
 
     /// A click moves the overmap cursor to the square; a click on the cursor travels there.
     fn overmap_mouse(&mut self, om: &Overmap, ev: MouseEvent) {
+        let notes = self.overmap_notes;
+        let on_notes = (notes.x..notes.x + notes.width).contains(&ev.column)
+            && (notes.y..notes.y + notes.height).contains(&ev.row);
+        if ev.kind == MouseEventKind::Down(MouseButton::Left) && on_notes {
+            if let Some((at, _)) = om.notes.get(usize::from(ev.row - notes.y)) {
+                self.model.overmap_cursor_to(*at);
+            }
+            return;
+        }
         let area = self.overmap_cells;
         let inside = (area.x..area.x + area.width).contains(&ev.column)
             && (area.y..area.y + area.height).contains(&ev.row);
@@ -429,6 +441,9 @@ impl<M: GameModel> TuiApp<M> {
                 if let Some(bg) = cell.bg {
                     style = style.bg(color(bg));
                 }
+                if om.path.contains(&om.square(col, row)) {
+                    style = style.bg(Color::Cyan);
+                }
                 if (col, row) == cursor {
                     style = style.add_modifier(Modifier::REVERSED);
                 }
@@ -449,8 +464,28 @@ impl<M: GameModel> TuiApp<M> {
         if let Some(note) = om.note(om.cursor) {
             sidebar.push(Line::from(format!("Note: {note}")));
         }
+        if !om.path.is_empty() {
+            sidebar.push(Line::from(format!(
+                "Route of {} squares: click the cursor to go",
+                om.path.len()
+            )));
+        }
         sidebar.extend(om.legend.iter().map(|l| Line::from(l.clone())));
-        f.render_widget(Paragraph::new(sidebar), legend);
+        let listed = om.notes.len().min(usize::from(legend.height) / 3);
+        let [text, notes] =
+            Layout::vertical([Constraint::Min(0), Constraint::Length(listed as u16)]).areas(legend);
+        f.render_widget(Paragraph::new(sidebar), text);
+        // One row per note, nearest the foot of the sidebar; a click on a row moves the cursor to it.
+        self.overmap_notes = notes;
+        let rows = om.notes.iter().take(listed).map(|((x, y, _), note)| {
+            Line::styled(
+                format!("({x}, {y}) {note}"),
+                Style::new()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::UNDERLINED),
+            )
+        });
+        f.render_widget(Paragraph::new(rows.collect::<Vec<_>>()), notes);
     }
 
     pub fn draw(&mut self, f: &mut Frame) {

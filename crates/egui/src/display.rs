@@ -1,7 +1,7 @@
 //! How the map is drawn: the game's tileset sprites or ASCII glyphs, the player's choice kept between runs.
 
 use crate::tileset::{self, Placed, Query, Tileset, TilesetInfo, Turn};
-use bn_client_core::{Cell, Layer};
+use bn_client_core::{Cell, Layer, OvermapTile};
 use eframe::egui::{self, Color32, Mesh, Rect, Shape, TextureHandle, TextureId, TextureOptions};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -398,6 +398,41 @@ impl Display {
         self.hidden = 0;
     }
 
+    /// Draws an overmap square's tile into `rect`; false when no tileset is in use or it has no sprite
+    /// for the tile or any of its fallbacks.
+    pub fn paint_overmap(
+        &mut self,
+        painter: &egui::Painter,
+        rect: Rect,
+        tile: &OvermapTile,
+    ) -> bool {
+        let Some(atlas) = &mut self.atlas else {
+            return false;
+        };
+        atlas.request(Fx::Plain);
+        let scale = (
+            rect.width() / atlas.tileset.tile.0 as f32,
+            rect.height() / atlas.tileset.tile.1 as f32,
+        );
+        let query = Query {
+            id: &tile.id,
+            fallbacks: &tile.fallbacks,
+            subtile: (!tile.subtile.is_empty()).then_some(tile.subtile.as_str()),
+            rotation: tile.rotation,
+            mirrored: false,
+            creature: false,
+            seed: 0,
+            season: None,
+        };
+        let chosen = atlas.tileset.choose(&query);
+        let mut drawn = false;
+        for placed in chosen.iter().flat_map(|c| [c.bg, c.fg]).flatten() {
+            drawn |= draw_sprite(painter, atlas, rect, scale, placed, Fx::Plain);
+        }
+        self.drawn += usize::from(drawn);
+        drawn
+    }
+
     /// Draws a cell's layers into `rect`, bottom first, the way the game's tile view does: sprites where
     /// the tileset has them and the glyph of the thing where it has none. A square nothing is known about is only the hidden
     /// backdrop; false when even that has no sprite.
@@ -491,6 +526,16 @@ fn glyph(painter: &egui::Painter, rect: Rect, layer: &Layer, tint: Color32) {
         egui::FontId::monospace(rect.height() - 2.0),
         Color32::from_rgb(c.0, c.1, c.2).gamma_multiply(f32::from(tint.r()) / 255.0),
     );
+}
+
+/// Whether the game at `root` would be shown with sprites: sprites are chosen in the saved settings
+/// at `path` (on by default) and the game has a tileset.
+pub fn tiles_wanted(root: Option<&Path>, path: Option<&Path>) -> bool {
+    let settings = path
+        .and_then(|p| std::fs::read(p).ok())
+        .and_then(|b| serde_json::from_slice::<Settings>(&b).ok())
+        .unwrap_or_default();
+    settings.tiles && root.is_some_and(|r| !tileset::available(r).is_empty())
 }
 
 /// One sprite at its place in the cell, turned as the tileset asks; false when its sheet is not loaded.

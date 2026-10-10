@@ -895,3 +895,38 @@ fn a_composed_screen_shows_its_text_and_its_actions_take_the_keys() {
     app.handle_key(key(KeyCode::Tab));
     assert_eq!(sent_actions(&h), [json!("NEXT_TAB")]);
 }
+
+mod overmap_route {
+    use super::*;
+
+    #[test]
+    fn the_route_and_the_notes_are_shown_and_a_note_row_moves_the_cursor() {
+        let (mut app, h) = engine();
+        h.push(common::overmap_event(100));
+        app.model.poll();
+        let screen = text(&render(&mut app));
+        assert!(screen.contains("Route of 2 squares"), "{screen}");
+        assert!(screen.contains("(99, 200) cache"), "{screen}");
+        // The note list sits at the foot of the sidebar; its one row is the note.
+        let row = screen
+            .lines()
+            .position(|l| l.contains("(99, 200) cache"))
+            .unwrap() as u16;
+        let col = screen
+            .lines()
+            .nth(row as usize)
+            .unwrap()
+            .find("(99, 200)")
+            .unwrap() as u16;
+        app.handle_mouse(MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: col,
+            row,
+            modifiers: KeyModifiers::NONE,
+        });
+        assert_eq!(
+            submits(&h).last().unwrap()["params"]["operation"],
+            json!({"kind":"set_target","pos":{"dim":"","x":99,"y":200,"z":0}})
+        );
+    }
+}
