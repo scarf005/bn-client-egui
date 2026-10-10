@@ -1,6 +1,7 @@
 //! Terminal client over the same `GameModel` as the egui client.
 
 mod crafting;
+mod settings;
 
 use bn_client_core::{ActionEntry, GameModel, Loading, Menu, Pos, Rgb};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
@@ -35,6 +36,8 @@ pub struct TuiApp<M: GameModel> {
     log_back: usize,
     /// The crafting search or batch count being typed.
     input: Option<crafting::Input>,
+    /// A settings value being typed.
+    edit: Option<settings::Edit>,
 }
 
 fn color(c: Rgb) -> Color {
@@ -85,6 +88,7 @@ impl<M: GameModel> TuiApp<M> {
             actions_open: None,
             log_back: 0,
             input: None,
+            edit: None,
         }
     }
 
@@ -106,6 +110,10 @@ impl<M: GameModel> TuiApp<M> {
             (m.title.clone(), m.entries().len(), tab)
         });
         if sig != self.menu_sig {
+            // Typing a filter changes the rows but not the screen.
+            if sig.as_ref().map(|s| &s.0) != self.menu_sig.as_ref().map(|s| &s.0) {
+                self.edit = None;
+            }
             self.selected = 0;
             self.menu_sig = sig;
         }
@@ -157,14 +165,15 @@ impl<M: GameModel> TuiApp<M> {
                 return;
             }
         }
+        if let Some(row) = self.actions_open {
+            return self.actions_key(row, key.code);
+        }
         if let Some(menu) = self.menu() {
             return match menu.context.as_str() {
                 "CRAFTING" => self.crafting_key(&menu, key),
+                _ if self.settings_key(&menu, key) => {}
                 _ => self.menu_key(&menu, key.code),
             };
-        }
-        if let Some(row) = self.actions_open {
-            return self.actions_key(row, key.code);
         }
         if self.cursor.is_some() {
             return self.look_key(key);
@@ -370,7 +379,8 @@ impl<M: GameModel> TuiApp<M> {
                 "CRAFTING" => self.draw_crafting(f, &menu),
                 _ => self.draw_menu(f, &menu),
             }
-        } else if let Some(row) = self.actions_open {
+        }
+        if let Some(row) = self.actions_open {
             self.draw_action_list(f, row);
         }
     }
@@ -547,7 +557,8 @@ impl<M: GameModel> TuiApp<M> {
         let rows = menu
             .entries()
             .iter()
-            .map(|c| {
+            .enumerate()
+            .map(|(i, c)| {
                 let denial = match c.enabled || c.denial.is_empty() {
                     true => String::new(),
                     false => format!(" ({})", c.denial),
@@ -556,7 +567,12 @@ impl<M: GameModel> TuiApp<M> {
                     true => Style::new(),
                     false => Style::new().fg(Color::DarkGray),
                 };
-                (format!("{}{denial}", c.label), style)
+                let value = match (&c.editor, &self.edit) {
+                    (Some(_), Some(edit)) if i == self.selected => format!(": {}", edit.shown()),
+                    (Some(e), _) => format!(": {}", settings::shown_value(e)),
+                    _ => String::new(),
+                };
+                (format!("{}{value}{denial}", c.label), style)
             })
             .collect::<Vec<_>>();
         let tabs = menu
@@ -566,7 +582,12 @@ impl<M: GameModel> TuiApp<M> {
             .collect::<Vec<_>>();
         let popup = Popup {
             title: &menu.title,
-            header: menu.message.lines().map(str::to_string).collect(),
+            header: menu
+                .message
+                .lines()
+                .map(str::to_string)
+                .chain(self.settings_hint(menu))
+                .collect(),
             tabs,
             rows,
             selected: self.selected,
