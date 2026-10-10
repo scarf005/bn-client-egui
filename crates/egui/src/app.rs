@@ -512,12 +512,20 @@ impl<M: GameModel> App<M> {
                 });
                 // The entry under the pointer explains itself, else the engine's selected one.
                 let mut described = None;
-                egui::ScrollArea::vertical()
-                    .max_height(ctx.content_rect().height() * 0.6)
+                // A composed screen is as wide as the engine's terminal: it scrolls sideways too.
+                let area = if menu.screen {
+                    egui::ScrollArea::both()
+                } else {
+                    egui::ScrollArea::vertical()
+                };
+                area.max_height(ctx.content_rect().height() * 0.6)
                     .show(ui, |ui| {
                         if menu.screen {
                             // A composed screen: columns line up only in a fixed-width font.
-                            ui.label(egui::RichText::new(&menu.message).monospace());
+                            ui.add(
+                                egui::Label::new(egui::RichText::new(&menu.message).monospace())
+                                    .wrap_mode(egui::TextWrapMode::Extend),
+                            );
                         } else if !menu.message.is_empty() {
                             ui.label(self.rich(ui, &menu.message));
                         }
