@@ -419,3 +419,55 @@ fn tab_in_a_palette_opened_over_a_menu_stays_in_the_palette() {
         );
     }
 }
+
+mod overmap {
+    use super::*;
+    use serde_json::Value;
+
+    fn open<'a>() -> (H<'a>, ScriptHandle) {
+        let (mut h, script) = harness();
+        h.run_steps(3);
+        let mut ev: Value = common::overmap_event(100);
+        ev["params"]["events"][0]["changes"]["interaction"]["interaction"]["overmap"]["legend"] =
+            json!([
+                "│",
+                "│# lake on the northwest",
+                "│  outskirts of Bristol",
+                "│",
+                "│Use movement keys to pan."
+            ]);
+        script.push(ev);
+        h.run_steps(3);
+        (h, script)
+    }
+
+    #[test]
+    fn the_cursor_status_reads_the_squares_description_and_the_view_lists_the_notes() {
+        let (h, _script) = open();
+        let said = "Overmap (100, 200, 0). lake on the northwest outskirts of Bristol.";
+        let live = announced(&h);
+        assert!(live.iter().any(|v| v == said), "{live:?}");
+        let view = h.get_by_label("Overmap view").accesskit_node();
+        let described = view.description().unwrap_or_default();
+        assert!(described.starts_with(said), "{described}");
+        assert!(
+            described.contains("Notes: (99, 200, 0) cache."),
+            "{described}"
+        );
+    }
+
+    #[test]
+    fn the_sidebar_frame_is_not_read_and_blank_rows_are_hidden() {
+        let (h, _script) = open();
+        let rows: Vec<_> = h
+            .root()
+            .children_recursive()
+            .filter(|n| n.accesskit_node().role() == accesskit::Role::Label)
+            .filter(|n| !n.accesskit_node().is_hidden())
+            .filter_map(|n| n.accesskit_node().value())
+            .filter(|v| v.contains('│') || v.trim().is_empty())
+            .collect();
+        assert!(rows.is_empty(), "frame or blank rows read aloud: {rows:?}");
+        h.get_by_label("Use movement keys to pan.");
+    }
+}

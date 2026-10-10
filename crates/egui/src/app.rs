@@ -575,7 +575,12 @@ impl<M: GameModel> App<M> {
             } else {
                 ""
             };
-            format!("Overmap ({}, {}, {}).{here}{note}", at.0, at.1, at.2)
+            // The sidebar describes the square under the cursor, and only that one.
+            let what = om
+                .here()
+                .filter(|_| at == om.cursor)
+                .map_or_else(String::new, |t| format!(" {t}."));
+            format!("Overmap ({}, {}, {}).{here}{what}{note}", at.0, at.1, at.2)
         };
         let status_label = ui.label(status(om.cursor));
         ui.ctx()
@@ -592,7 +597,13 @@ impl<M: GameModel> App<M> {
             });
             ui.ctx().accesskit_node_builder(response.id, |b| {
                 b.set_role(accesskit::Role::Canvas);
-                b.set_description(status(om.cursor));
+                b.set_description(
+                    [Some(status(om.cursor)), om.notes_text()]
+                        .into_iter()
+                        .flatten()
+                        .collect::<Vec<_>>()
+                        .join(" "),
+                );
             });
             painter.rect_filled(response.rect, 0.0, egui::Color32::BLACK);
             for row in 0..om.rows {
@@ -662,10 +673,16 @@ impl<M: GameModel> App<M> {
             egui::ScrollArea::vertical().show(ui, |ui| {
                 ui.vertical(|ui| {
                     for line in &om.legend {
-                        ui.add(
+                        let label = ui.add(
                             egui::Label::new(egui::RichText::new(line).monospace())
                                 .wrap_mode(egui::TextWrapMode::Extend),
                         );
+                        // The window frame and blank rows are layout, not text to read.
+                        let text = line.trim_start_matches(['│', '|']).trim();
+                        ui.ctx().accesskit_node_builder(label.id, |b| match text {
+                            "" => b.set_hidden(),
+                            _ => b.set_value(text),
+                        });
                     }
                 });
             });

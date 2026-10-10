@@ -228,6 +228,38 @@ impl Overmap {
         (self.origin.0 + col, self.origin.1 + row, self.origin.2)
     }
 
+    /// The cursor square as the native sidebar describes it: its first paragraph, without the window
+    /// frame and the leading glyph of the square.
+    pub fn here(&self) -> Option<String> {
+        let lines = self
+            .legend
+            .iter()
+            .map(|l| l.trim_start_matches(['│', '|']).trim())
+            .skip_while(|l| l.is_empty())
+            .take_while(|l| !l.is_empty())
+            .collect::<Vec<_>>()
+            .join(" ");
+        let text = match lines.split_once(' ') {
+            Some((glyph, rest))
+                if glyph.chars().count() == 1 && !glyph.chars().all(char::is_alphanumeric) =>
+            {
+                rest
+            }
+            _ => &lines,
+        };
+        (!text.is_empty()).then(|| text.to_string())
+    }
+
+    /// Every note in view, for a reader that cannot see the markers.
+    pub fn notes_text(&self) -> Option<String> {
+        let notes = self
+            .notes
+            .iter()
+            .map(|(p, t)| format!("({}, {}, {}) {t}", p.0, p.1, p.2))
+            .collect::<Vec<_>>();
+        (!notes.is_empty()).then(|| format!("Notes: {}.", notes.join("; ")))
+    }
+
     /// The note on this square, if any.
     pub fn note(&self, at: (i32, i32, i32)) -> Option<&str> {
         self.notes
