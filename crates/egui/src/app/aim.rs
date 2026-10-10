@@ -6,24 +6,38 @@ use bn_client_core::{GameModel, Menu, MenuChoice, MenuPane};
 use eframe::egui::{self, accesskit};
 use std::collections::VecDeque;
 
-/// The native area actions and the names of the areas they point a pane at.
-const AREAS: [(&str, &str); 16] = [
-    ("ITEMS_NW", "North West"),
-    ("ITEMS_N", "North"),
-    ("ITEMS_NE", "North East"),
-    ("ITEMS_W", "West"),
-    ("ITEMS_CE", "Directly below you"),
-    ("ITEMS_E", "East"),
-    ("ITEMS_SW", "South West"),
-    ("ITEMS_S", "South"),
-    ("ITEMS_SE", "South East"),
-    ("ITEMS_UP", "Above"),
-    ("ITEMS_DOWN", "Below"),
-    ("ITEMS_INVENTORY", "Inventory"),
-    ("ITEMS_WORN", "Worn Items"),
-    ("ITEMS_AROUND", "Surrounding area"),
-    ("ITEMS_CONTAINER", "Container"),
-    ("ITEMS_DRAGGED_CONTAINER", "Grabbed Vehicle"),
+type Cell = Option<(&'static str, &'static str, &'static str)>;
+
+/// The native area picker as the game lays it out: Container and Grabbed Vehicle over Surrounding area
+/// and Worn Items beside the compass, Inventory level with the middle row, Above and Below at the right edge.
+const GRID: [[Cell; 7]; 3] = [
+    [
+        Some(("ITEMS_CONTAINER", "Container", "C")),
+        Some(("ITEMS_DRAGGED_CONTAINER", "Grabbed Vehicle", "D")),
+        None,
+        Some(("ITEMS_NW", "North West", "7")),
+        Some(("ITEMS_N", "North", "8")),
+        Some(("ITEMS_NE", "North East", "9")),
+        Some(("ITEMS_UP", "Above", "<")),
+    ],
+    [
+        None,
+        Some(("ITEMS_INVENTORY", "Inventory", "I")),
+        None,
+        Some(("ITEMS_W", "West", "4")),
+        Some(("ITEMS_CE", "Directly below you", "5")),
+        Some(("ITEMS_E", "East", "6")),
+        Some(("ITEMS_DOWN", "Below", ">")),
+    ],
+    [
+        Some(("ITEMS_AROUND", "Surrounding area", "A")),
+        Some(("ITEMS_WORN", "Worn Items", "W")),
+        None,
+        Some(("ITEMS_SW", "South West", "1")),
+        Some(("ITEMS_S", "South", "2")),
+        Some(("ITEMS_SE", "South East", "3")),
+        None,
+    ],
 ];
 
 /// Height of the item description under the panes.
@@ -240,29 +254,50 @@ impl<M: GameModel> App<M> {
         let zone = ui.dnd_drop_zone::<Dragged, _>(egui::Frame::group(ui.style()), |ui| {
             ui.set_min_width(ui.available_width());
             ui.heading(format!("{name}: {}", pane.area));
-            ui.horizontal_wrapped(|ui| {
-                let mut areas = AREAS
-                    .iter()
-                    .filter(|(a, _)| has(a))
-                    .map(|(a, n)| (*a, *n, pane.area == *n))
-                    .collect::<Vec<_>>();
-                if has("TOGGLE_VEH") {
-                    areas.push(("TOGGLE_VEH", "Vehicle", false));
-                }
-                for (action, area, on) in areas {
-                    let b =
-                        ui.add_enabled(!self.model.busy(), egui::Button::new(area).selected(on));
-                    a11y::tab(ui.ctx(), b.id, on);
-                    ui.ctx().accesskit_node_builder(b.id, |n| {
-                        n.set_label(format!("{name} area {area}"));
-                    });
-                    out.ids.extend(b.enabled().then_some(b.id));
-                    if b.clicked() {
-                        out.todo.push(Step::Action(side(index).into()));
-                        out.todo.push(Step::Action(action.into()));
+            // The native grid: marker columns, the compass with Above and Below, as drawn by the game.
+            egui::Grid::new(("aim_areas", index))
+                .spacing([4.0, 2.0])
+                .show(ui, |ui| {
+                    for row in GRID {
+                        for cell in row {
+                            let Some((action, area, mark)) = cell else {
+                                ui.label("");
+                                continue;
+                            };
+                            let on = pane.area == area;
+                            let b = ui
+                                .add_enabled(
+                                    has(action) && !self.model.busy(),
+                                    egui::Button::new(mark)
+                                        .selected(on)
+                                        .min_size(egui::vec2(24.0, 0.0)),
+                                )
+                                .on_hover_text(area);
+                            a11y::tab(ui.ctx(), b.id, on);
+                            ui.ctx().accesskit_node_builder(b.id, |n| {
+                                n.set_label(format!("{name} area {area}"));
+                            });
+                            out.ids.extend(b.enabled().then_some(b.id));
+                            if b.clicked() {
+                                out.todo.push(Step::Action(side(index).into()));
+                                out.todo.push(Step::Action(action.into()));
+                            }
+                        }
+                        ui.end_row();
                     }
+                });
+            if has("TOGGLE_VEH") {
+                let b = ui.add_enabled(!self.model.busy(), egui::Button::new("V"));
+                b.clone().on_hover_text("Vehicle storage");
+                ui.ctx().accesskit_node_builder(b.id, |n| {
+                    n.set_label(format!("{name} area vehicle storage"));
+                });
+                out.ids.extend(b.enabled().then_some(b.id));
+                if b.clicked() {
+                    out.todo.push(Step::Action(side(index).into()));
+                    out.todo.push(Step::Action("TOGGLE_VEH".into()));
                 }
-            });
+            }
             // The filter box follows what the engine reports until the player types in it.
             let (typed, seen) = &mut self.aim.filters[index];
             if *seen != pane.filter {
