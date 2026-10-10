@@ -504,8 +504,8 @@ fn live_engine_long_wait_is_never_reported_as_stalled() {
     assert!(model.invoke_action("wait"));
     wait_for(&mut model, "the wait menu", |m| m.menu().is_some());
     wait_for(&mut model, "the command to finish", |m| !m.busy());
-    // An unloaded engine plays six hours in about a second, so ask for a month: the wait has to
-    // outlast the stall limit whatever the machine.
+    // An unloaded engine plays six hours in about a second, so ask for 200 days, the most the engine's
+    // int move count holds: the wait has to outlast the stall limit whatever the machine.
     let id = model
         .menu()
         .unwrap()
@@ -523,7 +523,7 @@ fn live_engine_long_wait_is_never_reported_as_stalled() {
     let field = model.menu().unwrap().field.unwrap().id;
     // A stall limit far below the wait: only the heartbeats keep the model from reporting one.
     model.set_stall(Duration::from_secs(5));
-    model.fill(&field, "30d", true);
+    model.fill(&field, "200d", true);
     assert!(model.busy());
     let started = std::time::Instant::now();
     while started.elapsed() < Duration::from_secs(20) && model.busy() {
