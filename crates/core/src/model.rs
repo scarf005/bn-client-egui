@@ -84,10 +84,13 @@ pub enum Shape {
         shrapnel: bool,
         tile: String,
     },
-    /// Floating text rising from `at`, in colored segments.
+    /// Floating text at `at`, in colored segments, moving by `scroll` each animation step as the
+    /// native text does; `hp` marks a creature's hit-point readout, which stays beside it.
     Text {
         at: Pos,
         segments: Vec<(String, Rgb)>,
+        scroll: Pos,
+        hp: bool,
     },
 }
 
