@@ -189,6 +189,9 @@ impl<M: GameModel> App<M> {
                                     if !choice.enabled && !choice.denial.is_empty() {
                                         b.set_description(markup::plain(&choice.denial));
                                     }
+                                    if choice.id == "acknowledge" {
+                                        b.set_description("Space or Enter closes this popup");
+                                    }
                                 });
                                 if choice.id != "acknowledge"
                                     && (button.hovered()
