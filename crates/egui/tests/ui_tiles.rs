@@ -332,3 +332,18 @@ fn dark_and_bright_only_squares_draw_the_lowlight_overlay_instead_of_their_terra
         );
     }
 }
+
+#[test]
+fn starting_up_and_following_the_engine_write_no_settings_but_a_click_does() {
+    let root = game_root("ui-no-write");
+    let settings = root.join("quiet/settings.json");
+    let mut h = harness_with(&root, settings.clone(), session_with_display(false));
+    h.run_steps(6);
+    assert!(
+        !settings.exists(),
+        "the engine's option is followed, not saved"
+    );
+    h.get_by_label("Tiles").click();
+    h.run_steps(3);
+    assert!(settings.exists(), "the player's click is saved");
+}
