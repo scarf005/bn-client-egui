@@ -219,3 +219,11 @@ fn the_message_log_keeps_two_fifths_of_the_sidebar_height_when_the_status_is_tal
     let log = h.get_by_label("Message log").rect();
     assert!(800.0 - log.min.y >= 800.0 * 0.35, "{log:?}");
 }
+
+#[test]
+fn the_resizable_log_keeps_its_default_share_instead_of_shrinking_to_its_content() {
+    let (mut h, _script) = harness(egui::vec2(1100.0, 800.0));
+    h.run_steps(10);
+    let log = h.get_by_label("Message log").rect();
+    assert!(800.0 - log.min.y >= 800.0 * 0.35, "{log:?}");
+}

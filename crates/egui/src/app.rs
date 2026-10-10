@@ -300,7 +300,10 @@ impl<M: GameModel> App<M> {
                 (ui.available_width() * SIDEBAR_SHARE).clamp(SIDEBAR_WIDTH.0, SIDEBAR_WIDTH.1),
             )
             .size_range(SIDEBAR_WIDTH.0..=SIDEBAR_WIDTH.1)
-            .show(ui, |ui| self.sidebar_panel(ui));
+            .show(ui, |ui| {
+                ui.set_min_width(ui.available_width());
+                self.sidebar_panel(ui)
+            });
         label_resize_handle(ui.ctx(), "sidebar", "Resize sidebar");
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE.fill(egui::Color32::BLACK))

@@ -25,9 +25,15 @@ impl<M: GameModel> App<M> {
     /// The whole sidebar: the message log pinned to its bottom, `sidebar` filling the rest.
     pub(super) fn sidebar_panel(&mut self, ui: &mut egui::Ui) {
         egui::Panel::bottom("log")
-            .resizable(false)
-            .exact_size(ui.available_height() * LOG_SHARE)
-            .show(ui, |ui| self.log(ui));
+            .default_size(ui.available_height() * LOG_SHARE)
+            .size_range(ui.available_height() * 0.1..=ui.available_height() * 0.8)
+            .show(ui, |ui| {
+                // A panel is stored at its content's size, so the content must fill it, or the
+                // panel shrinks to its minimum on the first frame.
+                ui.set_min_height(ui.available_height());
+                self.log(ui)
+            });
+        super::label_resize_handle(ui.ctx(), "log", "Resize message log");
         egui::CentralPanel::no_frame().show(ui, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| self.sidebar(ui));
         });
