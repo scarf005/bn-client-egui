@@ -128,16 +128,6 @@ impl StdioTransport {
             let (user, config) = (dir.join("user"), dir.join("config"));
             std::fs::create_dir_all(&user)?;
             std::fs::create_dir_all(&config)?;
-            // The software GPU path of the engine's lighting fails now and then under load and raises
-            // a debug pop-up mid-test; the CPU path computes the same result.
-            std::fs::write(
-                config.join("options.json"),
-                r#"[{"name":"COMPUTE_ACCELERATION","value":"cpu"}]"#,
-            )?;
-            std::fs::write(
-                config.join("preload.json"),
-                r#"{"compute_acceleration":"cpu"}"#,
-            )?;
             (Some(dir), Some(user), Some(config))
         } else {
             (None, profile.userdir.clone(), profile.configdir.clone())
