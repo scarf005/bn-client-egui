@@ -94,15 +94,32 @@ pub fn live_region(ui: &mut egui::Ui, text: &str) {
 /// last frame, joined in order, so a burst is read whole and history is never re-read.
 #[derive(Default)]
 pub struct Announcer {
+    changed: bool,
+    sep: &'static str,
     seen: Option<usize>,
     last: String,
     text: String,
 }
 
 impl Announcer {
+    /// Joins a burst with `sep`.
+    pub fn new(sep: &'static str) -> Self {
+        Self {
+            sep,
+            ..Self::default()
+        }
+    }
+
+    /// Whether the last `update` found new lines.
+    pub fn changed(&self) -> bool {
+        self.changed
+    }
+
     pub fn update(&mut self, lines: &[String]) -> &str {
+        self.changed = true;
         let Some(last) = lines.last() else {
             self.seen = Some(0);
+            self.changed = false;
             return &self.text;
         };
         let first = match self.seen {
@@ -111,9 +128,12 @@ impl Announcer {
             // A repeat counter changed the newest line in place.
             Some(seen) if seen == lines.len() && *last != self.last => seen - 1,
             Some(seen) if seen > lines.len() => 0,
-            Some(_) => return &self.text,
+            Some(_) => {
+                self.changed = false;
+                return &self.text;
+            }
         };
-        self.text = lines[first..].join(" ");
+        self.text = lines[first..].join(self.sep);
         self.seen = Some(lines.len());
         self.last.clone_from(last);
         &self.text

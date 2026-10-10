@@ -172,6 +172,16 @@ pub struct CommandStatus {
     pub stage: String,
     /// The command reached a terminal stage.
     pub finished: bool,
+    /// Every stage the command went through, oldest first, so ones that pass within a frame are kept.
+    pub history: Vec<String>,
+}
+
+impl CommandStatus {
+    pub fn set_stage(&mut self, stage: String, finished: bool) {
+        self.history.push(stage.clone());
+        self.stage = stage;
+        self.finished = finished;
+    }
 }
 
 /// Engine loading screen: a title, the steps seen so far and the one in progress.

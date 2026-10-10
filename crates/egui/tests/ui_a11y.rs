@@ -12,6 +12,7 @@ type H<'a> = Harness<'a, App<EngineModel>>;
 
 fn harness<'a>() -> (H<'a>, ScriptHandle) {
     let (t, h) = session();
+    let t = t.on("bn.command.submit", vec![fixture("submit_result")]);
     let model = EngineModel::new(Box::new(t));
     let harness = Harness::builder()
         .with_size(egui::vec2(1100.0, 800.0))
@@ -314,5 +315,23 @@ fn a_live_announcement_is_not_drawn_as_a_second_copy_of_the_message() {
     assert!(
         live.clone().count() == 1 && live.clone().all(|(_, drawn)| !drawn),
         "the announcement exists for screen readers and paints nothing: {nodes:?}"
+    );
+}
+
+#[test]
+fn stages_reached_within_one_frame_are_announced_together() {
+    let (mut h, script) = harness();
+    open_menu(&mut h, &script);
+    h.get_by_label("combat knife").click();
+    h.run_steps(2);
+    for stage in ["executing", "completed"] {
+        script.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{
+            "epoch":"e7f3","command_id":"c:5","stage":stage}}));
+    }
+    h.run_steps(1);
+    let live = announced(&h);
+    assert!(
+        live.iter().any(|v| v == "combat knife: executing, done"),
+        "{live:?}"
     );
 }

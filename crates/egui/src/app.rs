@@ -76,6 +76,7 @@ pub struct App<M: GameModel> {
     /// What the two message lists announce, so a burst in one frame is read whole.
     native_live: a11y::Announcer,
     command_live: a11y::Announcer,
+    status_live: a11y::Announcer,
     /// The enabled controls of the open menu, in Tab order, as of the last frame.
     menu_ids: Vec<egui::Id>,
     /// Where the engine's cursor was in the open menu, so keyboard focus can follow it.
@@ -117,8 +118,9 @@ impl<M: GameModel> App<M> {
             cursor_placed: false,
             menu_ids: Vec::new(),
             menu_focus: None,
-            native_live: a11y::Announcer::default(),
-            command_live: a11y::Announcer::default(),
+            native_live: a11y::Announcer::new(" "),
+            command_live: a11y::Announcer::new(" "),
+            status_live: a11y::Announcer::new(", "),
             crafting: Default::default(),
             pickup: Default::default(),
             queued: None,
@@ -445,6 +447,13 @@ impl<M: GameModel> App<M> {
             .command()
             .filter(|s| !(s.finished && s.stage == "done"))
             .map_or_else(|| "Ready".into(), |s| format!("{}: {}", s.label, s.stage));
+        // Every stage reached since the last frame is said, even one that is not shown afterwards.
+        let news = self
+            .model
+            .command()
+            .map(|s| (s.label, self.status_live.update(&s.history).to_owned()))
+            .filter(|_| self.status_live.changed());
+        let text = news.map_or(text, |(label, stages)| format!("{label}: {stages}"));
         ui.horizontal(|ui| {
             let label = ui.label(text);
             ui.ctx()
