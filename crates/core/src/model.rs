@@ -53,6 +53,34 @@ pub struct Cell {
     pub square: u32,
 }
 
+/// One short animation the native game would play on the map, in view coordinates.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Effect {
+    pub shape: Shape,
+    /// How long the native animation holds it.
+    pub duration_ms: u64,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Shape {
+    /// A shot flying along `path`; a tiles client looks `sprite` up first.
+    Projectile {
+        path: Vec<Pos>,
+        glyph: char,
+        sprite: Option<String>,
+        color: Rgb,
+    },
+    /// An explosion starting at `at` and reaching `radius` squares.
+    Burst { at: Pos, radius: u32, color: Rgb },
+    /// One ring of squares an explosion shaped by terrain fills.
+    Blast { cells: Vec<Pos> },
+    /// Floating text rising from `at`, in colored segments.
+    Text {
+        at: Pos,
+        segments: Vec<(String, Rgb)>,
+    },
+}
+
 /// One line of the game's own message log. A repeat of the newest line keeps its `id` and raises
 /// `count`; the client shows it as "text x2" in place of the earlier line.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -292,6 +320,10 @@ pub trait GameModel {
         &[]
     }
     fn say(&mut self, text: String);
+    /// The map animations produced since the last call; models without a game have none.
+    fn take_effects(&mut self) -> Vec<Effect> {
+        vec![]
+    }
 }
 
 pub struct FakeModel {

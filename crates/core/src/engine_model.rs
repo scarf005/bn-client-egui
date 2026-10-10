@@ -5,8 +5,8 @@ use crate::colors::ColorMap;
 use crate::keys;
 use crate::markup::{self, Run};
 use crate::model::{
-    ActionEntry, Cell, CommandStatus, Failure, FailureKind, GameModel, Layer, Loading, LogLine,
-    Menu, MenuChoice, MenuField, Pos, Rgb,
+    ActionEntry, Cell, CommandStatus, Effect, Failure, FailureKind, GameModel, Layer, Loading,
+    LogLine, Menu, MenuChoice, MenuField, Pos, Rgb, Shape,
 };
 use crate::protocol::{
     self, Cell as WorldCell, Entity, Expect, Incoming, Known, LoadingNotice, Look, Operation,
@@ -147,6 +147,63 @@ fn direction(dx: i32, dy: i32) -> Option<&'static str> {
 }
 
 impl EngineModel {
+    /// A published square in view coordinates; none on another level than the avatar's.
+    fn view_of(&self, square: &Value) -> Option<Pos> {
+        let (ox, oy) = self.origin?;
+        let at = |k: &str| square[k].as_i64().map(|v| v as i32);
+        (at("z")? == self.avatar_pos()?.z).then(|| Pos {
+            x: at("x").unwrap_or_default() - ox,
+            y: at("y").unwrap_or_default() - oy,
+        })
+    }
+
+    fn effect_of(&self, fact: &crate::replica::Fact) -> Option<Effect> {
+        let d = &fact.data;
+        let squares = |key: &str| -> Vec<Pos> {
+            d[key]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|s| self.view_of(s))
+                .collect()
+        };
+        let color = |name: &Value| self.colors.resolve(name.as_str().unwrap_or("white")).0;
+        let shape = match fact.kind.as_str() {
+            "projectile.moved" => Shape::Projectile {
+                path: squares("path"),
+                glyph: d["look"]["glyph"].as_str()?.chars().next().unwrap_or('*'),
+                sprite: d["look"]["id"].as_str().map(str::to_string),
+                color: color(&d["look"]["color"]),
+            },
+            "explosion.started" => Shape::Burst {
+                at: self.view_of(&d["at"])?,
+                radius: d["radius"].as_u64().unwrap_or(0) as u32,
+                color: color(&d["color"]),
+            },
+            "explosion.blast" => Shape::Blast {
+                cells: squares("cells"),
+            },
+            "combat_text.shown" => Shape::Text {
+                at: self.view_of(&d["at"])?,
+                segments: d["segments"]
+                    .as_array()?
+                    .iter()
+                    .map(|s| {
+                        (
+                            s["text"].as_str().unwrap_or_default().to_string(),
+                            color(&s["color"]),
+                        )
+                    })
+                    .collect(),
+            },
+            _ => return None,
+        };
+        Some(Effect {
+            shape,
+            duration_ms: fact.duration_ms,
+        })
+    }
+
     pub fn new(transport: Box<dyn Transport>) -> Self {
         let mut m = Self {
             transport,
@@ -1024,6 +1081,11 @@ impl GameModel for EngineModel {
 
     fn say(&mut self, text: String) {
         self.messages.push(text);
+    }
+
+    fn take_effects(&mut self) -> Vec<Effect> {
+        let facts = self.replica.take_facts();
+        facts.iter().filter_map(|f| self.effect_of(f)).collect()
     }
 
     fn loading(&self) -> Option<Loading> {
