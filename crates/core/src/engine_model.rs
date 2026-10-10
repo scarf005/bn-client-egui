@@ -375,10 +375,10 @@ impl EngineModel {
         self
     }
 
-    /// Engine messages received plus CPU ticks the engine has used; live tests use it to tell progress
-    /// from a stall, since a loading engine is silent but busy.
+    /// How many engine messages have arrived so far; live tests fail after 120 s without one, however
+    /// busy the engine is: loading steps and activities send heartbeats.
     pub fn received(&self) -> u64 {
-        self.received + self.transport.engine_cpu_ticks()
+        self.received
     }
 
     /// Timestamped protocol milestones (`submit`, `received`, stage names, `events`) since the last call.
