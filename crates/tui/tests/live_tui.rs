@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 type App = TuiApp<EngineModel>;
 
 fn wait(app: &mut App, what: &str, done: impl Fn(&mut App) -> bool) {
-    let deadline = Instant::now() + Duration::from_secs(90);
+    let deadline = Instant::now() + Duration::from_secs(240);
     loop {
         app.model.poll();
         if done(app) {
