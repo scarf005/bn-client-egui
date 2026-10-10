@@ -185,7 +185,8 @@ impl Replica {
     }
 
     fn insert_cells(&mut self, cells: Vec<Cell>) {
-        for c in cells {
+        for mut c in cells {
+            c.complete();
             self.cells
                 .entry(c.at.dim.clone())
                 .or_default()
@@ -232,7 +233,15 @@ impl Replica {
         if let Some(route) = c.route {
             self.route = route;
         }
-        self.boundary = c.interaction.or(self.boundary.take());
+        if let Some(next) = c.interaction {
+            let kept = self.boundary.take().map(|b| b.actions).unwrap_or_default();
+            self.boundary = Some(Boundary {
+                boundary_id: next.boundary_id,
+                readiness: next.readiness,
+                actions: next.actions.unwrap_or(kept),
+                interaction: next.interaction,
+            });
+        }
     }
 
     pub fn ready(&self) -> bool {
