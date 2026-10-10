@@ -1139,6 +1139,7 @@
             "revision": "34",
             "type": "message.logged",
             "command": "c:5",
+            "changes": {},
             "data": {
               "id": "7",
               "text": "You open the door.",
@@ -1152,6 +1153,7 @@
             "revision": "34",
             "type": "message.logged",
             "command": "c:5",
+            "changes": {},
             "data": {
               "id": "7",
               "text": "You open the door.",

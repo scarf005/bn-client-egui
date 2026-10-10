@@ -43,10 +43,13 @@ fn clicking_new_game_shows_the_command_status() {
     });
     h.get_by_label("New Game").click();
     let clicked = Instant::now();
-    run_until(&mut h, "the status line to follow the click", 60, |h| {
-        h.query_by_label("New Game: done").is_some()
+    // A command that went well is no longer shown, so the model's status is what reports it.
+    run_until(&mut h, "the command to finish", 60, |h| {
+        h.state()
+            .model
+            .command()
+            .is_some_and(|c| c.label == "New Game" && c.finished && c.stage == "done")
     });
-    // The engine answers with the same flattened main menu, so the status line is the only reaction.
     println!("New Game done after {:?}", clicked.elapsed());
 }
 

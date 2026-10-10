@@ -305,32 +305,6 @@ fn live_engine_map_follows_the_declared_viewport_and_accepts_clicks_across_it() 
 }
 
 #[test]
-#[ignore = "requires BN_ENGINE that reports the avatar sidebar"]
-fn live_engine_reports_the_native_sidebar_of_the_tutorial_avatar() {
-    let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
-    let transport = StdioTransport::spawn(engine.as_ref()).expect("engine starts");
-    let mut model = EngineModel::new(Box::new(transport));
-    wait_for(&mut model, "subscription", |m| m.live());
-    choose_label(&mut model, "New Game");
-    choose_label(&mut model, "Tutorial");
-    wait_for(&mut model, "the sidebar", |m| !m.sidebar().is_empty());
-    let rows: Vec<String> = model
-        .sidebar()
-        .iter()
-        .map(|l| {
-            l.iter()
-                .map(|s| s.text.as_str())
-                .collect::<Vec<_>>()
-                .join(" ")
-        })
-        .collect();
-    println!("{}", rows.join("\n"));
-    assert!(rows.iter().any(|r| r.starts_with("HEAD")), "{rows:?}");
-    assert!(rows.iter().any(|r| r.starts_with("Location:")), "{rows:?}");
-    assert!(rows.iter().any(|r| r.starts_with("Weapon:")), "{rows:?}");
-}
-
-#[test]
 #[ignore = "requires BN_ENGINE; plays in a temp profile and never touches the real one"]
 fn live_engine_saved_character_is_listed_on_the_load_tab_and_loads_after_relaunch() {
     let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
@@ -447,6 +421,32 @@ fn live_engine_interrupts_a_long_wait_and_the_stop_question_is_a_menu() {
         "{:?}",
         model.messages()
     );
+}
+
+#[test]
+#[ignore = "requires BN_ENGINE that reports the avatar sidebar"]
+fn live_engine_reports_the_native_sidebar_of_the_tutorial_avatar() {
+    let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
+    let transport = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
+    let mut model = EngineModel::new(Box::new(transport));
+    wait_for(&mut model, "subscription", |m| m.live());
+    choose_label(&mut model, "New Game");
+    choose_label(&mut model, "Tutorial");
+    wait_for(&mut model, "the sidebar", |m| !m.sidebar().is_empty());
+    let rows: Vec<String> = model
+        .sidebar()
+        .iter()
+        .map(|l| {
+            l.iter()
+                .map(|s| s.text.as_str())
+                .collect::<Vec<_>>()
+                .join(" ")
+        })
+        .collect();
+    println!("{}", rows.join("\n"));
+    assert!(rows.iter().any(|r| r.starts_with("HEAD")), "{rows:?}");
+    assert!(rows.iter().any(|r| r.starts_with("Location:")), "{rows:?}");
+    assert!(rows.iter().any(|r| r.starts_with("Weapon:")), "{rows:?}");
 }
 
 #[test]

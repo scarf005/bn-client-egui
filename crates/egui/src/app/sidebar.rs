@@ -35,7 +35,11 @@ impl<M: GameModel> App<M> {
 
     /// Slot for the status contents; the item lists stay below them.
     fn sidebar(&mut self, ui: &mut egui::Ui) {
-        crate::sidebar::show(ui, &self.model.sidebar());
+        // Without an avatar there is no status to show.
+        let status = self.model.sidebar();
+        if !status.is_empty() {
+            crate::sidebar::show(ui, &status);
+        }
         self.items(ui);
     }
 

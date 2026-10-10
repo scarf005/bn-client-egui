@@ -224,12 +224,13 @@ impl EngineModel {
         self
     }
 
-    /// Timestamped protocol milestones (`submit`, `received`, stage names, `events`) since the last call.
-    /// How many engine messages have arrived so far; live tests use it to tell progress from a stall.
+    /// Engine messages received plus CPU ticks the engine has used; live tests use it to tell progress
+    /// from a stall, since a loading engine is silent but busy.
     pub fn received(&self) -> u64 {
-        self.received
+        self.received + self.transport.engine_cpu_ticks()
     }
 
+    /// Timestamped protocol milestones (`submit`, `received`, stage names, `events`) since the last call.
     pub fn take_trace(&mut self) -> Vec<(Instant, &'static str)> {
         std::mem::take(&mut self.trace)
     }
