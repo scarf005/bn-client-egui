@@ -525,6 +525,7 @@ impl<M: GameModel> App<M> {
         let mut edited = None;
         let mut key_chosen = None;
         let mut more = false;
+        let mut filter_clicked = false;
         let mut cancel = ctx.input(|i| i.key_pressed(egui::Key::Escape)) && menu.can_cancel;
         let title = markup::plain(&menu.title);
         egui::Window::new(&title)
@@ -612,6 +613,11 @@ impl<M: GameModel> App<M> {
                             });
                         }
                     });
+                if self.model.actions().iter().any(|a| a.id == "FILTER") && menu.field.is_none() {
+                    let filter = ui.add_enabled(!self.model.busy(), egui::Button::new("Filter"));
+                    ids.extend(filter.enabled().then_some(filter.id));
+                    filter_clicked = filter.clicked();
+                }
                 if menu.total > menu.choices.len() {
                     // The rest of a long list comes one page per click, so a huge list never floods the window.
                     let rest = ui.button(format!(
@@ -632,6 +638,9 @@ impl<M: GameModel> App<M> {
                 }
             });
         self.menu_ids = ids;
+        if filter_clicked {
+            self.model.invoke_action("FILTER");
+        }
         if more {
             self.model.more_choices();
             ctx.request_repaint();
