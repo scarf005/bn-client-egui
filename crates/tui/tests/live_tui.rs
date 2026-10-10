@@ -1,5 +1,6 @@
 //! Drives the terminal client's key handling against a real engine:
 //! `BN_ENGINE=... cargo test -p bn-client-tui --test live_tui -- --ignored --nocapture`
+mod common;
 use bn_client_core::transport::StdioTransport;
 use bn_client_core::watchdog::Watchdog;
 use bn_client_core::{EngineModel, GameModel};
@@ -32,7 +33,9 @@ fn press(app: &mut App, code: KeyCode) {
     app.handle_key(KeyEvent::new(code, KeyModifiers::NONE));
 }
 
-/// Moves the menu highlight to the row whose label contains `label` and presses Enter.
+/// Moves the menu highlight to the row whose label contains `label` and presses Enter. Each Down waits
+/// until the engine's cursor has moved, so the next one is not counted from a stale highlight (one Down
+/// too many lands on Defence mode, which opens character creation).
 fn pick(app: &mut App, label: &str) {
     wait(app, label, |a| {
         a.model
@@ -43,10 +46,36 @@ fn pick(app: &mut App, label: &str) {
         if app.selected_label().is_some_and(|l| l.contains(label)) {
             break;
         }
+        let before = app.selected_label();
         press(app, KeyCode::Down);
+        wait(app, "the cursor to move", |a| a.selected_label() != before);
     }
     assert!(app.selected_label().unwrap().contains(label));
     press(app, KeyCode::Enter);
+}
+
+/// Starts the tutorial and closes the lesson pop-ups between it and the map with Enter, like a player.
+fn start_tutorial(app: &mut App) {
+    tab(app, "New Game");
+    pick(app, "Tutorial");
+    let mut watchdog = Watchdog::new(Duration::from_secs(300), Duration::from_secs(900));
+    loop {
+        app.model.poll();
+        if app.model.size().x > 0 && app.model.menu().is_none() && !app.model.busy() {
+            return;
+        }
+        assert!(
+            !watchdog.expired(app.model.received()),
+            "timed out waiting for the tutorial map: menu {:?} command {:?}",
+            app.model.menu().map(|m| (m.context, m.title)),
+            app.model.command()
+        );
+        if app.model.menu().is_some() && !app.model.busy() {
+            app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+            std::thread::sleep(Duration::from_millis(500));
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
 }
 
 /// Switches the main menu to the tab named `label` with Left or Right, whichever is nearer in tab order.
@@ -88,20 +117,11 @@ fn tab(app: &mut App, label: &str) {
 #[ignore = "requires BN_ENGINE pointing at an engine binary"]
 fn live_tui_starts_the_tutorial_opens_the_inventory_and_closes_it() {
     let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
-    let transport = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
+    let transport =
+        StdioTransport::spawn_with(engine.as_ref(), &common::cpu_profile()).expect("engine starts");
     let mut app = TuiApp::new(EngineModel::new(Box::new(transport)));
 
-    tab(&mut app, "New Game");
-    pick(&mut app, "Tutorial");
-    wait(&mut app, "the tutorial map", |a| a.model.size().x > 0);
-    // Tutorial pop-ups are menus; dismiss them like a player would.
-    wait(&mut app, "idle", |a| !a.model.busy());
-    while app.model.menu().is_some() {
-        press(&mut app, KeyCode::Enter);
-        wait(&mut app, "idle", |a| !a.model.busy());
-        std::thread::sleep(Duration::from_millis(500));
-        app.model.poll();
-    }
+    start_tutorial(&mut app);
 
     press(&mut app, KeyCode::Char('i'));
     wait(&mut app, "the inventory menu", |a| {
@@ -122,19 +142,11 @@ fn absolute(app: &App) -> (i32, i32) {
 #[ignore = "requires BN_ENGINE pointing at an engine binary"]
 fn live_tui_walks_with_arrows_then_shows_and_walks_a_route_from_the_look_cursor() {
     let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
-    let transport = StdioTransport::spawn(engine.as_ref()).expect("engine starts");
+    let transport =
+        StdioTransport::spawn_with(engine.as_ref(), &common::cpu_profile()).expect("engine starts");
     let mut app = TuiApp::new(EngineModel::new(Box::new(transport)));
 
-    tab(&mut app, "New Game");
-    pick(&mut app, "Tutorial");
-    wait(&mut app, "the tutorial map", |a| a.model.size().x > 0);
-    wait(&mut app, "idle", |a| !a.model.busy());
-    while app.model.menu().is_some() {
-        press(&mut app, KeyCode::Enter);
-        wait(&mut app, "idle", |a| !a.model.busy());
-        std::thread::sleep(Duration::from_millis(500));
-        app.model.poll();
-    }
+    start_tutorial(&mut app);
 
     let start = absolute(&app);
     press(&mut app, KeyCode::Right);
@@ -182,19 +194,11 @@ fn recipes(app: &App) -> Vec<bn_client_core::MenuChoice> {
 #[ignore = "requires BN_ENGINE pointing at an engine binary"]
 fn live_tui_crafting_switches_tabs_shows_details_searches_and_closes() {
     let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
-    let transport = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
+    let transport =
+        StdioTransport::spawn_with(engine.as_ref(), &common::cpu_profile()).expect("engine starts");
     let mut app = TuiApp::new(EngineModel::new(Box::new(transport)));
 
-    tab(&mut app, "New Game");
-    pick(&mut app, "Tutorial");
-    wait(&mut app, "the tutorial map", |a| a.model.size().x > 0);
-    wait(&mut app, "idle", |a| !a.model.busy());
-    while app.model.menu().is_some() {
-        press(&mut app, KeyCode::Enter);
-        wait(&mut app, "idle", |a| !a.model.busy());
-        std::thread::sleep(Duration::from_millis(500));
-        app.model.poll();
-    }
+    start_tutorial(&mut app);
 
     press(&mut app, KeyCode::Char('&'));
     wait(&mut app, "the crafting menu", |a| {

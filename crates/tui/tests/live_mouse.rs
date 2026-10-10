@@ -1,6 +1,7 @@
 //! The terminal client's mouse against a real engine, in a private profile with the CPU compute path:
 //! `TMPDIR=$HOME/scratch BN_ENGINE=... cargo test -p bn-client-tui --test live_mouse -- --ignored`
-use bn_client_core::transport::{Profile, StdioTransport};
+mod common;
+use bn_client_core::transport::StdioTransport;
 use bn_client_core::watchdog::Watchdog;
 use bn_client_core::{EngineModel, GameModel};
 use bn_client_tui::TuiApp;
@@ -62,24 +63,8 @@ fn text(t: &Terminal<TestBackend>) -> String {
 #[ignore = "requires BN_ENGINE pointing at an engine binary with the mouse view"]
 fn live_tui_mouse_ignores_the_wheel_in_the_main_menu_then_describes_and_right_clicks_a_square() {
     let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
-    let dir = std::env::temp_dir().join(format!("bn-tui-mouse-{}", std::process::id()));
-    std::fs::create_dir_all(dir.join("config")).unwrap();
-    std::fs::write(
-        dir.join("config/options.json"),
-        r#"[{"name":"USE_LANG","value":"en_US"},{"name":"ANIMATIONS","value":"false"},{"name":"AUTOSAVE","value":"false"},{"name":"COMPUTE_ACCELERATION","value":"cpu"}]"#,
-    )
-    .unwrap();
-    std::fs::write(
-        dir.join("config/preload.json"),
-        r#"{"compute_acceleration":"cpu"}"#,
-    )
-    .unwrap();
-    let profile = Profile {
-        userdir: Some(dir.clone()),
-        configdir: Some(dir.join("config")),
-        ..Profile::default()
-    };
-    let transport = StdioTransport::spawn_with(engine.as_ref(), &profile).expect("engine starts");
+    let transport =
+        StdioTransport::spawn_with(engine.as_ref(), &common::cpu_profile()).expect("engine starts");
     let mut app = TuiApp::new(EngineModel::new(Box::new(transport)));
 
     // The native main menu registers no SCROLL action, so the client has nothing to send.
