@@ -268,6 +268,13 @@ impl<M: GameModel> TuiApp<M> {
         if token(key).is_some_and(|t| self.model.press(&t)) {
             return;
         }
+        // A menu the engine binds no confirm key in still acts on the row under its cursor.
+        if key.code == KeyCode::Enter
+            && let Some(row) = menu.entries().get(self.selected).filter(|c| c.enabled)
+        {
+            self.model.choose(&row.id);
+            return;
+        }
         // A menu the engine gives no cancel key still closes with Esc.
         if key.code == KeyCode::Esc && menu.can_cancel {
             self.model.cancel_menu();

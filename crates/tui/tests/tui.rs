@@ -958,3 +958,21 @@ mod overmap_route {
         );
     }
 }
+
+#[test]
+fn enter_chooses_the_cursor_row_when_the_menu_binds_no_confirm_key() {
+    let (mut app, h) = engine_n(1);
+    for name in ["events_41_walk", "events_42_message"] {
+        h.push(fixture(name));
+    }
+    let mut menu = menu_event(fixture("events_43_menu"), "c:1");
+    menu["params"]["events"][0]["changes"]["interaction"]["actions"] =
+        json!([{"id":"DOWN","name":"Down","keys":["DOWN"]}]);
+    h.push(menu);
+    app.model.poll();
+    app.handle_key(key(KeyCode::Enter));
+    assert_eq!(
+        submits(&h)[0]["params"]["operation"],
+        json!({"kind":"choose","choice_id":"c:1"})
+    );
+}
