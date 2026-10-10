@@ -56,6 +56,12 @@ fn a_menu_with_more_choices_than_listed_fetches_the_next_page_and_shows_it() {
     let (mut h, script) = harness(vec![reply]);
     let menu = menu_event(|i| i["choice_total"] = json!(3));
     open(&mut h, &script, menu);
+    assert!(
+        sent(&script, "bn.interaction.choices").is_empty(),
+        "a long list does not flood the window by itself"
+    );
+    h.get_by_label("Load more (2 of 3)").click();
+    h.run_steps(3);
     let asked = sent(&script, "bn.interaction.choices");
     assert_eq!(asked.len(), 1, "the missing page is asked for once");
     assert_eq!(asked[0]["params"]["offset"], 2);

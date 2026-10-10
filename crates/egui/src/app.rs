@@ -613,13 +613,13 @@ impl<M: GameModel> App<M> {
                         }
                     });
                 if menu.total > menu.choices.len() {
-                    // The rest of a long list comes in pages as it is scrolled to.
+                    // The rest of a long list comes one page per click, so a huge list never floods the window.
                     let rest = ui.button(format!(
                         "Load more ({} of {})",
                         menu.choices.len(),
                         menu.total
                     ));
-                    more = rest.clicked() || ui.is_rect_visible(rest.rect);
+                    more = rest.clicked();
                 }
                 if let Some(description) = described.filter(|d| !d.is_empty()) {
                     ui.separator();
