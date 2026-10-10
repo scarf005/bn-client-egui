@@ -590,3 +590,23 @@ fn remembered_furniture_stays_drawn_from_its_memory_overlay() {
         "bare remembered floor draws terrain"
     );
 }
+
+#[test]
+fn travel_to_a_square_the_engine_cannot_resolve_is_reported_once_in_words() {
+    let (t, h) = session();
+    let mut m = connected(
+        t.on("bn.command.submit", walk_reply())
+            .on("bn.command.submit", walk_reply()),
+    );
+    for id in ["c:5", "c:5"] {
+        assert!(m.travel(Pos { x: 39, y: 12 }));
+        h.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{
+            "epoch":"e7f3","command_id":id,"stage":"rejected","error":"validation_failed"}}));
+        m.poll();
+        assert!(!m.busy());
+    }
+    assert_eq!(
+        m.messages(),
+        ["Travel rejected: that square is outside the map window the engine can resolve."]
+    );
+}

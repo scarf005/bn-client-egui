@@ -212,8 +212,8 @@ impl EngineModel {
                         && n.error.as_ref().is_some_and(|e| e == "stale_epoch");
                     if n.stage != "completed" && !swap {
                         self.rejected = self.walking;
-                        let why = n.error.as_ref().map_or(n.stage.clone(), error_kind);
-                        self.messages.push(format!("Command {}: {why}.", n.stage));
+                        let reason = n.error.as_ref().map(error_kind);
+                        self.report_failure(&n.stage, reason.as_deref());
                     }
                 }
             }
@@ -285,6 +285,21 @@ impl EngineModel {
                     s.stage = "accepted".into();
                 }
             }
+        }
+    }
+
+    /// Logs a failed command; a repeat of the last line (a click held on an unreachable square) adds none.
+    fn report_failure(&mut self, stage: &str, reason: Option<&str>) {
+        let travel = self.status.as_ref().is_some_and(|s| s.label == "Travel");
+        let text = match reason {
+            Some("validation_failed") if travel => {
+                "Travel rejected: that square is outside the map window the engine can resolve."
+                    .to_string()
+            }
+            _ => format!("Command {stage}: {}.", reason.unwrap_or(stage)),
+        };
+        if self.messages.last() != Some(&text) {
+            self.messages.push(text);
         }
     }
 
