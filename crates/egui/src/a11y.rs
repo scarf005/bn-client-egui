@@ -78,3 +78,33 @@ pub fn trap_tab(ctx: &egui::Context, ids: &[egui::Id]) {
     };
     ctx.memory_mut(|m| m.request_focus(ids[next]));
 }
+
+/// Turns an append-only log into the text of one polite live region: every line added since the
+/// last frame, joined in order, so a burst is read whole and history is never re-read.
+#[derive(Default)]
+pub struct Announcer {
+    seen: Option<usize>,
+    last: String,
+    text: String,
+}
+
+impl Announcer {
+    pub fn update(&mut self, lines: &[String]) -> &str {
+        let Some(last) = lines.last() else {
+            self.seen = Some(0);
+            return &self.text;
+        };
+        let first = match self.seen {
+            None => lines.len() - 1,
+            Some(seen) if seen < lines.len() => seen,
+            // A repeat counter changed the newest line in place.
+            Some(seen) if seen == lines.len() && *last != self.last => seen - 1,
+            Some(seen) if seen > lines.len() => 0,
+            Some(_) => return &self.text,
+        };
+        self.text = lines[first..].join(" ");
+        self.seen = Some(lines.len());
+        self.last.clone_from(last);
+        &self.text
+    }
+}

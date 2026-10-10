@@ -244,3 +244,40 @@ fn item_rows_have_one_focusable_control_named_with_the_item() {
         assert_eq!(stops.len(), 1, "{item}: {stops:?}");
     }
 }
+
+fn log_line(script: &ScriptHandle, sequence: u32, id: &str, text: &str, count: u32) {
+    script.push(
+        json!({"jsonrpc": "2.0", "method": "bn.events", "params": {"epoch": "e7f3",
+        "events": [{"sequence": sequence.to_string(), "revision": "32", "type": "message.logged",
+        "data": {"id": id, "text": text, "kind": "bad", "color": "c_red", "count": count}}]}}),
+    );
+}
+
+fn announced(h: &H) -> Vec<String> {
+    h.root()
+        .children_recursive()
+        .filter(|n| n.accesskit_node().live() == accesskit::Live::Polite)
+        .filter_map(|n| n.accesskit_node().value())
+        .collect()
+}
+
+#[test]
+fn messages_arriving_in_one_frame_are_announced_together_and_only_once() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    script.push(fixture("events_41_walk"));
+    log_line(&script, 42, "7", "You open the door.", 1);
+    log_line(&script, 43, "8", "Bang!", 1);
+    log_line(&script, 44, "8", "Bang!", 2);
+    h.run_steps(3);
+    let live = announced(&h);
+    assert!(
+        live.iter().any(|v| v == "You open the door. Bang! x2"),
+        "{live:?}"
+    );
+    log_line(&script, 45, "9", "Crash!", 1);
+    h.run_steps(3);
+    let live = announced(&h);
+    assert!(live.iter().any(|v| v == "Crash!"), "{live:?}");
+    assert!(!live.iter().any(|v| v.contains("door")), "{live:?}");
+}

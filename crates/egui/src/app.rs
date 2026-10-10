@@ -1,5 +1,5 @@
 use crate::a11y;
-use bn_client_core::{GameModel, Loading, Pos};
+use bn_client_core::{GameModel, Loading, LogLine, Pos};
 use eframe::egui::{self, accesskit};
 
 /// A command must outlast this before the controls show it; keeps short commands from blinking the UI.
@@ -56,6 +56,9 @@ pub struct App<M: GameModel> {
     focus_menu: bool,
     /// The menu just closed; the map takes focus back.
     refocus_map: bool,
+    /// What the two message lists announce, so a burst in one frame is read whole.
+    native_live: a11y::Announcer,
+    command_live: a11y::Announcer,
     /// The enabled controls of the open menu, in Tab order, as of the last frame.
     menu_ids: Vec<egui::Id>,
     /// The cursor has been put on the player since the map first appeared.
@@ -83,6 +86,8 @@ impl<M: GameModel> App<M> {
             refocus_map: false,
             cursor_placed: false,
             menu_ids: Vec::new(),
+            native_live: a11y::Announcer::default(),
+            command_live: a11y::Announcer::default(),
         }
     }
 
@@ -673,17 +678,26 @@ impl<M: GameModel> App<M> {
     }
 
     fn log(&mut self, ui: &mut egui::Ui) {
-        message_log(ui, self.model.native_log(), self.model.messages());
+        let native = self.model.native_log();
+        let shown = native.iter().map(LogLine::shown).collect::<Vec<_>>();
+        let native_live = self.native_live.update(&shown).to_owned();
+        let command_live = self.command_live.update(self.model.messages()).to_owned();
+        message_log(
+            ui,
+            native,
+            self.model.messages(),
+            [&native_live, &command_live],
+        );
     }
 }
 
 /// The message log panel: the game's own lines in their native colours, then the client's command
-/// results and errors in a separate scroll area. The newest line of each is a polite live region,
-/// so history is never re-announced.
-fn message_log(ui: &mut egui::Ui, native: &[crate::LogLine], commands: &[String]) {
+/// results and errors in a separate scroll area. What each list gained since the last frame is a
+/// polite live region, so history is never re-announced.
+fn message_log(ui: &mut egui::Ui, native: &[crate::LogLine], commands: &[String], live: [&str; 2]) {
     ui.heading("Message log");
-    if let Some(latest) = native.last() {
-        let live = ui.label(latest.shown());
+    if !native.is_empty() {
+        let live = ui.label(live[0]);
         ui.ctx()
             .accesskit_node_builder(live.id, |b| b.set_live(accesskit::Live::Polite));
     }
@@ -697,9 +711,9 @@ fn message_log(ui: &mut egui::Ui, native: &[crate::LogLine], commands: &[String]
                 ui.label(line.color.map_or(text.clone(), |c| text.color(rgb(c))));
             }
         });
-    if let Some(latest) = commands.last() {
+    if !commands.is_empty() {
         ui.separator();
-        let live = ui.label(latest);
+        let live = ui.label(live[1]);
         ui.ctx()
             .accesskit_node_builder(live.id, |b| b.set_live(accesskit::Live::Polite));
     }
