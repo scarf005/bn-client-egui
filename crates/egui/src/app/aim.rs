@@ -43,6 +43,9 @@ const GRID: [[Cell; 7]; 3] = [
 /// Height of the item description under the panes.
 const DESCRIPTION_HEIGHT: f32 = 96.0;
 
+/// How long a typed answer waits for the prompt it is meant for.
+const PROMPT_WAIT: std::time::Duration = std::time::Duration::from_secs(5);
+
 /// One input for the engine, sent once the previous one has finished.
 pub enum Step {
     Choose(String),
@@ -57,6 +60,8 @@ pub struct Aim {
     /// The filter box text of each pane, and the filter the engine last reported for it.
     filters: [(String, String); 2],
     amount: String,
+    /// When the front step began waiting for a prompt.
+    waiting: Option<std::time::Duration>,
     /// A text box of the screen has the keyboard, so typed keys are text and not game keys.
     pub(super) editing: bool,
 }
@@ -87,24 +92,40 @@ impl<M: GameModel> App<M> {
         if self.model.busy() {
             return;
         }
-        let Some(step) = self.aim.steps.pop_front() else {
+        let Some(step) = self.aim.steps.front() else {
+            self.aim.waiting = None;
             return;
         };
-        let sent = match &step {
+        let sent = match step {
             Step::Choose(id) => {
-                self.model.choose(id);
+                let id = id.clone();
+                self.model.choose(&id);
                 true
             }
-            Step::Action(id) => self.model.invoke_action(id),
+            Step::Action(id) => {
+                let id = id.clone();
+                self.model.invoke_action(&id)
+            }
             Step::Fill(text) => match self.model.menu().and_then(|m| m.field) {
                 Some(field) => {
-                    self.model.fill(&field.id, text, true);
+                    let text = text.clone();
+                    self.model.fill(&field.id, &text, true);
                     true
                 }
-                None => false,
+                None => {
+                    // The prompt an earlier action opens can arrive after that action completed.
+                    let since = *self.aim.waiting.get_or_insert_with(|| self.clock.now());
+                    if self.clock.now().saturating_sub(since) < PROMPT_WAIT {
+                        return;
+                    }
+                    false
+                }
             },
         };
-        if !sent {
+        self.aim.waiting = None;
+        if sent {
+            self.aim.steps.pop_front();
+        } else {
             self.aim.steps.clear();
         }
     }
@@ -253,51 +274,62 @@ impl<M: GameModel> App<M> {
         };
         let zone = ui.dnd_drop_zone::<Dragged, _>(egui::Frame::group(ui.style()), |ui| {
             ui.set_min_width(ui.available_width());
-            ui.heading(format!("{name}: {}", pane.area));
-            // The native grid: marker columns, the compass with Above and Below, as drawn by the game.
-            egui::Grid::new(("aim_areas", index))
-                .spacing([4.0, 2.0])
-                .show(ui, |ui| {
-                    for row in GRID {
-                        for cell in row {
-                            let Some((action, area, mark)) = cell else {
-                                ui.label("");
-                                continue;
-                            };
-                            let on = pane.area == area;
-                            let b = ui
-                                .add_enabled(
-                                    has(action) && !self.model.busy(),
-                                    egui::Button::new(mark)
-                                        .selected(on)
-                                        .min_size(egui::vec2(24.0, 0.0)),
-                                )
-                                .on_hover_text(area);
-                            a11y::tab(ui.ctx(), b.id, on);
+            // The title on the left, the area picker at the top right, as the native header draws them.
+            ui.horizontal_top(|ui| {
+                ui.heading(format!("{name}: {}", pane.area));
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
+                    ui.vertical(|ui| {
+                        // The native grid: marker columns, the compass with Above and Below, as drawn by the game.
+                        egui::Grid::new(("aim_areas", index))
+                            .spacing([4.0, 2.0])
+                            .show(ui, |ui| {
+                                for row in GRID {
+                                    for cell in row {
+                                        let Some((action, area, mark)) = cell else {
+                                            ui.label("");
+                                            continue;
+                                        };
+                                        let on = pane.area == area;
+                                        let blocked = pane.blocked.iter().any(|b| b == action);
+                                        let b = ui
+                                            .add_enabled(
+                                                has(action) && !self.model.busy(),
+                                                egui::Button::new(
+                                                    egui::RichText::new(mark)
+                                                        .color(area_color(on, blocked)),
+                                                )
+                                                .selected(on)
+                                                .min_size(egui::vec2(24.0, 0.0)),
+                                            )
+                                            .on_hover_text(area);
+                                        a11y::tab(ui.ctx(), b.id, on);
+                                        ui.ctx().accesskit_node_builder(b.id, |n| {
+                                            n.set_label(format!("{name} area {area}"));
+                                        });
+                                        out.ids.extend(b.enabled().then_some(b.id));
+                                        if b.clicked() {
+                                            out.todo.push(Step::Action(side(index).into()));
+                                            out.todo.push(Step::Action(action.into()));
+                                        }
+                                    }
+                                    ui.end_row();
+                                }
+                            });
+                        if has("TOGGLE_VEH") {
+                            let b = ui.add_enabled(!self.model.busy(), egui::Button::new("V"));
+                            b.clone().on_hover_text("Vehicle storage");
                             ui.ctx().accesskit_node_builder(b.id, |n| {
-                                n.set_label(format!("{name} area {area}"));
+                                n.set_label(format!("{name} area vehicle storage"));
                             });
                             out.ids.extend(b.enabled().then_some(b.id));
                             if b.clicked() {
                                 out.todo.push(Step::Action(side(index).into()));
-                                out.todo.push(Step::Action(action.into()));
+                                out.todo.push(Step::Action("TOGGLE_VEH".into()));
                             }
                         }
-                        ui.end_row();
-                    }
+                    });
                 });
-            if has("TOGGLE_VEH") {
-                let b = ui.add_enabled(!self.model.busy(), egui::Button::new("V"));
-                b.clone().on_hover_text("Vehicle storage");
-                ui.ctx().accesskit_node_builder(b.id, |n| {
-                    n.set_label(format!("{name} area vehicle storage"));
-                });
-                out.ids.extend(b.enabled().then_some(b.id));
-                if b.clicked() {
-                    out.todo.push(Step::Action(side(index).into()));
-                    out.todo.push(Step::Action("TOGGLE_VEH".into()));
-                }
-            }
+            });
             // The filter box follows what the engine reports until the player types in it.
             let (typed, seen) = &mut self.aim.filters[index];
             if *seen != pane.filter {
@@ -363,5 +395,29 @@ impl<M: GameModel> App<M> {
             out.todo.push(Step::Choose(d.row.clone()));
             out.todo.push(Step::Action("MOVE_SINGLE_ITEM".into()));
         }
+    }
+}
+
+/// The colour the native picker draws an area's mark in: red when the pane cannot put items there,
+/// white for the pane's own area, dark gray for the rest.
+fn area_color(on: bool, blocked: bool) -> egui::Color32 {
+    match (blocked, on) {
+        (true, _) => egui::Color32::from_rgb(255, 60, 60),
+        (false, true) => egui::Color32::WHITE,
+        (false, false) => egui::Color32::from_gray(110),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn blocked_areas_are_red_the_panes_own_white_and_the_rest_dark_gray() {
+        let red = area_color(false, true);
+        assert!(red.r() > 200 && red.g() < 100 && red.b() < 100);
+        assert_eq!(area_color(true, true), red, "blocked wins over selected");
+        assert_eq!(area_color(true, false), egui::Color32::WHITE);
+        assert!(area_color(false, false).r() < 140);
     }
 }
