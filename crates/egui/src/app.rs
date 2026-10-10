@@ -2,7 +2,7 @@ use crate::a11y;
 use crate::display::Display;
 use crate::editor;
 use crate::text;
-use bn_client_core::{GameModel, Loading, LogLine, Pos, keys, markup};
+use bn_client_core::{Failure, GameModel, Loading, LogLine, Pos, keys, markup};
 use eframe::egui::{self, accesskit};
 
 mod crafting;
@@ -155,6 +155,25 @@ impl<M: GameModel> App<M> {
     }
 
     /// Native-style loading screen: splash image, current step as live text, the step list.
+    /// The engine is gone or silent: say so with its last stderr lines, and offer a restart.
+    fn failure(&mut self, ui: &mut egui::Ui, failure: &Failure) {
+        let heading = ui.heading(&failure.message);
+        ui.ctx()
+            .accesskit_node_builder(heading.id, |b| b.set_live(accesskit::Live::Assertive));
+        if !failure.stderr.is_empty() {
+            ui.label("Last engine output:");
+            egui::ScrollArea::vertical().show(ui, |ui| {
+                for line in &failure.stderr {
+                    ui.monospace(line);
+                }
+            });
+        }
+        let restart = ui.button("Restart");
+        if restart.clicked() {
+            self.model.restart();
+        }
+    }
+
     fn loading(&self, ui: &mut egui::Ui, loading: &Loading) {
         ui.heading(&loading.title);
         if let Some(step) = loading.entries.get(loading.index) {
@@ -211,6 +230,10 @@ impl<M: GameModel> App<M> {
         if !self.images {
             egui_extras::install_image_loaders(ui.ctx());
             self.images = true;
+        }
+        if let Some(failure) = self.model.failure() {
+            self.failure(ui, &failure);
+            return;
         }
         if let Some(loading) = self.model.loading() {
             self.loading(ui, &loading);
