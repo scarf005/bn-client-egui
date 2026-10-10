@@ -257,7 +257,7 @@ fn status_line_names_the_stage_and_explains_a_rejection_in_words() {
 }
 
 #[test]
-fn status_line_reports_done_and_keeps_executing_until_the_boundary_is_reached() {
+fn status_line_keeps_executing_until_the_boundary_is_reached_then_goes_back_to_ready() {
     let (mut h, script) = harness();
     open_menu(&mut h, &script);
     click_choice(&mut h);
@@ -267,7 +267,7 @@ fn status_line_reports_done_and_keeps_executing_until_the_boundary_is_reached() 
     assert!(h.state().model.busy(), "still busy without any bn.loading");
     script.push(notice("completed", None));
     h.run_steps(2);
-    h.get_by_label("combat knife: done");
+    h.get_by_label("Ready");
     assert!(!h.state().model.busy());
 }
 

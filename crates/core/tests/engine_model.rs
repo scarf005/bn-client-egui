@@ -1135,3 +1135,119 @@ fn set_count_submits_for_an_enabled_recipe_and_batch_mode_has_no_field() {
     m.fill("filter", "x", true);
     assert!(submits(&h).is_empty());
 }
+
+/// An `interaction.changed` event at `sequence` with these actions and interaction.
+fn show(sequence: u64, actions: Value, interaction: Value) -> Value {
+    json!({"jsonrpc":"2.0","method":"bn.events","params":{"epoch":"e7f3","events":[{
+        "sequence": sequence.to_string(), "revision": (sequence - 9).to_string(),
+        "type": "interaction.changed",
+        "changes": {"interaction": {
+            "boundary_id": format!("b:{sequence}"),
+            "readiness": {"phase":"playing","game_ready":true,
+                "accepts_interaction_commands":true,"accepts_registered_actions":true},
+            "actions": actions,
+            "interaction": interaction}}}]}})
+}
+
+fn operations(h: &bn_client_core::transport::ScriptHandle) -> Vec<Value> {
+    submits(h)
+        .iter()
+        .map(|s| s["params"]["operation"].clone())
+        .collect()
+}
+
+#[test]
+fn a_pressed_key_runs_the_action_the_engine_binds_to_it_and_nothing_else() {
+    let (t, h) = session();
+    let mut m = connected(t.on("bn.command.submit", walk_reply()));
+    h.push(show(
+        41,
+        json!([{"id":"LEVEL_DOWN","name":"Descend","keys":[">"]},
+               {"id":"QUIT","name":"Quit","keys":["ESC","SPACE"]},
+               {"id":"COORDINATE","name":"COORDINATE","keys":[]}]),
+        Value::Null,
+    ));
+    m.poll();
+    assert!(!m.press("<"), "no action binds <");
+    assert!(!m.press("COORDINATE"));
+    assert!(m.press("SPACE"));
+    assert_eq!(
+        operations(&h),
+        [json!({"kind":"action","action_id":"QUIT"})]
+    );
+    let names: Vec<_> = m.actions().into_iter().map(|a| a.name).collect();
+    assert_eq!(
+        names,
+        ["Descend", "Quit"],
+        "an action without keys is not offered"
+    );
+}
+
+#[test]
+fn any_key_acknowledges_a_press_any_key_popup_and_only_that() {
+    let popup = |anykey: bool| {
+        let mut ack = json!({"id":"acknowledge","label":"x","description": if anykey {"ANY_INPUT"} else {"QUIT"},
+            "denial":"","enabled":true,"selectable":true,"selected":true,"columns":[]});
+        ack["label"] = "Press any key".into();
+        json!({"schema_id":"s:p","kind":"choices","context":"POPUP_WAIT","title":"","message":"Nothing.",
+            "allow_cancel":false,"choices":[ack],"choice_total":1,"allow_set_count":false})
+    };
+    for (anykey, sent) in [(true, 1), (false, 0)] {
+        let (t, h) = session();
+        let mut m = connected(t.on("bn.command.submit", walk_reply()));
+        h.push(show(41, json!([]), popup(anykey)));
+        m.poll();
+        assert_eq!(m.press("w"), anykey);
+        assert_eq!(submits(&h).len(), sent);
+    }
+}
+
+#[test]
+fn the_selected_tab_picks_the_pane_and_a_target_interaction_is_a_cursor_not_a_menu() {
+    let (t, h) = session();
+    let mut m = connected(t);
+    let row = |id: &str, label: &str, pane: Option<&str>, selected: bool| {
+        let mut c = json!({"id":id,"label":label,"description":"d","denial":"","enabled":true,
+            "selectable":true,"selected":selected,"columns":[{"label":"Base","value":"8"}]});
+        if let Some(p) = pane {
+            c["pane_id"] = p.into();
+        }
+        c
+    };
+    h.push(show(
+        41,
+        json!([]),
+        json!({"schema_id":"s:t","kind":"choices","context":"PLAYER_INFO","title":"Info","message":"",
+            "allow_cancel":true,"choice_total":3,"allow_set_count":false,
+            "choices":[row("t:1","STATS",None,false), row("t:2","SKILLS",None,true),
+                       row("s:1","Melee",Some("skills"),false)],
+            "compat":{"panes":[{"id":"stats","label":"STATS"},{"id":"skills","label":"SKILLS"}]}}),
+    ));
+    m.poll();
+    let menu = m.menu().unwrap();
+    assert_eq!(menu.pane.as_deref(), Some("skills"));
+    assert_eq!(menu.tabs().len(), 2);
+    assert_eq!(menu.entries()[0].label, "Melee");
+    assert_eq!(menu.entries()[0].description, "d");
+    assert_eq!(
+        menu.entries()[0].columns,
+        [("Base".to_string(), "8".to_string())]
+    );
+    h.push(show(
+        42,
+        json!([]),
+        json!({"schema_id":"s:l","kind":"target","context":"LOOK","title":"Look Around","message":"",
+            "allow_cancel":true,"choices":[],"choice_total":0,"allow_set_count":false,
+            "target":{"current":{"dim":"","x":5,"y":4,"z":0}}}),
+    ));
+    m.poll();
+    assert!(m.menu().is_none());
+    let origin = m.origin();
+    assert_eq!(
+        m.focus(),
+        Some(Pos {
+            x: 5 - origin.x,
+            y: 4 - origin.y
+        })
+    );
+}

@@ -3,6 +3,7 @@
 use crate::clock::Clock;
 use crate::colors::ColorMap;
 use crate::keys::KeyMap;
+use crate::markup::{self, Run};
 use crate::model::{
     ActionEntry, Cell, CommandStatus, GameModel, Layer, Loading, LogLine, Menu, MenuChoice,
     MenuField, Pos, Rgb,
@@ -428,11 +429,17 @@ impl EngineModel {
                     .and_then(|b| b.interaction.as_ref())
                     .map(|i| &i.choices);
                 let found = choices.and_then(|c| c.iter().find(|c| &c.id == choice_id));
-                (found.map(|c| c.label.clone()), Some(choice_id.clone()))
+                (
+                    found.map(|c| markup::plain(&c.label)),
+                    Some(choice_id.clone()),
+                )
             }
             Operation::Action { action_id } => {
                 let found = boundary.and_then(|b| b.actions.iter().find(|a| &a.id == action_id));
-                (found.map(|a| a.name.clone()), Some(action_id.clone()))
+                (
+                    found.map(|a| markup::plain(&a.name)),
+                    Some(action_id.clone()),
+                )
             }
             Operation::Travel { .. } => (Some("Travel".into()), None),
             Operation::Cancel => (Some("Cancel".into()), None),
@@ -533,12 +540,17 @@ impl EngineModel {
     fn refresh_actions(&mut self) {
         let offered = self.replica.boundary().map_or(&[][..], |b| &b.actions);
         if !offered.is_empty() || !self.busy {
+            // An action the engine lists with no keys cannot be run, so there is nothing to offer.
             self.shown = offered
                 .iter()
+                .filter(|a| a.keys.as_ref().is_none_or(|keys| !keys.is_empty()))
                 .map(|a| ActionEntry {
                     id: a.id.clone(),
                     name: a.name.clone(),
-                    keys: self.keys.keys(&a.id).to_vec(),
+                    keys: a
+                        .keys
+                        .clone()
+                        .unwrap_or_else(|| self.keys.keys(&a.id).to_vec()),
                 })
                 .collect();
         }
@@ -972,18 +984,35 @@ impl GameModel for EngineModel {
 
     fn press(&mut self, key: &str) -> bool {
         let offered = self.replica.boundary().and_then(|b| {
+            // The engine names the keys of its active context; the key settings only serve older engines.
             let bound = self.keys.actions_for(key);
-            b.actions.iter().find(|a| bound.contains(&a.id.as_str()))
+            b.actions.iter().find(|a| match &a.keys {
+                Some(keys) => keys.iter().any(|k| k == key),
+                None => bound.contains(&a.id.as_str()),
+            })
         });
-        let id = offered.map(|a| a.id.clone());
-        id.is_some_and(|id| self.invoke_action(&id))
+        if let Some(id) = offered.map(|a| a.id.clone()) {
+            return self.invoke_action(&id);
+        }
+        // A "press any key" popup has no key to bind: whatever is pressed acknowledges it.
+        let any_key = self
+            .replica
+            .boundary()
+            .and_then(|b| b.interaction.as_ref())
+            .is_some_and(|i| {
+                i.choices
+                    .iter()
+                    .any(|c| c.id == "acknowledge" && c.description == "ANY_INPUT")
+            });
+        any_key
+            && !self.busy
+            && self.submit(Operation::Choose {
+                choice_id: "acknowledge".into(),
+            })
     }
 
     fn menu(&self) -> Option<Menu> {
         let i = self.replica.boundary()?.interaction.as_ref()?;
-        let title = [&i.title, &i.context, &i.kind]
-            .into_iter()
-            .find(|s| !s.is_empty());
         let text = |k: &str| {
             let v = i.field.as_ref()?.get(k)?.as_str();
             v.map(String::from)
@@ -993,11 +1022,32 @@ impl GameModel for EngineModel {
             label: text("label").unwrap_or_default(),
             value: text("value").unwrap_or_default(),
         });
+        // A cursor the engine moves (look mode) is drawn on the map, not listed.
+        if i.kind == "target" {
+            return None;
+        }
+        let pane_labels = i
+            .compat
+            .as_ref()
+            .and_then(|c| c["panes"].as_array())
+            .map_or(&[][..], Vec::as_slice);
+        let pane_of = |label: &str| {
+            pane_labels
+                .iter()
+                .find(|p| p["label"] == label)
+                .and_then(|p| p["id"].as_str())
+        };
+        // Without the engine's pane list, the rows that belong to no pane are the tabs of a paned menu.
+        let paned = i.choices.iter().any(|c| c.pane_id.is_some());
+        let tab = |c: &protocol::Choice| {
+            c.pane_id.is_none()
+                && (pane_of(&c.label).is_some() || (pane_labels.is_empty() && paned))
+        };
         Some(Menu {
             context: i.context.clone(),
             field,
             can_set_count: i.allow_set_count,
-            title: title.cloned().unwrap_or_default(),
+            title: i.title.clone(),
             message: i.message.clone(),
             choices: i
                 .choices
@@ -1009,16 +1059,36 @@ impl GameModel for EngineModel {
                     denial: c.denial.clone(),
                     selected: c.selected,
                     group: c.pane_id.clone(),
+                    tab: tab(c),
                     description: c.description.clone(),
                     columns: c
                         .columns
                         .iter()
-                        .map(|c| (c.label.clone(), c.value.clone()))
+                        .map(|col| (col.label.clone(), col.value.clone()))
                         .collect(),
                 })
                 .collect(),
             can_cancel: i.allow_cancel,
+            pane: i
+                .choices
+                .iter()
+                .find(|c| tab(c) && c.selected)
+                .and_then(|c| pane_of(&c.label).map(String::from)),
         })
+    }
+
+    fn focus(&self) -> Option<Pos> {
+        let i = self.replica.boundary()?.interaction.as_ref()?;
+        let at = serde_json::from_value::<WorldPos>(i.target.as_ref()?["current"].clone()).ok()?;
+        let (ox, oy) = self.origin?;
+        Some(Pos {
+            x: at.x - ox,
+            y: at.y - oy,
+        })
+    }
+
+    fn styled(&self, text: &str) -> Vec<Run> {
+        markup::runs(text, &self.colors)
     }
 
     fn choose(&mut self, choice_id: &str) {

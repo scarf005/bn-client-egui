@@ -146,8 +146,16 @@ impl<M: GameModel> TuiApp<M> {
         if self.model.loading().is_some() {
             return;
         }
-        if key.code == KeyCode::Esc && self.model.interrupt() {
-            return;
+        if key.code == KeyCode::Esc {
+            // Esc stops a running activity and leaves look mode, whichever applies.
+            let stopped = self.model.interrupt();
+            if self.cursor.take().is_some() {
+                self.destination = None;
+                return;
+            }
+            if stopped {
+                return;
+            }
         }
         if let Some(menu) = self.menu() {
             return match menu.context.as_str() {

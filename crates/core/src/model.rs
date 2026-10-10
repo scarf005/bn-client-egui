@@ -1,3 +1,6 @@
+use crate::colors::ColorMap;
+use crate::markup::{self, Run};
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Pos {
     pub x: i32,
@@ -82,6 +85,8 @@ pub struct MenuChoice {
     pub selected: bool,
     /// The tab this entry belongs to; tab rows and plain list rows have none.
     pub group: Option<String>,
+    /// A tab header of the menu rather than one of its entries.
+    pub tab: bool,
     /// The engine's detail text for the row; empty when it has none.
     pub description: String,
     /// Label and value pairs shown beside the row.
@@ -107,24 +112,27 @@ pub struct Menu {
     pub can_cancel: bool,
     pub can_set_count: bool,
     pub field: Option<MenuField>,
+    /// The pane of the selected tab, when the menu has tabs.
+    pub pane: Option<String>,
 }
 
 impl Menu {
-    /// The tab rows of a tabbed menu; empty when no row belongs to a tab.
+    /// The tab headers of a tabbed menu; empty when the menu has none.
     pub fn tabs(&self) -> Vec<&MenuChoice> {
-        match self.choices.iter().any(|c| c.group.is_some()) {
-            true => self.choices.iter().filter(|c| c.group.is_none()).collect(),
-            false => Vec::new(),
-        }
+        self.choices.iter().filter(|c| c.tab).collect()
     }
 
     /// The rows below the tabs: the selected tab's entries, or every row when there are no tabs.
     pub fn entries(&self) -> Vec<&MenuChoice> {
-        let tabbed = !self.tabs().is_empty();
         self.choices
             .iter()
-            .filter(|c| !tabbed || c.group.is_some())
+            .filter(|c| !c.tab && (self.pane.is_none() || c.group == self.pane))
             .collect()
+    }
+
+    /// The only way out is the engine's own acknowledge row, so a separate Cancel would duplicate it.
+    pub fn acknowledges(&self) -> bool {
+        self.choices.iter().any(|c| c.id == "acknowledge")
     }
 }
 
@@ -215,6 +223,14 @@ pub trait GameModel {
     }
     fn menu(&self) -> Option<Menu> {
         None
+    }
+    /// Where the engine's own cursor is (look mode), in view coordinates; none when it has no cursor.
+    fn focus(&self) -> Option<Pos> {
+        None
+    }
+    /// `text` split at its colour tags, coloured with the game's palette.
+    fn styled(&self, text: &str) -> Vec<Run> {
+        markup::runs(text, &ColorMap::default())
     }
     fn choose(&mut self, _choice_id: &str) {}
     fn cancel_menu(&mut self) {}
