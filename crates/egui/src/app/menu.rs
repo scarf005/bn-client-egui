@@ -36,6 +36,30 @@ impl<M: GameModel> App<M> {
         let mut cancel = self.palette.is_none()
             && ctx.input(|i| i.key_pressed(egui::Key::Escape))
             && menu.can_cancel;
+        // The wheel moves the engine's cursor by its own steps, as in a native list; the list only
+        // follows the cursor, so one wheel does not scroll twice.
+        let engine_scroll = self.model.can_scroll_menu();
+        if engine_scroll {
+            // One engine step per wheel event, not per smoothed frame.
+            let steps = ctx.input(|i| {
+                i.raw
+                    .events
+                    .iter()
+                    .filter_map(|e| match e {
+                        egui::Event::MouseWheel { delta, .. } if delta.y != 0.0 => {
+                            Some(delta.y > 0.0)
+                        }
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>()
+            });
+            for up in steps {
+                if self.model.scroll_menu(up) {
+                    ctx.request_repaint();
+                }
+            }
+        }
+        let mut cursor_seen = None;
         let title = markup::plain(&menu.title);
         egui::Window::new(&title)
             .id(a11y::dialog_id(&title))
@@ -76,6 +100,10 @@ impl<M: GameModel> App<M> {
                     egui::ScrollArea::vertical()
                 };
                 area.max_height(ctx.content_rect().height() * 0.6)
+                    .scroll_source(egui::scroll_area::ScrollSource {
+                        mouse_wheel: !engine_scroll,
+                        ..Default::default()
+                    })
                     .show(ui, |ui| {
                         if menu.screen {
                             // A composed screen: columns line up only in a fixed-width font.
@@ -113,6 +141,12 @@ impl<M: GameModel> App<M> {
                                     choice.selected,
                                 );
                                 ids.extend(button.enabled().then_some(button.id));
+                                if choice.selected {
+                                    cursor_seen = Some(choice.id.clone());
+                                    if self.menu_cursor.as_deref() != Some(&choice.id) {
+                                        button.scroll_to_me(None);
+                                    }
+                                }
                                 // The keyboard focus follows the engine's own cursor.
                                 let at_cursor = menu.focus.as_deref() == Some(choice.id.as_str());
                                 if (entered && i == 0 && tabs.is_empty() && menu.focus.is_none())
@@ -147,6 +181,7 @@ impl<M: GameModel> App<M> {
             });
         self.menu_ids = ids;
         self.menu_focus = menu.focus.clone();
+        self.menu_cursor = cursor_seen;
         self.focus_menu = entered && !focused;
         a11y::dialog(ctx, &title, &menu.message);
         if let (Some(field), Some(value)) = (&menu.field, key_chosen) {

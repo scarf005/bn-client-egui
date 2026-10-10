@@ -454,6 +454,10 @@ pub enum Operation {
     Action {
         action_id: String,
     },
+    /// The right click (SEC_SELECT) on a map square: examine, close a door, pick up or fire.
+    Context {
+        pos: WorldPos,
+    },
     /// The left click of Tiles and curses on a map square: plans a route, a repeat walks it.
     Travel {
         pos: WorldPos,
@@ -535,6 +539,19 @@ pub struct WorldCellsResult {
     pub at: At,
     pub cells: Vec<Cell>,
     pub forgotten: Vec<WorldPos>,
+}
+
+/// Params of `bn.world.describe`: what the native mouse view prints for a hovered square.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DescribeParams {
+    pub epoch: String,
+    pub boundary_id: String,
+    pub pos: WorldPos,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DescribeResult {
+    pub lines: Vec<String>,
 }
 
 /// Params of `bn.command.result`; its result is a `CommandNotice`.
