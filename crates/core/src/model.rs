@@ -82,15 +82,31 @@ pub struct MenuChoice {
     pub selected: bool,
     /// The tab this entry belongs to; tab rows and plain list rows have none.
     pub group: Option<String>,
+    /// The engine's detail text for the row; empty when it has none.
+    pub description: String,
+    /// Label and value pairs shown beside the row.
+    pub columns: Vec<(String, String)>,
+}
+
+/// The text field of a menu, such as the crafting search.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MenuField {
+    pub id: String,
+    pub label: String,
+    pub value: String,
 }
 
 /// The engine's current interaction, rendered generically.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Menu {
+    /// The engine's name for the kind of menu, such as `CRAFTING`.
+    pub context: String,
     pub title: String,
     pub message: String,
     pub choices: Vec<MenuChoice>,
     pub can_cancel: bool,
+    pub can_set_count: bool,
+    pub field: Option<MenuField>,
 }
 
 impl Menu {
@@ -206,6 +222,10 @@ pub trait GameModel {
     fn season(&self) -> Option<String> {
         None
     }
+    /// Fills the menu's text field; `submit` applies it (search) rather than only editing it.
+    fn fill(&mut self, _field_id: &str, _value: &str, _submit: bool) {}
+    /// Chooses a row with a count, such as a batch craft.
+    fn set_count(&mut self, _choice_id: &str, _count: u64) {}
     fn size(&self) -> Pos;
     fn cell(&self, at: Pos) -> Cell;
     fn player(&self) -> Pos;

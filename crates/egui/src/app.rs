@@ -3,6 +3,8 @@ use crate::display::Display;
 use bn_client_core::{GameModel, Loading, LogLine, Pos};
 use eframe::egui::{self, accesskit};
 
+mod crafting;
+
 /// A command must outlast this before the controls show it; keeps short commands from blinking the UI.
 const SETTLE: std::time::Duration = std::time::Duration::from_millis(150);
 
@@ -67,6 +69,7 @@ pub struct App<M: GameModel> {
     menu_ids: Vec<egui::Id>,
     /// The cursor has been put on the player since the map first appeared.
     cursor_placed: bool,
+    crafting: crafting::Crafting,
 }
 
 impl<M: GameModel> App<M> {
@@ -94,6 +97,7 @@ impl<M: GameModel> App<M> {
             menu_ids: Vec::new(),
             native_live: a11y::Announcer::default(),
             command_live: a11y::Announcer::default(),
+            crafting: Default::default(),
         }
     }
 
@@ -261,10 +265,11 @@ impl<M: GameModel> App<M> {
             .map(|(_, token)| token.to_string())
             .collect::<Vec<_>>()
         });
-        let arrows = if self.model.menu().is_none() {
-            arrows
+        // Menus own the keyboard: typing in their text fields must not run game actions.
+        let (typed, arrows) = if self.model.menu().is_none() {
+            (typed, arrows)
         } else {
-            vec![]
+            (vec![], vec![])
         };
         self.keys_consumed = false;
         for key in typed.into_iter().chain(arrows) {
@@ -354,6 +359,11 @@ impl<M: GameModel> App<M> {
         };
         let entered = self.focus_menu
             | (self.menu_title.replace(menu.title.clone()).as_ref() != Some(&menu.title));
+        if menu.context == "CRAFTING" {
+            let focused = self.crafting(ctx, &menu, entered);
+            self.focus_menu = entered && !focused;
+            return;
+        }
         a11y::trap_tab(ctx, &self.menu_ids);
         let mut ids = Vec::new();
         let mut focused = false;
