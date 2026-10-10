@@ -95,6 +95,8 @@ pub trait GameModel {
     fn poll(&mut self) {}
     /// Registers a callback the model runs (from any thread) when new engine data has arrived.
     fn set_waker(&mut self, _waker: crate::transport::Waker) {}
+    /// The map size, in cells, the UI has room for; models that can show more or less adapt.
+    fn set_viewport(&mut self, _cells: Pos) {}
     /// Absolute map position of view cell (0, 0); lets a walk target survive the view scrolling.
     fn origin(&self) -> Pos {
         Pos { x: 0, y: 0 }

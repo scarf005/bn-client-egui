@@ -21,6 +21,8 @@ pub enum Outcome {
 pub struct Replica {
     at: Option<At>,
     coverage: Option<Coverage>,
+    /// The squares a map click selects (the engine's terrain window).
+    view: Option<Coverage>,
     boundary: Option<Boundary>,
     avatar: Option<Avatar>,
     environment: Option<Environment>,
@@ -49,6 +51,7 @@ impl Replica {
         *self = Self {
             at: Some(s.at),
             coverage: s.coverage,
+            view: s.view,
             boundary: Some(s.interaction),
             avatar: s.avatar,
             environment: s.environment,
@@ -147,6 +150,9 @@ impl Replica {
             self.entities.retain(|_, e| inside(&cov, &e.at));
             self.coverage = Some(cov);
         }
+        if let Some(view) = c.view {
+            self.view = Some(view);
+        }
         self.insert_cells(c.cells);
         for p in c.forgotten {
             if let Some(cells) = self.cells.get_mut(&p.dim) {
@@ -177,6 +183,10 @@ impl Replica {
 
     pub fn coverage(&self) -> Option<&Coverage> {
         self.coverage.as_ref()
+    }
+
+    pub fn view(&self) -> Option<&Coverage> {
+        self.view.as_ref()
     }
 
     pub fn boundary(&self) -> Option<&Boundary> {

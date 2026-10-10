@@ -201,6 +201,9 @@ pub struct Boundary {
 pub struct Changes {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub coverage: Option<Coverage>,
+    /// Replaces the clickable view.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub view: Option<Coverage>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub cells: Vec<Cell>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -251,6 +254,9 @@ pub struct Snapshot {
     /// Absent, with `avatar` and `environment`, while no world is loaded (menus).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub coverage: Option<Coverage>,
+    /// The squares of the avatar's level a map click selects.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub view: Option<Coverage>,
     pub interaction: Boundary,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub avatar: Option<Avatar>,
@@ -368,6 +374,15 @@ pub struct ClientInfo {
 pub struct HelloParams {
     pub versions: Vec<String>,
     pub client: ClientInfo,
+    /// Map cells the client can show; the engine sizes its terrain window to them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub viewport: Option<Viewport>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Viewport {
+    pub cols: u32,
+    pub rows: u32,
 }
 
 impl HelloParams {
@@ -378,6 +393,14 @@ impl HelloParams {
                 name: client.into(),
                 version: env!("CARGO_PKG_VERSION").into(),
             },
+            viewport: None,
+        }
+    }
+
+    pub fn with_viewport(self, viewport: Viewport) -> Self {
+        Self {
+            viewport: Some(viewport),
+            ..self
         }
     }
 }

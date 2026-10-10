@@ -129,6 +129,7 @@ fn by_def(def: &str, v: &Value) -> Result<Value, String> {
     use protocol::*;
     match def {
         "hello_params" => round_trip::<HelloParams>(v),
+        "viewport" => round_trip::<Viewport>(v),
         "hello_result" => round_trip::<Hello>(v),
         "empty_params" => round_trip::<std::collections::BTreeMap<String, Value>>(v),
         "subscribe_result" => round_trip::<Snapshot>(v),

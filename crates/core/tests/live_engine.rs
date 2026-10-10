@@ -63,14 +63,19 @@ fn live_engine_starts_the_tutorial_and_walks_one_step() {
     choose_label(&mut model, "Tutorial");
     wait_for(&mut model, "the tutorial map", |m| m.size().x > 0);
 
-    let start = model.player();
-    let target = Pos {
-        x: start.x + 1,
-        y: start.y,
-    };
-    assert!(model.step_toward(target), "movement was submitted");
-    wait_for(&mut model, "one step east", |m| m.player() != start);
-    assert_eq!(model.player(), target);
+    // The view follows the avatar, so only the absolute square tells that it moved.
+    let square = |m: &EngineModel| (m.player().x + m.origin().x, m.player().y + m.origin().y);
+    let start = square(&model);
+    let me = model.player();
+    assert!(
+        model.step_toward(Pos {
+            x: me.x + 1,
+            y: me.y
+        }),
+        "movement was submitted"
+    );
+    wait_for(&mut model, "one step east", |m| square(m) != start);
+    assert_eq!(square(&model), (start.0 + 1, start.1));
 }
 
 #[test]
@@ -266,4 +271,37 @@ fn live_engine_remembered_furniture_stays_drawn_after_walking_past_it() {
         step(&mut model, -1);
     }
     assert_eq!(racks(&model), 1, "the rack is drawn from map memory");
+}
+
+#[test]
+#[ignore = "requires BN_ENGINE that sizes its terrain window from the client's viewport"]
+fn live_engine_map_follows_the_declared_viewport_and_accepts_clicks_across_it() {
+    let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
+    let transport = StdioTransport::spawn(engine.as_ref()).expect("engine starts");
+    let mut model = EngineModel::new(Box::new(transport));
+
+    wait_for(&mut model, "subscription", |m| m.live());
+    choose_label(&mut model, "New Game");
+    choose_label(&mut model, "Tutorial");
+    wait_for(&mut model, "the tutorial map", |m| m.size().x > 0);
+    wait_for(&mut model, "idle", |m| !m.busy());
+    dismiss_popups(&mut model);
+    assert_eq!(model.size(), Pos { x: 40, y: 25 }, "hello declared 40x25");
+
+    // A panel larger than the engine's default window: the engine grows its window to match.
+    model.set_viewport(Pos { x: 60, y: 30 });
+    wait_for(&mut model, "the engine window to grow", |m| {
+        m.size() == Pos { x: 60, y: 30 }
+    });
+
+    // The far east column was outside the default 36x24 window; the engine now accepts a click there.
+    let me = model.player();
+    wait_for(&mut model, "idle", |m| !m.busy());
+    assert!(model.travel(Pos { x: 59, y: me.y }));
+    wait_for(&mut model, "the click to finish", |m| !m.busy());
+    assert!(
+        model.messages().iter().all(|m| !m.contains("rejected")),
+        "{:?}",
+        model.messages()
+    );
 }
