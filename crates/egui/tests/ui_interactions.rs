@@ -237,7 +237,7 @@ fn a_description_and_columns_of_the_selected_entry_are_shown() {
             "choices":[strength],"choice_total":1,"allow_set_count":false}),
     ));
     h.run_steps(3);
-    h.get_by_label("Character information");
+    assert!(h.get_all_by_label("Character information").count() >= 1);
     h.get_by_label("Strength affects your melee damage.");
     h.get_by_label("Current: 8");
     h.get_by_label("Base: 9");

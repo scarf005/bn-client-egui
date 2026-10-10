@@ -1037,7 +1037,12 @@ impl GameModel for EngineModel {
                 .find(|p| p["label"] == label)
                 .and_then(|p| p["id"].as_str())
         };
-        let tab = |c: &protocol::Choice| c.pane_id.is_none() && pane_of(&c.label).is_some();
+        // Without the engine's pane list, the rows that belong to no pane are the tabs of a paned menu.
+        let paned = i.choices.iter().any(|c| c.pane_id.is_some());
+        let tab = |c: &protocol::Choice| {
+            c.pane_id.is_none()
+                && (pane_of(&c.label).is_some() || (pane_labels.is_empty() && paned))
+        };
         Some(Menu {
             context: i.context.clone(),
             field,

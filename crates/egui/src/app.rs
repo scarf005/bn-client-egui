@@ -517,9 +517,10 @@ impl<M: GameModel> App<M> {
                 .find(|(label, _)| label.strip_suffix(" color") == Some(name))
                 .map(|(_, color)| color.as_str())
         };
-        let shown = columns
-            .iter()
-            .filter(|(label, value)| !label.ends_with(" color") && !value.is_empty());
+        let shown = columns.iter().filter(|(label, value)| {
+            // `source` names the selector column an item comes from; the engine keeps it for clients.
+            !label.ends_with(" color") && label != "source" && !value.is_empty()
+        });
         for (label, value) in shown {
             let value = match tint(label) {
                 Some(color) => format!("<color_{color}>{value}</color>"),
@@ -613,11 +614,11 @@ impl<M: GameModel> App<M> {
         if let Some(focus) = self.model.focus() {
             self.cursor = to_abs(focus);
         }
-        let mut cursor = at_view(self.cursor);
         let player = self.model.player();
         if !std::mem::replace(&mut self.cursor_placed, true) {
-            self.cursor = player;
+            self.cursor = to_abs(player);
         }
+        let mut cursor = at_view(self.cursor);
         let route = self.model.route();
         let mut status = format!(
             "Player at ({}, {}). Cursor ({}, {}): {}.",
