@@ -1,12 +1,15 @@
 //! Terminal client over the same `GameModel` as the egui client.
 
-use bn_client_core::{ActionEntry, GameModel, Loading, Menu, Pos, Rgb};
+mod crafting;
+mod settings;
+
+use bn_client_core::{ActionEntry, Failure, GameModel, Loading, Menu, Pos, Rgb, keys};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Clear, Gauge, Paragraph};
+use ratatui::widgets::{Block, Clear, Gauge, Paragraph, Wrap};
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 const LOG_LINES: usize = 6;
@@ -31,6 +34,10 @@ pub struct TuiApp<M: GameModel> {
     actions_open: Option<usize>,
     /// Message log lines scrolled back from the newest.
     log_back: usize,
+    /// The crafting search or batch count being typed.
+    input: Option<crafting::Input>,
+    /// A settings value being typed.
+    edit: Option<settings::Edit>,
 }
 
 fn color(c: Rgb) -> Color {
@@ -39,7 +46,8 @@ fn color(c: Rgb) -> Color {
 
 /// The game's key token for a terminal key, or `None` for keys the game has no name for.
 fn token(key: KeyEvent) -> Option<String> {
-    Some(match key.code {
+    let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+    let base = match key.code {
         KeyCode::Char(' ') => "SPACE".into(),
         KeyCode::Char(c) => c.to_string(),
         KeyCode::Up => "UP".into(),
@@ -48,13 +56,22 @@ fn token(key: KeyEvent) -> Option<String> {
         KeyCode::Right => "RIGHT".into(),
         KeyCode::Home => "HOME".into(),
         KeyCode::End => "END".into(),
-        KeyCode::PageUp => "PAGE_UP".into(),
-        KeyCode::PageDown => "PAGE_DOWN".into(),
+        KeyCode::PageUp => "PPAGE".into(),
+        KeyCode::PageDown => "NPAGE".into(),
         KeyCode::Enter => "RETURN".into(),
         KeyCode::Tab => "TAB".into(),
+        KeyCode::BackTab => "BACKTAB".into(),
+        KeyCode::Backspace => "BACKSPACE".into(),
+        KeyCode::Delete => "DELETE".into(),
         KeyCode::Esc => "ESC".into(),
+        KeyCode::F(n @ 1..=12) => keys::function(n),
         _ => return None,
-    })
+    };
+    Some(keys::chord(
+        &base,
+        ctrl,
+        key.modifiers.contains(KeyModifiers::SHIFT),
+    ))
 }
 
 fn arrow(code: KeyCode) -> Option<(i32, i32)> {
@@ -80,6 +97,8 @@ impl<M: GameModel> TuiApp<M> {
             map_first: Pos { x: 0, y: 0 },
             actions_open: None,
             log_back: 0,
+            input: None,
+            edit: None,
         }
     }
 
@@ -101,8 +120,23 @@ impl<M: GameModel> TuiApp<M> {
             (m.title.clone(), m.entries().len(), tab)
         });
         if sig != self.menu_sig {
+            // Typing a filter changes the rows but not the screen.
+            if sig.as_ref().map(|s| &s.0) != self.menu_sig.as_ref().map(|s| &s.0) {
+                self.edit = None;
+            }
             self.selected = 0;
             self.menu_sig = sig;
+        }
+        // The engine's own cursor is the highlight; its navigation keys move it. The crafting
+        // screen keeps its own list.
+        if let Some(menu) = menu.as_ref().filter(|m| m.context != "CRAFTING") {
+            let entries = menu.entries();
+            // A cursor on a tab header, or none, leaves the row marked selected as the one it is on.
+            let at = entries
+                .iter()
+                .position(|c| menu.focus.as_deref() == Some(c.id.as_str()))
+                .or_else(|| entries.iter().position(|c| c.selected));
+            self.selected = at.unwrap_or(self.selected);
         }
         menu
     }
@@ -138,23 +172,42 @@ impl<M: GameModel> TuiApp<M> {
             self.quit = true;
             return;
         }
+        if self.model.failure().is_some() {
+            if matches!(key.code, KeyCode::Char('r' | 'R')) {
+                self.model.restart();
+            }
+            return;
+        }
         if self.model.loading().is_some() {
             return;
         }
-        if key.code == KeyCode::Esc && self.model.interrupt() {
-            return;
-        }
-        if let Some(menu) = self.menu() {
-            return self.menu_key(&menu, key.code);
+        if key.code == KeyCode::Esc {
+            // Esc stops a running activity and leaves look mode, whichever applies.
+            let stopped = self.model.interrupt();
+            if self.cursor.take().is_some() {
+                self.destination = None;
+                return;
+            }
+            if stopped {
+                return;
+            }
         }
         if let Some(row) = self.actions_open {
             return self.actions_key(row, key.code);
+        }
+        if let Some(menu) = self.menu() {
+            return match menu.context.as_str() {
+                "CRAFTING" => self.crafting_key(&menu, key),
+                _ if self.settings_key(&menu, key) => {}
+                _ => self.menu_key(&menu, key),
+            };
         }
         if self.cursor.is_some() {
             return self.look_key(key);
         }
         self.destination = None;
-        if matches!(key.code, KeyCode::Char('x' | ';')) {
+        // Look mode starts with whatever keys the engine binds to its look action.
+        if self.is_look_key(key) {
             self.cursor = Some(self.absolute(self.model.player()));
             return;
         }
@@ -193,33 +246,15 @@ impl<M: GameModel> TuiApp<M> {
         }
     }
 
-    fn menu_key(&mut self, menu: &Menu, code: KeyCode) {
-        let (tabs, entries) = (menu.tabs(), menu.entries());
-        let last = entries.len().saturating_sub(1);
-        match code {
-            KeyCode::Up => self.selected = self.selected.saturating_sub(1),
-            KeyCode::Down => self.selected = (self.selected + 1).min(last),
-            KeyCode::PageUp => self.selected = self.selected.saturating_sub(PAGE),
-            KeyCode::PageDown => self.selected = (self.selected + PAGE).min(last),
-            KeyCode::Home => self.selected = 0,
-            KeyCode::End => self.selected = last,
-            KeyCode::Left | KeyCode::Right => {
-                let here = tabs.iter().position(|t| t.selected).unwrap_or(0);
-                let next = match code {
-                    KeyCode::Left => here.checked_sub(1),
-                    _ => Some(here + 1),
-                };
-                if let Some(tab) = next.and_then(|i| tabs.get(i)) {
-                    self.model.choose(&tab.id);
-                }
-            }
-            KeyCode::Enter => {
-                if let Some(c) = entries.get(self.selected) {
-                    self.model.choose(&c.id);
-                }
-            }
-            KeyCode::Esc => self.model.cancel_menu(),
-            _ => {}
+    /// A menu is an engine input context: its keys (navigation, paging, confirm, cancel, tab switch)
+    /// are whatever the player bound in it, and the engine moves its own cursor.
+    fn menu_key(&mut self, menu: &Menu, key: KeyEvent) {
+        if token(key).is_some_and(|t| self.model.press(&t)) {
+            return;
+        }
+        // A menu the engine gives no cancel key still closes with Esc.
+        if key.code == KeyCode::Esc && menu.can_cancel {
+            self.model.cancel_menu();
         }
     }
 
@@ -242,6 +277,36 @@ impl<M: GameModel> TuiApp<M> {
         }
     }
 
+    /// The one-square step of the movement action the engine binds to `token`.
+    fn direction(&self, token: &str) -> Option<(i32, i32)> {
+        let action = self
+            .model
+            .actions()
+            .into_iter()
+            .find(|a| a.keys.iter().any(|k| k == token))?;
+        Some(match action.id.as_str() {
+            "UP" => (0, -1),
+            "DOWN" => (0, 1),
+            "LEFT" => (-1, 0),
+            "RIGHT" => (1, 0),
+            "LEFTUP" => (-1, -1),
+            "RIGHTUP" => (1, -1),
+            "LEFTDOWN" => (-1, 1),
+            "RIGHTDOWN" => (1, 1),
+            _ => return None,
+        })
+    }
+
+    /// Whether the engine binds `key` to its look action.
+    fn is_look_key(&self, key: KeyEvent) -> bool {
+        token(key).is_some_and(|t| {
+            self.model
+                .actions()
+                .iter()
+                .any(|a| a.id == "look" && a.keys.contains(&t))
+        })
+    }
+
     /// The look cursor moves with arrows and vi keys (five cells with Shift); Enter plans a route to it
     /// and, pressed again, walks it; Esc leaves.
     fn look_key(&mut self, key: KeyEvent) {
@@ -251,20 +316,13 @@ impl<M: GameModel> TuiApp<M> {
         let shifted = key.modifiers.contains(KeyModifiers::SHIFT)
             || matches!(key.code, KeyCode::Char(c) if c.is_uppercase());
         let step = if shifted { 5 } else { 1 };
-        let delta = match key.code {
-            KeyCode::Char(c) => match c.to_ascii_lowercase() {
-                'h' => Some((-1, 0)),
-                'j' => Some((0, 1)),
-                'k' => Some((0, -1)),
-                'l' => Some((1, 0)),
-                'y' => Some((-1, -1)),
-                'u' => Some((1, -1)),
-                'b' => Some((-1, 1)),
-                'n' => Some((1, 1)),
-                _ => None,
-            },
-            code => arrow(code),
-        };
+        // The directions are whatever keys the engine binds to its movement actions; an upper case
+        // letter without a binding of its own is the five-cell move of its lower case twin.
+        let named = token(key);
+        let delta = named
+            .as_deref()
+            .and_then(|t| self.direction(t))
+            .or_else(|| named.and_then(|t| self.direction(&t.to_lowercase())));
         if let Some((dx, dy)) = delta {
             let size = self.model.size();
             let view = self.view(at);
@@ -282,7 +340,7 @@ impl<M: GameModel> TuiApp<M> {
                     self.go_to(self.view(at));
                 }
             }
-            KeyCode::Esc | KeyCode::Char('x' | ';') => {
+            _ if key.code == KeyCode::Esc || self.is_look_key(key) => {
                 self.cursor = None;
                 self.destination = None;
             }
@@ -315,6 +373,9 @@ impl<M: GameModel> TuiApp<M> {
     }
 
     pub fn draw(&mut self, f: &mut Frame) {
+        if let Some(failure) = self.model.failure() {
+            return Self::draw_failure(f, &failure);
+        }
         if let Some(loading) = self.model.loading() {
             return Self::draw_loading(f, &loading);
         }
@@ -332,22 +393,30 @@ impl<M: GameModel> TuiApp<M> {
         self.draw_actions(f, actions);
         self.draw_items(f, items);
         f.render_widget(Paragraph::new(self.status_line()), status);
-        let messages = self.model.messages();
-        let end = messages
-            .len()
-            .saturating_sub(self.log_back.min(messages.len()));
-        let shown = &messages[end.saturating_sub(LOG_LINES)..end];
-        let lines = shown
+        // The game's own lines in their colours with repeat counts, then the client's command results.
+        let native = self.model.native_log().iter().map(|l| {
+            let style = l.color.map_or(Style::new(), |c| Style::new().fg(color(c)));
+            Line::styled(l.shown(), style)
+        });
+        let commands = self
+            .model
+            .messages()
             .iter()
-            .map(|m| Line::raw(m.as_str()))
-            .collect::<Vec<_>>();
+            .map(|m| Line::styled(m.as_str(), Style::new().fg(Color::DarkGray)));
+        let all = native.chain(commands).collect::<Vec<_>>();
+        let end = all.len().saturating_sub(self.log_back.min(all.len()));
+        let lines = all[end.saturating_sub(LOG_LINES)..end].to_vec();
         f.render_widget(
             Paragraph::new(lines).block(Block::bordered().title("Message log")),
             log,
         );
         if let Some(menu) = self.menu() {
-            self.draw_menu(f, &menu);
-        } else if let Some(row) = self.actions_open {
+            match menu.context.as_str() {
+                "CRAFTING" => self.draw_crafting(f, &menu),
+                _ => self.draw_menu(f, &menu),
+            }
+        }
+        if let Some(row) = self.actions_open {
             self.draw_action_list(f, row);
         }
     }
@@ -376,6 +445,18 @@ impl<M: GameModel> TuiApp<M> {
             "{command} | Look ({}, {}): {desc} [{hint}, Esc]",
             view.x, view.y
         )
+    }
+
+    /// The engine is gone or silent: its last stderr lines and how to restart.
+    fn draw_failure(f: &mut Frame, failure: &Failure) {
+        let mut lines = vec![Line::from(failure.message.clone()), Line::from("")];
+        if !failure.stderr.is_empty() {
+            lines.push(Line::from("Last engine output:"));
+            lines.extend(failure.stderr.iter().map(|l| Line::from(l.clone())));
+            lines.push(Line::from(""));
+        }
+        lines.push(Line::from("R: restart the engine    Ctrl-C: quit"));
+        f.render_widget(Paragraph::new(lines), f.area());
     }
 
     /// Title, a progress bar over the steps, and the step list (the splash image is skipped).
@@ -512,14 +593,20 @@ impl<M: GameModel> TuiApp<M> {
         };
         let mut lines = section("Ground", self.model.ground());
         lines.extend(section("Inventory", self.model.inventory()));
-        f.render_widget(Paragraph::new(lines).block(Block::bordered()), area);
+        f.render_widget(
+            Paragraph::new(lines)
+                .wrap(Wrap { trim: false })
+                .block(Block::bordered()),
+            area,
+        );
     }
 
     fn draw_menu(&mut self, f: &mut Frame, menu: &Menu) {
         let rows = menu
             .entries()
             .iter()
-            .map(|c| {
+            .enumerate()
+            .map(|(i, c)| {
                 let denial = match c.enabled || c.denial.is_empty() {
                     true => String::new(),
                     false => format!(" ({})", c.denial),
@@ -528,7 +615,12 @@ impl<M: GameModel> TuiApp<M> {
                     true => Style::new(),
                     false => Style::new().fg(Color::DarkGray),
                 };
-                (format!("{}{denial}", c.label), style)
+                let value = match (&c.editor, &self.edit) {
+                    (Some(_), Some(edit)) if i == self.selected => format!(": {}", edit.shown()),
+                    (Some(e), _) => format!(": {}", settings::shown_value(e)),
+                    _ => String::new(),
+                };
+                (format!("{}{value}{denial}", c.label), style)
             })
             .collect::<Vec<_>>();
         let tabs = menu
@@ -538,7 +630,12 @@ impl<M: GameModel> TuiApp<M> {
             .collect::<Vec<_>>();
         let popup = Popup {
             title: &menu.title,
-            header: menu.message.lines().map(str::to_string).collect(),
+            header: menu
+                .message
+                .lines()
+                .map(str::to_string)
+                .chain(self.settings_hint(menu))
+                .collect(),
             tabs,
             rows,
             selected: self.selected,
@@ -566,19 +663,7 @@ impl<M: GameModel> TuiApp<M> {
     /// A centred box: message lines, a tab bar, then the rows scrolled to keep the highlighted one visible.
     fn draw_popup(f: &mut Frame, popup: &Popup) {
         let area = f.area();
-        let tab_bar = Line::from(
-            popup
-                .tabs
-                .iter()
-                .flat_map(|(label, on)| {
-                    let style = match on {
-                        true => Style::new().add_modifier(Modifier::REVERSED),
-                        false => Style::new(),
-                    };
-                    [Span::styled(format!(" {label} "), style), Span::raw(" ")]
-                })
-                .collect::<Vec<_>>(),
-        );
+        let tab_bar = bar(&popup.tabs);
         let widest = popup
             .header
             .iter()
@@ -633,6 +718,21 @@ impl<M: GameModel> TuiApp<M> {
             .collect::<Vec<_>>();
         f.render_widget(Paragraph::new(lines), list);
     }
+}
+
+/// Tab labels in a row, the selected one reversed.
+fn bar(tabs: &[(String, bool)]) -> Line<'static> {
+    Line::from(
+        tabs.iter()
+            .flat_map(|(label, on)| {
+                let style = match on {
+                    true => Style::new().add_modifier(Modifier::REVERSED),
+                    false => Style::new(),
+                };
+                [Span::styled(format!(" {label} "), style), Span::raw(" ")]
+            })
+            .collect::<Vec<_>>(),
+    )
 }
 
 /// Breaks `text` into lines of at most `width` terminal columns, at spaces where it can.

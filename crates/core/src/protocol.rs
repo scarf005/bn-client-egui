@@ -51,6 +51,9 @@ pub struct Look {
     /// `left` or `right`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub facing: Option<String>,
+    /// Items on the square when there are several, on the displayed item.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stack: Option<u32>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -108,6 +111,12 @@ pub struct Entity {
     /// Sprites drawn over a character, bottom first.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub overlays: Vec<Look>,
+    /// `hostile`, `friendly`, `neutral` or `any`: how the creature regards the avatar.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attitude: Option<String>,
+    /// The creature is aware of the avatar.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub aware: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub statuses: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -140,6 +149,9 @@ pub struct Avatar {
     pub inventory: Option<Vec<InventoryItem>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sidebar: Option<Sidebar>,
+    /// The stacks on the avatar's own square; absent from engines that predate it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ground: Option<Vec<InventoryItem>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -148,6 +160,9 @@ pub struct InventoryItem {
     pub name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub count: Option<u64>,
+    /// `wielded`, `worn` or `carried`; absent for items on the ground.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub slot: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -177,9 +192,12 @@ pub struct Readiness {
 pub struct Action {
     pub id: String,
     pub name: String,
+    /// Keyboard keys the active input context binds to the action; absent from older engines.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub keys: Option<Vec<String>>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Choice {
     pub id: String,
     pub label: String,
@@ -190,9 +208,43 @@ pub struct Choice {
     pub enabled: bool,
     pub selectable: bool,
     pub selected: bool,
+    /// The native cursor row of a list menu.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub highlighted: Option<bool>,
     pub columns: Vec<Column>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub editor: Option<Editor>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected_count: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub available_count: Option<u64>,
+}
+
+/// A value the row can be set to directly with a `fill` on the row's id.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Editor {
+    /// `bool`, `select`, `integer`, `float` or `text`.
+    #[serde(rename = "type")]
+    pub kind: String,
+    pub value: String,
+    #[serde(default)]
+    pub values: Vec<EditorValue>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub minimum: Option<serde_json::Number>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub maximum: Option<serde_json::Number>,
+    #[serde(default = "no_limit")]
+    pub max_length: i64,
+}
+
+fn no_limit() -> i64 {
+    -1
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EditorValue {
+    pub id: String,
+    pub label: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

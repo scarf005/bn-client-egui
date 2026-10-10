@@ -1,7 +1,7 @@
 //! Searchable list of everything the engine accepts, opened from the top bar or with Ctrl+P.
 
-use super::App;
-use bn_client_core::GameModel;
+use super::{App, Queued};
+use bn_client_core::{GameModel, markup};
 use eframe::egui;
 
 impl<M: GameModel> App<M> {
@@ -61,8 +61,12 @@ impl<M: GameModel> App<M> {
                         ui.with_layout(egui::Layout::top_down_justified(egui::Align::Min), |ui| {
                             for a in &actions {
                                 let label = match a.keys.is_empty() {
-                                    true => a.name.clone(),
-                                    false => format!("{} ({})", a.name, a.keys.join(", ")),
+                                    true => markup::plain(&a.name),
+                                    false => format!(
+                                        "{} ({})",
+                                        markup::plain(&a.name),
+                                        a.keys.join(", ")
+                                    ),
                                 };
                                 let button = self.control(ui, label, &a.id, true, false);
                                 if button.clicked() {
@@ -75,9 +79,27 @@ impl<M: GameModel> App<M> {
         match invoke {
             Some(id) => {
                 ctx.request_repaint();
-                self.model.invoke_action(&id);
+                match self.model.busy() {
+                    true => self.queued = Some(Queued::Action(id)),
+                    false => {
+                        self.model.invoke_action(&id);
+                    }
+                }
             }
             None if !close => self.palette = Some(query),
+            None => {}
+        }
+    }
+
+    /// Runs the click that waited for the engine to finish its previous command.
+    pub(super) fn run_queued(&mut self) {
+        if self.model.busy() {
+            return;
+        }
+        match self.queued.take() {
+            Some(Queued::Action(id)) => {
+                self.model.invoke_action(&id);
+            }
             None => {}
         }
     }

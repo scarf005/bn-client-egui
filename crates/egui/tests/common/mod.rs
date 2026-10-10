@@ -67,6 +67,7 @@ pub fn game_root(tag: &str) -> std::path::PathBuf {
                     {"id": "corner", "fg": 4}
                 ]},
                 {"id": "t_wall_season_winter", "fg": 5},
+                {"id": "lighting_hidden", "fg": 4},
                 {"id": "grass", "fg": [{"weight": 1, "sprite": 5}, {"weight": 3, "sprite": 6}]},
                 {"id": ["mon_a", "mon_b", "mon_zombie"], "fg": 7}
             ]},

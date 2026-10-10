@@ -1,8 +1,9 @@
 //! The right-hand sidebar, like the native Tiles one: status contents on top, the message log below.
 
 use super::App;
-use bn_client_core::{GameModel, LogLine};
-use eframe::egui::{self, accesskit};
+use crate::a11y;
+use bn_client_core::{GameModel, LogLine, markup};
+use eframe::egui;
 
 /// The message log's share of the sidebar height.
 const LOG_SHARE: f32 = 0.4;
@@ -57,14 +58,16 @@ impl<M: GameModel> App<M> {
                         ui.heading(title);
                         for (index, name) in items.iter().enumerate() {
                             ui.horizontal(|ui| {
-                                let grip = ui.add(egui::Label::new(name).sense(egui::Sense::DRAG));
+                                let grip = ui.add(
+                                    egui::Label::new(self.rich(ui, name)).sense(egui::Sense::DRAG),
+                                );
                                 grip.dnd_set_drag_payload(Dragged {
                                     from: column,
                                     index,
                                 });
                                 let button = ui.button(verb);
                                 ui.ctx().accesskit_node_builder(button.id, |b| {
-                                    b.set_label(format!("{verb} {name}"))
+                                    b.set_label(format!("{verb} {}", markup::plain(name)))
                                 });
                                 if button.clicked() {
                                     moved = Some(Dragged {
@@ -119,9 +122,7 @@ pub(super) fn message_log(
 ) {
     ui.heading("Message log");
     if !native.is_empty() {
-        let live = ui.label(live[0]);
-        ui.ctx()
-            .accesskit_node_builder(live.id, |b| b.set_live(accesskit::Live::Polite));
+        a11y::live_region(ui, live[0]);
     }
     egui::ScrollArea::vertical()
         .id_salt("native_log")
@@ -138,9 +139,7 @@ pub(super) fn message_log(
         });
     if !commands.is_empty() {
         ui.separator();
-        let live = ui.label(live[1]);
-        ui.ctx()
-            .accesskit_node_builder(live.id, |b| b.set_live(accesskit::Live::Polite));
+        a11y::live_region(ui, live[1]);
     }
     egui::ScrollArea::vertical()
         .id_salt("command_log")

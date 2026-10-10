@@ -24,9 +24,17 @@ saves, options and keybindings are used (Load tab, Save and Quit work as in Tile
 `--configdir PATH` override them; `--fresh-profile` (or `BN_FRESH_PROFILE=1`) uses a private throwaway profile.
 Live tests always use one.
 
-Terminal client over the same model (`Ctrl-C` quits; arrows/vi-keys/game keys walk and act; main menu tabs on Left/Right, entries on Up/Down/Enter/Esc;
-`x` or `;` starts a look cursor: move it, Enter shows the route, Enter again walks, Esc leaves; left click travels the same way;
-`Tab` lists the actions, PageUp/PageDown scroll the message log; the terminal size is declared to the engine as the map viewport):
+Terminal client over the same model (`Ctrl-C` quits; the terminal size is declared to the engine as the map viewport).
+
+Keys: the client binds none. The engine sends, with every action, the keys of the active input context
+(the game, a menu, a popup, look mode) including the player's own rebinds in the engine profile's
+`keybindings.json`, and the client forwards what is pressed. So movement, menu navigation, paging,
+confirm, cancel, tab switching, look and every other key are the engine's bindings; a rebound `CONFIRM`
+confirms in menus. The only keys the clients keep for themselves are not game input:
+egui: Tab and Shift+Tab move keyboard focus, Space and Enter act on a focused widget, and arrows move the
+map cursor of the mouse-and-keyboard view; TUI: Ctrl-C quits, Tab opens the actions list, and its look
+mode starts and leaves with the keys the engine binds to its look action, with the cursor moved by the
+engine's direction keys.
 
     cargo run -p bn-client-tui                 # same engine lookup; --fake for the fake model
 
@@ -50,7 +58,7 @@ replace it with a recorded session once an engine can produce one.
 
 Mouse: left-click walks, right-click opens Look / Move here, hover shows a tooltip,
 items drag between Ground and Inventory. Keyboard: focus the map, arrows move the
-cursor, Enter walks there, L looks; per-item Pick up / Drop buttons replace dragging.
+cursor; per-item Pick up / Drop buttons replace dragging.
 
 ## TODO (manual, not done)
 

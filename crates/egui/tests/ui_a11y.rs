@@ -289,3 +289,30 @@ fn messages_arriving_in_one_frame_are_announced_together_and_only_once() {
     assert!(live.iter().any(|v| v == "Crash!"), "{live:?}");
     assert!(!live.iter().any(|v| v.contains("door")), "{live:?}");
 }
+
+#[test]
+fn a_live_announcement_is_not_drawn_as_a_second_copy_of_the_message() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    script.push(fixture("events_41_walk"));
+    log_line(&script, 42, "7", "You open the door.", 1);
+    h.run_steps(3);
+    let with_text = || {
+        h.root()
+            .children_recursive()
+            .filter(|n| n.accesskit_node().value().as_deref() == Some("You open the door."))
+            .map(|n| {
+                let node = n.accesskit_node();
+                (node.id(), (node.live(), node.raw_bounds().is_some()))
+            })
+            .collect::<std::collections::HashMap<_, _>>()
+            .into_values()
+            .collect::<Vec<_>>()
+    };
+    let nodes = with_text();
+    let live = nodes.iter().filter(|(l, _)| *l == accesskit::Live::Polite);
+    assert!(
+        live.clone().count() == 1 && live.clone().all(|(_, drawn)| !drawn),
+        "the announcement exists for screen readers and paints nothing: {nodes:?}"
+    );
+}

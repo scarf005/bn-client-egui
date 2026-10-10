@@ -1,5 +1,4 @@
 //! Needs a real engine build: `BN_ENGINE=/path/to/cataclysm-bn-tiles cargo test -p bn-client-core --test live_messages -- --ignored --nocapture`
-use bn_client_core::keys::KeyMap;
 use bn_client_core::transport::StdioTransport;
 use bn_client_core::{EngineModel, GameModel};
 use std::time::{Duration, Instant};
@@ -55,10 +54,8 @@ fn dismiss_popups(model: &mut EngineModel) {
 #[ignore = "requires BN_ENGINE pointing at an engine binary"]
 fn live_engine_message_log_shows_native_lines_with_repeat_counts() {
     let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
-    let root = bn_client_core::transport::game_root(engine.as_ref(), None);
-    let keys = root.as_deref().map_or_else(KeyMap::default, KeyMap::load);
     let t = StdioTransport::spawn(engine.as_ref()).expect("engine starts");
-    let mut m = EngineModel::new(Box::new(t)).with_keys(keys);
+    let mut m = EngineModel::new(Box::new(t));
     wait_for(&mut m, "subscription", |m| m.live());
     choose_label(&mut m, "New Game");
     choose_label(&mut m, "Tutorial");

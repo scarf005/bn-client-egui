@@ -4,6 +4,7 @@ pub mod colors;
 pub mod engine_model;
 pub mod keys;
 pub mod launch;
+pub mod markup;
 pub mod model;
 pub mod protocol;
 pub mod replica;
@@ -14,6 +15,6 @@ pub mod watchdog;
 pub use clock::Clock;
 pub use engine_model::EngineModel;
 pub use model::{
-    ActionEntry, Cell, CommandStatus, FakeModel, GameModel, Layer, Loading, LogLine, Menu,
-    MenuChoice, Pos, Rgb,
+    ActionEntry, Cell, CommandStatus, Failure, FailureKind, FakeModel, GameModel, Layer, Loading,
+    LogLine, Menu, MenuChoice, Pos, Rgb,
 };

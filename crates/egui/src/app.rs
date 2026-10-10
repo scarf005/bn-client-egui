@@ -1,10 +1,13 @@
 use crate::a11y;
 use crate::display::Display;
-use bn_client_core::{GameModel, Loading, Pos};
+use crate::text;
+use bn_client_core::{Failure, GameModel, Loading, Pos, keys};
 use eframe::egui::{self, accesskit};
 
+mod crafting;
 mod menu;
 mod palette;
+mod pickup;
 mod sidebar;
 
 /// A command must outlast this before the controls show it; keeps short commands from blinking the UI.
@@ -75,8 +78,18 @@ pub struct App<M: GameModel> {
     command_live: a11y::Announcer,
     /// The enabled controls of the open menu, in Tab order, as of the last frame.
     menu_ids: Vec<egui::Id>,
+    /// Where the engine's cursor was in the open menu, so keyboard focus can follow it.
+    menu_focus: Option<String>,
     /// The cursor has been put on the player since the map first appeared.
     cursor_placed: bool,
+    crafting: crafting::Crafting,
+    pickup: pickup::Pickup,
+    /// A click that arrived while a command was in flight, sent when the engine is free again.
+    queued: Option<Queued>,
+}
+
+enum Queued {
+    Action(String),
 }
 
 impl<M: GameModel> App<M> {
@@ -103,8 +116,12 @@ impl<M: GameModel> App<M> {
             refocus_map: false,
             cursor_placed: false,
             menu_ids: Vec::new(),
+            menu_focus: None,
             native_live: a11y::Announcer::default(),
             command_live: a11y::Announcer::default(),
+            crafting: Default::default(),
+            pickup: Default::default(),
+            queued: None,
         }
     }
 
@@ -146,7 +163,32 @@ impl<M: GameModel> App<M> {
         &self.display
     }
 
+    /// `text` with its colour tags drawn as colours.
+    fn rich(&self, ui: &egui::Ui, text: &str) -> egui::WidgetText {
+        let font = egui::TextStyle::Body.resolve(ui.style());
+        text::job(&self.model.styled(text), &font).into()
+    }
+
     /// Native-style loading screen: splash image, current step as live text, the step list.
+    /// The engine is gone or silent: say so with its last stderr lines, and offer a restart.
+    fn failure(&mut self, ui: &mut egui::Ui, failure: &Failure) {
+        let heading = ui.heading(&failure.message);
+        ui.ctx()
+            .accesskit_node_builder(heading.id, |b| b.set_live(accesskit::Live::Assertive));
+        if !failure.stderr.is_empty() {
+            ui.label("Last engine output:");
+            egui::ScrollArea::vertical().show(ui, |ui| {
+                for line in &failure.stderr {
+                    ui.monospace(line);
+                }
+            });
+        }
+        let restart = ui.button("Restart");
+        if restart.clicked() {
+            self.model.restart();
+        }
+    }
+
     fn loading(&self, ui: &mut egui::Ui, loading: &Loading) {
         ui.vertical_centered(|ui| self.loading_content(ui, loading));
     }
@@ -208,6 +250,10 @@ impl<M: GameModel> App<M> {
             egui_extras::install_image_loaders(ui.ctx());
             self.images = true;
         }
+        if let Some(failure) = self.model.failure() {
+            self.failure(ui, &failure);
+            return;
+        }
         if let Some(loading) = self.model.loading() {
             self.loading(ui, &loading);
             return;
@@ -220,13 +266,19 @@ impl<M: GameModel> App<M> {
         if self.pending_since.is_some() && !self.settled() {
             ui.ctx().request_repaint_after(SETTLE);
         }
-        if ui.ctx().input(|i| i.key_pressed(egui::Key::Escape)) {
-            self.model.interrupt();
+        if self.model.menu().is_some_and(|m| m.context == "MAIN_MENU") {
+            // The game is over: the next one starts with the cursor on its player and no walk pending.
+            (self.cursor_placed, self.destination, self.marker) = (false, None, None);
         }
+        self.run_queued();
+        // Esc interrupts a running activity; with none running it goes to the game like any key
+        // (leaves look mode, acknowledges a popup, else opens the main menu).
+        let interrupted =
+            ui.ctx().input(|i| i.key_pressed(egui::Key::Escape)) && self.model.interrupt();
         self.walk(ui.ctx());
         self.palette_keys(ui.ctx());
-        self.game_keys(ui.ctx());
-        if self.model.menu().is_none() {
+        self.game_keys(ui.ctx(), interrupted);
+        if menu_forwards_keys(self.model.menu().as_ref()) {
             // Arrow keys belong to the game, whichever widget was clicked last; Tab still moves focus.
             let ctx = ui.ctx();
             if let Some(id) = ctx.memory(|m| m.focused()) {
@@ -258,7 +310,53 @@ impl<M: GameModel> App<M> {
     }
 
     /// Typed characters and special keys are game keys; the first one that runs an action wins.
-    fn game_keys(&mut self, ctx: &egui::Context) {
+    /// Named like the engine's key names (`SPACE`, `ESC`, `RETURN`, `UP`, `PPAGE`).
+    fn game_keys(&mut self, ctx: &egui::Context, interrupted: bool) {
+        use egui::Key;
+        const NAMED: [(Key, &str); 13] = [
+            (Key::ArrowUp, "UP"),
+            (Key::ArrowDown, "DOWN"),
+            (Key::ArrowLeft, "LEFT"),
+            (Key::ArrowRight, "RIGHT"),
+            (Key::Escape, "ESC"),
+            (Key::Enter, "RETURN"),
+            (Key::Tab, "TAB"),
+            (Key::Backspace, "BACKSPACE"),
+            (Key::Delete, "DELETE"),
+            (Key::Home, "HOME"),
+            (Key::End, "END"),
+            (Key::PageUp, "PPAGE"),
+            (Key::PageDown, "NPAGE"),
+        ];
+        const FUNCTION: [Key; 12] = [
+            Key::F1,
+            Key::F2,
+            Key::F3,
+            Key::F4,
+            Key::F5,
+            Key::F6,
+            Key::F7,
+            Key::F8,
+            Key::F9,
+            Key::F10,
+            Key::F11,
+            Key::F12,
+        ];
+        // The engine's name for a pressed key, with Ctrl and Shift folded in (`CTRL+S`, `BACKTAB`).
+        let name = |key: Key, mods: egui::Modifiers| {
+            let base = NAMED
+                .iter()
+                .find(|(k, _)| *k == key)
+                .map(|(_, n)| n.to_string())
+                .or_else(|| {
+                    FUNCTION
+                        .iter()
+                        .position(|k| *k == key)
+                        .map(|n| keys::function(n as u8 + 1))
+                })
+                .or_else(|| mods.ctrl.then(|| key.name().to_string()))?;
+            Some(keys::chord(&base, mods.ctrl, mods.shift))
+        };
         let typed = ctx.input(|i| {
             i.events
                 .iter()
@@ -268,28 +366,55 @@ impl<M: GameModel> App<M> {
                 })
                 .collect::<Vec<_>>()
         });
-        let arrows = ctx.input(|i| {
-            [
-                (egui::Key::ArrowUp, "UP"),
-                (egui::Key::ArrowDown, "DOWN"),
-                (egui::Key::ArrowLeft, "LEFT"),
-                (egui::Key::ArrowRight, "RIGHT"),
-            ]
-            .into_iter()
-            .filter(|(key, _)| i.key_pressed(*key))
-            .map(|(_, token)| token.to_string())
-            .collect::<Vec<_>>()
-        });
-        let arrows = if self.model.menu().is_none() {
-            arrows
+        let menu = self.model.menu();
+        // A menu is an engine input context: its navigation, paging, confirm and cancel keys are the
+        // player's bindings, and the engine moves its own cursor. The exceptions are the toolkit's
+        // accessibility keys: Tab and Shift+Tab move focus, and Space and Enter act on a focused widget.
+        // Menus with a text field keep the keyboard for typing.
+        let focused = ctx.memory(|m| m.focused()).is_some();
+        let toolkit = |token: &str| match &menu {
+            None => false,
+            Some(_) => {
+                token == "TAB"
+                    || token == "BACKTAB"
+                    || (focused && matches!(token, "SPACE" | "RETURN"))
+            }
+        };
+        let forwards = menu_forwards_keys(menu.as_ref());
+        let typed = if forwards { typed } else { vec![] };
+        // Esc closes a menu through its cancel button, which also covers menus the engine binds no key to.
+        let esc_cancels = menu
+            .as_ref()
+            .is_some_and(|m| m.can_cancel && !m.acknowledges());
+        let named = if forwards {
+            ctx.input(|i| {
+                i.events
+                    .iter()
+                    .filter_map(|e| match e {
+                        egui::Event::Key {
+                            key,
+                            pressed: true,
+                            modifiers,
+                            ..
+                        } if !(*key == Key::Escape && (interrupted || esc_cancels)) => {
+                            name(*key, *modifiers)
+                        }
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>()
+            })
         } else {
             vec![]
         };
+        let (typed, named): (Vec<_>, Vec<_>) = (
+            typed.into_iter().filter(|t| !toolkit(t)).collect(),
+            named.into_iter().filter(|t| !toolkit(t)).collect(),
+        );
         self.keys_consumed = false;
         if self.palette.is_some() {
             return;
         }
-        for key in typed.into_iter().chain(arrows) {
+        for key in typed.into_iter().chain(named) {
             if self.model.press(&key) {
                 self.keys_consumed = true;
             }
@@ -307,9 +432,11 @@ impl<M: GameModel> App<M> {
     }
 
     fn status(&mut self, ui: &mut egui::Ui) {
+        // A command that went well is over; only one still going or one that failed is worth showing.
         let text = self
             .model
             .command()
+            .filter(|s| !(s.finished && s.stage == "done"))
             .map_or_else(|| "Ready".into(), |s| format!("{}: {}", s.label, s.stage));
         ui.horizontal(|ui| {
             let label = ui.label(text);
@@ -333,7 +460,7 @@ impl<M: GameModel> App<M> {
     fn control(
         &self,
         ui: &mut egui::Ui,
-        text: String,
+        text: impl Into<egui::WidgetText>,
         id: &str,
         enabled: bool,
         highlighted: bool,
@@ -350,6 +477,10 @@ impl<M: GameModel> App<M> {
             egui::Button::new(text).selected(pending || highlighted),
         );
         a11y::button(ui.ctx(), button.id, pending);
+        // A clicked button must not keep the focus ring, nor Enter and Space for itself, once it has run.
+        if button.clicked() {
+            button.surrender_focus();
+        }
         button
     }
 
@@ -418,23 +549,33 @@ impl<M: GameModel> App<M> {
             ui.label("No map loaded");
             return;
         }
-        // The map may have been replaced by a smaller one since the cursor was set.
-        self.cursor = Pos {
-            x: self.cursor.x.clamp(0, size.x - 1),
-            y: self.cursor.y.clamp(0, size.y - 1),
+        // The cursor is kept on a map square, so it stays there when the view scrolls; the engine's own
+        // cursor (look mode) wins. The map may also have been replaced by a smaller one since it was set.
+        let origin = self.model.origin();
+        let at_view = |abs: Pos| Pos {
+            x: (abs.x - origin.x).clamp(0, size.x - 1),
+            y: (abs.y - origin.y).clamp(0, size.y - 1),
         };
+        let to_abs = |view: Pos| Pos {
+            x: view.x + origin.x,
+            y: view.y + origin.y,
+        };
+        if let Some(focus) = self.model.focus() {
+            self.cursor = to_abs(focus);
+        }
         let player = self.model.player();
         if !std::mem::replace(&mut self.cursor_placed, true) {
-            self.cursor = player;
+            self.cursor = to_abs(player);
         }
+        let mut cursor = at_view(self.cursor);
         let route = self.model.route();
         let mut status = format!(
             "Player at ({}, {}). Cursor ({}, {}): {}.",
             player.x,
             player.y,
-            self.cursor.x,
-            self.cursor.y,
-            self.model.cell(self.cursor).desc
+            cursor.x,
+            cursor.y,
+            self.model.cell(cursor).desc
         );
         if let Some(end) = route.last() {
             status += &format!(
@@ -466,15 +607,15 @@ impl<M: GameModel> App<M> {
         // Only a moving pointer moves the cursor, so it cannot undo keyboard navigation.
         let hover = response.hover_pos();
         if let Some(p) = hover.filter(|p| self.last_hover != Some(*p)) {
-            self.cursor = cell_at(p);
+            cursor = cell_at(p);
         }
         self.last_hover = hover;
         if response.clicked() {
-            self.go_to(self.cursor);
+            self.go_to(cursor);
             ui.ctx().request_repaint();
         }
         if response.secondary_clicked() {
-            self.menu_cell = self.cursor;
+            self.menu_cell = cursor;
         }
         if self.refocus_map && self.model.menu().is_none() {
             self.refocus_map = false;
@@ -492,24 +633,28 @@ impl<M: GameModel> App<M> {
                     },
                 )
             });
-            let (dx, dy, look) = ui.input(|i| {
+            let (dx, dy) = ui.input(|i| {
                 let k = |key| i.key_pressed(key) as i32;
                 (
                     k(egui::Key::ArrowRight) - k(egui::Key::ArrowLeft),
                     k(egui::Key::ArrowDown) - k(egui::Key::ArrowUp),
-                    i.key_pressed(egui::Key::L),
                 )
             });
-            self.cursor = Pos {
-                x: (self.cursor.x + dx).clamp(0, size.x - 1),
-                y: (self.cursor.y + dy).clamp(0, size.y - 1),
-            };
-            if look && !self.keys_consumed {
-                self.look(self.cursor);
+            // While the engine owns the cursor its own arrow handling moves it.
+            if self.model.focus().is_none() {
+                cursor = Pos {
+                    x: (cursor.x + dx).clamp(0, size.x - 1),
+                    y: (cursor.y + dy).clamp(0, size.y - 1),
+                };
             }
         }
+        self.cursor = to_abs(cursor);
         response.clone().on_hover_ui_at_pointer(|ui| {
-            ui.label(self.model.cell(self.cursor).desc);
+            let desc = self.model.cell(cursor).desc;
+            if desc != "unknown" {
+                // A tooltip at the pointer gets almost no width to wrap in; one line never wraps.
+                ui.add(egui::Label::new(desc).wrap_mode(egui::TextWrapMode::Extend));
+            }
         });
         let menu = response.context_menu(|ui| {
             let at = self.menu_cell;
@@ -576,7 +721,6 @@ impl<M: GameModel> App<M> {
                 );
             }
         }
-        let origin = self.model.origin();
         if let Some(m) = self.marker.filter(|_| self.model.busy()) {
             painter.rect_stroke(
                 rect(Pos {
@@ -601,12 +745,18 @@ impl<M: GameModel> App<M> {
             );
         }
         painter.rect_stroke(
-            rect(self.cursor),
+            rect(cursor),
             0.0,
             egui::Stroke::new(1.0, egui::Color32::WHITE),
             egui::StrokeKind::Inside,
         );
     }
+}
+
+/// Whether the keys pressed go to the engine: with no menu open, or in a menu that has no text field
+/// to type into (the crafting screen takes its own keys).
+fn menu_forwards_keys(menu: Option<&bn_client_core::Menu>) -> bool {
+    menu.is_none_or(|m| m.acknowledges() || (m.field.is_none() && m.context != "CRAFTING"))
 }
 
 impl<M: GameModel> eframe::App for App<M> {
