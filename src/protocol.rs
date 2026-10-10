@@ -106,9 +106,17 @@ pub struct Avatar {
     pub at: WorldPos,
     pub name: String,
     pub stats: Vec<Stat>,
-    /// Carried items (assumed by this client; the design doc leaves the avatar item list open).
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub inventory: Vec<Look>,
+    /// Carried items; optional on the wire (absent and empty both mean nothing carried).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inventory: Option<Vec<InventoryItem>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InventoryItem {
+    pub look: Look,
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub count: Option<u64>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

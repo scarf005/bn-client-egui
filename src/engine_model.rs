@@ -281,10 +281,16 @@ impl EngineModel {
             .avatar_pos()
             .and_then(|p| self.replica.cell(&p.dim, p.x, p.y, p.z));
         self.ground = here.map_or(vec![], |c| c.items.iter().map(look_name).collect());
-        self.inventory = self
-            .replica
-            .avatar()
-            .map_or(vec![], |a| a.inventory.iter().map(look_name).collect());
+        self.inventory = self.replica.avatar().map_or(vec![], |a| {
+            a.inventory
+                .iter()
+                .flatten()
+                .map(|item| match item.count {
+                    Some(count) if count > 1 => format!("{} ({count})", item.name),
+                    _ => item.name.clone(),
+                })
+                .collect()
+        });
     }
 }
 

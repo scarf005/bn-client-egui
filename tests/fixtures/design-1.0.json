@@ -85,10 +85,8 @@
     "stats": [],
     "inventory": [
      {
-      "kind": "item",
-      "id": "flashlight",
-      "glyph": "/",
-      "color": "white"
+      "look": { "kind": "item", "id": "flashlight", "glyph": "/", "color": "white" },
+      "name": "flashlight"
      }
     ]
    },
@@ -729,10 +727,8 @@
        "stats": [],
        "inventory": [
         {
-         "kind": "item",
-         "id": "flashlight",
-         "glyph": "/",
-         "color": "white"
+         "look": { "kind": "item", "id": "flashlight", "glyph": "/", "color": "white" },
+         "name": "flashlight"
         }
        ]
       }
