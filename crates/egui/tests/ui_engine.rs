@@ -3,10 +3,11 @@ use bn_client_egui::app::CELL;
 use bn_client_egui::transport::ScriptHandle;
 use bn_client_egui::{App, EngineModel, GameModel};
 use common::{fixture, session};
-use eframe::egui;
+use eframe::egui::{self, accesskit};
 use egui_kittest::Harness;
 use egui_kittest::kittest::{NodeT, Queryable};
 use serde_json::json;
+use std::time::Duration;
 
 type H<'a> = Harness<'a, App<EngineModel>>;
 
@@ -207,17 +208,30 @@ fn click_choice(h: &mut H) {
     h.run_steps(2);
 }
 
+const SETTLE: Duration = Duration::from_millis(200);
+
 #[test]
-fn pressed_choice_shows_pending_at_once_and_other_controls_wait() {
+fn pressed_choice_is_highlighted_and_others_wait_once_the_command_outlasts_a_blink() {
     let (mut h, script) = harness();
     open_menu(&mut h, &script);
     click_choice(&mut h);
-    h.get_by_label("combat knife (pending)");
+    h.run_steps(2);
+    std::thread::sleep(SETTLE);
+    h.run_steps(2);
+    let pressed = h.get_by_label("combat knife");
+    assert_eq!(
+        pressed.accesskit_node().toggled(),
+        Some(accesskit::Toggled::True)
+    );
     assert!(h.get_by_label("Cancel").accesskit_node().is_disabled());
-    h.get_by_label("tin can");
     script.push(notice("completed", None));
     h.run_steps(3);
-    assert!(h.query_by_label("combat knife (pending)").is_none());
+    assert_ne!(
+        h.get_by_label("combat knife")
+            .accesskit_node()
+            .is_selected(),
+        Some(true)
+    );
     assert!(!h.get_by_label("Cancel").accesskit_node().is_disabled());
 }
 
@@ -317,4 +331,96 @@ fn tabbed_menu_shows_tabs_and_only_the_selected_tabs_entries_and_choosing_a_tab_
         submits(&script)[0]["params"]["operation"],
         json!({"kind":"choose","choice_id":"tab:settings"})
     );
+}
+
+fn click_map(h: &mut H, view: (f32, f32)) {
+    let origin = h.get_by_label("Map").rect().min;
+    let pos = origin + egui::vec2(view.0 * CELL, view.1 * CELL);
+    h.hover_at(pos);
+    h.run_steps(2);
+    for pressed in [true, false] {
+        h.event(egui::Event::PointerButton {
+            pos,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        });
+        h.run_steps(1);
+    }
+}
+
+fn operations(script: &ScriptHandle) -> Vec<serde_json::Value> {
+    submits(script)
+        .iter()
+        .map(|m| m["params"]["operation"].clone())
+        .collect()
+}
+
+#[test]
+fn arrow_key_walks_after_a_button_was_clicked() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    h.get_by_label("Move left (LEFT, h)").click();
+    h.run_steps(2);
+    script.push(notice("completed", None));
+    h.run_steps(3);
+    h.key_press(egui::Key::ArrowRight);
+    h.run_steps(3);
+    let ops = operations(&script);
+    assert_eq!(ops.len(), 2, "{ops:?}");
+    assert_eq!(ops[1], json!({"kind":"action","action_id":"RIGHT"}));
+}
+
+#[test]
+fn arrow_key_walks_after_the_map_was_clicked() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    click_map(&mut h, (22.5, 12.5));
+    h.run_steps(2);
+    script.push(notice("completed", None));
+    h.run_steps(3);
+    h.key_press(egui::Key::ArrowUp);
+    h.run_steps(3);
+    let ops = operations(&script);
+    assert_eq!(ops.len(), 2, "{ops:?}");
+    assert_eq!(ops[1], json!({"kind":"action","action_id":"UP"}));
+}
+
+#[test]
+fn arrow_key_does_not_walk_while_a_menu_is_open() {
+    let (mut h, script) = harness();
+    open_menu(&mut h, &script);
+    h.key_press(egui::Key::ArrowRight);
+    h.run_steps(3);
+    assert!(submits(&script).is_empty());
+}
+
+#[test]
+fn actions_panel_does_not_blink_during_a_short_command() {
+    let (mut h, _script) = harness();
+    h.run_steps(3);
+    let before = h.get_by_label("Move right (RIGHT, l)").rect();
+    click_map(&mut h, (22.5, 12.5));
+    h.run_steps(3);
+    assert!(h.state().model.busy());
+    let during = h.get_by_label("Move right (RIGHT, l)");
+    assert!(!during.accesskit_node().is_disabled(), "no disabled blink");
+    assert_eq!(during.rect(), before, "no re-layout");
+}
+
+#[test]
+fn actions_panel_keeps_its_layout_when_a_long_command_disables_it() {
+    let (mut h, _script) = harness();
+    h.run_steps(3);
+    let before = h.get_by_label("Move right (RIGHT, l)").rect();
+    click_map(&mut h, (22.5, 12.5));
+    h.run_steps(2);
+    std::thread::sleep(SETTLE);
+    h.run_steps(3);
+    let during = h.get_by_label("Move right (RIGHT, l)");
+    assert!(
+        during.accesskit_node().is_disabled(),
+        "disabled once it lasts"
+    );
+    assert_eq!(during.rect(), before, "same size and place");
 }

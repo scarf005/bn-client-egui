@@ -1,6 +1,9 @@
 use bn_client_core::{GameModel, Loading, Pos};
 use eframe::egui::{self, accesskit};
 
+/// A command must outlast this before the controls show it; keeps short commands from blinking the UI.
+const SETTLE: std::time::Duration = std::time::Duration::from_millis(150);
+
 /// Side length of one map cell in points.
 pub const CELL: f32 = 16.0;
 
@@ -36,6 +39,8 @@ pub struct App<M: GameModel> {
     destination: Option<Pos>,
     /// Absolute square of the last map click, marked until its command finishes.
     marker: Option<Pos>,
+    /// When the command now in flight was first seen; short ones never change the controls.
+    pending_since: Option<std::time::Instant>,
     last_hover: Option<egui::Pos2>,
     wired: bool,
     images: bool,
@@ -54,6 +59,7 @@ impl<M: GameModel> App<M> {
             menu_cell: cursor,
             destination: None,
             marker: None,
+            pending_since: None,
             last_hover: None,
             wired: false,
             images: false,
@@ -126,6 +132,10 @@ impl<M: GameModel> App<M> {
             self.wired = true;
         }
         self.model.poll();
+        self.pending_since = self
+            .model
+            .busy()
+            .then(|| self.pending_since.unwrap_or_else(std::time::Instant::now));
         if !self.images {
             egui_extras::install_image_loaders(ui.ctx());
             self.images = true;
@@ -139,8 +149,27 @@ impl<M: GameModel> App<M> {
             ui.ctx()
                 .request_repaint_after(std::time::Duration::from_secs(1));
         }
+        if self.pending_since.is_some() && !self.settled() {
+            ui.ctx().request_repaint_after(SETTLE);
+        }
         self.walk(ui.ctx());
         self.game_keys(ui.ctx());
+        if self.model.menu().is_none() {
+            // Arrow keys belong to the game, whichever widget was clicked last; Tab still moves focus.
+            let ctx = ui.ctx();
+            if let Some(id) = ctx.memory(|m| m.focused()) {
+                ctx.memory_mut(|m| {
+                    m.set_focus_lock_filter(
+                        id,
+                        egui::EventFilter {
+                            horizontal_arrows: true,
+                            vertical_arrows: true,
+                            ..Default::default()
+                        },
+                    )
+                });
+            }
+        }
         egui::Panel::top("status").show(ui, |ui| self.status(ui));
         egui::Panel::left("actions")
             .resizable(false)
@@ -164,8 +193,25 @@ impl<M: GameModel> App<M> {
                 })
                 .collect::<Vec<_>>()
         });
+        let arrows = ctx.input(|i| {
+            [
+                (egui::Key::ArrowUp, "UP"),
+                (egui::Key::ArrowDown, "DOWN"),
+                (egui::Key::ArrowLeft, "LEFT"),
+                (egui::Key::ArrowRight, "RIGHT"),
+            ]
+            .into_iter()
+            .filter(|(key, _)| i.key_pressed(*key))
+            .map(|(_, token)| token.to_string())
+            .collect::<Vec<_>>()
+        });
+        let arrows = if self.model.menu().is_none() {
+            arrows
+        } else {
+            vec![]
+        };
         self.keys_consumed = false;
-        for key in typed {
+        for key in typed.into_iter().chain(arrows) {
             if self.model.press(&key) {
                 self.keys_consumed = true;
             }
@@ -183,7 +229,13 @@ impl<M: GameModel> App<M> {
             .accesskit_node_builder(label.id, |b| b.set_live(accesskit::Live::Polite));
     }
 
-    /// A button for a choice or action: the pressed one shows pending and the rest wait for the engine.
+    /// The command in flight has lasted long enough to show; shorter ones never blink the controls.
+    fn settled(&self) -> bool {
+        self.pending_since.is_some_and(|t| t.elapsed() >= SETTLE)
+    }
+
+    /// A button for a choice or action. Once a command has lasted a while, the pressed one is
+    /// highlighted and the rest wait for the engine; the label never changes, so nothing re-lays out.
     fn control(
         &self,
         ui: &mut egui::Ui,
@@ -192,16 +244,13 @@ impl<M: GameModel> App<M> {
         enabled: bool,
         highlighted: bool,
     ) -> egui::Response {
-        let pending = self
-            .model
-            .command()
-            .is_some_and(|s| !s.finished && s.target.as_deref() == Some(id));
-        let text = if pending {
-            format!("{text} (pending)")
-        } else {
-            text
-        };
-        let usable = enabled && !self.model.busy();
+        let settled = self.settled();
+        let pending = settled
+            && self
+                .model
+                .command()
+                .is_some_and(|s| !s.finished && s.target.as_deref() == Some(id));
+        let usable = enabled && !(settled && self.model.busy());
         ui.add_enabled(
             usable,
             egui::Button::new(text).selected(pending || highlighted),
