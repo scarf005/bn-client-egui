@@ -2,11 +2,19 @@ use bn_client_egui::display::settings_path;
 use bn_client_egui::fonts;
 use bn_client_egui::launch::{LaunchArgs, Opened, Search, open_engine, resolve};
 use bn_client_egui::setup::{Launcher, Starter};
+use bn_client_egui::theme;
 use bn_client_egui::transport::Profile;
 use bn_client_egui::{App, FakeModel, GameModel};
 use clap::Parser;
 use eframe::egui;
 use std::path::PathBuf;
+
+fn native_options() -> eframe::NativeOptions {
+    eframe::NativeOptions {
+        viewport: egui::ViewportBuilder::default().with_inner_size([1280.0, 800.0]),
+        ..Default::default()
+    }
+}
 
 /// The app, keeping the display choice in the settings file; the game root comes after, since the
 /// choice is read once the root is known.
@@ -20,8 +28,9 @@ fn app<M: GameModel>(model: M) -> App<M> {
 fn run(model: impl GameModel + 'static, root: Option<PathBuf>) -> eframe::Result {
     eframe::run_native(
         "Cataclysm: Bright Nights client",
-        eframe::NativeOptions::default(),
+        native_options(),
         Box::new(move |cc| {
+            theme::apply(&cc.egui_ctx);
             if let Some(root) = &root {
                 fonts::install(&cc.egui_ctx, root);
             }
@@ -70,8 +79,9 @@ fn main() -> eframe::Result {
     let found = resolve(cli.launch.engine.as_deref(), &Search::from_env());
     eframe::run_native(
         "Cataclysm: Bright Nights client",
-        eframe::NativeOptions::default(),
+        native_options(),
         Box::new(move |cc| {
+            theme::apply(&cc.egui_ctx);
             let starter = profile.clone();
             let start: Starter = Box::new(move |ctx, engine| start_engine(ctx, engine, &starter));
             Ok(Box::new(match found {

@@ -262,6 +262,8 @@ pub struct Display {
     problem: Option<String>,
     /// Sprites drawn by the last map paint.
     drawn: usize,
+    /// Squares of the last map paint that lie on the hidden-lighting sprite.
+    hidden: usize,
 }
 
 impl Display {
@@ -280,6 +282,7 @@ impl Display {
             atlas: None,
             problem: None,
             drawn: 0,
+            hidden: 0,
         };
         display.open();
         display
@@ -338,6 +341,11 @@ impl Display {
     /// Sprites drawn by the last map paint.
     pub fn drawn(&self) -> usize {
         self.drawn
+    }
+
+    /// Squares of the last map paint drawn on the tileset's hidden-lighting sprite: unknown or remembered.
+    pub fn hidden(&self) -> usize {
+        self.hidden
     }
 
     /// Whether every sheet of the tileset is ready to draw.
@@ -414,10 +422,12 @@ impl Display {
     /// Starts a paint of the map: forgets the count of sprites drawn.
     pub fn begin(&mut self) {
         self.drawn = 0;
+        self.hidden = 0;
     }
 
     /// Draws a cell's layers into `rect`, bottom first, the way the game's tile view does: sprites where
-    /// the tileset has them and the glyph of the thing where it has none. False when there are no layers.
+    /// the tileset has them and the glyph of the thing where it has none. A square nothing is known about is only the hidden
+    /// backdrop; false when even that has no sprite.
     pub fn paint(
         &mut self,
         painter: &egui::Painter,
@@ -429,9 +439,6 @@ impl Display {
         let Some(atlas) = &mut self.atlas else {
             return false;
         };
-        if cell.layers.is_empty() {
-            return false;
-        }
         let fx = match (cell.remembered, cell.light) {
             (true, _) => Fx::Memory,
             (false, Some(light)) if light <= 1 => Fx::Shadow,
@@ -442,6 +449,28 @@ impl Display {
             rect.width() / atlas.tileset.tile.0 as f32,
             rect.height() / atlas.tileset.tile.1 as f32,
         );
+        // What the game does not show plainly lies on its "hidden" lighting sprite.
+        let mut backdrop = false;
+        if cell.layers.is_empty() || cell.remembered {
+            let hidden = Query {
+                id: "lighting_hidden",
+                fallbacks: &[],
+                subtile: None,
+                rotation: 0,
+                mirrored: false,
+                creature: false,
+                seed: cell.square,
+                season,
+            };
+            let sprites = atlas.tileset.choose(&hidden);
+            for placed in sprites.iter().flat_map(|c| [c.bg, c.fg]).flatten() {
+                backdrop |= draw_sprite(painter, atlas, rect, (sx, sy), placed, Fx::Plain);
+            }
+        }
+        self.hidden += usize::from(backdrop);
+        if cell.layers.is_empty() {
+            return backdrop;
+        }
         let mut drawn = 0;
         for layer in &cell.layers {
             let chosen = atlas.tileset.choose(&query(layer, season));

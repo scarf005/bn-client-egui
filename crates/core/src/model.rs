@@ -1,6 +1,7 @@
 use crate::colors::ColorMap;
 use crate::markup::{self, Run};
 
+use crate::protocol::Editor;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Pos {
     pub x: i32,
@@ -48,6 +49,8 @@ pub struct Cell {
     pub remembered: bool,
     /// The game's light level of a square in sight: 0 dark, 1 low, 2 bright only, 3 lit, 4 bright.
     pub light: Option<u8>,
+    /// The game's per-square seed for weighted sprite variants, also for squares nothing is known about.
+    pub square: u32,
 }
 
 /// One line of the game's own message log. A repeat of the newest line keeps its `id` and raises
@@ -74,7 +77,7 @@ impl LogLine {
 }
 
 /// One selectable row of the engine's current interaction menu.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct MenuChoice {
     pub id: String,
     pub label: String,
@@ -87,10 +90,17 @@ pub struct MenuChoice {
     pub group: Option<String>,
     /// A tab header of the menu rather than one of its entries.
     pub tab: bool,
+    /// The native cursor is on this row.
+    pub highlighted: bool,
+    /// How many of the row are chosen, and how many there are, for rows that take a count.
+    pub selected_count: Option<u64>,
+    pub available_count: Option<u64>,
     /// The engine's detail text for the row; empty when it has none.
     pub description: String,
     /// Label and value pairs shown beside the row.
     pub columns: Vec<(String, String)>,
+    /// How the row's value can be set directly, as an option of the options menu.
+    pub editor: Option<Editor>,
 }
 
 /// The text field of a menu, such as the crafting search.
@@ -99,10 +109,12 @@ pub struct MenuField {
     pub id: String,
     pub label: String,
     pub value: String,
+    /// `text`, `integer`, or `key` for a prompt that takes the next key press.
+    pub kind: String,
 }
 
 /// The engine's current interaction, rendered generically.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Menu {
     /// The engine's name for the kind of menu, such as `CRAFTING`.
     pub context: String,
@@ -114,6 +126,11 @@ pub struct Menu {
     pub field: Option<MenuField>,
     /// The pane of the selected tab, when the menu has tabs.
     pub pane: Option<String>,
+    /// The row the engine's own cursor is on, which its navigation keys move.
+    pub focus: Option<String>,
+    /// The engine's composed screen of a view it has no structured interaction for: only text to
+    /// show, driven by the keys of the view's actions.
+    pub screen: bool,
 }
 
 impl Menu {
@@ -155,6 +172,16 @@ pub struct CommandStatus {
     pub stage: String,
     /// The command reached a terminal stage.
     pub finished: bool,
+    /// Every stage the command went through, oldest first, so ones that pass within a frame are kept.
+    pub history: Vec<String>,
+}
+
+impl CommandStatus {
+    pub fn set_stage(&mut self, stage: String, finished: bool) {
+        self.history.push(stage.clone());
+        self.stage = stage;
+        self.finished = finished;
+    }
 }
 
 /// Engine loading screen: a title, the steps seen so far and the one in progress.
@@ -165,6 +192,23 @@ pub struct Loading {
     pub index: usize,
     /// Splash image, relative to the game root.
     pub image: Option<String>,
+}
+
+/// Why the engine cannot be played right now.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FailureKind {
+    /// The engine process ended or closed its output.
+    Exited,
+    /// A request has been outstanding longer than the watchdog allows.
+    Stalled,
+}
+
+/// The engine's failure, with its last stderr lines, for an error screen with a Restart button.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Failure {
+    pub kind: FailureKind,
+    pub message: String,
+    pub stderr: Vec<String>,
 }
 
 /// What the UI needs from the game: `FakeModel` in tests, `EngineModel` against a real engine.
@@ -221,6 +265,14 @@ pub trait GameModel {
     fn route(&self) -> Vec<Pos> {
         vec![]
     }
+    /// Set while the engine has exited or stopped answering; the UI shows it instead of the map.
+    fn failure(&self) -> Option<Failure> {
+        None
+    }
+    /// Starts the engine again on the same profile; false when the model cannot.
+    fn restart(&mut self) -> bool {
+        false
+    }
     /// The engine's loading screen, while it is up.
     fn loading(&self) -> Option<Loading> {
         None
@@ -257,6 +309,10 @@ pub trait GameModel {
     fn drop_item(&mut self, index: usize);
     /// Client-side lines: command results and errors.
     fn messages(&self) -> &[String];
+    /// The avatar's sidebar as coloured lines; empty before the engine reports one.
+    fn sidebar(&self) -> Vec<crate::sidebar::Line> {
+        vec![]
+    }
     /// The game's own message log, oldest first.
     fn native_log(&self) -> &[LogLine] {
         &[]
@@ -286,6 +342,25 @@ impl Default for FakeModel {
 }
 
 impl GameModel for FakeModel {
+    fn actions(&self) -> Vec<ActionEntry> {
+        let action = |id: &str, name: &str, keys: &[&str]| ActionEntry {
+            id: id.into(),
+            name: name.into(),
+            keys: keys.iter().map(|k| k.to_string()).collect(),
+        };
+        vec![
+            action("look", "Look around", &[";", "x"]),
+            action("UP", "Move up", &["UP", "k"]),
+            action("DOWN", "Move down", &["DOWN", "j"]),
+            action("LEFT", "Move left", &["LEFT", "h"]),
+            action("RIGHT", "Move right", &["RIGHT", "l"]),
+            action("LEFTUP", "Move up left", &["HOME", "y"]),
+            action("RIGHTUP", "Move up right", &["PPAGE", "u"]),
+            action("LEFTDOWN", "Move down left", &["END", "b"]),
+            action("RIGHTDOWN", "Move down right", &["NPAGE", "n"]),
+        ]
+    }
+
     fn size(&self) -> Pos {
         self.size
     }

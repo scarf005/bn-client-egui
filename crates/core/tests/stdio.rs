@@ -110,15 +110,15 @@ fn default_profile_leaves_user_and_config_dirs_to_the_engine() {
 }
 
 #[test]
-fn explicit_dirs_are_passed_through_unchanged() {
+fn explicit_dirs_end_in_a_separator_because_the_engine_appends_file_names_to_them() {
     let profile = Profile {
         userdir: Some("/data/user".into()),
-        configdir: Some("/data/config".into()),
+        configdir: Some("/data/config/".into()),
         ..Profile::default()
     };
     assert_eq!(
         args_of(Some(&profile)),
-        "--client mcp --userdir /data/user --configdir /data/config"
+        "--client mcp --userdir /data/user/ --configdir /data/config/"
     );
 }
 

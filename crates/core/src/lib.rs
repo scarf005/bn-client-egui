@@ -8,12 +8,13 @@ pub mod markup;
 pub mod model;
 pub mod protocol;
 pub mod replica;
+pub mod sidebar;
 pub mod transport;
 pub mod watchdog;
 
 pub use clock::Clock;
 pub use engine_model::EngineModel;
 pub use model::{
-    ActionEntry, Cell, CommandStatus, FakeModel, GameModel, Layer, Loading, LogLine, Menu,
-    MenuChoice, Pos, Rgb,
+    ActionEntry, Cell, CommandStatus, Failure, FailureKind, FakeModel, GameModel, Layer, Loading,
+    LogLine, Menu, MenuChoice, Pos, Rgb,
 };

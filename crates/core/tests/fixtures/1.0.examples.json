@@ -82,7 +82,11 @@
           "actions": [
             {
               "id": "UP",
-              "name": "Move up"
+              "name": "Move up",
+              "keys": [
+                "UP",
+                "k"
+              ]
             }
           ],
           "interaction": {
@@ -138,7 +142,11 @@
           "actions": [
             {
               "id": "UP",
-              "name": "Move up"
+              "name": "Move up",
+              "keys": [
+                "UP",
+                "k"
+              ]
             }
           ],
           "interaction": {
@@ -392,7 +400,9 @@
                 "mon_zombie_base"
               ],
               "facing": "right"
-            }
+            },
+            "attitude": "hostile",
+            "aware": true
           },
           {
             "id": "e:13",
@@ -456,7 +466,8 @@
                 "tile": "corpse_mon_zombie",
                 "looks_like": [
                   "corpse"
-                ]
+                ],
+                "stack": 3
               }
             ],
             "light": 1,
@@ -1016,6 +1027,364 @@
           }
         ]
       }
+    },
+    {
+      "name": "avatar with sidebar",
+      "def": "avatar",
+      "value": {
+        "id": "e:avatar",
+        "at": {
+          "dim": "",
+          "x": 3,
+          "y": 4,
+          "z": 0
+        },
+        "name": "Ada",
+        "stats": [
+          {
+            "id": "strength",
+            "label": "Strength",
+            "value": "8",
+            "color": "white"
+          }
+        ],
+        "sidebar": {
+          "limbs": [
+            {
+              "id": "head",
+              "label": {
+                "text": "HEAD",
+                "color": "white"
+              },
+              "hp": 55,
+              "hp_max": 55,
+              "color": "green",
+              "broken": false
+            }
+          ],
+          "pain": {
+            "text": "Pain 3",
+            "color": "light_red"
+          },
+          "hunger": {
+            "text": "Hungry",
+            "color": "yellow"
+          },
+          "thirst": {
+            "text": "",
+            "color": "white"
+          },
+          "fatigue": {
+            "text": "Tired",
+            "color": "yellow"
+          },
+          "focus": 100,
+          "morale": {
+            "level": 12,
+            "face": ":)",
+            "color": "green"
+          },
+          "stamina": {
+            "current": 1000,
+            "max": 1000,
+            "color": "green"
+          },
+          "speed": {
+            "value": 100,
+            "color": "white"
+          },
+          "movement": {
+            "counter": 0,
+            "mode": "walk",
+            "color": "white"
+          },
+          "temperature": {
+            "text": "Comfortable",
+            "color": "green"
+          },
+          "power": {
+            "text": "--",
+            "color": "light_gray"
+          },
+          "safe_mode": {
+            "enabled": true,
+            "color": "green"
+          },
+          "location": {
+            "text": "field",
+            "color": "white"
+          },
+          "weather": {
+            "text": "Clear",
+            "color": "light_cyan"
+          },
+          "time": {
+            "season": "Spring",
+            "day": 1,
+            "clock": "Around noon",
+            "has_watch": false
+          },
+          "weapon": "fists"
+        }
+      }
+    },
+    {
+      "name": "native message line, then its repeat",
+      "def": "events_notification",
+      "value": {
+        "epoch": "epoch:e7f3",
+        "events": [
+          {
+            "sequence": "50",
+            "revision": "34",
+            "type": "message.logged",
+            "command": "c:5",
+            "changes": {},
+            "data": {
+              "id": "7",
+              "text": "You open the door.",
+              "kind": "neutral",
+              "color": "c_white",
+              "count": 1
+            }
+          },
+          {
+            "sequence": "51",
+            "revision": "34",
+            "type": "message.logged",
+            "command": "c:5",
+            "changes": {},
+            "data": {
+              "id": "7",
+              "text": "You open the door.",
+              "kind": "neutral",
+              "color": "c_white",
+              "count": 2
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "options row with each editor type",
+      "def": "choice",
+      "value": {
+        "id": "option:SAFEMODEPROXIMITY",
+        "label": "Safe mode proximity distance",
+        "description": "",
+        "denial": "",
+        "pane_id": "page:general",
+        "enabled": true,
+        "selectable": true,
+        "selected": false,
+        "columns": [
+          {
+            "label": "Value",
+            "value": "7"
+          }
+        ],
+        "editor": {
+          "type": "integer",
+          "value": "7",
+          "values": [],
+          "max_length": -1,
+          "minimum": 0,
+          "maximum": 60
+        }
+      }
+    },
+    {
+      "name": "select editor",
+      "def": "choice",
+      "value": {
+        "id": "option:DROP_EMPTY",
+        "label": "Drop empty containers",
+        "description": "",
+        "denial": "",
+        "pane_id": "page:general",
+        "enabled": true,
+        "selectable": true,
+        "selected": false,
+        "columns": [
+          {
+            "label": "Value",
+            "value": "No"
+          }
+        ],
+        "editor": {
+          "type": "select",
+          "value": "no",
+          "values": [
+            {
+              "id": "no",
+              "label": "No"
+            },
+            {
+              "id": "watertight",
+              "label": "Watertight"
+            },
+            {
+              "id": "all",
+              "label": "All"
+            }
+          ],
+          "max_length": -1
+        }
+      }
+    },
+    {
+      "name": "submit fill on an editor row",
+      "def": "submit_params",
+      "value": {
+        "epoch": "epoch:e7f3",
+        "expect": {
+          "revision": "31",
+          "boundary_id": "boundary:90",
+          "schema_id": "2c1f"
+        },
+        "operation": {
+          "kind": "fill",
+          "field_id": "option:SAFEMODEPROXIMITY",
+          "value": "8",
+          "submit": true
+        }
+      }
+    },
+    {
+      "name": "key field of a keybinding prompt",
+      "def": "field",
+      "value": {
+        "id": "field:key",
+        "label": "New key for Move East",
+        "description": "",
+        "value": "",
+        "type": "key",
+        "max_length": -1,
+        "printable": false
+      }
+    },
+    {
+      "name": "projectile, explosion and combat text facts",
+      "def": "events_notification",
+      "value": {
+        "epoch": "epoch:e7f3",
+        "events": [
+          {
+            "sequence": "8",
+            "revision": "7",
+            "type": "projectile.moved",
+            "command": "command:9",
+            "data": {
+              "projectile": "projectile:1",
+              "path": [
+                {
+                  "dim": "",
+                  "x": 3,
+                  "y": 4,
+                  "z": 0
+                },
+                {
+                  "dim": "",
+                  "x": 4,
+                  "y": 4,
+                  "z": 0
+                }
+              ],
+              "look": {
+                "kind": "projectile",
+                "id": null,
+                "glyph": "*",
+                "color": "red"
+              }
+            },
+            "display": {
+              "duration_ms": 20
+            }
+          },
+          {
+            "sequence": "9",
+            "revision": "7",
+            "type": "explosion.started",
+            "command": "command:9",
+            "data": {
+              "explosion": "explosion:1",
+              "at": {
+                "dim": "",
+                "x": 5,
+                "y": 4,
+                "z": 0
+              },
+              "radius": 3,
+              "color": "red"
+            },
+            "display": {
+              "duration_ms": 40
+            }
+          },
+          {
+            "sequence": "10",
+            "revision": "7",
+            "type": "explosion.blast",
+            "command": "command:9",
+            "data": {
+              "explosion": "explosion:2",
+              "cells": [
+                {
+                  "dim": "",
+                  "x": 5,
+                  "y": 4,
+                  "z": 0
+                },
+                {
+                  "dim": "",
+                  "x": 6,
+                  "y": 4,
+                  "z": 0
+                }
+              ]
+            },
+            "display": {
+              "duration_ms": 10
+            }
+          },
+          {
+            "sequence": "11",
+            "revision": "7",
+            "type": "explosion.ended",
+            "command": "command:9",
+            "data": {
+              "explosion": "explosion:1"
+            }
+          },
+          {
+            "sequence": "12",
+            "revision": "7",
+            "type": "combat_text.shown",
+            "command": "command:9",
+            "data": {
+              "at": {
+                "dim": "",
+                "x": 5,
+                "y": 4,
+                "z": 0
+              },
+              "segments": [
+                {
+                  "text": "-12",
+                  "color": "light_red"
+                },
+                {
+                  "text": " crit",
+                  "color": "yellow"
+                }
+              ]
+            },
+            "display": {
+              "duration_ms": 80
+            }
+          }
+        ]
+      }
     }
   ],
   "invalid": [
@@ -1194,7 +1563,11 @@
           "actions": [
             {
               "id": "UP",
-              "name": "Move up"
+              "name": "Move up",
+              "keys": [
+                "UP",
+                "k"
+              ]
             }
           ],
           "interaction": {
@@ -1470,6 +1843,131 @@
       }
     },
     {
+      "name": "avatar sidebar with unknown movement mode",
+      "def": "avatar",
+      "why": "movement.mode is walk, run, crouch or prone",
+      "value": {
+        "id": "e:avatar",
+        "at": {
+          "dim": "",
+          "x": 3,
+          "y": 4,
+          "z": 0
+        },
+        "name": "Ada",
+        "stats": [
+          {
+            "id": "strength",
+            "label": "Strength",
+            "value": "8",
+            "color": "white"
+          }
+        ],
+        "sidebar": {
+          "limbs": [
+            {
+              "id": "head",
+              "label": {
+                "text": "HEAD",
+                "color": "white"
+              },
+              "hp": 55,
+              "hp_max": 55,
+              "color": "green",
+              "broken": false
+            }
+          ],
+          "pain": {
+            "text": "Pain 3",
+            "color": "light_red"
+          },
+          "hunger": {
+            "text": "Hungry",
+            "color": "yellow"
+          },
+          "thirst": {
+            "text": "",
+            "color": "white"
+          },
+          "fatigue": {
+            "text": "Tired",
+            "color": "yellow"
+          },
+          "focus": 100,
+          "morale": {
+            "level": 12,
+            "face": ":)",
+            "color": "green"
+          },
+          "stamina": {
+            "current": 1000,
+            "max": 1000,
+            "color": "green"
+          },
+          "speed": {
+            "value": 100,
+            "color": "white"
+          },
+          "movement": {
+            "counter": 0,
+            "mode": "fly",
+            "color": "white"
+          },
+          "temperature": {
+            "text": "Comfortable",
+            "color": "green"
+          },
+          "power": {
+            "text": "--",
+            "color": "light_gray"
+          },
+          "safe_mode": {
+            "enabled": true,
+            "color": "green"
+          },
+          "location": {
+            "text": "field",
+            "color": "white"
+          },
+          "weather": {
+            "text": "Clear",
+            "color": "light_cyan"
+          },
+          "time": {
+            "season": "Spring",
+            "day": 1,
+            "clock": "Around noon",
+            "has_watch": false
+          },
+          "weapon": "fists"
+        }
+      }
+    },
+    {
+      "name": "message repeat count zero",
+      "def": "events_notification",
+      "why": "a message is shown at least once",
+      "value": {
+        "epoch": "epoch:e7f3",
+        "events": [
+          {
+            "sequence": "50",
+            "revision": "34",
+            "type": "message.logged",
+            "command": "c:5",
+            "changes": {},
+            "data": {
+              "id": "7",
+              "text": "You open the door.",
+              "kind": "neutral",
+              "color": "c_white",
+              "count": 0
+            }
+          }
+        ]
+      }
+    },
+    {
       "name": "rotation beyond the four turns",
       "def": "look",
       "value": {
@@ -1542,6 +2040,69 @@
             "slot": "pocket"
           }
         ]
+      }
+    },
+    {
+      "name": "editor of an unknown type",
+      "def": "choice",
+      "value": {
+        "id": "option:X",
+        "label": "X",
+        "description": "",
+        "denial": "",
+        "pane_id": "page:general",
+        "enabled": true,
+        "selectable": true,
+        "selected": false,
+        "columns": [
+          {
+            "label": "Value",
+            "value": "1"
+          }
+        ],
+        "editor": {
+          "type": "slider",
+          "value": "1",
+          "values": [],
+          "max_length": -1
+        }
+      },
+      "why": "editor.type is one of bool, select, integer, float, text"
+    },
+    {
+      "name": "combat text without segments",
+      "def": "events_notification",
+      "why": "combat_text.shown carries at least one colored segment",
+      "value": {
+        "epoch": "epoch:e7f3",
+        "events": [
+          {
+            "sequence": "12",
+            "revision": "7",
+            "type": "combat_text.shown",
+            "command": "command:9",
+            "data": {
+              "at": {
+                "dim": "",
+                "x": 5,
+                "y": 4,
+                "z": 0
+              },
+              "segments": []
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "stack of one item",
+      "def": "look",
+      "value": {
+        "kind": "item",
+        "id": "rock",
+        "glyph": "*",
+        "color": "light_gray",
+        "stack": 1
       }
     }
   ]

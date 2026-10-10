@@ -383,11 +383,8 @@ fn cell_colors_come_from_the_game_palette() {
     assert_eq!(m.cell(Pos { x: 23, y: 12 }).color, Rgb(10, 0, 0));
 }
 
-fn with_keys(t: ScriptedTransport) -> EngineModel {
-    use bn_client_core::keys::KeyMap;
-    let json = r#"[{"id":"pickup","category":"DEFAULTMODE","bindings":[{"input_method":"keyboard","key":"g"}]}]"#;
-    let mut m =
-        EngineModel::new(Box::new(t)).with_keys(KeyMap::from_json(json, "DEFAULTMODE").unwrap());
+fn polled(t: ScriptedTransport) -> EngineModel {
+    let mut m = EngineModel::new(Box::new(t));
     m.poll();
     m
 }
@@ -395,7 +392,7 @@ fn with_keys(t: ScriptedTransport) -> EngineModel {
 #[test]
 fn actions_list_names_ids_and_keys_from_the_boundary() {
     let (t, _h) = session();
-    let m = with_keys(t);
+    let m = polled(t);
     let a = m.actions();
     let right = a.iter().find(|a| a.id == "RIGHT").unwrap();
     assert_eq!(
@@ -411,7 +408,7 @@ fn actions_list_names_ids_and_keys_from_the_boundary() {
 #[test]
 fn pressing_a_bound_key_submits_the_same_action_id() {
     let (t, h) = session();
-    let mut m = with_keys(t.on("bn.command.submit", walk_reply()));
+    let mut m = polled(t.on("bn.command.submit", walk_reply()));
     assert!(m.press("g"));
     assert_eq!(
         submits(&h)[0]["params"]["operation"],
@@ -424,7 +421,7 @@ fn pressing_a_bound_key_submits_the_same_action_id() {
 #[test]
 fn keys_without_an_offered_action_are_not_consumed() {
     let (t, h) = session();
-    let mut m = with_keys(t);
+    let mut m = polled(t);
     assert!(!m.press("q"));
     assert!(
         !m.press("x"),
@@ -436,7 +433,7 @@ fn keys_without_an_offered_action_are_not_consumed() {
 #[test]
 fn clicking_an_action_invokes_it_by_id_and_unknown_ids_are_refused() {
     let (t, h) = session();
-    let mut m = with_keys(t.on("bn.command.submit", walk_reply()));
+    let mut m = polled(t.on("bn.command.submit", walk_reply()));
     assert!(!m.invoke_action("nope"));
     assert!(m.invoke_action("LEFT"));
     assert_eq!(
@@ -857,6 +854,8 @@ fn tiled_session() -> EngineModel {
                 .unwrap()
                 .clone(),
         );
+    subscribe["result"]["entities"][0]["attitude"] = json!("hostile");
+    subscribe["result"]["entities"][0]["aware"] = json!(true);
     let mut part = fixture("snapshot_part_1");
     part["params"]["cells"].as_array_mut().unwrap().extend([
         json!({"at": {"dim": "", "x": 9, "y": 8, "z": 0}, "known": "visible", "light": 1,
@@ -864,7 +863,7 @@ fn tiled_session() -> EngineModel {
                 "looks_like": ["t_wall_base"], "subtile": "edge", "rotation": 1},
             "items": [
                 {"kind": "item", "id": "corpse", "glyph": "%", "color": "red", "tile": "corpse_mon_zombie",
-                 "looks_like": ["corpse"]}
+                 "looks_like": ["corpse"], "stack": 2}
             ]}),
         json!({"at": {"dim": "", "x": 9, "y": 7, "z": 0}, "known": "remembered",
             "memory": {"terrain": {"kind": "terrain", "id": "t_grass", "glyph": "\"", "color": "green",
@@ -894,7 +893,9 @@ fn a_cell_lists_its_sprites_bottom_first_with_the_engines_tile_selection() {
         .map(|l| l.id.as_str())
         .collect::<Vec<_>>();
     // The item is named by its sprite id, the corpse of the monster, not the item type.
-    assert_eq!(layers, ["t_wall", "corpse_mon_zombie"]);
+    // A pile of two is highlighted over its displayed item, with a sprite that has no glyph.
+    assert_eq!(layers, ["t_wall", "corpse_mon_zombie", "highlight_item"]);
+    assert_eq!(cell.layers[2].glyph, '\0');
     let wall = &cell.layers[0];
     assert_eq!((wall.subtile.as_deref(), wall.rotation), (Some("edge"), 1));
     assert_eq!(wall.fallbacks, ["t_wall_base"]);
@@ -944,7 +945,8 @@ fn creatures_and_the_avatar_draw_over_the_terrain_with_their_overlays() {
         .iter()
         .map(|l| l.id.as_str())
         .collect::<Vec<_>>();
-    assert_eq!(ids, ["t_dirt", "mon_zombie"]);
+    // The native view marks a monster that is aware of the avatar with its attitude.
+    assert_eq!(ids, ["t_dirt", "mon_zombie", "overlay_hostile_sees_player"]);
     let sprite = &zombie.layers[1];
     assert!(sprite.mirrored && sprite.creature);
     assert_eq!(sprite.fallbacks, ["mon_zombie_base"]);
@@ -1250,4 +1252,305 @@ fn the_selected_tab_picks_the_pane_and_a_target_interaction_is_a_cursor_not_a_me
             y: 4 - origin.y
         })
     );
+}
+
+#[test]
+fn fill_sets_an_editable_row_or_the_key_field_and_ignores_anything_else() {
+    let (t, h) = session();
+    let mut m = connected(t.on("bn.command.submit", walk_reply()));
+    h.push(fixture("events_41_walk"));
+    h.push(fixture("events_42_message"));
+    let mut menu = fixture("events_43_menu");
+    let interaction = &mut menu["params"]["events"][0]["changes"]["interaction"]["interaction"];
+    interaction["choices"][0]["editor"] =
+        json!({"type":"integer","value":"7","values":[],"minimum":0,"maximum":60,"max_length":-1});
+    interaction["field"] = json!({"id":"field:key","label":"Key","description":"","value":"",
+        "type":"key","max_length":-1,"printable":false});
+    h.push(menu);
+    m.poll();
+    let menu = m.menu().unwrap();
+    assert_eq!(menu.field.as_ref().map(|f| f.kind.as_str()), Some("key"));
+    let editor = menu.choices[0].editor.as_ref().unwrap();
+    assert_eq!(
+        (
+            editor.kind.as_str(),
+            editor.maximum.as_ref().and_then(|n| n.as_f64())
+        ),
+        ("integer", Some(60.0))
+    );
+    assert!(menu.choices[1].editor.is_none());
+
+    m.fill("nowhere", "1", true);
+    m.fill("c:2", "1", true);
+    assert!(
+        submits(&h).is_empty(),
+        "unknown and disabled rows are never filled"
+    );
+    m.fill("c:1", "8", true);
+    assert_eq!(
+        submits(&h)[0]["params"]["operation"],
+        json!({"kind":"fill","field_id":"c:1","value":"8","submit":true})
+    );
+}
+
+#[test]
+fn control_function_and_numpad_keys_run_the_actions_the_engine_binds_to_them() {
+    let (t, h) = session();
+    let mut m = connected(
+        t.on("bn.command.submit", walk_reply())
+            .on("bn.command.submit", walk_reply()),
+    );
+    h.push(show(
+        41,
+        json!([{"id":"save","name":"Save","keys":["CTRL+S"]},
+               {"id":"help","name":"Help","keys":["F1"]},
+               {"id":"pause","name":"Pause","keys":[".","NUMPAD_5"]},
+               {"id":"back","name":"Back","keys":["BACKTAB"]}]),
+        Value::Null,
+    ));
+    m.poll();
+    assert!(m.press("CTRL+S"));
+    h.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{"epoch":"e7f3","command_id":"c:5","stage":"completed"}}));
+    m.poll();
+    assert!(
+        m.press("5"),
+        "a digit with no binding may be the numpad key"
+    );
+    assert!(!m.press("CTRL+Q"), "no other control letter is bound");
+    assert_eq!(
+        operations(&h),
+        [
+            json!({"kind":"action","action_id":"save"}),
+            json!({"kind":"action","action_id":"pause"})
+        ]
+    );
+}
+
+mod failures {
+    use super::*;
+    use bn_client_core::{Clock, FailureKind};
+    use std::time::Duration;
+
+    fn with_clock(t: ScriptedTransport) -> (EngineModel, Clock) {
+        let clock = Clock::manual();
+        let mut m = EngineModel::new(Box::new(t)).with_clock(clock.clone());
+        m.poll();
+        (m, clock)
+    }
+
+    #[test]
+    fn an_exit_is_a_failure_with_the_last_stderr_lines() {
+        let (t, h) = session();
+        let mut m = connected(t);
+        assert!(m.failure().is_none());
+        h.close(&["loading data", "terminate called after throwing"]);
+        m.poll();
+        let failure = m.failure().expect("the exit is reported");
+        assert_eq!(failure.kind, FailureKind::Exited);
+        assert_eq!(
+            failure.stderr,
+            ["loading data", "terminate called after throwing"]
+        );
+        assert!(!m.busy());
+    }
+
+    #[test]
+    fn silence_with_a_command_in_flight_is_a_stall_that_a_message_clears() {
+        let (t, h) = session();
+        let (mut m, clock) = with_clock(t.on("bn.command.submit", walk_reply()));
+        assert!(m.step_toward(Pos { x: 30, y: 12 }));
+        m.poll();
+        clock.advance(Duration::from_secs(119));
+        m.poll();
+        assert!(m.failure().is_none(), "within the watchdog");
+        clock.advance(Duration::from_secs(2));
+        m.poll();
+        assert_eq!(m.failure().unwrap().kind, FailureKind::Stalled);
+        h.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{
+            "epoch":"e7f3","command_id":"c:5","stage":"executing"}}));
+        m.poll();
+        assert!(m.failure().is_none(), "the engine answered after all");
+    }
+
+    #[test]
+    fn heartbeats_keep_a_long_activity_from_counting_as_stalled() {
+        let (t, h) = session();
+        let (mut m, clock) = with_clock(t.on("bn.command.submit", walk_reply()));
+        assert!(m.step_toward(Pos { x: 30, y: 12 }));
+        m.poll();
+        // Ten minutes of activity, with a heartbeat every two seconds.
+        for _ in 0..300 {
+            clock.advance(Duration::from_secs(2));
+            h.push(json!({"jsonrpc":"2.0","method":"bn.progress","params":{"epoch":"e7f3"}}));
+            m.poll();
+            assert!(m.failure().is_none(), "alive engines are not stalled");
+        }
+        assert!(m.busy(), "the command is still running");
+        // Then the heartbeats stop.
+        clock.advance(Duration::from_secs(119));
+        m.poll();
+        assert!(m.failure().is_none());
+        clock.advance(Duration::from_secs(2));
+        m.poll();
+        assert_eq!(m.failure().unwrap().kind, FailureKind::Stalled);
+    }
+
+    #[test]
+    fn loading_notifications_also_count_as_signs_of_life() {
+        let (t, h) = session();
+        let (mut m, clock) = with_clock(t.on("bn.command.submit", walk_reply()));
+        assert!(m.step_toward(Pos { x: 30, y: 12 }));
+        m.poll();
+        for _ in 0..100 {
+            clock.advance(Duration::from_secs(60));
+            h.push(json!({"jsonrpc":"2.0","method":"bn.loading","params":{
+                "epoch":"e7f3","title":"Loading","entries":["a"],"index":0}}));
+            m.poll();
+            assert!(m.failure().is_none());
+        }
+    }
+
+    #[test]
+    fn an_idle_engine_may_stay_quiet() {
+        let (t, _h) = session();
+        let (mut m, clock) = with_clock(t);
+        clock.advance(Duration::from_secs(3600));
+        m.poll();
+        assert!(m.failure().is_none());
+    }
+
+    #[test]
+    fn restart_starts_a_fresh_session_through_the_respawn_hook() {
+        let (t, h) = session();
+        let (t2, h2) = session();
+        let mut spare = Some(t2);
+        let mut m = EngineModel::new(Box::new(t)).with_respawn(Box::new(move || {
+            Ok(Box::new(spare.take().expect("one restart"))
+                as Box<dyn bn_client_core::transport::Transport>)
+        }));
+        m.poll();
+        h.close(&["boom"]);
+        m.poll();
+        assert!(m.failure().is_some());
+        assert!(m.restart());
+        assert!(m.failure().is_none());
+        m.poll();
+        assert_eq!(h2.sent_methods(), ["bn.hello", "bn.subscribe"]);
+        assert_eq!(m.size(), Pos { x: 40, y: 25 }, "the new session is live");
+    }
+
+    #[test]
+    fn restart_without_a_respawn_hook_does_nothing() {
+        let (t, h) = session();
+        let mut m = connected(t);
+        h.close(&[]);
+        m.poll();
+        assert!(!m.restart());
+        assert!(m.failure().is_some());
+    }
+}
+
+#[test]
+fn returning_to_the_main_menu_clears_the_previous_games_log_and_command_lines() {
+    let (t, h) = session();
+    let mut m = connected(t);
+    h.push(fixture("events_41_walk"));
+    h.push(logged(42, "7", "You open the door.", 1));
+    m.poll();
+    m.say("Something blocks the way.".into());
+    assert_eq!(m.native_log().len(), 1);
+    let mut menu = crafting("favorites");
+    menu["interaction"]["context"] = json!("MAIN_MENU");
+    h.push(change(43, json!({"interaction": menu})));
+    m.poll();
+    assert!(
+        m.native_log().is_empty(),
+        "the game's own lines belong to that game"
+    );
+    assert!(m.messages().is_empty(), "so do the client's command lines");
+    h.push(logged(44, "8", "Welcome back.", 1));
+    m.poll();
+    assert_eq!(m.native_log().len(), 1, "a later game logs again");
+}
+
+#[test]
+fn pickup_rows_carry_the_native_highlight_marks_and_counts() {
+    let text = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/pickup.json"
+    ))
+    .unwrap();
+    let boundary = serde_json::from_str::<Value>(&text).unwrap()["pickup"].clone();
+    let (t, h) = session();
+    let mut m = connected(t);
+    h.push(change(41, json!({"interaction": boundary})));
+    m.poll();
+    let menu = m.menu().unwrap();
+    assert_eq!(menu.context, "PICKUP");
+    let rows = menu
+        .choices
+        .iter()
+        .map(|c| {
+            (
+                c.highlighted,
+                c.selected,
+                c.selected_count,
+                c.available_count,
+            )
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        rows,
+        [
+            (false, false, None, Some(1)),
+            (true, true, Some(2), Some(3))
+        ]
+    );
+}
+
+#[test]
+fn a_client_line_repeating_the_newest_one_is_not_added_again() {
+    let (t, _h) = session();
+    let mut m = connected(t);
+    m.say("You see a wall at (4, 5).".into());
+    m.say("You see a wall at (4, 5).".into());
+    m.say("You see a door at (5, 5).".into());
+    m.say("You see a wall at (4, 5).".into());
+    assert_eq!(m.messages().len(), 3, "{:?}", m.messages());
+}
+
+#[test]
+fn query_popup_rows_do_not_carry_the_action_id_as_a_description() {
+    let mut menu = crafting("favorites");
+    menu["actions"] = json!([{"id": "YES", "name": "Yes", "keys": ["y"]}, {"id": "NO", "name": "No", "keys": ["n"]}]);
+    let rows = ["Yes", "No"].map(|label| {
+        let id = label.to_uppercase();
+        json!({"id": format!("option:{id}"), "label": label, "description": id, "denial": "",
+            "enabled": true, "selectable": true, "selected": false, "columns": []})
+    });
+    menu["interaction"]["context"] = json!("YESNO");
+    menu["interaction"]["choices"] = json!(rows);
+    let (t, h) = session();
+    let mut m = connected(t);
+    h.push(change(41, json!({"interaction": menu})));
+    m.poll();
+    let menu = m.menu().unwrap();
+    assert!(
+        menu.choices.iter().all(|c| c.description.is_empty()),
+        "{:?}",
+        menu.choices
+    );
+    // Text that is not an action id stays.
+    let mut real = crafting("weapon");
+    real["actions"] = json!([{"id": "YES", "name": "Yes"}]);
+    h.push(change(42, json!({"interaction": real})));
+    m.poll();
+    let kept = m
+        .menu()
+        .unwrap()
+        .choices
+        .into_iter()
+        .find(|c| c.id == "recipe:aa")
+        .unwrap();
+    assert!(kept.description.starts_with("Time to complete"));
 }

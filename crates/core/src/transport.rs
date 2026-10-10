@@ -7,7 +7,7 @@ use std::collections::{HashMap, VecDeque};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -22,7 +22,19 @@ pub trait Transport {
     fn send(&mut self, msg: Value);
     /// The next parsed incoming message, without blocking.
     fn recv(&mut self) -> Option<Incoming>;
+    /// CPU time the engine has used so far in clock ticks, 0 where unknown. A busy engine is silent on
+    /// the wire while it loads a world; live tests count this as progress.
+    fn engine_cpu_ticks(&self) -> u64 {
+        0
+    }
+    /// The engine's last stderr lines, oldest first.
+    fn stderr_tail(&self) -> Vec<String> {
+        vec![]
+    }
 }
+
+/// How many stderr lines are kept for the error screen.
+const STDERR_LINES: usize = 20;
 
 pub fn request(id: u64, method: &str, params: Value) -> Value {
     json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params })
@@ -94,9 +106,15 @@ pub struct StdioTransport {
     waker: Arc<Mutex<Option<Waker>>>,
     /// The throwaway profile directory, removed on drop.
     dir: Option<PathBuf>,
+    stderr: Arc<Mutex<VecDeque<String>>>,
 }
 
 impl StdioTransport {
+    /// The engine's process id, for tests that kill it.
+    pub fn pid(&self) -> u32 {
+        self.child.id()
+    }
+
     /// Runs the engine on its own default user and config directories (your real saves and options).
     pub fn spawn(engine: &Path) -> std::io::Result<Self> {
         Self::spawn_with(engine, &Profile::default())
@@ -126,18 +144,38 @@ impl StdioTransport {
                 .arg(format!("{}/", root.display()));
         }
         command.args(["--client", "mcp"]);
+        // The engine appends file names to these without a separator, so each must end in one.
+        let dir_arg = |dir: &Path| {
+            let mut arg = dir.as_os_str().to_os_string();
+            if !arg.to_string_lossy().ends_with(std::path::MAIN_SEPARATOR) {
+                arg.push(std::path::MAIN_SEPARATOR_STR);
+            }
+            arg
+        };
         if let Some(user) = &userdir {
-            command.arg("--userdir").arg(user);
+            command.arg("--userdir").arg(dir_arg(user));
         }
         if let Some(config) = &configdir {
-            command.arg("--configdir").arg(config);
+            command.arg("--configdir").arg(dir_arg(config));
         }
         let mut child = command
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::null())
+            .stderr(Stdio::piped())
             .spawn()?;
         let stdin = child.stdin.take().expect("piped stdin");
+        let err = child.stderr.take().expect("piped stderr");
+        let stderr: Arc<Mutex<VecDeque<String>>> = Arc::default();
+        let tail = stderr.clone();
+        let err_reader = std::thread::spawn(move || {
+            for line in BufReader::new(err).lines().map_while(Result::ok) {
+                let mut tail = tail.lock().unwrap();
+                tail.push_back(line);
+                if tail.len() > STDERR_LINES {
+                    tail.pop_front();
+                }
+            }
+        });
         let stdout = child.stdout.take().expect("piped stdout");
         let trace = Trace::from_env();
         let (tx, incoming) = mpsc::channel();
@@ -159,6 +197,8 @@ impl StdioTransport {
                     return;
                 }
             }
+            // The last stderr lines explain the exit, so they must be in before the UI hears of it.
+            let _ = err_reader.join();
             notify(Incoming::Closed);
         });
         let (out, lines) = mpsc::channel::<String>();
@@ -180,6 +220,7 @@ impl StdioTransport {
             incoming,
             waker,
             dir,
+            stderr,
         })
     }
 }
@@ -195,6 +236,23 @@ impl Transport for StdioTransport {
 
     fn recv(&mut self) -> Option<Incoming> {
         self.incoming.try_recv().ok()
+    }
+
+    /// `utime + stime` from `/proc/<pid>/stat` (Linux; 0 elsewhere).
+    fn engine_cpu_ticks(&self) -> u64 {
+        let stat = std::fs::read_to_string(format!("/proc/{}/stat", self.child.id())).ok();
+        // Fields after the parenthesised command name; utime and stime are the 12th and 13th of them.
+        let fields = stat
+            .as_deref()
+            .and_then(|s| s.rsplit_once(')'))
+            .map(|(_, f)| f);
+        fields
+            .map(|f| f.split_whitespace().skip(11).take(2))
+            .map_or(0, |t| t.filter_map(|v| v.parse::<u64>().ok()).sum())
+    }
+
+    fn stderr_tail(&self) -> Vec<String> {
+        self.stderr.lock().unwrap().iter().cloned().collect()
     }
 }
 
@@ -213,6 +271,8 @@ impl Drop for StdioTransport {
 pub struct ScriptHandle {
     sent: Arc<Mutex<Vec<Value>>>,
     inbox: Arc<Mutex<VecDeque<Value>>>,
+    closed: Arc<AtomicBool>,
+    stderr: Arc<Mutex<Vec<String>>>,
 }
 
 impl ScriptHandle {
@@ -227,6 +287,12 @@ impl ScriptHandle {
             .filter_map(|m| m["method"].as_str())
             .map(String::from)
             .collect()
+    }
+
+    /// Ends the stream once the queued messages are read, as an engine exit does.
+    pub fn close(&self, stderr: &[&str]) {
+        *self.stderr.lock().unwrap() = stderr.iter().map(|l| l.to_string()).collect();
+        self.closed.store(true, Ordering::SeqCst);
     }
 
     /// Queues an unsolicited engine message.
@@ -275,8 +341,19 @@ impl Transport for ScriptedTransport {
     }
 
     fn recv(&mut self) -> Option<Incoming> {
-        let msg = self.handle.inbox.lock().unwrap().pop_front()?;
+        let Some(msg) = self.handle.inbox.lock().unwrap().pop_front() else {
+            // Closed is reported once.
+            return self
+                .handle
+                .closed
+                .swap(false, Ordering::SeqCst)
+                .then_some(Incoming::Closed);
+        };
         Some(protocol::parse_message(&msg).unwrap_or_else(|e| Incoming::Malformed(e.to_string())))
+    }
+
+    fn stderr_tail(&self) -> Vec<String> {
+        self.handle.stderr.lock().unwrap().clone()
     }
 }
 

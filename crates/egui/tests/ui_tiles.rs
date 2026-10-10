@@ -76,6 +76,12 @@ fn the_map_draws_sprites_of_the_chosen_tileset_for_what_the_engine_published() {
         .sum::<usize>();
     assert!(layers > 30, "{layers} layers");
     assert_eq!(display.drawn(), layers - 1);
+    // Every square nothing is known about lies on the hidden-lighting sprite, like the native view.
+    let known = (0..size.y)
+        .flat_map(|y| (0..size.x).map(move |x| bn_client_egui::Pos { x, y }))
+        .filter(|&at| !model.cell(at).layers.is_empty())
+        .count();
+    assert_eq!(display.hidden(), (size.x * size.y) as usize - known);
 }
 
 #[test]

@@ -64,7 +64,7 @@ fn run(model: impl GameModel) -> std::io::Result<()> {
 #[derive(Parser)]
 #[command(
     name = "bn-client-tui",
-    about = "Terminal client for Cataclysm: Bright Nights. Ctrl-C quits; x/; look cursor, Tab action list, PageUp/Down log"
+    about = "Terminal client for Cataclysm: Bright Nights. Ctrl-C quits; the engine's look key starts a look cursor, Tab lists the actions, PageUp/Down log"
 )]
 struct Cli {
     #[command(flatten)]

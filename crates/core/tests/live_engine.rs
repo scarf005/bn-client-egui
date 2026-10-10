@@ -1,5 +1,4 @@
 //! Needs a real engine build: `BN_ENGINE=/path/to/cataclysm-bn-tiles cargo test --test live_engine -- --ignored`
-use bn_client_core::keys::KeyMap;
 use bn_client_core::transport::{Profile, StdioTransport};
 use bn_client_core::watchdog::Watchdog;
 use bn_client_core::{EngineModel, GameModel, Pos};
@@ -84,9 +83,7 @@ fn live_engine_starts_the_tutorial_and_walks_one_step() {
 fn live_engine_non_movement_action_opens_a_menu_that_can_be_cancelled() {
     let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
     let transport = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
-    let root = bn_client_core::transport::game_root(engine.as_ref(), None);
-    let keys = root.as_deref().map_or_else(KeyMap::default, KeyMap::load);
-    let mut model = EngineModel::new(Box::new(transport)).with_keys(keys);
+    let mut model = EngineModel::new(Box::new(transport));
 
     wait_for(&mut model, "subscription", |m| m.live());
     choose_label(&mut model, "New Game");
@@ -424,4 +421,125 @@ fn live_engine_interrupts_a_long_wait_and_the_stop_question_is_a_menu() {
         "{:?}",
         model.messages()
     );
+}
+
+#[test]
+#[ignore = "requires BN_ENGINE that reports the avatar sidebar"]
+fn live_engine_reports_the_native_sidebar_of_the_tutorial_avatar() {
+    let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
+    let transport = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
+    let mut model = EngineModel::new(Box::new(transport));
+    wait_for(&mut model, "subscription", |m| m.live());
+    choose_label(&mut model, "New Game");
+    choose_label(&mut model, "Tutorial");
+    wait_for(&mut model, "the sidebar", |m| !m.sidebar().is_empty());
+    let rows: Vec<String> = model
+        .sidebar()
+        .iter()
+        .map(|l| {
+            l.iter()
+                .map(|s| s.text.as_str())
+                .collect::<Vec<_>>()
+                .join(" ")
+        })
+        .collect();
+    println!("{}", rows.join("\n"));
+    assert!(rows.iter().any(|r| r.starts_with("HEAD")), "{rows:?}");
+    assert!(rows.iter().any(|r| r.starts_with("Location:")), "{rows:?}");
+    assert!(rows.iter().any(|r| r.starts_with("Weapon:")), "{rows:?}");
+}
+
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn live_engine_killed_mid_game_shows_the_failure_and_restart_brings_the_menu_back() {
+    let engine = std::path::PathBuf::from(std::env::var_os("BN_ENGINE").expect("set BN_ENGINE"));
+    let transport = StdioTransport::spawn_fresh(&engine).expect("engine starts");
+    let pid = transport.pid();
+    let again = engine.clone();
+    let mut model = EngineModel::new(Box::new(transport)).with_respawn(Box::new(move || {
+        StdioTransport::spawn_fresh(&again)
+            .map(|t| Box::new(t) as Box<dyn bn_client_core::transport::Transport>)
+    }));
+    wait_for(&mut model, "subscription", |m| m.live());
+    choose_label(&mut model, "New Game");
+    choose_label(&mut model, "Tutorial");
+    wait_for(&mut model, "the tutorial map", |m| m.size().x > 0);
+    assert!(model.failure().is_none());
+
+    let killed = std::process::Command::new("kill")
+        .args(["-9", &pid.to_string()])
+        .status()
+        .expect("kill runs");
+    assert!(killed.success());
+    wait_for(&mut model, "the failure", |m| m.failure().is_some());
+    let failure = model.failure().unwrap();
+    assert_eq!(failure.kind, bn_client_core::FailureKind::Exited);
+    println!("failure: {failure:?}");
+
+    assert!(model.restart(), "the engine starts again");
+    wait_for(&mut model, "the new session", |m| m.live());
+    assert!(model.failure().is_none());
+    wait_for(&mut model, "the main menu", |m| {
+        m.menu()
+            .is_some_and(|menu| menu.choices.iter().any(|c| c.label.contains("New Game")))
+    });
+}
+
+#[test]
+#[ignore = "requires BN_ENGINE with bn.progress heartbeats"]
+fn live_engine_long_wait_is_never_reported_as_stalled() {
+    let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
+    let transport = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
+    let mut model = EngineModel::new(Box::new(transport));
+    wait_for(&mut model, "subscription", |m| m.live());
+    choose_label(&mut model, "New Game");
+    choose_label(&mut model, "Tutorial");
+    wait_for(&mut model, "the tutorial map", |m| m.size().x > 0);
+    wait_for(&mut model, "idle", |m| !m.busy());
+    dismiss_popups(&mut model);
+    assert!(model.invoke_action("wait"));
+    choose_label(&mut model, "5 minutes");
+    dismiss_popups(&mut model);
+
+    assert!(model.invoke_action("wait"));
+    wait_for(&mut model, "the wait menu", |m| m.menu().is_some());
+    wait_for(&mut model, "the command to finish", |m| !m.busy());
+    let id = model
+        .menu()
+        .unwrap()
+        .choices
+        .iter()
+        .find(|c| c.label.starts_with("6 hours"))
+        .expect("6 hours")
+        .id
+        .clone();
+    // A stall limit far below the wait: only the heartbeats keep the model from reporting one.
+    model.set_stall(Duration::from_secs(5));
+    model.choose(&id);
+    assert!(model.busy());
+    let started = std::time::Instant::now();
+    while started.elapsed() < Duration::from_secs(20) && model.busy() {
+        model.poll();
+        assert!(
+            model.failure().is_none(),
+            "{:?} after {:?}",
+            model.failure(),
+            started.elapsed()
+        );
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    assert!(
+        model.busy(),
+        "the wait outlasted the stall limit ({:?})",
+        started.elapsed()
+    );
+    assert!(model.interrupt());
+    wait_for(&mut model, "the stop question", |m| {
+        m.menu()
+            .is_some_and(|menu| menu.choices.iter().any(|c| c.label == "Yes"))
+    });
+    wait_for(&mut model, "the command to finish", |m| !m.busy());
+    model.set_stall(Duration::from_secs(120));
+    choose_label(&mut model, "Yes");
+    assert!(model.failure().is_none());
 }

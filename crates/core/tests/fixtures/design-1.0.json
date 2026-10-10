@@ -53,23 +53,23 @@
      {
       "id": "RIGHT",
       "name": "Move right"
-     },
+     , "keys": ["RIGHT","l"]},
      {
       "id": "LEFT",
       "name": "Move left"
-     },
+     , "keys": ["LEFT","h"]},
      {
       "id": "UP",
       "name": "Move up"
-     },
+     , "keys": ["UP","k"]},
      {
       "id": "DOWN",
       "name": "Move down"
-     },
+     , "keys": ["DOWN","j"]},
      {
       "id": "pickup",
       "name": "Pick up"
-     }
+     , "keys": ["g"]}
     ],
     "interaction": null
    },
@@ -778,23 +778,23 @@
         {
          "id": "RIGHT",
          "name": "Move right"
-        },
+        , "keys": ["RIGHT","l"]},
         {
          "id": "LEFT",
          "name": "Move left"
-        },
+        , "keys": ["LEFT","h"]},
         {
          "id": "UP",
          "name": "Move up"
-        },
+        , "keys": ["UP","k"]},
         {
          "id": "DOWN",
          "name": "Move down"
-        },
+        , "keys": ["DOWN","j"]},
         {
          "id": "pickup",
          "name": "Pick up"
-        }
+        , "keys": ["g"]}
        ],
        "interaction": {
         "schema_id": "s:pickup",

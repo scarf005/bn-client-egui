@@ -1,14 +1,14 @@
 //! Needs a real engine build: `BN_ENGINE=/path/to/cataclysm-bn-tiles cargo test -p bn-client-core --test live_inventory -- --ignored --test-threads=1`
-use bn_client_core::keys::KeyMap;
 use bn_client_core::transport::StdioTransport;
+use bn_client_core::watchdog::Watchdog;
 use bn_client_core::{EngineModel, GameModel};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 fn wait_for(model: &mut EngineModel, what: &str, mut done: impl FnMut(&EngineModel) -> bool) {
-    let deadline = Instant::now() + Duration::from_secs(400);
+    let mut watchdog = Watchdog::live();
     while !done(model) {
         assert!(
-            Instant::now() < deadline,
+            !watchdog.expired(model.received()),
             "timed out waiting for {what}: {:?}",
             model.messages()
         );
@@ -49,9 +49,7 @@ fn dismiss_popups(model: &mut EngineModel) {
 fn start_tutorial() -> EngineModel {
     let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
     let transport = StdioTransport::spawn(engine.as_ref()).expect("engine starts");
-    let root = bn_client_core::transport::game_root(engine.as_ref(), None);
-    let keys = root.as_deref().map_or_else(KeyMap::default, KeyMap::load);
-    let mut model = EngineModel::new(Box::new(transport)).with_keys(keys);
+    let mut model = EngineModel::new(Box::new(transport));
     wait_for(&mut model, "subscription", |m| m.live());
     choose_label(&mut model, "New Game");
     choose_label(&mut model, "Tutorial");
@@ -111,4 +109,34 @@ fn live_pick_up_a_chosen_ground_item_wield_it_and_drop_it() {
     println!("INV {:?} GROUND {:?}", model.inventory(), model.ground());
     assert!(model.inventory().is_empty());
     assert_eq!(model.ground(), [item]);
+}
+
+#[test]
+#[ignore = "requires BN_ENGINE"]
+fn live_pickup_list_has_the_carry_header_a_cursor_row_marks_and_the_confirm_action() {
+    use bn_client_core::Pos;
+    let mut model = start_tutorial();
+    let me = model.player();
+    model.step_toward(Pos {
+        x: me.x + 1,
+        y: me.y,
+    });
+    wait_for(&mut model, "idle", |m| !m.busy());
+    dismiss_popups(&mut model);
+    assert!(model.invoke_action("pickup"));
+    settle(&mut model);
+    let menu = model.menu().expect("the native pickup list");
+    assert_eq!(menu.context, "PICKUP");
+    assert!(menu.message.starts_with("PICK Wgt "), "{}", menu.message);
+    assert!(menu.message.contains("Vol "), "{}", menu.message);
+    let row = &menu.choices[0];
+    assert!(!row.selected, "{row:?}");
+    assert!(row.description.contains("Weight:"), "{}", row.description);
+
+    model.choose(&row.id.clone());
+    settle(&mut model);
+    let menu = model.menu().expect("still the pickup list");
+    assert!(menu.choices[0].selected, "the row is marked");
+    assert!(model.actions().iter().any(|a| a.id == "CONFIRM"));
+    assert!(model.invoke_action("CONFIRM"));
 }
