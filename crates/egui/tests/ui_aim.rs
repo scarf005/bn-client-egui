@@ -145,10 +145,8 @@ fn a_count_moves_that_many_through_the_native_amount_prompt() {
     h.get_by_label("tin can").click();
     h.run_steps(2);
     finished(&mut h, &script);
-    h.get_by_label("Amount to move").click();
+    h.get_by_label("Amount to move").focus();
     h.run_steps(2);
-    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
-    h.run_steps(1);
     h.get_by_label("Amount to move").type_text("2");
     h.run_steps(2);
     h.get_by_label("Move amount").click();
@@ -157,8 +155,7 @@ fn a_count_moves_that_many_through_the_native_amount_prompt() {
         operations(&script).last(),
         Some(&action("MOVE_VARIABLE_ITEM"))
     );
-    // The engine asks how many; the queued step answers it.
-    finished(&mut h, &script);
+    // The engine asks how many, as the native prompt does, and then finishes the command.
     let mut prompt = aim();
     prompt["interaction"]["context"] = json!("STRING_INPUT");
     prompt["interaction"]["kind"] = json!("field");
@@ -168,7 +165,8 @@ fn a_count_moves_that_many_through_the_native_amount_prompt() {
     prompt["interaction"]["field"] = json!({"id":"field:value","label":"How many?","description":"",
         "value":"3","type":"text","max_length":10,"printable":false});
     script.push(event(42, prompt));
-    h.run_steps(4);
+    h.run_steps(2);
+    finished(&mut h, &script);
     assert_eq!(
         operations(&script).last(),
         Some(&json!({"kind":"fill","field_id":"field:value","value":"2","submit":true}))
@@ -178,7 +176,7 @@ fn a_count_moves_that_many_through_the_native_amount_prompt() {
 #[test]
 fn a_pane_filter_is_typed_in_its_own_box_and_sent_through_the_native_filter() {
     let (mut h, script) = harness();
-    h.get_by_label("Left pane filter").click();
+    h.get_by_label("Left pane filter").focus();
     h.run_steps(2);
     h.get_by_label("Left pane filter").type_text("can");
     h.run_steps(2);
