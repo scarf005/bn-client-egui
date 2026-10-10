@@ -188,3 +188,44 @@ fn the_overmap_draws_the_engines_tile_ids_with_fallbacks_and_keeps_markers_as_gl
         "hello said the client draws tiles"
     );
 }
+
+#[test]
+fn switching_between_tiles_and_ascii_tells_the_engine_without_a_restart() {
+    let root = game_root("ui-switch-hello");
+    let (t, script) = ScriptedTransport::new();
+    let transport = t.on("bn.hello", vec![fixture("hello_result")]).on(
+        "bn.subscribe",
+        vec![
+            fixture("subscribe_result"),
+            fixture("snapshot_part_0"),
+            fixture("snapshot_part_1"),
+        ],
+    );
+    let app = App::new(EngineModel::connect(Box::new(transport), true))
+        .with_root(root.clone())
+        .with_settings(root.join("settings.json"));
+    let mut h: H = Harness::builder()
+        .with_size(egui::vec2(1100.0, 800.0))
+        .build_ui_state(|ui, app: &mut App<EngineModel>| app.show(ui), app);
+    settle(&mut h);
+    let tiles_said = |script: &bn_client_egui::transport::ScriptHandle| -> Vec<bool> {
+        script
+            .sent()
+            .iter()
+            .filter(|m| m["method"] == "bn.hello")
+            .map(|m| m["params"]["tiles"] == true)
+            .collect()
+    };
+    assert_eq!(tiles_said(&script), [true], "started with tiles");
+
+    h.get_by_label("ASCII").click();
+    h.run_steps(4);
+    assert_eq!(tiles_said(&script), [true, false]);
+
+    h.get_by_label("Tiles").click();
+    h.run_steps(2);
+    settle(&mut h);
+    assert_eq!(tiles_said(&script), [true, false, true]);
+    let methods = script.sent_methods();
+    assert_eq!(methods.iter().filter(|m| *m == "bn.viewport").count(), 2);
+}
