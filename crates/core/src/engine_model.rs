@@ -181,7 +181,10 @@ impl EngineModel {
                 if n.is_terminal() && self.command_id.as_deref() == Some(&n.command_id) {
                     self.busy = false;
                     self.command_id = None;
-                    if n.stage != "completed" {
+                    // The world swap after choosing the Tutorial ends its command with stale_epoch.
+                    let swap = n.stage == "interrupted"
+                        && n.error.as_ref().is_some_and(|e| e == "stale_epoch");
+                    if n.stage != "completed" && !swap {
                         self.rejected = self.walking;
                         let why = n.error.as_ref().map_or(n.stage.clone(), error_kind);
                         self.messages.push(format!("Command {}: {why}.", n.stage));
@@ -352,8 +355,8 @@ impl EngineModel {
 }
 
 fn error_kind(e: &Value) -> String {
-    e["kind"]
-        .as_str()
+    e.as_str()
+        .or_else(|| e["kind"].as_str())
         .map_or_else(|| e.to_string(), String::from)
 }
 

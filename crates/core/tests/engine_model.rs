@@ -489,3 +489,27 @@ fn empty_action_list_between_auto_move_steps_keeps_the_controls_until_idle() {
         "an idle boundary with none shows none"
     );
 }
+
+fn interrupted_by(error: &str) -> (EngineModel, Vec<String>) {
+    let (t, h) = session();
+    let mut m = connected(t.on("bn.command.submit", walk_reply()));
+    assert!(m.travel(Pos { x: 22, y: 12 }));
+    h.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{
+        "epoch":"e7f3","command_id":"c:5","stage":"interrupted","error":error}}));
+    m.poll();
+    assert!(!m.busy());
+    let messages = m.messages().to_vec();
+    (m, messages)
+}
+
+#[test]
+fn interrupted_command_shows_the_engine_error_reason() {
+    let (_, messages) = interrupted_by("not_ready");
+    assert_eq!(messages.last().unwrap(), "Command interrupted: not_ready.");
+}
+
+#[test]
+fn world_swap_interruption_is_not_reported_as_a_failure() {
+    let (_, messages) = interrupted_by("stale_epoch");
+    assert!(messages.is_empty(), "{messages:?}");
+}
