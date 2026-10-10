@@ -227,3 +227,24 @@ fn the_resizable_log_keeps_its_default_share_instead_of_shrinking_to_its_content
     let log = h.get_by_label("Message log").rect();
     assert!(800.0 - log.min.y >= 800.0 * 0.35, "{log:?}");
 }
+
+#[test]
+fn dragging_the_log_edge_resizes_it_and_the_size_sticks() {
+    let (mut h, _script) = harness(egui::vec2(1100.0, 800.0));
+    h.run_steps(5);
+    let heading = h.get_by_label("Message log").rect();
+    let before = heading.min.y;
+    let edge = h.get_by_label("Resize message log").rect().center();
+    h.hover_at(edge);
+    h.run_steps(2);
+    h.drag_at(edge);
+    h.run_steps(2);
+    for dy in [-40.0, -80.0, -120.0] {
+        h.hover_at(edge + egui::vec2(0.0, dy));
+        h.run_steps(2);
+    }
+    h.drop_at(edge + egui::vec2(0.0, -120.0));
+    h.run_steps(5);
+    let after = h.get_by_label("Message log").rect().min.y;
+    assert!(after < before - 60.0, "{before} -> {after}");
+}
