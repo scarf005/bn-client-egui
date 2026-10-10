@@ -981,3 +981,23 @@ fn options_is_in_the_action_palette_and_opens_the_native_options_through_the_mai
         Some(&json!({"kind":"choose","choice_id":"main:options"}))
     );
 }
+
+fn list_with(rows: usize) -> Value {
+    let choices = (0..rows)
+        .map(|i| choice(&format!("r:{i}"), &format!("row {i}")))
+        .collect::<Vec<_>>();
+    json!({"schema_id":"s:list","kind":"choices","context":"UILIST","title":"","message":"Pick",
+        "allow_cancel":true,"choices":choices,"choice_total":rows,"allow_set_count":false})
+}
+
+#[test]
+fn the_filter_button_is_for_long_lists_not_for_a_two_row_question() {
+    let filter = json!([{"id":"FILTER","name":"Filter","keys":["/"]}]);
+    for (rows, shown) in [(2, false), (9, false), (30, true)] {
+        let (mut h, script) = harness();
+        h.run_steps(3);
+        script.push(show(41, filter.clone(), list_with(rows)));
+        h.run_steps(4);
+        assert_eq!(h.query_by_label("Filter").is_some(), shown, "{rows} rows");
+    }
+}
