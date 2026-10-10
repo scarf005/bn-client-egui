@@ -33,6 +33,8 @@ impl<M: GameModel> App<M> {
         let follows = self.menu_focus != menu.focus;
         let mut edited = None;
         let mut key_chosen = None;
+        let mut more = false;
+        let mut filter_clicked = false;
         let mut cancel = self.palette.is_none()
             && ctx.input(|i| i.key_pressed(egui::Key::Escape))
             && menu.can_cancel;
@@ -118,13 +120,12 @@ impl<M: GameModel> App<M> {
                         if menu.field.as_ref().is_some_and(|f| f.kind == "key") {
                             key_chosen = editor::key_prompt(ui);
                         } else if let Some(field) = &menu.field {
-                            let (typed, response) = self.text_prompt(ui, field);
+                            let response = self.text_prompt(ui, field);
                             ids.push(response.id);
                             if entered {
                                 response.request_focus();
                                 focused = response.has_focus();
                             }
-                            key_chosen = typed;
                         }
                         for (i, choice) in menu.entries().into_iter().enumerate() {
                             if let Some(row) = &choice.editor {
@@ -183,12 +184,40 @@ impl<M: GameModel> App<M> {
                             });
                         }
                     });
+                if self.model.actions().iter().any(|a| a.id == "FILTER") && menu.field.is_none() {
+                    let filter = ui.add_enabled(!self.model.busy(), egui::Button::new("Filter"));
+                    ids.extend(filter.enabled().then_some(filter.id));
+                    filter_clicked = filter.clicked();
+                }
+                if menu.total > menu.choices.len() {
+                    // The rest of a long list comes one page per click, so a huge list never floods the window.
+                    let rest = ui.button(format!(
+                        "Load more ({} of {})",
+                        menu.choices.len(),
+                        menu.total
+                    ));
+                    more = rest.clicked();
+                }
                 if let Some(description) = described.filter(|d| !d.is_empty()) {
                     ui.separator();
                     ui.label(self.rich(ui, description));
                 }
             });
         self.menu_ids = ids;
+        if filter_clicked {
+            self.model.invoke_action("FILTER");
+        }
+        if more {
+            self.model.more_choices();
+            ctx.request_repaint();
+        }
+        // Every change is sent, and the newest text goes out again once an in-flight command is done.
+        if let Some((id, text, submit)) = self.prompt_send.clone()
+            && !self.model.busy()
+        {
+            self.prompt_send = None;
+            self.model.fill(&id, &text, submit);
+        }
         self.menu_focus = menu.focus.clone();
         self.menu_cursor = cursor_seen;
         self.focus_menu = entered && !focused;
@@ -207,13 +236,13 @@ impl<M: GameModel> App<M> {
         }
     }
 
-    /// The engine's text prompt, such as a list filter: a box that Enter sends. The text is the engine's
-    /// until the box is edited.
+    /// The engine's text prompt, such as a list filter: a box whose every change is sent and that Enter
+    /// submits. The text is the engine's until the box is edited.
     fn text_prompt(
         &mut self,
         ui: &mut egui::Ui,
         field: &bn_client_core::model::MenuField,
-    ) -> (Option<String>, egui::Response) {
+    ) -> egui::Response {
         let (seen, text) = &mut self.prompt;
         if *seen != (field.id.clone(), field.value.clone()) {
             *seen = (field.id.clone(), field.value.clone());
@@ -226,8 +255,12 @@ impl<M: GameModel> App<M> {
         ui.ctx()
             .accesskit_node_builder(response.id, move |b| b.set_label(name));
         let enter = ui.input(|i| i.key_pressed(egui::Key::Enter));
-        let sent = (response.lost_focus() && enter).then(|| text.clone());
-        (sent, response)
+        let submit = (response.lost_focus() || response.has_focus()) && enter;
+        if response.changed() || submit {
+            let submit = submit || self.prompt_send.as_ref().is_some_and(|s| s.2);
+            self.prompt_send = Some((field.id.clone(), text.clone(), submit));
+        }
+        response
     }
 
     /// The title art and version line: fixed-width text, so the art keeps its shape.

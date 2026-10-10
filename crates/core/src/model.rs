@@ -53,6 +53,44 @@ pub struct Cell {
     pub square: u32,
 }
 
+/// One short animation the native game would play on the map, in view coordinates.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Effect {
+    pub shape: Shape,
+    /// How long the native animation holds it.
+    pub duration_ms: u64,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Shape {
+    /// A shot flying along `path`; a tiles client looks `sprite` up first.
+    Projectile {
+        path: Vec<Pos>,
+        glyph: char,
+        sprite: Option<String>,
+        color: Rgb,
+    },
+    /// An explosion starting at `at` and reaching `radius` squares.
+    Burst {
+        at: Pos,
+        radius: u32,
+        color: Rgb,
+        /// The tile id the native tiles draw it with.
+        tile: String,
+    },
+    /// The squares one step of an explosion blasts, or its shrapnel lands on.
+    Blast {
+        cells: Vec<Pos>,
+        shrapnel: bool,
+        tile: String,
+    },
+    /// Floating text rising from `at`, in colored segments.
+    Text {
+        at: Pos,
+        segments: Vec<(String, Rgb)>,
+    },
+}
+
 /// One line of the game's own message log. A repeat of the newest line keeps its `id` and raises
 /// `count`; the client shows it as "text x2" in place of the earlier line.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -123,6 +161,8 @@ pub struct Menu {
     /// Lines drawn above the menu in a fixed-width font, with colour tags.
     pub banner: Vec<String>,
     pub choices: Vec<MenuChoice>,
+    /// How many choices the engine has in all; more than `choices.len()` until the rest is fetched.
+    pub total: usize,
     pub can_cancel: bool,
     pub can_set_count: bool,
     pub field: Option<MenuField>,
@@ -317,6 +357,8 @@ pub trait GameModel {
     fn scroll_menu(&mut self, _up: bool) -> bool {
         false
     }
+    /// Fetches the next page of a menu that has more choices than it lists.
+    fn more_choices(&mut self) {}
     fn cancel_menu(&mut self) {}
     /// Season of the game calendar (`spring`, `summer`, `autumn`, `winter`), which picks seasonal sprites.
     fn season(&self) -> Option<String> {
@@ -346,6 +388,10 @@ pub trait GameModel {
         &[]
     }
     fn say(&mut self, text: String);
+    /// The map animations produced since the last call; models without a game have none.
+    fn take_effects(&mut self) -> Vec<Effect> {
+        vec![]
+    }
 }
 
 pub struct FakeModel {
@@ -355,6 +401,14 @@ pub struct FakeModel {
     ground: Vec<String>,
     inventory: Vec<String>,
     messages: Vec<String>,
+    effects: Vec<Effect>,
+}
+
+impl FakeModel {
+    /// An animation the next `take_effects` hands out.
+    pub fn queue_effect(&mut self, effect: Effect) {
+        self.effects.push(effect);
+    }
 }
 
 impl Default for FakeModel {
@@ -365,6 +419,7 @@ impl Default for FakeModel {
             ground: vec!["Rusty knife".into(), "Tin can".into()],
             inventory: vec!["Flashlight".into()],
             messages: vec!["Welcome to the prototype.".into()],
+            effects: vec![],
         }
     }
 }
@@ -387,6 +442,10 @@ impl GameModel for FakeModel {
             action("LEFTDOWN", "Move down left", &["END", "b"]),
             action("RIGHTDOWN", "Move down right", &["NPAGE", "n"]),
         ]
+    }
+
+    fn take_effects(&mut self) -> Vec<Effect> {
+        std::mem::take(&mut self.effects)
     }
 
     fn size(&self) -> Pos {

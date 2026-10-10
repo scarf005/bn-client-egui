@@ -27,6 +27,15 @@ pub struct LoggedLine {
     pub count: u32,
 }
 
+/// A native animation fact (`projectile.moved`, `explosion.*`, `combat_text.shown`), kept as published.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Fact {
+    pub kind: String,
+    pub data: serde_json::Value,
+    /// `display.duration_ms`: how long the native animation holds it.
+    pub duration_ms: u64,
+}
+
 #[derive(Default)]
 pub struct Replica {
     at: Option<At>,
@@ -43,6 +52,7 @@ pub struct Replica {
     loading: Option<(u32, u32)>,
     log: Vec<String>,
     lines: Vec<LoggedLine>,
+    facts: Vec<Fact>,
 }
 
 fn seq(s: &str) -> Option<u64> {
@@ -115,6 +125,25 @@ impl Replica {
             last += 1;
         }
         for e in fresh {
+            if matches!(
+                e.kind.as_str(),
+                "projectile.moved"
+                    | "explosion.started"
+                    | "explosion.blast"
+                    | "explosion.shrapnel"
+                    | "explosion.ended"
+                    | "combat_text.shown"
+            ) && let Some(data) = &e.data
+            {
+                self.facts.push(Fact {
+                    kind: e.kind.clone(),
+                    data: data.clone(),
+                    duration_ms: e
+                        .display
+                        .as_ref()
+                        .map_or(0, |d| d["duration_ms"].as_u64().unwrap_or(0)),
+                });
+            }
             if let Some(data) = &e.data
                 && let Some(text) = data["text"].as_str()
             {
@@ -234,6 +263,11 @@ impl Replica {
 
     pub fn cell(&self, dim: &str, x: i32, y: i32, z: i32) -> Option<&Cell> {
         self.cells.get(dim)?.get(&(x, y, z))
+    }
+
+    /// Animation facts since the last call, in the order the game produced them.
+    pub fn take_facts(&mut self) -> Vec<Fact> {
+        std::mem::take(&mut self.facts)
     }
 
     /// Message-log lines since the last call, in log order.

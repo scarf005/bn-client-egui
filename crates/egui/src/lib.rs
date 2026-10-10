@@ -2,6 +2,7 @@ mod a11y;
 pub mod app;
 pub mod display;
 pub mod editor;
+mod effects;
 pub mod fonts;
 #[cfg(feature = "profile")]
 pub mod profile;

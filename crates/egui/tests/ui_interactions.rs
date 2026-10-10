@@ -557,11 +557,25 @@ fn a_text_prompt_is_typed_into_a_box_and_enter_sends_it() {
     h.run_steps(1);
     h.get_by_label("Filter:").type_text("shirt");
     h.run_steps(2);
+    // Every change is sent as a fill that keeps the prompt open; the engine takes the next one once
+    // the command in flight is done, and Enter submits the newest text.
+    let typed = submits(&script);
+    assert!(!typed.is_empty());
+    assert!(
+        typed
+            .iter()
+            .all(|s| s["kind"] == "fill" && s["submit"] == false),
+        "{typed:?}"
+    );
+    script.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{
+        "epoch":"e7f3","command_id":"c:5","stage":"completed"}}));
+    h.run_steps(2);
     h.key_press(egui::Key::Enter);
     h.run_steps(3);
+    let last = submits(&script).pop().unwrap();
     assert_eq!(
-        submits(&script),
-        [json!({"kind":"fill","field_id":"field:text","value":"shirt","submit":true})]
+        last,
+        json!({"kind":"fill","field_id":"field:text","value":"shirt","submit":true})
     );
 }
 
@@ -578,5 +592,8 @@ fn typing_in_a_text_prompt_runs_no_game_action() {
     h.get_by_label("Filter:").click();
     h.get_by_label("Filter:").type_text("w");
     h.run_steps(3);
-    assert!(submits(&script).is_empty());
+    assert!(
+        submits(&script).iter().all(|s| s["kind"] == "fill"),
+        "typing sends fills, never the game's own action"
+    );
 }
