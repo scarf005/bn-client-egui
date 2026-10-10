@@ -77,8 +77,9 @@ fn live_crafting_menu_switches_tabs_searches_shows_details_and_closes() {
         h.query_by_label("New Game").is_some()
     });
     h.get_by_label("New Game").click();
+    // A click while the tab command is still in flight is ignored, so wait until it has finished.
     run_until(&mut h, "the tutorial entry", 60, |h| {
-        h.query_by_label("Tutorial").is_some()
+        h.query_by_label("Tutorial").is_some() && !h.state().model.busy()
     });
     h.get_by_label("Tutorial").click();
     run_until(&mut h, "the tutorial map", 120, |h| {
