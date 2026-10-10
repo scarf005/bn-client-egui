@@ -55,7 +55,7 @@ fn dismiss_popups(model: &mut EngineModel) {
 #[ignore = "requires BN_ENGINE pointing at an engine binary"]
 fn live_engine_message_log_shows_native_lines_with_repeat_counts() {
     let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
-    let t = StdioTransport::spawn(engine.as_ref()).expect("engine starts");
+    let t = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
     let mut m = EngineModel::new(Box::new(t));
     wait_for(&mut m, "subscription", |m| m.live());
     choose_label(&mut m, "New Game");
