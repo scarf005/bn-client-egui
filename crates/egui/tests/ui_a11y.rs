@@ -198,3 +198,25 @@ fn the_map_cursor_starts_on_the_player() {
     let at = player.strip_prefix("Player at ").expect(&desc);
     assert!(rest.starts_with(at), "{desc}");
 }
+
+#[test]
+fn tab_and_shift_tab_stay_inside_an_open_menu() {
+    let (mut h, script) = harness();
+    open_menu(&mut h, &script);
+    let mut seen = vec![focused_label(&h)];
+    for _ in 0..3 {
+        h.key_press(egui::Key::Tab);
+        h.run_steps(3);
+        seen.push(focused_label(&h));
+    }
+    let entry = Some("combat knife".to_string());
+    let cancel = Some("Cancel".to_string());
+    // The disabled "tin can" is skipped; the cycle is knife, Cancel, knife, Cancel.
+    assert_eq!(seen, [entry.clone(), cancel.clone(), entry, cancel.clone()]);
+    h.key_press_modifiers(egui::Modifiers::SHIFT, egui::Key::Tab);
+    h.run_steps(3);
+    assert_eq!(focused_label(&h).as_deref(), Some("combat knife"));
+    h.key_press_modifiers(egui::Modifiers::SHIFT, egui::Key::Tab);
+    h.run_steps(3);
+    assert_eq!(focused_label(&h), cancel);
+}

@@ -56,6 +56,8 @@ pub struct App<M: GameModel> {
     focus_menu: bool,
     /// The menu just closed; the map takes focus back.
     refocus_map: bool,
+    /// The enabled controls of the open menu, in Tab order, as of the last frame.
+    menu_ids: Vec<egui::Id>,
     /// The cursor has been put on the player since the map first appeared.
     cursor_placed: bool,
 }
@@ -80,6 +82,7 @@ impl<M: GameModel> App<M> {
             focus_menu: false,
             refocus_map: false,
             cursor_placed: false,
+            menu_ids: Vec::new(),
         }
     }
 
@@ -312,11 +315,14 @@ impl<M: GameModel> App<M> {
     fn menu(&mut self, ctx: &egui::Context) {
         let Some(menu) = self.model.menu() else {
             self.focus_menu = false;
+            self.menu_ids.clear();
             self.refocus_map |= self.menu_title.take().is_some();
             return;
         };
         let entered = self.focus_menu
             | (self.menu_title.replace(menu.title.clone()).as_ref() != Some(&menu.title));
+        a11y::trap_tab(ctx, &self.menu_ids);
+        let mut ids = Vec::new();
         let mut focused = false;
         let mut chosen = None;
         let mut cancel = ctx.input(|i| i.key_pressed(egui::Key::Escape)) && menu.can_cancel;
@@ -332,6 +338,7 @@ impl<M: GameModel> App<M> {
                         let button =
                             self.control(ui, tab.label.clone(), &tab.id, tab.enabled, tab.selected);
                         a11y::tab(ui.ctx(), button.id, tab.selected);
+                        ids.extend(button.enabled().then_some(button.id));
                         if entered && tab.selected {
                             button.request_focus();
                             focused = button.has_focus();
@@ -344,6 +351,7 @@ impl<M: GameModel> App<M> {
                 for (i, choice) in menu.entries().into_iter().enumerate() {
                     let button =
                         self.control(ui, choice.label.clone(), &choice.id, choice.enabled, false);
+                    ids.extend(button.enabled().then_some(button.id));
                     if entered && i == 0 && tabs.is_empty() {
                         button.request_focus();
                         focused = button.has_focus();
@@ -358,14 +366,13 @@ impl<M: GameModel> App<M> {
                         chosen = Some(choice.id.clone());
                     }
                 }
-                if menu.can_cancel
-                    && ui
-                        .add_enabled(!self.model.busy(), egui::Button::new("Cancel"))
-                        .clicked()
-                {
-                    cancel = true;
+                if menu.can_cancel {
+                    let button = ui.add_enabled(!self.model.busy(), egui::Button::new("Cancel"));
+                    ids.extend(button.enabled().then_some(button.id));
+                    cancel |= button.clicked();
                 }
             });
+        self.menu_ids = ids;
         self.focus_menu = entered && !focused;
         a11y::dialog(ctx, &menu.title, &menu.message);
         if let Some(id) = chosen {
