@@ -849,7 +849,8 @@ fn tiled_session() -> EngineModel {
     });
     subscribe["result"]["avatar"]["overlays"] = json!([{
         "kind": "overlay", "id": "worn_jacket", "glyph": "", "color": "",
-        "tile": "overlay_female_worn_jacket", "looks_like": ["overlay_worn_jacket"]
+        "tile": "overlay_female_worn_jacket", "looks_like": ["overlay_worn_jacket"],
+        "tint_keys": ["VARSIZE", "jacket_light"]
     }, {
         "kind": "overlay", "id": "mutation_hair_long", "glyph": "", "color": "",
         "tile": "overlay_female_mutation_hair_long",
@@ -1013,6 +1014,7 @@ fn creatures_and_the_avatar_draw_over_the_terrain_with_their_overlays() {
     );
     assert_eq!(hair.traits["hair_color"], ["hair_black"]);
     assert!(me.layers[3].mutation.is_none());
+    assert_eq!(me.layers[3].tint_keys, ["VARSIZE", "jacket_light"]);
     assert!(!me.layers[2].mirrored && me.layers[2].creature);
     assert_eq!(me.layers[2].glyph, '@');
     assert_eq!(me.layers[3].glyph, '\0');

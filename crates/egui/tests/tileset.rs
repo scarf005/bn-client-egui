@@ -368,3 +368,80 @@ fn the_engines_list_of_mod_tilesets_replaces_the_search_of_the_data() {
     let sprite = |id: &str| both.choose(&query(id)).unwrap().fg.unwrap().sprite;
     assert_eq!((sprite("vp_found"), sprite("vp_listed")), (10, 14));
 }
+
+#[test]
+fn an_item_takes_the_paint_of_its_first_flag_or_else_of_its_id() {
+    let root = game_root("key-paints");
+    add_tints(
+        &root,
+        serde_json::json!([
+            {"id": "jeans", "fg": "#112233"},
+            {"id": "FANCY", "fg": "#445566"},
+            {"id": "WATERPROOF", "fg": "#778899"}
+        ]),
+        serde_json::json!([]),
+    );
+    let set = Tileset::load(&root.join("gfx/test")).unwrap();
+    let keys = |k: &[&str]| k.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+    let color = |k: &[&str]| set.key_paints(&keys(k)).1.map(|p| p.color);
+    // The flags come first, in the order the game lists them, then the id.
+    assert_eq!(
+        color(&["VARSIZE", "FANCY", "WATERPROOF", "jeans"]),
+        Some([68, 85, 102])
+    );
+    assert_eq!(color(&["VARSIZE", "jeans"]), Some([17, 34, 51]));
+    assert_eq!(color(&["VARSIZE", "shirt"]), None);
+}
+
+#[test]
+fn a_hair_style_goes_by_the_sprite_of_the_hair_color_where_the_tileset_paints_no_hair() {
+    let root = game_root("legacy-hair");
+    add_mod(
+        &root,
+        "hair.json",
+        &["test"],
+        serde_json::json!([{"id": "overlay_female_mutation_hair_black_long", "fg": 0}]),
+    );
+    let set = Tileset::load(&root.join("gfx/test")).unwrap();
+    let style = vec!["hair_style".to_string()];
+    let black = traits(&[("hair_color", &["hair_black"])]);
+    let blond = traits(&[("hair_color", &["hair_blond"])]);
+    let ask = |id: &str, traits: &Traits, male: bool| {
+        set.colored_hair(
+            &PaintQuery {
+                id,
+                types: &style,
+                flags: &[],
+                traits,
+            },
+            male,
+        )
+    };
+    assert_eq!(
+        ask("hair_long", &black, false),
+        Some([
+            "overlay_female_mutation_hair_black_long".to_string(),
+            "overlay_mutation_hair_black_long".to_string()
+        ])
+    );
+    // No sprite for the color, a style that names its color already, or no hair color: the ordinary overlay.
+    assert_eq!(ask("hair_long", &blond, false), None);
+    assert_eq!(ask("hair_black_long", &black, false), None);
+    assert_eq!(ask("hair_long", &Traits::new(), false), None);
+    // A tileset that pairs hair styles with colors paints them instead.
+    add_tints(
+        &root,
+        serde_json::json!([]),
+        serde_json::json!([
+            {"source_type": "hair_color", "target_type": "hair_style", "override": true}
+        ]),
+    );
+    let painted = Tileset::load(&root.join("gfx/test")).unwrap();
+    let q = PaintQuery {
+        id: "hair_long",
+        types: &style,
+        flags: &[],
+        traits: &black,
+    };
+    assert_eq!(painted.colored_hair(&q, false), None);
+}
