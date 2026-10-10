@@ -34,7 +34,20 @@ enum Pending {
     Submit,
     Viewport,
     Interrupt,
+    Choices,
 }
+
+/// The choices past the first page of the interaction with this boundary and schema.
+#[derive(Default)]
+struct Paged {
+    key: (String, String),
+    more: Vec<protocol::Choice>,
+    /// A page was asked for and has not arrived.
+    waiting: bool,
+}
+
+/// The engine sends at most this many choices per request.
+const PAGE: u64 = 200;
 
 /// Starts the engine again on the same profile.
 pub type Respawn = Box<dyn FnMut() -> std::io::Result<Box<dyn Transport>>>;
@@ -75,6 +88,8 @@ pub struct EngineModel {
     inventory: Vec<String>,
     /// The engine's own names for the same rows; the native menus list items by these.
     ground_names: Vec<String>,
+    /// Pages of a long menu fetched after the first, for the interaction they belong to.
+    paged: Paged,
     /// The tile each running explosion is drawn with, from its `explosion.started`.
     explosion_tiles: HashMap<String, String>,
     inventory_names: Vec<String>,
@@ -149,6 +164,17 @@ fn direction(dx: i32, dy: i32) -> Option<&'static str> {
 }
 
 impl EngineModel {
+    /// The fetched pages of this interaction, when they belong to it.
+    fn more_of(&self, i: &protocol::Interaction) -> &[protocol::Choice] {
+        let b = self.replica.boundary();
+        match b {
+            Some(b) if self.paged.key == (b.boundary_id.clone(), i.schema_id.clone()) => {
+                &self.paged.more
+            }
+            _ => &[],
+        }
+    }
+
     /// A published square in view coordinates; none on another level than the avatar's.
     fn view_of(&self, square: &Value) -> Option<Pos> {
         let (ox, oy) = self.origin?;
@@ -240,6 +266,7 @@ impl EngineModel {
             ground: vec![],
             inventory: vec![],
             ground_names: vec![],
+            paged: Paged::default(),
             explosion_tiles: HashMap::new(),
             inventory_names: vec![],
             trace: vec![],
@@ -462,6 +489,14 @@ impl EngineModel {
                 Err(e) => self.messages.push(format!("Bad snapshot: {e}")),
             },
             Pending::Viewport | Pending::Interrupt => {}
+            Pending::Choices => {
+                self.paged.waiting = false;
+                if let Ok(page) = serde_json::from_value::<protocol::ChoicesResult>(value)
+                    && self.paged.key.0 == page.boundary_id
+                {
+                    self.paged.more.extend(page.choices);
+                }
+            }
             Pending::Submit => {
                 self.mark("received");
                 self.command_id = value["command_id"].as_str().map(String::from);
@@ -1217,7 +1252,8 @@ impl GameModel for EngineModel {
     }
 
     fn menu(&self) -> Option<Menu> {
-        let i = self.replica.boundary()?.interaction.as_ref()?;
+        let b = self.replica.boundary()?;
+        let i = b.interaction.as_ref()?;
         let text = |k: &str| {
             let v = i.field.as_ref()?.get(k)?.as_str();
             v.map(String::from)
@@ -1244,7 +1280,9 @@ impl GameModel for EngineModel {
                 .and_then(|p| p["id"].as_str())
         };
         // Without the engine's pane list, the rows that belong to no pane are the tabs of a paned menu.
-        let paned = i.choices.iter().any(|c| c.pane_id.is_some());
+        let more = self.more_of(i);
+        let all = || i.choices.iter().chain(more);
+        let paned = all().any(|c| c.pane_id.is_some());
         let tab = |c: &protocol::Choice| {
             c.pane_id.is_none()
                 && (pane_of(&c.label).is_some() || (pane_labels.is_empty() && paned))
@@ -1255,9 +1293,8 @@ impl GameModel for EngineModel {
             can_set_count: i.allow_set_count,
             title: i.title.clone(),
             message: i.message.clone(),
-            choices: i
-                .choices
-                .iter()
+            total: i.choice_total as usize,
+            choices: all()
                 .map(|c| MenuChoice {
                     id: c.id.clone(),
                     label: c.label.clone(),
@@ -1276,9 +1313,7 @@ impl GameModel for EngineModel {
                 })
                 .collect(),
             can_cancel: i.allow_cancel,
-            pane: i
-                .choices
-                .iter()
+            pane: all()
                 .find(|c| tab(c) && c.selected)
                 .and_then(|c| pane_of(&c.label).map(String::from)),
             focus: i
@@ -1287,6 +1322,45 @@ impl GameModel for EngineModel {
                 .and_then(|c| c["focus"]["choice_id"].as_str())
                 .map(String::from),
         })
+    }
+
+    fn more_choices(&mut self) {
+        let Some(b) = self.replica.boundary() else {
+            return;
+        };
+        let Some(i) = b.interaction.as_ref() else {
+            return;
+        };
+        let key = (b.boundary_id.clone(), i.schema_id.clone());
+        if self.paged.key != key {
+            self.paged = Paged {
+                key,
+                ..Paged::default()
+            };
+        }
+        let loaded = i.choices.len() + self.paged.more.len();
+        if self.paged.waiting || loaded as u64 >= i.choice_total {
+            return;
+        }
+        let (epoch, boundary_id) = (
+            self.replica.at().map(|a| a.epoch.clone()),
+            b.boundary_id.clone(),
+        );
+        let Some(epoch) = epoch else {
+            return;
+        };
+        self.paged.waiting = true;
+        let params = protocol::ChoicesParams {
+            epoch,
+            boundary_id,
+            offset: loaded as u64,
+            limit: PAGE,
+        };
+        self.call(
+            "bn.interaction.choices",
+            serde_json::to_value(params).expect("choices params serialize"),
+            Pending::Choices,
+        );
     }
 
     fn focus(&self) -> Option<Pos> {

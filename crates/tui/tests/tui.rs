@@ -816,3 +816,31 @@ fn a_dead_engine_shows_stderr_and_r_restarts_it() {
     assert_eq!(second.sent_methods()[..2], ["bn.hello", "bn.subscribe"]);
     assert!(!text(&render(&mut app)).contains("The engine stopped."));
 }
+
+#[test]
+fn a_menu_with_more_choices_than_listed_asks_for_the_next_page_near_the_end() {
+    let (t, h) = session();
+    let t = t.on(
+        "bn.interaction.choices",
+        vec![json!({"jsonrpc":"2.0","id":3,"result":{"boundary_id":"b:13","total":3,"choices":[
+            {"id":"c:3","label":"glass jar","enabled":true,"description":"","denial":"","selectable":true,
+             "selected":false,"columns":[]}]}})],
+    );
+    let mut app = TuiApp::new(connected(t));
+    for name in ["events_41_walk", "events_42_message"] {
+        h.push(fixture(name));
+    }
+    let mut menu = menu_event(fixture("events_43_menu"), "c:1");
+    menu["params"]["events"][0]["changes"]["interaction"]["interaction"]["choice_total"] = json!(3);
+    h.push(menu);
+    app.model.poll();
+    let _ = render(&mut app);
+    app.model.poll();
+    let asked = h
+        .sent()
+        .into_iter()
+        .filter(|m| m["method"] == "bn.interaction.choices")
+        .count();
+    assert_eq!(asked, 1);
+    assert!(text(&render(&mut app)).contains("glass jar"));
+}

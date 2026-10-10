@@ -154,6 +154,8 @@ pub struct Menu {
     pub title: String,
     pub message: String,
     pub choices: Vec<MenuChoice>,
+    /// How many choices the engine has in all; more than `choices.len()` until the rest is fetched.
+    pub total: usize,
     pub can_cancel: bool,
     pub can_set_count: bool,
     pub field: Option<MenuField>,
@@ -305,6 +307,8 @@ pub trait GameModel {
         markup::runs(text, &ColorMap::default())
     }
     fn choose(&mut self, _choice_id: &str) {}
+    /// Fetches the next page of a menu that has more choices than it lists.
+    fn more_choices(&mut self) {}
     fn cancel_menu(&mut self) {}
     /// Season of the game calendar (`spring`, `summer`, `autumn`, `winter`), which picks seasonal sprites.
     fn season(&self) -> Option<String> {

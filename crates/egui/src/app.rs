@@ -79,6 +79,10 @@ pub struct App<M: GameModel> {
     queued: Option<Queued>,
     /// Shots, explosions and floating text now playing on the map.
     effects: Effects,
+    /// The text being typed into the open menu's field, with the field it belongs to.
+    field_draft: Option<(String, String)>,
+    /// The newest field text not yet sent, and whether Enter asked to submit it.
+    field_send: Option<(String, String, bool)>,
 }
 
 enum Queued {
@@ -114,6 +118,8 @@ impl<M: GameModel> App<M> {
             crafting: Default::default(),
             queued: None,
             effects: Effects::default(),
+            field_draft: None,
+            field_send: None,
         }
     }
 
@@ -518,6 +524,7 @@ impl<M: GameModel> App<M> {
         let follows = self.menu_focus != menu.focus;
         let mut edited = None;
         let mut key_chosen = None;
+        let mut more = false;
         let mut cancel = ctx.input(|i| i.key_pressed(egui::Key::Escape)) && menu.can_cancel;
         let title = markup::plain(&menu.title);
         egui::Window::new(&title)
@@ -550,6 +557,9 @@ impl<M: GameModel> App<M> {
                         }
                         if menu.field.as_ref().is_some_and(|f| f.kind == "key") {
                             key_chosen = editor::key_prompt(ui);
+                        }
+                        if let Some(field) = menu.field.as_ref().filter(|f| f.kind != "key") {
+                            self.text_field(ui, field, entered);
                         }
                         for (i, choice) in menu.entries().into_iter().enumerate() {
                             if let Some(row) = &choice.editor {
@@ -602,6 +612,15 @@ impl<M: GameModel> App<M> {
                             });
                         }
                     });
+                if menu.total > menu.choices.len() {
+                    // The rest of a long list comes in pages as it is scrolled to.
+                    let rest = ui.button(format!(
+                        "Load more ({} of {})",
+                        menu.choices.len(),
+                        menu.total
+                    ));
+                    more = rest.clicked() || ui.is_rect_visible(rest.rect);
+                }
                 if let Some(description) = described.filter(|d| !d.is_empty()) {
                     ui.separator();
                     ui.label(self.rich(ui, description));
@@ -613,6 +632,19 @@ impl<M: GameModel> App<M> {
                 }
             });
         self.menu_ids = ids;
+        if more {
+            self.model.more_choices();
+            ctx.request_repaint();
+        }
+        if let Some((id, text, submit)) = self.field_send.clone()
+            && !self.model.busy()
+        {
+            self.field_send = None;
+            self.model.fill(&id, &text, submit);
+        }
+        if menu.field.is_none() {
+            self.field_draft = None;
+        }
         self.menu_focus = menu.focus.clone();
         self.focus_menu = entered && !focused;
         a11y::dialog(ctx, &title, &menu.message);
@@ -627,6 +659,35 @@ impl<M: GameModel> App<M> {
             self.model.choose(&id);
         } else if cancel {
             self.model.cancel_menu();
+        }
+    }
+
+    /// A single-line edit for the engine's text or number prompt: every change is sent, Enter submits.
+    fn text_field(
+        &mut self,
+        ui: &mut egui::Ui,
+        field: &bn_client_core::model::MenuField,
+        entered: bool,
+    ) {
+        let draft = self
+            .field_draft
+            .get_or_insert_with(|| (field.id.clone(), field.value.clone()));
+        if draft.0 != field.id {
+            *draft = (field.id.clone(), field.value.clone());
+        }
+        let label = markup::plain(&field.label);
+        let edit = ui.add(egui::TextEdit::singleline(&mut draft.1).desired_width(f32::INFINITY));
+        ui.ctx().accesskit_node_builder(edit.id, |b| {
+            b.set_label(label.clone());
+        });
+        if entered {
+            edit.request_focus();
+        }
+        let submit = (edit.lost_focus() || edit.has_focus())
+            && ui.input(|i| i.key_pressed(egui::Key::Enter));
+        if edit.changed() || submit {
+            let submit = submit || self.field_send.as_ref().is_some_and(|s| s.2);
+            self.field_send = Some((draft.0.clone(), draft.1.clone(), submit));
         }
     }
 
