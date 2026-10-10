@@ -24,7 +24,7 @@ fn connects_with_hello_then_subscribe_and_exposes_the_map() {
     assert_eq!(m.size(), Pos { x: 40, y: 25 });
     assert_eq!(m.player(), Pos { x: 20, y: 12 });
     assert_eq!(m.cell(Pos { x: 21, y: 11 }).glyph, '#');
-    assert_eq!(m.cell(Pos { x: 21, y: 11 }).desc, "t_wall");
+    assert_eq!(m.cell(Pos { x: 21, y: 11 }).desc, "plastered wooden wall");
     assert_eq!(
         m.cell(Pos { x: 23, y: 12 }).glyph,
         'Z',
