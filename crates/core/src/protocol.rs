@@ -270,6 +270,39 @@ pub struct Interaction {
     pub field: Option<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub target: Option<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub overmap: Option<OvermapWire>,
+}
+
+/// The native overmap window as drawn: `[glyph, foreground, background]` per cell, row-major,
+/// with curses color indexes, and the sidebar text.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OvermapWire {
+    pub origin: WorldPos,
+    pub player: WorldPos,
+    pub cols: usize,
+    pub rows: usize,
+    pub cells: Vec<Vec<(String, u8, u8)>>,
+    pub legend: Vec<String>,
+    pub notes: Vec<OvermapNote>,
+    #[serde(default)]
+    pub path: Vec<WorldPos>,
+    #[serde(default)]
+    pub tiles: Option<OvermapTiles>,
+}
+
+/// Tile ids of the overmap squares, for a client that said it draws tiles.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OvermapTiles {
+    /// `[tile, rotation, subtile]` per square, row-major like the glyph cells.
+    pub cells: Vec<Vec<(String, u8, String)>>,
+    pub looks_like: std::collections::BTreeMap<String, Vec<String>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OvermapNote {
+    pub pos: WorldPos,
+    pub text: String,
 }
 
 /// Interaction boundary: what the engine is waiting for right now.
@@ -466,6 +499,9 @@ pub struct HelloParams {
     /// Map cells the client can show; the engine sizes its terrain window to them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub viewport: Option<Viewport>,
+    /// The client draws tiles, so the engine adds tile ids where it has them (the overmap).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub tiles: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -483,7 +519,12 @@ impl HelloParams {
                 version: env!("CARGO_PKG_VERSION").into(),
             },
             viewport: None,
+            tiles: false,
         }
+    }
+
+    pub fn with_tiles(self, tiles: bool) -> Self {
+        Self { tiles, ..self }
     }
 
     pub fn with_viewport(self, viewport: Viewport) -> Self {

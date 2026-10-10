@@ -1,3 +1,4 @@
+#![recursion_limit = "512"]
 mod common;
 use bn_client_egui::transport::ScriptedTransport;
 use bn_client_egui::{App, EngineModel, GameModel};
@@ -135,4 +136,55 @@ fn the_chosen_tileset_name_is_kept() {
         Some("test")
     );
     assert!(h.state().display().tiles());
+}
+
+#[test]
+fn the_overmap_draws_the_engines_tile_ids_with_fallbacks_and_keeps_markers_as_glyphs() {
+    let root = game_root("ui-overmap");
+    let (t, script) = ScriptedTransport::new();
+    let transport = t.on("bn.hello", vec![fixture("hello_result")]).on(
+        "bn.subscribe",
+        vec![
+            fixture("subscribe_result"),
+            fixture("snapshot_part_0"),
+            fixture("snapshot_part_1"),
+        ],
+    );
+    let app = App::new(EngineModel::connect(Box::new(transport), true))
+        .with_root(root.clone())
+        .with_settings(root.join("settings.json"));
+    let mut h: H = Harness::builder()
+        .with_size(egui::vec2(1100.0, 800.0))
+        .build_ui_state(|ui, app: &mut App<EngineModel>| app.show(ui), app);
+    settle(&mut h);
+    script.push(common::with_tiles(common::overmap_event(100)));
+    h.run_steps(4);
+    settle(&mut h);
+    // Twelve squares, each with a sprite under it: the floor, and the forest through its `t_dirt`
+    // fallback. The player's marker is a glyph over its sprite.
+    h.run_steps(2);
+    let display = h.state().display();
+    assert!(display.tiles());
+    assert_eq!(
+        display.drawn(),
+        12,
+        "a sprite under every square, markers on top"
+    );
+    h.get_by_label("Overmap (100, 200, 0). Route of 2 squares; click the cursor to go.");
+    // The note is listed and a click on it moves the overmap cursor there.
+    h.get_by_label("(99, 200) cache").click();
+    h.run_steps(2);
+    let sent = script.sent();
+    let last = sent
+        .iter()
+        .rfind(|m| m["method"] == "bn.command.submit")
+        .unwrap();
+    assert_eq!(
+        last["params"]["operation"],
+        json!({"kind":"set_target","pos":{"dim":"","x":99,"y":200,"z":0}})
+    );
+    assert_eq!(
+        sent[0]["params"]["tiles"], true,
+        "hello said the client draws tiles"
+    );
 }

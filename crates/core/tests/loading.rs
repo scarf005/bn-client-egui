@@ -1,3 +1,4 @@
+#![recursion_limit = "512"]
 mod common;
 use bn_client_core::GameModel;
 use bn_client_core::protocol::{self, Incoming, LoadingNotice};
