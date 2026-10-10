@@ -352,3 +352,25 @@ fn is_prose(description: &str) -> bool {
         .chars()
         .any(|c| !(c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_'))
 }
+
+/// What a popup's dismiss button shows: the any-key prompt as the engine words it, otherwise "OK" in
+/// place of the engine's action name ("Cancel popup"), which the native popup never shows.
+fn dismiss_text(engine_label: &str) -> &str {
+    if engine_label == "Press any key" {
+        engine_label
+    } else {
+        "OK"
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::dismiss_text;
+
+    #[test]
+    fn a_popup_button_says_ok_and_the_any_key_prompt_keeps_its_words() {
+        assert_eq!(dismiss_text("Cancel popup"), "OK");
+        assert_eq!(dismiss_text("Exit screen"), "OK");
+        assert_eq!(dismiss_text("Press any key"), "Press any key");
+    }
+}
