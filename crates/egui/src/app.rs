@@ -40,7 +40,8 @@ pub struct App<M: GameModel> {
     /// Absolute square of the last map click, marked until its command finishes.
     marker: Option<Pos>,
     /// When the command now in flight was first seen; short ones never change the controls.
-    pending_since: Option<std::time::Instant>,
+    pending_since: Option<std::time::Duration>,
+    clock: bn_client_core::Clock,
     last_hover: Option<egui::Pos2>,
     wired: bool,
     images: bool,
@@ -60,6 +61,7 @@ impl<M: GameModel> App<M> {
             destination: None,
             marker: None,
             pending_since: None,
+            clock: bn_client_core::Clock::default(),
             last_hover: None,
             wired: false,
             images: false,
@@ -76,6 +78,16 @@ impl<M: GameModel> App<M> {
             x: m.x - origin.x,
             y: m.y - origin.y,
         })
+    }
+
+    /// Times the settle delay with `clock`, so tests can advance it instead of sleeping.
+    pub fn with_clock(mut self, clock: bn_client_core::Clock) -> Self {
+        self.clock = clock;
+        self
+    }
+
+    pub fn clock(&self) -> &bn_client_core::Clock {
+        &self.clock
     }
 
     pub fn with_root(mut self, root: std::path::PathBuf) -> Self {
@@ -135,7 +147,7 @@ impl<M: GameModel> App<M> {
         self.pending_since = self
             .model
             .busy()
-            .then(|| self.pending_since.unwrap_or_else(std::time::Instant::now));
+            .then(|| self.pending_since.unwrap_or_else(|| self.clock.now()));
         if !self.images {
             egui_extras::install_image_loaders(ui.ctx());
             self.images = true;
@@ -231,7 +243,8 @@ impl<M: GameModel> App<M> {
 
     /// The command in flight has lasted long enough to show; shorter ones never blink the controls.
     fn settled(&self) -> bool {
-        self.pending_since.is_some_and(|t| t.elapsed() >= SETTLE)
+        self.pending_since
+            .is_some_and(|t| self.clock.now().saturating_sub(t) >= SETTLE)
     }
 
     /// A button for a choice or action. Once a command has lasted a while, the pressed one is

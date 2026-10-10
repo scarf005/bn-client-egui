@@ -1,7 +1,7 @@
 mod common;
 use bn_client_egui::app::CELL;
 use bn_client_egui::transport::ScriptHandle;
-use bn_client_egui::{App, EngineModel, GameModel};
+use bn_client_egui::{App, Clock, EngineModel, GameModel};
 use common::{fixture, session};
 use eframe::egui::{self, accesskit};
 use egui_kittest::Harness;
@@ -14,12 +14,13 @@ type H<'a> = Harness<'a, App<EngineModel>>;
 fn harness<'a>() -> (H<'a>, ScriptHandle) {
     let (t, h) = session();
     let t = t.on("bn.command.submit", vec![fixture("submit_result")]);
-    let model = EngineModel::new(Box::new(t));
+    let clock = Clock::manual();
+    let model = EngineModel::new(Box::new(t)).with_clock(clock.clone());
     let harness = Harness::builder()
         .with_size(egui::vec2(1100.0, 800.0))
         .build_ui_state(
             |ui, app: &mut App<EngineModel>| app.show(ui),
-            App::new(model),
+            App::new(model).with_clock(clock),
         );
     (harness, h)
 }
@@ -216,7 +217,7 @@ fn pressed_choice_is_highlighted_and_others_wait_once_the_command_outlasts_a_bli
     open_menu(&mut h, &script);
     click_choice(&mut h);
     h.run_steps(2);
-    std::thread::sleep(SETTLE);
+    h.state().clock().advance(SETTLE);
     h.run_steps(2);
     let pressed = h.get_by_label("combat knife");
     assert_eq!(
@@ -415,7 +416,7 @@ fn actions_panel_keeps_its_layout_when_a_long_command_disables_it() {
     let before = h.get_by_label("Move right (RIGHT, l)").rect();
     click_map(&mut h, (22.5, 12.5));
     h.run_steps(2);
-    std::thread::sleep(SETTLE);
+    h.state().clock().advance(SETTLE);
     h.run_steps(3);
     let during = h.get_by_label("Move right (RIGHT, l)");
     assert!(

@@ -1,3 +1,4 @@
+pub mod clock;
 pub mod color_table;
 pub mod colors;
 pub mod engine_model;
@@ -8,6 +9,7 @@ pub mod replica;
 pub mod transport;
 pub mod watchdog;
 
+pub use clock::Clock;
 pub use engine_model::EngineModel;
 pub use model::{
     ActionEntry, Cell, CommandStatus, FakeModel, GameModel, Loading, Menu, MenuChoice, Pos, Rgb,

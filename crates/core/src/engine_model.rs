@@ -1,5 +1,6 @@
 //! `GameModel` backed by a live engine connection.
 
+use crate::clock::Clock;
 use crate::colors::ColorMap;
 use crate::keys::KeyMap;
 use crate::model::{
@@ -13,7 +14,7 @@ use crate::replica::{Outcome, Replica};
 use crate::transport::{Transport, request};
 use serde_json::{Value, json};
 use std::collections::HashMap;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 /// The map window asked for until the UI reports its own size.
 const VIEW: Pos = Pos { x: 40, y: 25 };
@@ -51,7 +52,8 @@ pub struct EngineModel {
     wanted: Pos,
     /// The size the engine was last told, and when the UI last asked for another one.
     declared: Pos,
-    resized: Option<Instant>,
+    resized: Option<Duration>,
+    clock: Clock,
     messages: Vec<String>,
     ground: Vec<String>,
     inventory: Vec<String>,
@@ -122,6 +124,7 @@ impl EngineModel {
             wanted: VIEW,
             declared: VIEW,
             resized: None,
+            clock: Clock::default(),
             messages: vec![],
             ground: vec![],
             inventory: vec![],
@@ -145,6 +148,12 @@ impl EngineModel {
             Pending::Hello,
         );
         m
+    }
+
+    /// Times the resize debounce with `clock`, so tests can advance it instead of sleeping.
+    pub fn with_clock(mut self, clock: Clock) -> Self {
+        self.clock = clock;
+        self
     }
 
     /// Uses the game's own palette for look colours.
@@ -467,7 +476,7 @@ impl EngineModel {
     fn send_viewport(&mut self) {
         let settled = self
             .resized
-            .is_some_and(|at| at.elapsed() >= RESIZE_DEBOUNCE);
+            .is_some_and(|at| self.clock.now().saturating_sub(at) >= RESIZE_DEBOUNCE);
         if settled && self.wanted != self.declared && self.replica.at().is_some() {
             self.declared = self.wanted;
             self.resized = None;
@@ -689,7 +698,7 @@ impl GameModel for EngineModel {
         };
         if cells != self.wanted {
             self.wanted = cells;
-            self.resized = Some(Instant::now());
+            self.resized = Some(self.clock.now());
         }
     }
 

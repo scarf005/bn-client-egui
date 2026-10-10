@@ -686,10 +686,12 @@ fn hello_declares_the_map_size_the_client_wants() {
 #[test]
 fn a_resized_panel_is_sent_once_after_it_settles() {
     let (t, h) = session();
+    let clock = bn_client_core::Clock::manual();
     let mut m = connected(t.on(
         "bn.viewport",
         vec![json!({"jsonrpc":"2.0","id":null,"result":{}})],
-    ));
+    ))
+    .with_clock(clock.clone());
     let viewports = |h: &bn_client_core::transport::ScriptHandle| {
         h.sent()
             .into_iter()
@@ -701,12 +703,12 @@ fn a_resized_panel_is_sent_once_after_it_settles() {
     m.set_viewport(Pos { x: 52, y: 30 });
     m.poll();
     assert!(viewports(&h).is_empty(), "still changing: nothing sent yet");
-    std::thread::sleep(std::time::Duration::from_millis(300));
+    clock.advance(std::time::Duration::from_millis(300));
     m.poll();
     m.poll();
     assert_eq!(viewports(&h), [json!({"cols": 52, "rows": 30})]);
     m.set_viewport(Pos { x: 52, y: 30 });
-    std::thread::sleep(std::time::Duration::from_millis(300));
+    clock.advance(std::time::Duration::from_millis(300));
     m.poll();
     assert_eq!(
         viewports(&h).len(),
