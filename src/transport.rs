@@ -21,6 +21,20 @@ pub fn request(id: u64, method: &str, params: Value) -> Value {
     json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params })
 }
 
+/// Directory holding the engine's game data: `env_root` (from `BN_ROOT`) if set, else the nearest ancestor of
+/// the engine binary that contains `data/json/`. A CMake build tree also has a `data/` directory, so plain
+/// `data/` is not enough. The engine resolves `data/` against this base path.
+pub fn game_root(engine: &Path, env_root: Option<PathBuf>) -> Option<PathBuf> {
+    env_root.or_else(|| {
+        std::fs::canonicalize(engine)
+            .ok()?
+            .ancestors()
+            .skip(1)
+            .find(|dir| dir.join("data/json").is_dir())
+            .map(Path::to_path_buf)
+    })
+}
+
 /// Engine child process speaking JSON-RPC on stdin/stdout, with private user/config dirs.
 pub struct StdioTransport {
     child: Child,
@@ -35,7 +49,13 @@ impl StdioTransport {
         let (user, config) = (dir.join("user"), dir.join("config"));
         std::fs::create_dir_all(&user)?;
         std::fs::create_dir_all(&config)?;
-        let mut child = Command::new(engine)
+        let mut command = Command::new(engine);
+        if let Some(root) = game_root(engine, std::env::var_os("BN_ROOT").map(PathBuf::from)) {
+            command
+                .arg("--basepath")
+                .arg(format!("{}/", root.display()));
+        }
+        let mut child = command
             .args(["--client", "mcp", "--userdir"])
             .arg(&user)
             .arg("--configdir")
@@ -164,5 +184,31 @@ impl Transport for ScriptedTransport {
     fn recv(&mut self) -> Option<Incoming> {
         let msg = self.handle.inbox.lock().unwrap().pop_front()?;
         Some(protocol::parse_message(&msg).unwrap_or_else(|e| Incoming::Malformed(e.to_string())))
+    }
+}
+
+#[cfg(test)]
+mod root_tests {
+    use super::game_root;
+    use std::path::PathBuf;
+
+    #[test]
+    fn game_root_is_the_nearest_ancestor_with_data() {
+        let base = std::env::temp_dir().join(format!("bn-root-test-{}", std::process::id()));
+        let bin = base.join("out/build/src");
+        std::fs::create_dir_all(base.join("data/json")).unwrap();
+        // A build tree's own data/ (no json/) must not stop the search.
+        std::fs::create_dir_all(base.join("out/build/data")).unwrap();
+        std::fs::create_dir_all(&bin).unwrap();
+        let engine = bin.join("engine");
+        std::fs::write(&engine, "").unwrap();
+        let found = game_root(&engine, None).unwrap();
+        assert_eq!(found, std::fs::canonicalize(&base).unwrap());
+        assert_eq!(
+            game_root(&engine, Some(PathBuf::from("/x"))),
+            Some(PathBuf::from("/x"))
+        );
+        assert_eq!(game_root(&base.join("missing"), None), None);
+        std::fs::remove_dir_all(&base).unwrap();
     }
 }
