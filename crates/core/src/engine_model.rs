@@ -443,6 +443,10 @@ impl EngineModel {
                                 && from.as_ref() == self.avatar_pos()
                                 && self.replica.route().is_empty();
                             if stuck {
+                                let line = "You can't travel there.".to_string();
+                                if self.messages.last() != Some(&line) {
+                                    self.messages.push(line);
+                                }
                                 "done: You can't travel there."
                             } else {
                                 "done"
