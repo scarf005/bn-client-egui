@@ -177,3 +177,19 @@ pub(super) fn message_log(
             }
         });
 }
+
+#[cfg(test)]
+mod tests {
+    use super::whole_lines_height;
+
+    #[test]
+    fn a_scroll_area_is_cut_between_lines_never_through_one() {
+        // Lines of 20 and 40 points: tops at 0, 20, 60, 80; 100 points in all.
+        let tops = [0.0, 20.0, 60.0, 80.0];
+        assert_eq!(whole_lines_height(&tops, 100.0, 200.0), 200.0, "all of it fits");
+        assert_eq!(whole_lines_height(&tops, 100.0, 70.0), 40.0, "the last two lines");
+        assert_eq!(whole_lines_height(&tops, 100.0, 45.0), 40.0, "part of a line is dropped");
+        assert_eq!(whole_lines_height(&tops, 100.0, 15.0), 20.0, "a line taller than the room still shows");
+        assert_eq!(whole_lines_height(&[], 0.0, 50.0), 50.0);
+    }
+}
