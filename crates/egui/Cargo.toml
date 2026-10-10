@@ -13,5 +13,13 @@ serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.149"
 image = { version = "=0.25.10", default-features = false, features = ["png", "jpeg", "webp"] }
 
+profiling = { version = "1.0.18", default-features = false }
+puffin = { version = "0.20", optional = true }
+
+[features]
+# Scope timings of every frame (egui's own scopes included) through puffin; see tests/perf_live.rs.
+profile = ["dep:puffin", "profiling/profile-with-puffin"]
+
 [dev-dependencies]
+cpu-time = "1"
 egui_kittest = "=0.36.2"

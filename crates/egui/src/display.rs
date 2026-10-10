@@ -329,6 +329,13 @@ impl Display {
             .is_some_and(|s| s.loading == 0)
     }
 
+    /// Some requested sheet is still being decoded or uploaded.
+    pub fn loading(&self) -> bool {
+        self.atlas
+            .as_ref()
+            .is_some_and(|a| a.sheets.iter().flatten().any(|s| s.loading > 0))
+    }
+
     /// The side of a map square in points: a tile of the tileset, or the glyph square.
     pub fn cell(&self, glyph: f32) -> f32 {
         self.atlas.as_ref().map_or(glyph, |a| {
@@ -377,6 +384,7 @@ impl Display {
 
     /// Uploads sheets that finished decoding; keeps repainting until all are in.
     pub fn update(&mut self, ctx: &egui::Context) {
+        profiling::scope!("Display::update");
         if let Some(atlas) = &mut self.atlas
             && atlas.upload(ctx)
         {
@@ -398,6 +406,7 @@ impl Display {
         cell: &Cell,
         season: Option<&str>,
     ) -> bool {
+        profiling::scope!("Display::paint");
         let Some(atlas) = &mut self.atlas else {
             return false;
         };

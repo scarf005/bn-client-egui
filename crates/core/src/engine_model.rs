@@ -236,6 +236,7 @@ impl EngineModel {
     }
 
     fn handle(&mut self, msg: Incoming) {
+        profiling::scope!("model.handle");
         match msg {
             Incoming::Response { id, result } => self.response(id, result),
             Incoming::SnapshotPart(p) => {
@@ -721,6 +722,7 @@ impl EngineModel {
 
 impl GameModel for EngineModel {
     fn poll(&mut self) {
+        profiling::scope!("model.poll");
         while let Some(msg) = self.transport.recv() {
             self.received += 1;
             self.handle(msg);
@@ -785,6 +787,7 @@ impl GameModel for EngineModel {
     }
 
     fn cell(&self, at: Pos) -> Cell {
+        profiling::scope!("model.cell");
         let unknown = Cell {
             glyph: ' ',
             color: Rgb(128, 128, 128),
@@ -1012,6 +1015,7 @@ impl GameModel for EngineModel {
     }
 
     fn menu(&self) -> Option<Menu> {
+        profiling::scope!("model.menu");
         let i = self.replica.boundary()?.interaction.as_ref()?;
         let text = |k: &str| {
             let v = i.field.as_ref()?.get(k)?.as_str();

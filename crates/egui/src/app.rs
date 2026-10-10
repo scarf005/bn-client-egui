@@ -195,6 +195,7 @@ impl<M: GameModel> App<M> {
     }
 
     pub fn show(&mut self, ui: &mut egui::Ui) {
+        profiling::scope!("App::show");
         if !self.wired {
             let ctx = ui.ctx().clone();
             self.model
@@ -247,14 +248,26 @@ impl<M: GameModel> App<M> {
             }
         }
         egui::Panel::top("status").show(ui, |ui| self.status(ui));
-        egui::Panel::left("actions")
-            .resizable(false)
-            .show(ui, |ui| self.actions(ui));
-        egui::Panel::bottom("log").show(ui, |ui| self.log(ui));
-        egui::Panel::right("items")
-            .resizable(false)
-            .show(ui, |ui| self.items(ui));
-        self.map(ui);
+        {
+            profiling::scope!("actions panel");
+            egui::Panel::left("actions")
+                .resizable(false)
+                .show(ui, |ui| self.actions(ui));
+        }
+        {
+            profiling::scope!("log panel");
+            egui::Panel::bottom("log").show(ui, |ui| self.log(ui));
+        }
+        {
+            profiling::scope!("items panel");
+            egui::Panel::right("items")
+                .resizable(false)
+                .show(ui, |ui| self.items(ui));
+        }
+        {
+            profiling::scope!("map");
+            self.map(ui);
+        }
         self.menu(ui.ctx());
     }
 
@@ -734,6 +747,7 @@ impl<M: GameModel> App<M> {
         if tiles {
             painter.rect_filled(response.rect, 0.0, egui::Color32::BLACK);
         }
+        profiling::scope!("map cells");
         for y in 0..size.y {
             for x in 0..size.x {
                 let cell = self.model.cell(Pos { x, y });
