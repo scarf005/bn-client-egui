@@ -204,3 +204,15 @@ fn every_dialog_opens_at_the_same_place() {
         "centered: {palette:?}"
     );
 }
+
+#[test]
+fn the_message_log_keeps_two_fifths_of_the_sidebar_height_when_the_status_is_tall() {
+    let (mut h, script) = harness(egui::vec2(1100.0, 800.0));
+    h.run_steps(3);
+    for name in ["events_41_walk", "events_42_message"] {
+        script.push(fixture(name));
+    }
+    h.run_steps(8);
+    let log = h.get_by_label("Message log").rect();
+    assert!(800.0 - log.min.y >= 800.0 * 0.35, "{log:?}");
+}

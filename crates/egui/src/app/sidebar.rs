@@ -24,10 +24,9 @@ impl<M: GameModel> App<M> {
     /// The whole sidebar: the message log pinned to its bottom, `sidebar` filling the rest.
     pub(super) fn sidebar_panel(&mut self, ui: &mut egui::Ui) {
         egui::Panel::bottom("log")
-            .default_size(ui.available_height() * LOG_SHARE)
-            .size_range(80.0..=ui.available_height() * 0.8)
+            .resizable(false)
+            .exact_size(ui.available_height() * LOG_SHARE)
             .show(ui, |ui| self.log(ui));
-        super::label_resize_handle(ui.ctx(), "log", "Resize message log");
         egui::CentralPanel::no_frame().show(ui, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| self.sidebar(ui));
         });
@@ -118,7 +117,10 @@ pub(super) fn message_log(ui: &mut egui::Ui, native: &[crate::LogLine], commands
         .show(ui, |ui| {
             for line in &native[native.len().saturating_sub(100)..] {
                 let text = egui::RichText::new(line.shown());
-                ui.label(line.color.map_or(text.clone(), |c| text.color(super::rgb(c))));
+                ui.label(
+                    line.color
+                        .map_or(text.clone(), |c| text.color(super::rgb(c))),
+                );
             }
         });
     if let Some(latest) = commands.last() {

@@ -1,7 +1,7 @@
 use bn_client_egui::fonts;
-use bn_client_egui::theme;
 use bn_client_egui::launch::{LaunchArgs, Opened, Search, open_engine, resolve};
 use bn_client_egui::setup::{Launcher, Starter};
+use bn_client_egui::theme;
 use bn_client_egui::transport::Profile;
 use bn_client_egui::{App, FakeModel, GameModel};
 use clap::Parser;
