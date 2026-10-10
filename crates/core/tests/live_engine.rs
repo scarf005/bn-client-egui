@@ -4,7 +4,7 @@ use bn_client_core::transport::StdioTransport;
 use bn_client_core::{EngineModel, GameModel, Pos};
 use std::time::{Duration, Instant};
 
-fn wait_for(model: &mut EngineModel, what: &str, done: impl Fn(&EngineModel) -> bool) {
+fn wait_for(model: &mut EngineModel, what: &str, mut done: impl FnMut(&EngineModel) -> bool) {
     let deadline = Instant::now() + Duration::from_secs(90);
     while !done(model) {
         assert!(
@@ -102,4 +102,41 @@ fn live_engine_non_movement_action_opens_a_menu_that_can_be_cancelled() {
     wait_for(&mut model, "the command to finish", |m| !m.busy());
     model.cancel_menu();
     wait_for(&mut model, "the menu to close", |m| m.menu().is_none());
+}
+
+#[test]
+#[ignore = "requires BN_ENGINE built with bn.loading support"]
+fn live_engine_shows_a_loading_screen_while_the_tutorial_loads() {
+    let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
+    let transport = StdioTransport::spawn(engine.as_ref()).expect("engine starts");
+    let mut model = EngineModel::new(Box::new(transport));
+    wait_for(&mut model, "subscription", |m| m.live());
+    choose_label(&mut model, "New Game");
+    let mut seen = vec![];
+    // Tutorial is chosen inside this loop's first poll; the command finishes only after loading.
+    wait_for(&mut model, "the world menu", |m| m.menu().is_some());
+    let id = model
+        .menu()
+        .unwrap()
+        .choices
+        .iter()
+        .find(|c| c.label.contains("Tutorial"))
+        .expect("Tutorial choice")
+        .id
+        .clone();
+    wait_for(&mut model, "idle", |m| !m.busy());
+    model.choose(&id);
+    wait_for(&mut model, "the tutorial map", |m| {
+        if let Some(l) = m.loading().filter(|l| seen.last() != Some(l)) {
+            seen.push(l);
+        }
+        m.size().x > 0
+    });
+    assert!(!seen.is_empty(), "a loading screen appeared");
+    assert!(seen.iter().all(|l| !l.title.is_empty()));
+    assert!(
+        model.loading().is_none(),
+        "and went away once the map showed"
+    );
+    println!("{} loading states, last: {:?}", seen.len(), seen.last());
 }
