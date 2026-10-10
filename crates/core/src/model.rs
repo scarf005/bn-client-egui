@@ -159,6 +159,19 @@ pub struct MenuField {
     pub kind: String,
 }
 
+/// One pane of a two-pane menu such as the advanced inventory: where it looks and how it is filtered.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MenuPane {
+    pub id: String,
+    pub label: String,
+    /// `source` for the pane the engine acts on, `destination` for the other.
+    pub role: String,
+    /// The name of the area the pane shows, as the native screen prints it.
+    pub area: String,
+    pub storage: String,
+    pub filter: String,
+}
+
 /// The engine's current interaction, rendered generically.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Menu {
@@ -169,6 +182,8 @@ pub struct Menu {
     /// Lines drawn above the menu in a fixed-width font, with colour tags.
     pub banner: Vec<String>,
     pub choices: Vec<MenuChoice>,
+    /// The panes of a two-pane menu; empty for other menus.
+    pub panes: Vec<MenuPane>,
     /// How many choices the engine has in all; more than `choices.len()` until the rest is fetched.
     pub total: usize,
     pub can_cancel: bool,

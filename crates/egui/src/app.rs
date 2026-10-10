@@ -6,6 +6,7 @@ use bn_client_core::{Failure, GameModel, Loading, Overmap, Pos, keys};
 use eframe::egui::{self, accesskit};
 use std::collections::VecDeque;
 
+mod aim;
 mod crafting;
 mod menu;
 mod palette;
@@ -110,6 +111,7 @@ pub struct App<M: GameModel> {
     /// The engine's look cursor was up at the last frame.
     was_looking: bool,
     crafting: crafting::Crafting,
+    aim: aim::Aim,
     pickup: pickup::Pickup,
     /// The engine's selected row of the open menu, to keep it in view when the wheel moves it.
     menu_cursor: Option<String>,
@@ -165,6 +167,7 @@ impl<M: GameModel> App<M> {
             command_live: a11y::Announcer::new(" "),
             status_live: a11y::Announcer::new(", "),
             crafting: Default::default(),
+            aim: Default::default(),
             pickup: Default::default(),
             menu_cursor: None,
             queued: VecDeque::new(),
@@ -327,6 +330,7 @@ impl<M: GameModel> App<M> {
             (self.cursor_placed, self.destination, self.marker) = (false, None, None);
         }
         self.run_queued();
+        self.run_aim_steps();
         // Esc interrupts a running activity; with none running it goes to the game like any key
         // (leaves look mode, acknowledges a popup, else opens the main menu).
         let interrupted =
@@ -335,7 +339,7 @@ impl<M: GameModel> App<M> {
         self.palette_keys(ui.ctx());
         self.game_keys(ui.ctx(), interrupted);
         let open = self.model.menu();
-        if menu_forwards_keys(open.as_ref()) {
+        if menu_forwards_keys(open.as_ref()) && !self.aim.editing {
             // Arrow keys belong to the game, whichever widget was clicked last; Tab still moves focus,
             // except on a tabbed screen where it is the engine's tab key.
             let tab = open.as_ref().is_some_and(tab_is_engines);
@@ -461,7 +465,7 @@ impl<M: GameModel> App<M> {
                     || (focused && matches!(token, "SPACE" | "RETURN"))
             }
         };
-        let forwards = menu_forwards_keys(menu.as_ref());
+        let forwards = menu_forwards_keys(menu.as_ref()) && !self.aim.editing;
         let typed = if forwards { typed } else { vec![] };
         // Esc closes a menu through its cancel button, which also covers menus the engine binds no key to.
         let esc_cancels = menu
