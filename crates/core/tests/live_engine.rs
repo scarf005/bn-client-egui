@@ -1,5 +1,4 @@
 //! Needs a real engine build: `BN_ENGINE=/path/to/cataclysm-bn-tiles cargo test --test live_engine -- --ignored`
-use bn_client_core::keys::KeyMap;
 use bn_client_core::transport::{Profile, StdioTransport};
 use bn_client_core::watchdog::Watchdog;
 use bn_client_core::{EngineModel, GameModel, Pos};
@@ -84,9 +83,7 @@ fn live_engine_starts_the_tutorial_and_walks_one_step() {
 fn live_engine_non_movement_action_opens_a_menu_that_can_be_cancelled() {
     let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
     let transport = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
-    let root = bn_client_core::transport::game_root(engine.as_ref(), None);
-    let keys = root.as_deref().map_or_else(KeyMap::default, KeyMap::load);
-    let mut model = EngineModel::new(Box::new(transport)).with_keys(keys);
+    let mut model = EngineModel::new(Box::new(transport));
 
     wait_for(&mut model, "subscription", |m| m.live());
     choose_label(&mut model, "New Game");

@@ -5,7 +5,6 @@
 
 use crate::colors::ColorMap;
 use crate::engine_model::EngineModel;
-use crate::keys::KeyMap;
 use crate::transport::{Profile, StdioTransport, game_root};
 use clap::Args;
 use serde_json::{Value, json};
@@ -180,10 +179,7 @@ pub fn open_engine(engine: &Path, profile: &Profile) -> Result<Opened, String> {
     let colors = root
         .as_deref()
         .map_or_else(ColorMap::default, ColorMap::load);
-    let keys = root.as_deref().map_or_else(KeyMap::default, KeyMap::load);
-    let model = EngineModel::new(Box::new(transport))
-        .with_colors(colors)
-        .with_keys(keys);
+    let model = EngineModel::new(Box::new(transport)).with_colors(colors);
     Ok(Opened { model, root })
 }
 

@@ -383,11 +383,8 @@ fn cell_colors_come_from_the_game_palette() {
     assert_eq!(m.cell(Pos { x: 23, y: 12 }).color, Rgb(10, 0, 0));
 }
 
-fn with_keys(t: ScriptedTransport) -> EngineModel {
-    use bn_client_core::keys::KeyMap;
-    let json = r#"[{"id":"pickup","category":"DEFAULTMODE","bindings":[{"input_method":"keyboard","key":"g"}]}]"#;
-    let mut m =
-        EngineModel::new(Box::new(t)).with_keys(KeyMap::from_json(json, "DEFAULTMODE").unwrap());
+fn polled(t: ScriptedTransport) -> EngineModel {
+    let mut m = EngineModel::new(Box::new(t));
     m.poll();
     m
 }
@@ -395,7 +392,7 @@ fn with_keys(t: ScriptedTransport) -> EngineModel {
 #[test]
 fn actions_list_names_ids_and_keys_from_the_boundary() {
     let (t, _h) = session();
-    let m = with_keys(t);
+    let m = polled(t);
     let a = m.actions();
     let right = a.iter().find(|a| a.id == "RIGHT").unwrap();
     assert_eq!(
@@ -411,7 +408,7 @@ fn actions_list_names_ids_and_keys_from_the_boundary() {
 #[test]
 fn pressing_a_bound_key_submits_the_same_action_id() {
     let (t, h) = session();
-    let mut m = with_keys(t.on("bn.command.submit", walk_reply()));
+    let mut m = polled(t.on("bn.command.submit", walk_reply()));
     assert!(m.press("g"));
     assert_eq!(
         submits(&h)[0]["params"]["operation"],
@@ -424,7 +421,7 @@ fn pressing_a_bound_key_submits_the_same_action_id() {
 #[test]
 fn keys_without_an_offered_action_are_not_consumed() {
     let (t, h) = session();
-    let mut m = with_keys(t);
+    let mut m = polled(t);
     assert!(!m.press("q"));
     assert!(
         !m.press("x"),
@@ -436,7 +433,7 @@ fn keys_without_an_offered_action_are_not_consumed() {
 #[test]
 fn clicking_an_action_invokes_it_by_id_and_unknown_ids_are_refused() {
     let (t, h) = session();
-    let mut m = with_keys(t.on("bn.command.submit", walk_reply()));
+    let mut m = polled(t.on("bn.command.submit", walk_reply()));
     assert!(!m.invoke_action("nope"));
     assert!(m.invoke_action("LEFT"));
     assert_eq!(

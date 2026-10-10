@@ -2,7 +2,7 @@
 
 use crate::clock::Clock;
 use crate::colors::ColorMap;
-use crate::keys::{self, KeyMap};
+use crate::keys;
 use crate::markup::{self, Run};
 use crate::model::{
     ActionEntry, Cell, CommandStatus, GameModel, Layer, Loading, LogLine, Menu, MenuChoice,
@@ -67,7 +67,6 @@ pub struct EngineModel {
     trace: Vec<(Instant, &'static str)>,
     received: u64,
     colors: ColorMap,
-    keys: KeyMap,
     loading: Option<Loading>,
     /// Actions on show: between auto-move steps the engine offers none, which must not flicker the list.
     shown: Vec<ActionEntry>,
@@ -162,7 +161,6 @@ impl EngineModel {
             trace: vec![],
             received: 0,
             colors: ColorMap::default(),
-            keys: KeyMap::default(),
             loading: None,
             shown: vec![],
             status: None,
@@ -191,12 +189,6 @@ impl EngineModel {
     /// Uses the game's own palette for look colours.
     pub fn with_colors(mut self, colors: ColorMap) -> Self {
         self.colors = colors;
-        self
-    }
-
-    /// Uses the game's key settings to label and trigger actions.
-    pub fn with_keys(mut self, keys: KeyMap) -> Self {
-        self.keys = keys;
         self
     }
 
@@ -547,10 +539,7 @@ impl EngineModel {
                 .map(|a| ActionEntry {
                     id: a.id.clone(),
                     name: a.name.clone(),
-                    keys: a
-                        .keys
-                        .clone()
-                        .unwrap_or_else(|| self.keys.keys(&a.id).to_vec()),
+                    keys: a.keys.clone().unwrap_or_default(),
                 })
                 .collect();
         }
@@ -983,14 +972,15 @@ impl GameModel for EngineModel {
     }
 
     fn press(&mut self, key: &str) -> bool {
-        // The engine names the keys of its active context; the key settings only serve older engines.
-        // A digit with no binding may be a numpad key (terminals and windows do not tell them apart).
+        // The engine names the keys of its active context, the player's rebinds included; the client
+        // knows none. A digit with no binding may be a numpad key (terminals and windows do not tell
+        // them apart).
         let bound_to = |key: &str| {
-            let bound = self.keys.actions_for(key);
             self.replica.boundary().and_then(|b| {
-                b.actions.iter().find(|a| match &a.keys {
-                    Some(keys) => keys.iter().any(|k| k == key),
-                    None => bound.contains(&a.id.as_str()),
+                b.actions.iter().find(|a| {
+                    a.keys
+                        .as_ref()
+                        .is_some_and(|keys| keys.iter().any(|k| k == key))
                 })
             })
         };
