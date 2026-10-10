@@ -732,7 +732,10 @@ impl<M: GameModel> App<M> {
             player.y,
             cursor.x,
             cursor.y,
-            self.model.cell(cursor).desc
+            // The engine's mouse-view text when it has answered for this square.
+            self.model
+                .hover_text(cursor)
+                .map_or_else(|| self.model.cell(cursor).desc, |lines| lines.join(" "))
         );
         if let Some(end) = route.last() {
             status += &format!(
@@ -813,6 +816,16 @@ impl<M: GameModel> App<M> {
                     x: (cursor.x + dx).clamp(0, size.x - 1),
                     y: (cursor.y + dy).clamp(0, size.y - 1),
                 };
+            }
+            // A keyboard cursor gets the same native description a hovering pointer does.
+            if self.model.focus().is_none() {
+                self.model.hover(cursor);
+            }
+            // Shift+F10, the keyboard's context-menu key, is the right click on the cursor square.
+            if ui.input(|i| i.modifiers.shift && i.key_pressed(egui::Key::F10))
+                && !self.model.context_click(cursor)
+            {
+                self.menu_cell = cursor;
             }
         }
         self.cursor = to_abs(cursor);

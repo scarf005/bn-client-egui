@@ -13,7 +13,13 @@ type H<'a> = Harness<'a, App<EngineModel>>;
 
 fn harness<'a>() -> (H<'a>, ScriptHandle) {
     let (t, h) = session();
-    let t = t.on("bn.command.submit", vec![fixture("submit_result")]);
+    let t = t
+        .on("bn.command.submit", vec![fixture("submit_result")])
+        .on("bn.command.submit", vec![fixture("submit_result")])
+        .on(
+            "bn.world.describe",
+            vec![json!({"jsonrpc":"2.0","id":0,"result":{"lines":["Wall","A zombie is here."]}})],
+        );
     let model = EngineModel::new(Box::new(t));
     let harness = Harness::builder()
         .with_size(egui::vec2(1100.0, 800.0))
@@ -470,4 +476,45 @@ mod overmap {
         assert!(rows.is_empty(), "frame or blank rows read aloud: {rows:?}");
         h.get_by_label("Use movement keys to pan.");
     }
+}
+
+#[test]
+fn the_keyboard_cursor_square_is_described_by_the_engines_native_text() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    h.get_by_label("Map").focus();
+    h.run_steps(6);
+    let asked = script
+        .sent()
+        .iter()
+        .filter(|m| m["method"] == "bn.world.describe")
+        .count();
+    assert_eq!(asked, 1, "the cursor square is asked for without a pointer");
+    let described = h
+        .get_by_label("Map")
+        .accesskit_node()
+        .description()
+        .unwrap_or_default();
+    assert!(
+        described.contains("Wall A zombie is here."),
+        "the map reads the native text: {described}"
+    );
+}
+
+#[test]
+fn shift_f10_on_the_map_is_the_right_click_on_the_cursor_square() {
+    let (mut h, script) = harness();
+    h.run_steps(4);
+    h.get_by_label("Map").focus();
+    h.run_steps(2);
+    h.key_press_modifiers(egui::Modifiers::SHIFT, egui::Key::F10);
+    h.run_steps(3);
+    let contexts: Vec<_> = script
+        .sent()
+        .into_iter()
+        .filter(|m| m["method"] == "bn.command.submit")
+        .map(|m| m["params"]["operation"].clone())
+        .filter(|o| o["kind"] == "context")
+        .collect();
+    assert_eq!(contexts.len(), 1, "{contexts:?}");
 }
