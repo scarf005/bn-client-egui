@@ -1,5 +1,6 @@
 //! `GameModel` backed by a live engine connection.
 
+use crate::colors::ColorMap;
 use crate::model::{Cell, GameModel, Menu, MenuChoice, Pos};
 use crate::protocol::{
     self, Cell as WorldCell, Expect, Incoming, Look, Operation, Snapshot, Submit, WorldPos,
@@ -42,32 +43,11 @@ pub struct EngineModel {
     ground: Vec<String>,
     inventory: Vec<String>,
     trace: Vec<(Instant, &'static str)>,
+    colors: ColorMap,
 }
 
 fn look_name(l: &Look) -> String {
     l.id.clone().unwrap_or_else(|| l.glyph.clone())
-}
-
-fn color(name: &str) -> Color32 {
-    let (r, g, b) = match name {
-        "black" => (60, 60, 60),
-        "red" => (170, 40, 40),
-        "green" => (40, 160, 60),
-        "brown" => (150, 100, 50),
-        "blue" => (60, 90, 200),
-        "magenta" => (170, 60, 170),
-        "cyan" => (40, 160, 170),
-        "dark_gray" => (110, 110, 110),
-        "light_red" => (240, 90, 90),
-        "light_green" => (110, 240, 110),
-        "yellow" => (240, 220, 80),
-        "light_blue" => (110, 150, 255),
-        "light_magenta" => (240, 110, 240),
-        "light_cyan" => (110, 240, 240),
-        "white" => (250, 250, 250),
-        _ => (180, 180, 180),
-    };
-    Color32::from_rgb(r, g, b)
 }
 
 fn glyph(l: &Look) -> char {
@@ -118,6 +98,7 @@ impl EngineModel {
             ground: vec![],
             inventory: vec![],
             trace: vec![],
+            colors: ColorMap::default(),
         };
         m.call(
             "bn.hello",
@@ -125,6 +106,12 @@ impl EngineModel {
             Pending::Hello,
         );
         m
+    }
+
+    /// Uses the game's own palette for look colours.
+    pub fn with_colors(mut self, colors: ColorMap) -> Self {
+        self.colors = colors;
+        self
     }
 
     /// Timestamped protocol milestones (`submit`, `received`, stage names, `events`) since the last call.
@@ -331,6 +318,18 @@ fn error_kind(e: &Value) -> String {
         .map_or_else(|| e.to_string(), String::from)
 }
 
+impl EngineModel {
+    fn styled(&self, look: &Look, desc: String) -> Cell {
+        let (color, bg) = self.colors.resolve(&look.color);
+        Cell {
+            glyph: glyph(look),
+            color,
+            bg,
+            desc,
+        }
+    }
+}
+
 impl GameModel for EngineModel {
     fn poll(&mut self) {
         while let Some(msg) = self.transport.recv() {
@@ -370,6 +369,7 @@ impl GameModel for EngineModel {
         let unknown = Cell {
             glyph: ' ',
             color: Color32::GRAY,
+            bg: None,
             desc: "unknown".into(),
         };
         let Some(p) = self.abs(at) else {
@@ -382,22 +382,15 @@ impl GameModel for EngineModel {
         if let Some(e) = entity {
             let look = e.look.as_ref().expect("filtered on look");
             let desc = e.name.clone().unwrap_or_else(|| look_name(look));
-            return Cell {
-                glyph: glyph(look),
-                color: color(&look.color),
-                desc,
-            };
+            return self.styled(look, desc);
         }
         match self.replica.cell(&p.dim, p.x, p.y, p.z) {
             Some(c) => match top_look(c) {
-                Some(l) => Cell {
-                    glyph: glyph(l),
-                    color: color(&l.color),
-                    desc: look_name(l),
-                },
+                Some(l) => self.styled(l, look_name(l)),
                 None => Cell {
                     glyph: '?',
                     color: Color32::GRAY,
+                    bg: None,
                     desc: "sensed".into(),
                 },
             },

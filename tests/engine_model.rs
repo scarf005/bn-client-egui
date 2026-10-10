@@ -311,3 +311,19 @@ fn origin_reports_the_view_offset_so_targets_survive_recentering() {
     // Avatar (3, 4) is drawn at view (20, 12).
     assert_eq!(m.origin(), Pos { x: -17, y: -8 });
 }
+
+#[test]
+fn cell_colors_come_from_the_game_palette() {
+    use bn_client_egui::colors::ColorMap;
+    let json = r#"[{"type":"colordef","BLACK":[0,0,0],"RED":[1,0,0],"GREEN":[2,0,0],"BROWN":[3,0,0],
+    "BLUE":[4,0,0],"MAGENTA":[5,0,0],"CYAN":[6,0,0],"GRAY":[7,0,0],"DGRAY":[8,0,0],"LRED":[9,0,0],
+    "LGREEN":[10,0,0],"YELLOW":[11,0,0],"LBLUE":[12,0,0],"LMAGENTA":[13,0,0],"LCYAN":[14,0,0],"WHITE":[15,0,0]}]"#;
+    let (t, _h) = session();
+    let mut m = EngineModel::new(Box::new(t)).with_colors(ColorMap::from_json(json).unwrap());
+    m.poll();
+    // The zombie is light_green, palette slot 10.
+    assert_eq!(
+        m.cell(Pos { x: 23, y: 12 }).color,
+        eframe::egui::Color32::from_rgb(10, 0, 0)
+    );
+}

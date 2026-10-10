@@ -242,6 +242,13 @@ impl<M: GameModel> App<M> {
             for x in 0..size.x {
                 let cell = self.model.cell(Pos { x, y });
                 let center = response.rect.min + egui::vec2(x as f32 + 0.5, y as f32 + 0.5) * CELL;
+                if let Some(bg) = cell.bg {
+                    painter.rect_filled(
+                        egui::Rect::from_center_size(center, egui::Vec2::splat(CELL)),
+                        0.0,
+                        bg,
+                    );
+                }
                 painter.text(
                     center,
                     egui::Align2::CENTER_CENTER,

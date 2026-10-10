@@ -9,6 +9,8 @@ pub struct Pos {
 pub struct Cell {
     pub glyph: char,
     pub color: Color32,
+    /// Background behind the glyph, when the game colour has one.
+    pub bg: Option<Color32>,
     pub desc: String,
 }
 
@@ -98,6 +100,7 @@ impl GameModel for FakeModel {
             return Cell {
                 glyph: '#',
                 color: Color32::from_rgb(180, 180, 180),
+                bg: None,
                 desc: "a wall".into(),
             };
         }
@@ -109,6 +112,7 @@ impl GameModel for FakeModel {
         Cell {
             glyph,
             color,
+            bg: None,
             desc: desc.into(),
         }
     }

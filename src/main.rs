@@ -1,4 +1,5 @@
-use bn_client_egui::transport::StdioTransport;
+use bn_client_egui::colors::ColorMap;
+use bn_client_egui::transport::{StdioTransport, game_root};
 use bn_client_egui::{App, EngineModel, FakeModel, GameModel};
 use std::path::PathBuf;
 
@@ -29,7 +30,11 @@ fn main() -> eframe::Result {
         return run(FakeModel::default());
     };
     match StdioTransport::spawn(&engine) {
-        Ok(t) => run(EngineModel::new(Box::new(t))),
+        Ok(t) => {
+            let root = game_root(&engine, std::env::var_os("BN_ROOT").map(PathBuf::from));
+            let colors = root.map_or_else(ColorMap::default, |r| ColorMap::load(&r));
+            run(EngineModel::new(Box::new(t)).with_colors(colors))
+        }
         Err(e) => {
             eprintln!("cannot start engine {}: {e}", engine.display());
             std::process::exit(1);
