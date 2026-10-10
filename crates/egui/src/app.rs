@@ -184,7 +184,14 @@ impl<M: GameModel> App<M> {
     }
 
     /// A button for a choice or action: the pressed one shows pending and the rest wait for the engine.
-    fn control(&self, ui: &mut egui::Ui, text: String, id: &str, enabled: bool) -> egui::Response {
+    fn control(
+        &self,
+        ui: &mut egui::Ui,
+        text: String,
+        id: &str,
+        enabled: bool,
+        highlighted: bool,
+    ) -> egui::Response {
         let pending = self
             .model
             .command()
@@ -195,7 +202,10 @@ impl<M: GameModel> App<M> {
             text
         };
         let usable = enabled && !self.model.busy();
-        ui.add_enabled(usable, egui::Button::new(text).selected(pending))
+        ui.add_enabled(
+            usable,
+            egui::Button::new(text).selected(pending || highlighted),
+        )
     }
 
     /// Everything the engine accepts right now, each with its game key, clickable.
@@ -209,7 +219,7 @@ impl<M: GameModel> App<M> {
                 } else {
                     format!("{} ({})", a.name, a.keys.join(", "))
                 };
-                if self.control(ui, label, &a.id, true).clicked() {
+                if self.control(ui, label, &a.id, true, false).clicked() {
                     invoke = Some(a.id);
                 }
             }
@@ -231,8 +241,19 @@ impl<M: GameModel> App<M> {
             if !menu.message.is_empty() {
                 ui.label(&menu.message);
             }
-            for choice in &menu.choices {
-                let button = self.control(ui, choice.label.clone(), &choice.id, choice.enabled);
+            let tabs = menu.tabs();
+            ui.horizontal_wrapped(|ui| {
+                for tab in &tabs {
+                    let button =
+                        self.control(ui, tab.label.clone(), &tab.id, tab.enabled, tab.selected);
+                    if button.clicked() {
+                        chosen = Some(tab.id.clone());
+                    }
+                }
+            });
+            for choice in menu.entries() {
+                let button =
+                    self.control(ui, choice.label.clone(), &choice.id, choice.enabled, false);
                 ui.ctx()
                     .accesskit_node_builder(button.id, |b| b.set_role(accesskit::Role::MenuItem));
                 if !choice.enabled && !choice.denial.is_empty() {

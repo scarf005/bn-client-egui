@@ -636,6 +636,8 @@ impl GameModel for EngineModel {
                     label: c.label.clone(),
                     enabled: c.enabled && c.selectable,
                     denial: c.denial.clone(),
+                    selected: c.selected,
+                    group: c.pane_id.clone(),
                 })
                 .collect(),
             can_cancel: i.allow_cancel,

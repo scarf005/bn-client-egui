@@ -284,3 +284,37 @@ fn map_click_marks_the_cell_before_the_route_arrives() {
     h.run_steps(3);
     assert_eq!(h.state().marker(), None, "cleared once the command ends");
 }
+
+#[test]
+fn tabbed_menu_shows_tabs_and_only_the_selected_tabs_entries_and_choosing_a_tab_submits_its_id() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    for name in ["events_41_walk", "events_42_message"] {
+        script.push(fixture(name));
+    }
+    let mut menu = fixture("events_43_menu");
+    let ev = &mut menu["params"]["events"][0];
+    let row = |id: &str, label: &str, selected: bool, pane: Option<&str>| {
+        let mut c = json!({"id":id,"label":label,"description":"","denial":"","enabled":true,
+            "selectable":true,"selected":selected,"columns":[]});
+        if let Some(pane) = pane {
+            c["pane_id"] = pane.into();
+        }
+        c
+    };
+    ev["changes"]["interaction"]["interaction"]["choices"] = json!([
+        row("tab:new_game", "New Game", true, None),
+        row("tab:settings", "Settings", false, None),
+        row("new_game:tutorial", "Tutorial", false, Some("new_game")),
+    ]);
+    script.push(menu);
+    h.run_steps(3);
+    h.get_by_label("New Game");
+    h.get_by_label("Tutorial");
+    h.get_by_label("Settings").click();
+    h.run_steps(2);
+    assert_eq!(
+        submits(&script)[0]["params"]["operation"],
+        json!({"kind":"choose","choice_id":"tab:settings"})
+    );
+}

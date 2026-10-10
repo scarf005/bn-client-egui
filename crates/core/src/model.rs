@@ -24,6 +24,10 @@ pub struct MenuChoice {
     pub enabled: bool,
     /// Why the row cannot be chosen; empty when enabled.
     pub denial: String,
+    /// The engine's committed selection, such as the current tab.
+    pub selected: bool,
+    /// The tab this entry belongs to; tab rows and plain list rows have none.
+    pub group: Option<String>,
 }
 
 /// The engine's current interaction, rendered generically.
@@ -33,6 +37,25 @@ pub struct Menu {
     pub message: String,
     pub choices: Vec<MenuChoice>,
     pub can_cancel: bool,
+}
+
+impl Menu {
+    /// The tab rows of a tabbed menu; empty when no row belongs to a tab.
+    pub fn tabs(&self) -> Vec<&MenuChoice> {
+        match self.choices.iter().any(|c| c.group.is_some()) {
+            true => self.choices.iter().filter(|c| c.group.is_none()).collect(),
+            false => Vec::new(),
+        }
+    }
+
+    /// The rows below the tabs: the selected tab's entries, or every row when there are no tabs.
+    pub fn entries(&self) -> Vec<&MenuChoice> {
+        let tabbed = !self.tabs().is_empty();
+        self.choices
+            .iter()
+            .filter(|c| !tabbed || c.group.is_some())
+            .collect()
+    }
 }
 
 /// A registered action the engine currently accepts, with the keys the game binds to it.

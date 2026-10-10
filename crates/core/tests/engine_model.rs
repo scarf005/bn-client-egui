@@ -305,6 +305,38 @@ fn main_menu_snapshot_without_a_world_shows_the_menu_and_no_map() {
 }
 
 #[test]
+fn tabbed_main_menu_separates_tab_rows_from_the_selected_tabs_entries() {
+    let text = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/1.0.examples.json"
+    ))
+    .unwrap();
+    let examples: Value = serde_json::from_str(&text).unwrap();
+    let menu = examples["valid"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["name"] == "subscribe result at the main menu")
+        .unwrap()["value"]
+        .clone();
+    let (t, _h) = ScriptedTransport::new();
+    let t = t.on("bn.hello", vec![fixture("hello_result")]).on(
+        "bn.subscribe",
+        vec![json!({"jsonrpc":"2.0","id":0,"result":menu})],
+    );
+    let menu = connected(t).menu().unwrap();
+    let ids = |rows: Vec<&bn_client_core::MenuChoice>| {
+        rows.iter().map(|c| c.id.clone()).collect::<Vec<_>>()
+    };
+    assert_eq!(ids(menu.tabs()), ["tab:new_game", "tab:load", "tab:quit"]);
+    assert_eq!(
+        ids(menu.entries()),
+        ["new_game:custom", "new_game:tutorial"]
+    );
+    assert!(menu.tabs()[0].selected && !menu.tabs()[1].selected);
+}
+
+#[test]
 fn origin_reports_the_view_offset_so_targets_survive_recentering() {
     let (t, _h) = session();
     let m = connected(t);
