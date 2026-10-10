@@ -67,6 +67,9 @@ fn action(id: &str) -> Value {
 fn both_panes_show_their_area_and_their_items_with_count_weight_and_volume() {
     let (h, _) = harness();
     h.get_by_label("Left pane: Directly below you");
+    // The header carries the engine's totals with their capacity, and the sort mode.
+    h.get_by_label("0.5 kg  0.50/1000.00 L  Sort: name");
+    h.get_by_label("3.1/35.0 kg  5.00/30.00 L  Sort: name");
     h.get_by_label("Right pane: Worn Items");
     h.get_by_label("long-sleeved shirt");
     h.get_by_label("tin can");

@@ -6,8 +6,8 @@ use crate::keys;
 use crate::markup::{self, Run};
 use crate::model::{
     ActionEntry, Cell, CommandStatus, Effect, Failure, FailureKind, GameModel, Layer, Loading,
-    LogLine, Menu, MenuChoice, MenuField, MenuPane, Overmap, OvermapCell, OvermapTile, Pos, Rgb,
-    Shape,
+    LogLine, Menu, MenuChoice, MenuField, MenuPane, Overmap, OvermapCell, OvermapTile, PaneTotals,
+    Pos, Rgb, Shape,
 };
 use crate::protocol::{
     self, Cell as WorldCell, Entity, Expect, Incoming, Known, LoadingNotice, Look, Operation,
@@ -1529,6 +1529,22 @@ impl GameModel for EngineModel {
                         area: text("area_label"),
                         storage: text("storage_kind"),
                         filter: text("filter"),
+                        sort: text("sort"),
+                        totals: p["totals"].is_object().then(|| {
+                            let t =
+                                |k: &str| p["totals"][k].as_str().unwrap_or_default().to_string();
+                            let b = |k: &str| p["totals"][k].as_bool().unwrap_or_default();
+                            PaneTotals {
+                                weight: t("weight"),
+                                weight_max: t("weight_max"),
+                                weight_unit: t("weight_unit"),
+                                volume: t("volume"),
+                                volume_max: t("volume_max"),
+                                volume_unit: t("volume_unit"),
+                                over_weight: b("over_weight"),
+                                over_volume: b("over_volume"),
+                            }
+                        }),
                     }
                 })
                 .collect(),

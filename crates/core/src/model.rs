@@ -170,6 +170,44 @@ pub struct MenuPane {
     pub area: String,
     pub storage: String,
     pub filter: String,
+    /// The native sort name, such as `name`; empty when the engine sent none.
+    pub sort: String,
+    /// The header totals the native pane prints; absent from engines that predate them.
+    pub totals: Option<PaneTotals>,
+}
+
+/// The weight and volume line of a pane header: `weight`/`volume` against an optional maximum.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct PaneTotals {
+    pub weight: String,
+    /// Empty where the native header shows no weight capacity.
+    pub weight_max: String,
+    pub weight_unit: String,
+    pub volume: String,
+    /// Empty where the native header shows no volume capacity.
+    pub volume_max: String,
+    pub volume_unit: String,
+    pub over_weight: bool,
+    pub over_volume: bool,
+}
+
+impl PaneTotals {
+    /// `weight[/max] unit`, as the native header prints it.
+    pub fn weight_text(&self) -> String {
+        Self::text(&self.weight, &self.weight_max, &self.weight_unit)
+    }
+
+    /// `volume[/max] unit`, as the native header prints it.
+    pub fn volume_text(&self) -> String {
+        Self::text(&self.volume, &self.volume_max, &self.volume_unit)
+    }
+
+    fn text(value: &str, max: &str, unit: &str) -> String {
+        match max.is_empty() {
+            true => format!("{value} {unit}"),
+            false => format!("{value}/{max} {unit}"),
+        }
+    }
 }
 
 /// The engine's current interaction, rendered generically.

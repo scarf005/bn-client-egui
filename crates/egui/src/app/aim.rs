@@ -254,6 +254,14 @@ impl<M: GameModel> App<M> {
         let zone = ui.dnd_drop_zone::<Dragged, _>(egui::Frame::group(ui.style()), |ui| {
             ui.set_min_width(ui.available_width());
             ui.heading(format!("{name}: {}", pane.area));
+            if let Some(totals) = &pane.totals {
+                ui.label(format!(
+                    "{}  {}  Sort: {}",
+                    totals.weight_text(),
+                    totals.volume_text(),
+                    pane.sort
+                ));
+            }
             // The native grid: marker columns, the compass with Above and Below, as drawn by the game.
             egui::Grid::new(("aim_areas", index))
                 .spacing([4.0, 2.0])

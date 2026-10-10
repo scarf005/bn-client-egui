@@ -54,7 +54,10 @@ fn find(t: &Terminal<TestBackend>, text: &str) -> (u16, u16) {
     lines(t)
         .iter()
         .enumerate()
-        .find_map(|(y, l)| l.find(text).map(|x| (x as u16, y as u16)))
+        .find_map(|(y, l)| {
+            l.find(text)
+                .map(|at| (l[..at].chars().count() as u16, y as u16))
+        })
         .unwrap_or_else(|| panic!("{text} not drawn:\n{}", lines(t).join("\n")))
 }
 
@@ -93,8 +96,9 @@ fn two_panes_show_their_area_totals_columns_rows_filter_and_description() {
     let t = render(&mut app);
     let all = lines(&t).join("\n");
     for text in [
-        "Left pane: Directly below you",
-        "Right pane: Worn Items",
+        "Directly below you",
+        "Worn Items",
+        "< [s or S] Sort: name >",
         "Name (charges)",
         "amt weight vol",
         "[f, F or /] Filter",
@@ -115,8 +119,79 @@ fn two_panes_show_their_area_totals_columns_rows_filter_and_description() {
     for value in ["0.15 kg", "0.75 L"] {
         assert!(line.contains(value), "{value} on the shirt's row: {line}");
     }
-    // The pane total is the sum of its rows: the shirt and three cans.
-    assert!(all.contains("0.45 kg"), "left total:\n{all}");
+    // The header totals are the engine's, with the capacity it shows after the slash, and not a
+    // sum of the listed rows (the three cans and the shirt add up to something else).
+    for text in ["0.5 kg  0.50/1000.00 L", "3.1/35.0 kg  5.00/30.00 L"] {
+        assert!(all.contains(text), "{text}:\n{all}");
+    }
+    assert!(!all.contains("0.45 kg"), "{all}");
+}
+
+#[test]
+fn a_pane_over_capacity_is_red_under_the_top_message_box() {
+    let mut boundary = aim();
+    boundary["interaction"]["compat"]["panes"][1]["totals"]["over_weight"] = true.into();
+    let (mut app, _) = open(boundary);
+    let t = render(&mut app);
+    let (x, y) = find(&t, "3.1/35.0 kg");
+    assert_eq!(t.backend().buffer()[(x, y)].fg, Color::Red);
+    let (x, y) = find(&t, "5.00/30.00 L");
+    assert_ne!(t.backend().buffer()[(x, y)].fg, Color::Red);
+    assert!(lines(&t)[0].contains("keybindings"), "{}", lines(&t)[0]);
+}
+
+#[test]
+fn area_markers_follow_the_native_grid_and_dim_the_areas_the_engine_does_not_offer() {
+    let mut boundary = aim();
+    boundary["actions"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|a| a["id"] != "ITEMS_NW");
+    let (mut app, _) = open(boundary);
+    let t = render(&mut app);
+    let rows = lines(&t);
+    let (_, first) = find(&t, "[C][D]");
+    for (row, grid) in [
+        "[C][D]  [7][8][9][<]",
+        "[I]  [4][5][6][>]",
+        "[A][W]  [1][2][3]",
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let line = &rows[usize::from(first) + row];
+        assert!(line.contains(grid), "{line}");
+    }
+    let (x, y) = find(&t, "[7]");
+    assert_eq!(t.backend().buffer()[(x, y)].fg, Color::DarkGray);
+    let (x, y) = find(&t, "[8]");
+    assert_ne!(t.backend().buffer()[(x, y)].fg, Color::DarkGray);
+}
+
+#[test]
+fn clicking_an_area_marker_is_a_native_area_action_and_a_dimmed_one_does_nothing() {
+    let mut boundary = aim();
+    boundary["actions"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|a| a["id"] != "ITEMS_NW");
+    let (mut app, h) = open(boundary);
+    let t = render(&mut app);
+    let (x, y) = find(&t, "[7]");
+    app.handle_mouse(mouse(MouseEventKind::Down(MouseButton::Left), x + 1, y));
+    app.tick();
+    assert_eq!(operations(&h), Vec::<Value>::new());
+    let (x, y) = find(&t, "[8]");
+    app.handle_mouse(mouse(MouseEventKind::Down(MouseButton::Left), x + 1, y));
+    app.tick();
+    assert_eq!(operations(&h), [action("ITEMS_N")]);
+    finished(&mut app, &h);
+    // A marker of the pane the engine does not act on points the engine at that pane first.
+    let (rx, ry) = (x + 60, y);
+    app.handle_mouse(mouse(MouseEventKind::Down(MouseButton::Left), rx + 1, ry));
+    app.tick();
+    finished(&mut app, &h);
+    assert_eq!(&operations(&h)[1..], [action("RIGHT"), action("ITEMS_N")]);
 }
 
 #[test]
