@@ -1356,6 +1356,21 @@ mod failures {
     }
 
     #[test]
+    fn the_failure_names_how_the_engine_process_ended() {
+        let (t, h) = session();
+        let mut m = connected(t);
+        h.exit_with("exit code 0");
+        h.close(&["mcp: the engine is exiting: the client closed its end of stdin"]);
+        m.poll();
+        let failure = m.failure().expect("the exit is reported");
+        assert_eq!(failure.message, "The engine stopped (exit code 0).");
+        assert_eq!(
+            failure.stderr,
+            ["mcp: the engine is exiting: the client closed its end of stdin"]
+        );
+    }
+
+    #[test]
     fn silence_with_a_command_in_flight_is_a_stall_that_a_message_clears() {
         let (t, h) = session();
         let (mut m, clock) = with_clock(t.on("bn.command.submit", walk_reply()));

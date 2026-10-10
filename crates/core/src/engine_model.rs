@@ -477,9 +477,13 @@ impl EngineModel {
                 self.connected = false;
                 self.busy = false;
                 self.messages.push("Engine connection closed.".into());
+                let message = match self.transport.exit_reason() {
+                    Some(reason) => format!("The engine stopped ({reason})."),
+                    None => "The engine stopped.".into(),
+                };
                 self.failure = Some(Failure {
                     kind: FailureKind::Exited,
-                    message: "The engine stopped.".into(),
+                    message,
                     stderr: self.transport.stderr_tail(),
                 });
             }
