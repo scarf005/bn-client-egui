@@ -609,6 +609,7 @@ dependencies = [
  "egui_extras",
  "egui_kittest",
  "image",
+ "serde",
  "serde_json",
 ]
 
