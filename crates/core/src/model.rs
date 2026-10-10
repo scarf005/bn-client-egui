@@ -120,6 +120,8 @@ pub struct Menu {
     pub context: String,
     pub title: String,
     pub message: String,
+    /// Lines drawn above the menu in a fixed-width font, with colour tags.
+    pub banner: Vec<String>,
     pub choices: Vec<MenuChoice>,
     pub can_cancel: bool,
     pub can_set_count: bool,

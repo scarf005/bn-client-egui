@@ -1,7 +1,7 @@
 //! The engine's current interaction as a window at the same place every time.
 
 use super::App;
-use crate::{a11y, editor};
+use crate::{a11y, editor, text};
 use bn_client_core::{GameModel, markup};
 use eframe::egui::{self, accesskit};
 
@@ -37,12 +37,13 @@ impl<M: GameModel> App<M> {
         let title = markup::plain(&menu.title);
         egui::Window::new(&title)
             .id(a11y::dialog_id(&title))
-            .title_bar(!title.is_empty())
+            .title_bar(!title.is_empty() && menu.banner.is_empty())
             .anchor(egui::Align2::CENTER_TOP, super::dialog_offset(ctx))
             .collapsible(false)
             .resizable(false)
             .show(ctx, |ui| {
                 ui.set_min_width(520.0);
+                self.banner(ui, &menu.banner);
                 // Cancel sits right under the title, so it is at the same place for every dialog.
                 if menu.can_cancel && !menu.acknowledges() {
                     let button = ui.add_enabled(!self.model.busy(), egui::Button::new("Cancel"));
@@ -159,6 +160,17 @@ impl<M: GameModel> App<M> {
         } else if cancel {
             self.model.cancel_menu();
         }
+    }
+
+    /// The title art and version line: fixed-width text, so the art keeps its shape.
+    fn banner(&self, ui: &mut egui::Ui, lines: &[String]) {
+        let font = egui::FontId::monospace(12.0);
+        ui.spacing_mut().item_spacing.y = 0.0;
+        for line in lines {
+            let runs = self.model.styled(line);
+            ui.label(text::job(&runs, &font));
+        }
+        ui.spacing_mut().item_spacing.y = 4.0;
     }
 
     /// An entry's labelled values; a `<name> color` column colours the value of `<name>`, and a column
