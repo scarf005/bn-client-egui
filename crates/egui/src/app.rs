@@ -73,6 +73,8 @@ pub struct App<M: GameModel> {
     crafting: crafting::Crafting,
     /// A click that arrived while a command was in flight, sent when the engine is free again.
     queued: Option<Queued>,
+    /// The loading step the list was last scrolled to; scrolling again every frame would repaint forever.
+    scrolled_to: Option<usize>,
 }
 
 enum Queued {
@@ -106,6 +108,7 @@ impl<M: GameModel> App<M> {
             command_live: a11y::Announcer::default(),
             crafting: Default::default(),
             queued: None,
+            scrolled_to: None,
         }
     }
 
@@ -154,7 +157,7 @@ impl<M: GameModel> App<M> {
     }
 
     /// Native-style loading screen: splash image, current step as live text, the step list.
-    fn loading(&self, ui: &mut egui::Ui, loading: &Loading) {
+    fn loading(&mut self, ui: &mut egui::Ui, loading: &Loading) {
         ui.heading(&loading.title);
         if let Some(step) = loading.entries.get(loading.index) {
             let status = format!(
@@ -187,7 +190,7 @@ impl<M: GameModel> App<M> {
                 } else {
                     text
                 });
-                if i == loading.index {
+                if i == loading.index && self.scrolled_to.replace(i) != Some(i) {
                     label.scroll_to_me(None);
                 }
             }
@@ -216,6 +219,7 @@ impl<M: GameModel> App<M> {
             self.loading(ui, &loading);
             return;
         }
+        self.scrolled_to = None;
         if self.model.live() {
             // Safety net only: incoming engine messages repaint through the waker.
             ui.ctx()
