@@ -6,6 +6,7 @@ license = "AGPL-3.0-only"
 
 [dependencies]
 bn-client-core = { path = "../core" }
+clap = "=4.6.7"
 crossterm = "=0.29.0"
 ratatui = "=0.30.2"
 unicode-width = "=0.2.2"

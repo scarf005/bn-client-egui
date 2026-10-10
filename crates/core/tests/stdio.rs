@@ -1,6 +1,8 @@
 #![cfg(unix)]
+use bn_client_core::launch::LaunchArgs;
 use bn_client_core::protocol::Incoming;
 use bn_client_core::transport::{Profile, StdioTransport, Transport, request};
+use clap::Parser;
 use serde_json::json;
 use std::os::unix::fs::PermissionsExt;
 use std::time::{Duration, Instant};
@@ -126,9 +128,16 @@ fn explicit_dirs_are_passed_through_unchanged() {
     );
 }
 
+#[derive(Parser)]
+struct Cli {
+    #[command(flatten)]
+    launch: LaunchArgs,
+}
+
 #[test]
 fn profile_args_pick_fresh_and_dirs_and_keep_the_rest() {
     let args = [
+        "bn",
         "--engine",
         "e",
         "--userdir",
@@ -136,12 +145,12 @@ fn profile_args_pick_fresh_and_dirs_and_keep_the_rest() {
         "--fresh-profile",
         "--configdir",
         "/c",
-    ]
-    .map(String::from);
-    let (p, rest) = Profile::from_args(args).unwrap();
+    ];
+    let cli = Cli::try_parse_from(args).unwrap().launch;
+    let p = cli.profile;
     assert!(p.fresh);
     assert_eq!(p.userdir.as_deref(), Some(std::path::Path::new("/u")));
     assert_eq!(p.configdir.as_deref(), Some(std::path::Path::new("/c")));
-    assert_eq!(rest, ["--engine", "e"]);
-    assert!(Profile::from_args(["--userdir".to_string()]).is_err());
+    assert_eq!(cli.engine.as_deref(), Some(std::path::Path::new("e")));
+    assert!(Cli::try_parse_from(["bn", "--userdir"]).is_err());
 }

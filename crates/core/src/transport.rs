@@ -64,13 +64,16 @@ impl Trace {
 }
 
 /// Which user and config directories the engine runs with.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(clap::Args, Clone, Debug, Default, PartialEq, Eq)]
 pub struct Profile {
-    /// Run in a throwaway directory deleted on drop, instead of the engine's own default profile.
+    /// Run in a private throwaway profile deleted on exit, instead of the engine's own default profile
+    #[arg(id = "fresh", long = "fresh-profile", env = "BN_FRESH_PROFILE")]
     pub fresh: bool,
-    /// Passed as `--userdir`; ignored when `fresh`.
+    /// Engine `--userdir` (saves); ignored with --fresh-profile
+    #[arg(long, value_name = "PATH")]
     pub userdir: Option<PathBuf>,
-    /// Passed as `--configdir`; ignored when `fresh`.
+    /// Engine `--configdir` (options, keybindings); ignored with --fresh-profile
+    #[arg(long, value_name = "PATH")]
     pub configdir: Option<PathBuf>,
 }
 
@@ -80,35 +83,6 @@ impl Profile {
             fresh: true,
             ..Self::default()
         }
-    }
-
-    /// Reads `--fresh-profile`, `--userdir PATH` and `--configdir PATH` (also `BN_FRESH_PROFILE` for the
-    /// first); returns the profile and the arguments it did not consume.
-    pub fn from_args(
-        args: impl IntoIterator<Item = String>,
-    ) -> Result<(Self, Vec<String>), String> {
-        let mut profile = Self {
-            fresh: std::env::var_os("BN_FRESH_PROFILE").is_some_and(|v| !v.is_empty() && v != "0"),
-            ..Self::default()
-        };
-        let mut rest = Vec::new();
-        let mut args = args.into_iter();
-        while let Some(arg) = args.next() {
-            match arg.as_str() {
-                "--fresh-profile" => profile.fresh = true,
-                "--userdir" | "--configdir" => {
-                    let value = args.next().ok_or(format!("{arg} needs a path"))?;
-                    let slot = if arg == "--userdir" {
-                        &mut profile.userdir
-                    } else {
-                        &mut profile.configdir
-                    };
-                    *slot = Some(value.into());
-                }
-                _ => rest.push(arg),
-            }
-        }
-        Ok((profile, rest))
     }
 }
 
