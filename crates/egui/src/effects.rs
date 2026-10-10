@@ -77,7 +77,7 @@ fn life(effect: &Effect) -> f64 {
 /// The direction the native text really scrolls in: a hit-point readout stays to one side of its
 /// creature, and text meant for a side moves diagonally up or down so that the sides stay free.
 fn text_direction(scroll: Pos, hp: bool, seed: u32) -> Pos {
-    let pick = |a: Pos, b: Pos| if seed % 2 == 0 { a } else { b };
+    let pick = |a: Pos, b: Pos| if seed.is_multiple_of(2) { a } else { b };
     match (hp, scroll.x, scroll.y) {
         (true, x, _) if x < 0 => Pos { x: -1, y: 0 },
         (true, _, _) => Pos { x: 1, y: 0 },

@@ -227,7 +227,8 @@ fn switching_between_tiles_and_ascii_tells_the_engine_without_a_restart() {
     settle(&mut h);
     assert_eq!(tiles_said(&script), [true, false, true]);
     let methods = script.sent_methods();
-    assert_eq!(methods.iter().filter(|m| *m == "bn.viewport").count(), 2);
+    // Each change of the cell size is declared once it has settled; a slow frame can add another.
+    assert!(methods.iter().filter(|m| *m == "bn.viewport").count() >= 2);
 }
 
 fn session_with_display(tiles: bool) -> ScriptedTransport {

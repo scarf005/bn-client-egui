@@ -19,7 +19,7 @@ const MEMORY: Color32 = Color32::from_gray(100);
 const SHADOW: Color32 = Color32::from_gray(170);
 
 /// The choice that survives a restart.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Settings {
     /// Draw sprites (true) or ASCII glyphs (false); absent until the player chooses, so the engine's
     /// `USE_TILES` option decides.
@@ -30,16 +30,6 @@ pub struct Settings {
     /// Play no shot, explosion or floating-text overlays on the map.
     #[serde(default)]
     pub reduced_motion: bool,
-}
-
-impl Default for Settings {
-    fn default() -> Self {
-        Self {
-            tiles: None,
-            tileset: None,
-            reduced_motion: false,
-        }
-    }
 }
 
 /// `$XDG_CONFIG_HOME/bn-client-egui/settings.json`, or the same under `~/.config`.
