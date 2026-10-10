@@ -611,6 +611,11 @@ fn travel_that_plans_nothing_and_moves_nothing_says_the_native_cant_travel_messa
         "epoch":"e7f3","command_id":"c:5","stage":"completed"}}));
     m.poll();
     assert_eq!(m.command().unwrap().stage, "done: You can't travel there.");
+    assert_eq!(
+        m.messages(),
+        ["You can't travel there."],
+        "native puts it in the message log"
+    );
 }
 
 #[test]
