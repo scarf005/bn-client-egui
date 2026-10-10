@@ -1,0 +1,69 @@
+//! The engine's current interaction as a centered window.
+
+use super::App;
+use bn_client_core::GameModel;
+use eframe::egui::{self, accesskit};
+
+impl<M: GameModel> App<M> {
+    /// The engine's current interaction, drawn generically: title, message, choices, cancel.
+    pub(super) fn menu(&mut self, ctx: &egui::Context) {
+        let Some(menu) = self.model.menu() else {
+            return;
+        };
+        let mut chosen = None;
+        let mut cancel = ctx.input(|i| i.key_pressed(egui::Key::Escape)) && menu.can_cancel;
+        egui::Window::new(&menu.title)
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .collapsible(false)
+            .resizable(false)
+            .show(ctx, |ui| {
+                ui.set_min_width(520.0);
+                if !menu.message.is_empty() {
+                    ui.label(&menu.message);
+                }
+                let tabs = menu.tabs();
+                ui.horizontal_wrapped(|ui| {
+                    for tab in &tabs {
+                        let button =
+                            self.control(ui, tab.label.clone(), &tab.id, tab.enabled, tab.selected);
+                        if button.clicked() {
+                            chosen = Some(tab.id.clone());
+                        }
+                    }
+                });
+                ui.with_layout(egui::Layout::top_down_justified(egui::Align::Min), |ui| {
+                    for choice in menu.entries() {
+                        let button = self.control(
+                            ui,
+                            choice.label.clone(),
+                            &choice.id,
+                            choice.enabled,
+                            false,
+                        );
+                        ui.ctx().accesskit_node_builder(button.id, |b| {
+                            b.set_role(accesskit::Role::MenuItem)
+                        });
+                        if !choice.enabled && !choice.denial.is_empty() {
+                            ui.label(&choice.denial);
+                        }
+                        if button.clicked() {
+                            chosen = Some(choice.id.clone());
+                        }
+                    }
+                });
+                if menu.can_cancel
+                    && ui
+                        .add_enabled(!self.model.busy(), egui::Button::new("Cancel"))
+                        .clicked()
+                {
+                    cancel = true;
+                }
+            });
+        if let Some(id) = chosen {
+            ctx.request_repaint();
+            self.model.choose(&id);
+        } else if cancel {
+            self.model.cancel_menu();
+        }
+    }
+}

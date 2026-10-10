@@ -1,24 +1,19 @@
 use bn_client_core::{GameModel, Loading, Pos};
 use eframe::egui::{self, accesskit};
 
+mod menu;
+mod palette;
+mod sidebar;
+
 /// A command must outlast this before the controls show it; keeps short commands from blinking the UI.
 const SETTLE: std::time::Duration = std::time::Duration::from_millis(150);
 
+/// The sidebar's share of the window width, and its limits in points.
+const SIDEBAR_SHARE: f32 = 0.25;
+const SIDEBAR_WIDTH: (f32, f32) = (280.0, 480.0);
+
 /// Side length of one map cell in points.
 pub const CELL: f32 = 16.0;
-
-#[derive(Clone, Copy, PartialEq)]
-enum Column {
-    Ground,
-    Inventory,
-}
-
-/// Drag payload: which column the item comes from and its index there.
-#[derive(Clone, Copy)]
-struct Dragged {
-    from: Column,
-    index: usize,
-}
 
 fn rgb(c: bn_client_core::Rgb) -> egui::Color32 {
     egui::Color32::from_rgb(c.0, c.1, c.2)
@@ -48,6 +43,8 @@ pub struct App<M: GameModel> {
     root: Option<std::path::PathBuf>,
     /// A typed key already ran an engine action this frame.
     keys_consumed: bool,
+    /// The action palette's search text while it is open.
+    palette: Option<String>,
 }
 
 impl<M: GameModel> App<M> {
@@ -65,6 +62,7 @@ impl<M: GameModel> App<M> {
             images: false,
             root: None,
             keys_consumed: false,
+            palette: None,
         }
     }
 
@@ -153,6 +151,7 @@ impl<M: GameModel> App<M> {
             ui.ctx().request_repaint_after(SETTLE);
         }
         self.walk(ui.ctx());
+        self.palette_keys(ui.ctx());
         self.game_keys(ui.ctx());
         if self.model.menu().is_none() {
             // Arrow keys belong to the game, whichever widget was clicked last; Tab still moves focus.
@@ -170,15 +169,17 @@ impl<M: GameModel> App<M> {
                 });
             }
         }
-        egui::Panel::top("status").show(ui, |ui| self.status(ui));
-        egui::Panel::left("actions")
+        egui::Panel::top("bar").show(ui, |ui| self.bar(ui));
+        egui::Panel::right("sidebar")
             .resizable(false)
-            .show(ui, |ui| self.actions(ui));
-        egui::Panel::bottom("log").show(ui, |ui| self.log(ui));
-        egui::Panel::right("items")
-            .resizable(false)
-            .show(ui, |ui| self.items(ui));
-        self.map(ui);
+            .exact_size(
+                (ui.available_width() * SIDEBAR_SHARE).clamp(SIDEBAR_WIDTH.0, SIDEBAR_WIDTH.1),
+            )
+            .show(ui, |ui| self.sidebar_panel(ui));
+        egui::CentralPanel::default()
+            .frame(egui::Frame::NONE.fill(egui::Color32::BLACK))
+            .show(ui, |ui| self.map(ui));
+        self.palette(ui.ctx());
         self.menu(ui.ctx());
     }
 
@@ -211,6 +212,9 @@ impl<M: GameModel> App<M> {
             vec![]
         };
         self.keys_consumed = false;
+        if self.palette.is_some() {
+            return;
+        }
         for key in typed.into_iter().chain(arrows) {
             if self.model.press(&key) {
                 self.keys_consumed = true;
@@ -219,6 +223,15 @@ impl<M: GameModel> App<M> {
     }
 
     /// The pressed control's name and stage, announced politely; stays until the next command.
+    fn bar(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            if ui.button("Actions").clicked() {
+                self.palette = self.palette.is_none().then(String::new);
+            }
+            self.status(ui);
+        });
+    }
+
     fn status(&self, ui: &mut egui::Ui) {
         let text = self
             .model
@@ -255,77 +268,6 @@ impl<M: GameModel> App<M> {
             usable,
             egui::Button::new(text).selected(pending || highlighted),
         )
-    }
-
-    /// Everything the engine accepts right now, each with its game key, clickable.
-    fn actions(&mut self, ui: &mut egui::Ui) {
-        ui.heading("Actions");
-        let mut invoke = None;
-        egui::ScrollArea::vertical().show(ui, |ui| {
-            for a in self.model.actions() {
-                let label = if a.keys.is_empty() {
-                    a.name.clone()
-                } else {
-                    format!("{} ({})", a.name, a.keys.join(", "))
-                };
-                if self.control(ui, label, &a.id, true, false).clicked() {
-                    invoke = Some(a.id);
-                }
-            }
-        });
-        if let Some(id) = invoke {
-            ui.ctx().request_repaint();
-            self.model.invoke_action(&id);
-        }
-    }
-
-    /// The engine's current interaction, drawn generically: title, message, choices, cancel.
-    fn menu(&mut self, ctx: &egui::Context) {
-        let Some(menu) = self.model.menu() else {
-            return;
-        };
-        let mut chosen = None;
-        let mut cancel = ctx.input(|i| i.key_pressed(egui::Key::Escape)) && menu.can_cancel;
-        egui::Window::new(&menu.title).show(ctx, |ui| {
-            if !menu.message.is_empty() {
-                ui.label(&menu.message);
-            }
-            let tabs = menu.tabs();
-            ui.horizontal_wrapped(|ui| {
-                for tab in &tabs {
-                    let button =
-                        self.control(ui, tab.label.clone(), &tab.id, tab.enabled, tab.selected);
-                    if button.clicked() {
-                        chosen = Some(tab.id.clone());
-                    }
-                }
-            });
-            for choice in menu.entries() {
-                let button =
-                    self.control(ui, choice.label.clone(), &choice.id, choice.enabled, false);
-                ui.ctx()
-                    .accesskit_node_builder(button.id, |b| b.set_role(accesskit::Role::MenuItem));
-                if !choice.enabled && !choice.denial.is_empty() {
-                    ui.label(&choice.denial);
-                }
-                if button.clicked() {
-                    chosen = Some(choice.id.clone());
-                }
-            }
-            if menu.can_cancel
-                && ui
-                    .add_enabled(!self.model.busy(), egui::Button::new("Cancel"))
-                    .clicked()
-            {
-                cancel = true;
-            }
-        });
-        if let Some(id) = chosen {
-            ctx.request_repaint();
-            self.model.choose(&id);
-        } else if cancel {
-            self.model.cancel_menu();
-        }
     }
 
     /// One step per frame toward the destination.
@@ -557,76 +499,6 @@ impl<M: GameModel> App<M> {
             egui::Stroke::new(1.0, egui::Color32::WHITE),
             egui::StrokeKind::Inside,
         );
-    }
-
-    fn items(&mut self, ui: &mut egui::Ui) {
-        let mut moved = None;
-        ui.columns(2, |cols| {
-            for (ui, column) in cols.iter_mut().zip([Column::Ground, Column::Inventory]) {
-                let (title, verb, items) = match column {
-                    Column::Ground => ("Ground", "Pick up", self.model.ground()),
-                    Column::Inventory => ("Inventory", "Drop", self.model.inventory()),
-                };
-                ui.heading(title);
-                let (_, dropped) =
-                    ui.dnd_drop_zone::<Dragged, _>(egui::Frame::group(ui.style()), |ui| {
-                        ui.set_min_size(egui::vec2(ui.available_width(), 200.0));
-                        for (index, name) in items.iter().enumerate() {
-                            ui.horizontal(|ui| {
-                                let grip =
-                                    ui.add(egui::Label::new(name).sense(egui::Sense::drag()));
-                                grip.dnd_set_drag_payload(Dragged {
-                                    from: column,
-                                    index,
-                                });
-                                let button = ui.button(verb);
-                                ui.ctx().accesskit_node_builder(button.id, |b| {
-                                    b.set_label(format!("{verb} {name}"))
-                                });
-                                if button.clicked() {
-                                    moved = Some(Dragged {
-                                        from: column,
-                                        index,
-                                    });
-                                }
-                            });
-                        }
-                    });
-                if let Some(d) = dropped.filter(|d| d.from != column) {
-                    moved = Some(*d);
-                }
-            }
-        });
-        match moved {
-            Some(Dragged {
-                from: Column::Ground,
-                index,
-            }) => self.model.pick_up(index),
-            Some(Dragged {
-                from: Column::Inventory,
-                index,
-            }) => self.model.drop_item(index),
-            None => {}
-        }
-    }
-
-    fn log(&mut self, ui: &mut egui::Ui) {
-        ui.heading("Message log");
-        // Only the newest message is live, so history is never re-announced.
-        if let Some(latest) = self.model.messages().last() {
-            let live = ui.label(latest);
-            ui.ctx()
-                .accesskit_node_builder(live.id, |b| b.set_live(accesskit::Live::Polite));
-        }
-        egui::ScrollArea::vertical()
-            .max_height(100.0)
-            .stick_to_bottom(true)
-            .show(ui, |ui| {
-                let messages = self.model.messages();
-                for message in &messages[messages.len().saturating_sub(50)..] {
-                    ui.label(message);
-                }
-            });
     }
 }
 

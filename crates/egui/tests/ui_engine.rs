@@ -154,10 +154,22 @@ fn closing_the_menu_event_removes_the_window() {
     assert!(h.query_by_label("Choose an item").is_none());
 }
 
+fn open_palette(h: &mut H) {
+    h.event(egui::Event::Key {
+        key: egui::Key::P,
+        physical_key: None,
+        pressed: true,
+        repeat: false,
+        modifiers: egui::Modifiers::COMMAND,
+    });
+    h.run_steps(3);
+}
+
 #[test]
-fn action_list_shows_name_and_keys_and_clicking_submits_the_action_id() {
+fn action_palette_shows_name_and_keys_and_clicking_submits_the_action_id() {
     let (mut h, script) = harness();
     h.run_steps(3);
+    open_palette(&mut h);
     h.get_by_label("Move right (RIGHT, l)").click();
     h.run_steps(2);
     assert_eq!(
@@ -360,6 +372,7 @@ fn operations(script: &ScriptHandle) -> Vec<serde_json::Value> {
 fn arrow_key_walks_after_a_button_was_clicked() {
     let (mut h, script) = harness();
     h.run_steps(3);
+    open_palette(&mut h);
     h.get_by_label("Move left (LEFT, h)").click();
     h.run_steps(2);
     script.push(notice("completed", None));
@@ -396,9 +409,10 @@ fn arrow_key_does_not_walk_while_a_menu_is_open() {
 }
 
 #[test]
-fn actions_panel_does_not_blink_during_a_short_command() {
+fn action_palette_does_not_blink_during_a_short_command() {
     let (mut h, _script) = harness();
     h.run_steps(3);
+    open_palette(&mut h);
     let before = h.get_by_label("Move right (RIGHT, l)").rect();
     click_map(&mut h, (22.5, 12.5));
     h.run_steps(3);
@@ -409,9 +423,10 @@ fn actions_panel_does_not_blink_during_a_short_command() {
 }
 
 #[test]
-fn actions_panel_keeps_its_layout_when_a_long_command_disables_it() {
+fn action_palette_keeps_its_layout_when_a_long_command_disables_it() {
     let (mut h, _script) = harness();
     h.run_steps(3);
+    open_palette(&mut h);
     let before = h.get_by_label("Move right (RIGHT, l)").rect();
     click_map(&mut h, (22.5, 12.5));
     h.run_steps(2);
