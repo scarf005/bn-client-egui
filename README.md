@@ -14,7 +14,7 @@ License: undecided (no LICENSE file yet).
 
 Engine lookup (first hit wins; `--help` lists the same): `--engine PATH`, `BN_ENGINE`, `cataclysm-bn-tiles` /
 `cataclysm-bn` (+ `.exe`) next to the client executable or in its parent directory, the path saved in
-`$XDG_CONFIG_HOME/bn-client/config.json` (`~/.config/bn-client/config.json`; rewritten after every successful start),
+`$XDG_CONFIG_HOME/bn-client/config.json` (`~/.config/bn-client/config.json`; written only when you pick the engine in the setup window),
 then `PATH`. If nothing is found the client exits with the list of searched places. Game data comes from `BN_ROOT`,
 else the nearest ancestor of the chosen engine containing `data/json`. So run once with
 `--engine /path/to/cataclysm-bn-tiles` and later runs need no arguments.
