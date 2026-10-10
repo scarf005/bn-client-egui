@@ -1,12 +1,12 @@
 //! Terminal client over the same `GameModel` as the egui client.
 
-use bn_client_core::{GameModel, Menu, Pos, Rgb};
+use bn_client_core::{GameModel, Loading, Menu, Pos, Rgb};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Clear, Paragraph};
+use ratatui::widgets::{Block, Clear, Gauge, Paragraph};
 
 const LOG_LINES: usize = 6;
 const SIDE_WIDTH: u16 = 36;
@@ -89,6 +89,9 @@ impl<M: GameModel> TuiApp<M> {
             self.quit = true;
             return;
         }
+        if self.model.loading().is_some() {
+            return;
+        }
         if let Some(menu) = self.menu() {
             match key.code {
                 KeyCode::Up => self.selected = self.selected.saturating_sub(1),
@@ -116,6 +119,9 @@ impl<M: GameModel> TuiApp<M> {
     }
 
     pub fn draw(&mut self, f: &mut Frame) {
+        if let Some(loading) = self.model.loading() {
+            return Self::draw_loading(f, &loading);
+        }
         let [main, log] =
             Layout::vertical([Constraint::Min(5), Constraint::Length(LOG_LINES as u16 + 2)])
                 .areas(f.area());
@@ -139,6 +145,46 @@ impl<M: GameModel> TuiApp<M> {
         if let Some(menu) = self.menu() {
             self.draw_menu(f, &menu);
         }
+    }
+
+    /// Title, a progress bar over the steps, and the step list (the splash image is skipped).
+    fn draw_loading(f: &mut Frame, loading: &Loading) {
+        let total = loading.entries.len();
+        let step = (loading.index + 1).min(total);
+        let [title, bar, list] = Layout::vertical([
+            Constraint::Length(1),
+            Constraint::Length(3),
+            Constraint::Min(1),
+        ])
+        .areas(f.area());
+        f.render_widget(
+            Paragraph::new(Line::styled(
+                loading.title.clone(),
+                Style::new().add_modifier(Modifier::BOLD),
+            )),
+            title,
+        );
+        let ratio = if total == 0 {
+            0.0
+        } else {
+            step as f64 / total as f64
+        };
+        f.render_widget(
+            Gauge::default()
+                .block(Block::bordered())
+                .ratio(ratio)
+                .label(format!("{step}/{total}")),
+            bar,
+        );
+        let lines = loading
+            .entries
+            .iter()
+            .enumerate()
+            .map(|(i, e)| match i == loading.index {
+                true => Line::styled(format!("> {e}"), Style::new().add_modifier(Modifier::BOLD)),
+                false => Line::raw(format!("  {e}")),
+            });
+        f.render_widget(Paragraph::new(lines.collect::<Vec<_>>()), list);
     }
 
     fn draw_map(&mut self, f: &mut Frame, area: Rect) {

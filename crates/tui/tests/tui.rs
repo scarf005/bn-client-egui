@@ -200,3 +200,45 @@ fn cells_without_a_background_use_the_default_one() {
         .unwrap();
     assert_eq!(wall.bg, Color::Reset);
 }
+
+fn loading(index: u32) -> Value {
+    json!({"jsonrpc":"2.0","method":"bn.loading","params":{"epoch":"e7f3","title":"Loading world",
+      "entries":["Loading items","Loading monsters","Finalizing"],"index":index,"image":{"path":"gfx/a.png"}}})
+}
+
+#[test]
+fn loading_screen_shows_title_progress_bar_and_steps_instead_of_the_map() {
+    let (mut app, h) = engine();
+    h.push(loading(1));
+    app.model.poll();
+    let s = text(&render(&mut app));
+    for want in [
+        "Loading world",
+        "2/3",
+        "Loading items",
+        "> Loading monsters",
+        "Finalizing",
+    ] {
+        assert!(s.contains(want), "{want} in:\n{s}");
+    }
+    assert!(!s.contains("Message log"), "game UI hidden:\n{s}");
+}
+
+#[test]
+fn loading_screen_goes_away_when_the_engine_is_done() {
+    let (mut app, h) = engine();
+    h.push(loading(0));
+    h.push(json!({"jsonrpc":"2.0","method":"bn.loading","params":{"epoch":"e7f3","done":true}}));
+    app.model.poll();
+    let s = text(&render(&mut app));
+    assert!(s.contains("Message log") && !s.contains("Loading world"));
+}
+
+#[test]
+fn keys_do_not_reach_the_game_while_loading() {
+    let (mut app, h) = engine();
+    h.push(loading(0));
+    app.model.poll();
+    app.handle_key(ch('k'));
+    assert!(submits(&h).is_empty());
+}
