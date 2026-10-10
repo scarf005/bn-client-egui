@@ -129,7 +129,7 @@ fn tabs_are_selectable_tabs_not_toggle_buttons() {
 }
 
 #[test]
-fn actions_are_plain_buttons_not_toggle_buttons() {
+fn palette_actions_are_menu_items_not_toggle_buttons() {
     let (mut h, _script) = harness();
     h.run_steps(3);
     h.event(egui::Event::Key {
@@ -141,7 +141,7 @@ fn actions_are_plain_buttons_not_toggle_buttons() {
     });
     h.run_steps(3);
     let action = h.get_by_label("Move right (RIGHT, l)");
-    assert_eq!(action.accesskit_node().role(), accesskit::Role::Button);
+    assert_eq!(action.accesskit_node().role(), accesskit::Role::MenuItem);
     assert_eq!(action.accesskit_node().toggled(), None);
 }
 
@@ -334,4 +334,52 @@ fn stages_reached_within_one_frame_are_announced_together() {
         live.iter().any(|v| v == "combat knife: executing, done"),
         "{live:?}"
     );
+}
+
+fn open_palette(h: &mut H) {
+    h.run_steps(3);
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::P);
+    h.run_steps(3);
+}
+
+#[test]
+fn the_action_palette_is_a_dialog_with_a_focused_search_and_menu_item_results() {
+    let (mut h, _script) = harness();
+    open_palette(&mut h);
+    let dialog = h
+        .get_all_by_label("Actions")
+        .find(|n| n.accesskit_node().role() == accesskit::Role::Dialog);
+    assert!(dialog.is_some(), "Actions dialog");
+    assert_eq!(focused_label(&h).as_deref(), Some("Search actions"));
+    let result = h.get_by_label("Move right (RIGHT, l)");
+    assert_eq!(result.accesskit_node().role(), accesskit::Role::MenuItem);
+}
+
+#[test]
+fn tab_walks_the_palette_results_and_wraps_instead_of_leaving() {
+    let (mut h, _script) = harness();
+    open_palette(&mut h);
+    h.key_press(egui::Key::Tab);
+    h.run_steps(3);
+    let first = focused_label(&h);
+    assert_ne!(first.as_deref(), Some("Search actions"));
+    h.key_press_modifiers(egui::Modifiers::SHIFT, egui::Key::Tab);
+    h.run_steps(3);
+    assert_eq!(focused_label(&h).as_deref(), Some("Search actions"));
+    h.key_press_modifiers(egui::Modifiers::SHIFT, egui::Key::Tab);
+    h.run_steps(3);
+    let last = focused_label(&h).expect("focus stays in the palette");
+    assert!(
+        h.get_all_by_label(&last).count() > 0 && last != "Search actions",
+        "{last}"
+    );
+}
+
+#[test]
+fn closing_the_palette_returns_focus_to_the_map() {
+    let (mut h, _script) = harness();
+    open_palette(&mut h);
+    h.key_press(egui::Key::Escape);
+    h.run_steps(4);
+    assert_eq!(focused_label(&h).as_deref(), Some("Map"));
 }

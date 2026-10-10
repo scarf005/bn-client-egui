@@ -79,6 +79,8 @@ pub struct App<M: GameModel> {
     status_live: a11y::Announcer,
     /// The enabled controls of the open menu, in Tab order, as of the last frame.
     menu_ids: Vec<egui::Id>,
+    /// The same for the action palette.
+    palette_ids: Vec<egui::Id>,
     /// Where the engine's cursor was in the open menu, so keyboard focus can follow it.
     menu_focus: Option<String>,
     /// The cursor has been put on the player since the map first appeared.
@@ -117,6 +119,7 @@ impl<M: GameModel> App<M> {
             refocus_map: false,
             cursor_placed: false,
             menu_ids: Vec::new(),
+            palette_ids: Vec::new(),
             menu_focus: None,
             native_live: a11y::Announcer::new(" "),
             command_live: a11y::Announcer::new(" "),

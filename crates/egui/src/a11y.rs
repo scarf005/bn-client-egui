@@ -51,7 +51,8 @@ pub fn button(ctx: &egui::Context, id: egui::Id, pressed: bool) {
 }
 
 /// Keeps Tab and Shift+Tab inside `ids` (a modal's controls, in order): focus wraps at either end
-/// and returns from outside. Call every frame the modal is open, before it is drawn.
+/// and returns from outside. Call every frame the modal is open, before it is drawn. A text field
+/// among `ids` must also be passed to `text_field` after it is drawn.
 pub fn trap_tab(ctx: &egui::Context, ids: &[egui::Id]) {
     let focused = ctx.memory(|m| m.focused());
     let at = focused.and_then(|f| ids.iter().position(|id| *id == f));
@@ -77,6 +78,24 @@ pub fn trap_tab(ctx: &egui::Context, ids: &[egui::Id]) {
         (None, true) => n - 1,
     };
     ctx.memory_mut(|m| m.request_focus(ids[next]));
+}
+
+/// Keeps a drawn text field's own Tab from moving focus past `trap_tab`; a text field sets its filter
+/// while it is drawn, which replaces the one `trap_tab` set.
+pub fn text_field(ctx: &egui::Context, id: egui::Id) {
+    ctx.memory_mut(|m| {
+        if m.has_focus(id) {
+            m.set_focus_lock_filter(
+                id,
+                egui::EventFilter {
+                    tab: true,
+                    horizontal_arrows: true,
+                    vertical_arrows: true,
+                    escape: false,
+                },
+            )
+        }
+    });
 }
 
 /// A polite live region that paints nothing: the text is announced when it changes but is not shown,
