@@ -919,3 +919,47 @@ fn a_popups_dismiss_button_tells_screen_readers_which_keys_close_it() {
         .unwrap_or_default();
     assert_eq!(hint, "Space or Enter closes this popup");
 }
+
+fn finished_command(h: &mut H, script: &ScriptHandle) {
+    script.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{
+        "epoch":"e7f3","command_id":"c:5","stage":"completed"}}));
+    h.run_steps(4);
+}
+
+#[test]
+fn options_is_in_the_action_palette_and_opens_the_native_options_through_the_main_menu() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    script.push(show(
+        41,
+        json!([{"id":"main_menu","name":"Main Menu","keys":["ESC"]}]),
+        Value::Null,
+    ));
+    h.run_steps(3);
+    open_palette(&mut h);
+    h.get_by_label("Search actions").focus();
+    h.run_steps(2);
+    h.get_by_label("Search actions").type_text("option");
+    h.run_steps(2);
+    h.get_by_label("Options").click();
+    h.run_steps(3);
+    assert_eq!(
+        submits(&script),
+        [json!({"kind":"action","action_id":"main_menu"})]
+    );
+    finished_command(&mut h, &script);
+    let mut menu = choice("main:options", "Options");
+    menu["selected"] = false.into();
+    script.push(show(
+        42,
+        json!([]),
+        json!({"schema_id":"s:mm","kind":"choices","context":"UILIST","title":"MAIN MENU",
+            "message":"","allow_cancel":true,"choices":[choice("main:wiki","Open Wiki"), menu],
+            "choice_total":2,"allow_set_count":false}),
+    ));
+    h.run_steps(5);
+    assert_eq!(
+        submits(&script).last(),
+        Some(&json!({"kind":"choose","choice_id":"main:options"}))
+    );
+}
