@@ -49,6 +49,8 @@ pub struct Cell {
     pub remembered: bool,
     /// The game's light level of a square in sight: 0 dark, 1 low, 2 bright only, 3 lit, 4 bright.
     pub light: Option<u8>,
+    /// The game's per-square seed for weighted sprite variants, also for squares nothing is known about.
+    pub square: u32,
 }
 
 /// One line of the game's own message log. A repeat of the newest line keeps its `id` and raises
@@ -119,6 +121,8 @@ pub struct Menu {
     pub field: Option<MenuField>,
     /// The pane of the selected tab, when the menu has tabs.
     pub pane: Option<String>,
+    /// The row the engine's own cursor is on, which its navigation keys move.
+    pub focus: Option<String>,
 }
 
 impl Menu {
@@ -172,6 +176,23 @@ pub struct Loading {
     pub image: Option<String>,
 }
 
+/// Why the engine cannot be played right now.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FailureKind {
+    /// The engine process ended or closed its output.
+    Exited,
+    /// A request has been outstanding longer than the watchdog allows.
+    Stalled,
+}
+
+/// The engine's failure, with its last stderr lines, for an error screen with a Restart button.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Failure {
+    pub kind: FailureKind,
+    pub message: String,
+    pub stderr: Vec<String>,
+}
+
 /// What the UI needs from the game: `FakeModel` in tests, `EngineModel` against a real engine.
 pub trait GameModel {
     /// Called once per frame: drain engine messages. No-op for synchronous models.
@@ -221,6 +242,14 @@ pub trait GameModel {
     /// The planned route in view coordinates, nearest first; empty when none.
     fn route(&self) -> Vec<Pos> {
         vec![]
+    }
+    /// Set while the engine has exited or stopped answering; the UI shows it instead of the map.
+    fn failure(&self) -> Option<Failure> {
+        None
+    }
+    /// Starts the engine again on the same profile; false when the model cannot.
+    fn restart(&mut self) -> bool {
+        false
     }
     /// The engine's loading screen, while it is up.
     fn loading(&self) -> Option<Loading> {
@@ -291,6 +320,25 @@ impl Default for FakeModel {
 }
 
 impl GameModel for FakeModel {
+    fn actions(&self) -> Vec<ActionEntry> {
+        let action = |id: &str, name: &str, keys: &[&str]| ActionEntry {
+            id: id.into(),
+            name: name.into(),
+            keys: keys.iter().map(|k| k.to_string()).collect(),
+        };
+        vec![
+            action("look", "Look around", &[";", "x"]),
+            action("UP", "Move up", &["UP", "k"]),
+            action("DOWN", "Move down", &["DOWN", "j"]),
+            action("LEFT", "Move left", &["LEFT", "h"]),
+            action("RIGHT", "Move right", &["RIGHT", "l"]),
+            action("LEFTUP", "Move up left", &["HOME", "y"]),
+            action("RIGHTUP", "Move up right", &["PPAGE", "u"]),
+            action("LEFTDOWN", "Move down left", &["END", "b"]),
+            action("RIGHTDOWN", "Move down right", &["NPAGE", "n"]),
+        ]
+    }
+
     fn size(&self) -> Pos {
         self.size
     }

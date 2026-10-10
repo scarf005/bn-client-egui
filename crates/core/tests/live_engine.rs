@@ -1,5 +1,4 @@
 //! Needs a real engine build: `BN_ENGINE=/path/to/cataclysm-bn-tiles cargo test --test live_engine -- --ignored`
-use bn_client_core::keys::KeyMap;
 use bn_client_core::transport::{Profile, StdioTransport};
 use bn_client_core::watchdog::Watchdog;
 use bn_client_core::{EngineModel, GameModel, Pos};
@@ -84,9 +83,7 @@ fn live_engine_starts_the_tutorial_and_walks_one_step() {
 fn live_engine_non_movement_action_opens_a_menu_that_can_be_cancelled() {
     let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
     let transport = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
-    let root = bn_client_core::transport::game_root(engine.as_ref(), None);
-    let keys = root.as_deref().map_or_else(KeyMap::default, KeyMap::load);
-    let mut model = EngineModel::new(Box::new(transport)).with_keys(keys);
+    let mut model = EngineModel::new(Box::new(transport));
 
     wait_for(&mut model, "subscription", |m| m.live());
     choose_label(&mut model, "New Game");
@@ -450,4 +447,40 @@ fn live_engine_reports_the_native_sidebar_of_the_tutorial_avatar() {
     assert!(rows.iter().any(|r| r.starts_with("HEAD")), "{rows:?}");
     assert!(rows.iter().any(|r| r.starts_with("Location:")), "{rows:?}");
     assert!(rows.iter().any(|r| r.starts_with("Weapon:")), "{rows:?}");
+}
+
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn live_engine_killed_mid_game_shows_the_failure_and_restart_brings_the_menu_back() {
+    let engine = std::path::PathBuf::from(std::env::var_os("BN_ENGINE").expect("set BN_ENGINE"));
+    let transport = StdioTransport::spawn_fresh(&engine).expect("engine starts");
+    let pid = transport.pid();
+    let again = engine.clone();
+    let mut model = EngineModel::new(Box::new(transport)).with_respawn(Box::new(move || {
+        StdioTransport::spawn_fresh(&again)
+            .map(|t| Box::new(t) as Box<dyn bn_client_core::transport::Transport>)
+    }));
+    wait_for(&mut model, "subscription", |m| m.live());
+    choose_label(&mut model, "New Game");
+    choose_label(&mut model, "Tutorial");
+    wait_for(&mut model, "the tutorial map", |m| m.size().x > 0);
+    assert!(model.failure().is_none());
+
+    let killed = std::process::Command::new("kill")
+        .args(["-9", &pid.to_string()])
+        .status()
+        .expect("kill runs");
+    assert!(killed.success());
+    wait_for(&mut model, "the failure", |m| m.failure().is_some());
+    let failure = model.failure().unwrap();
+    assert_eq!(failure.kind, bn_client_core::FailureKind::Exited);
+    println!("failure: {failure:?}");
+
+    assert!(model.restart(), "the engine starts again");
+    wait_for(&mut model, "the new session", |m| m.live());
+    assert!(model.failure().is_none());
+    wait_for(&mut model, "the main menu", |m| {
+        m.menu()
+            .is_some_and(|menu| menu.choices.iter().any(|c| c.label.contains("New Game")))
+    });
 }

@@ -2,15 +2,15 @@
 
 use crate::clock::Clock;
 use crate::colors::ColorMap;
-use crate::keys::KeyMap;
+use crate::keys;
 use crate::markup::{self, Run};
 use crate::model::{
-    ActionEntry, Cell, CommandStatus, GameModel, Layer, Loading, LogLine, Menu, MenuChoice,
-    MenuField, Pos, Rgb,
+    ActionEntry, Cell, CommandStatus, Failure, FailureKind, GameModel, Layer, Loading, LogLine,
+    Menu, MenuChoice, MenuField, Pos, Rgb,
 };
 use crate::protocol::{
-    self, Cell as WorldCell, Expect, Incoming, Known, LoadingNotice, Look, Operation, Snapshot,
-    Submit, WorldPos,
+    self, Cell as WorldCell, Entity, Expect, Incoming, Known, LoadingNotice, Look, Operation,
+    Snapshot, Submit, WorldPos,
 };
 use crate::replica::{Outcome, Replica};
 use crate::transport::{Transport, request};
@@ -36,8 +36,20 @@ enum Pending {
     Interrupt,
 }
 
+/// Starts the engine again on the same profile.
+pub type Respawn = Box<dyn FnMut() -> std::io::Result<Box<dyn Transport>>>;
+
+/// Without a message for this long while a request is outstanding, the engine counts as stalled.
+const STALL: Duration = Duration::from_secs(120);
+
 pub struct EngineModel {
     transport: Box<dyn Transport>,
+    respawn: Option<Respawn>,
+    waker: Option<crate::transport::Waker>,
+    failure: Option<Failure>,
+    /// When the engine last said anything, on the model's clock.
+    heard: Duration,
+    stall: Duration,
     replica: Replica,
     next_id: u64,
     pending: HashMap<u64, Pending>,
@@ -67,7 +79,6 @@ pub struct EngineModel {
     trace: Vec<(Instant, &'static str)>,
     received: u64,
     colors: ColorMap,
-    keys: KeyMap,
     loading: Option<Loading>,
     /// Actions on show: between auto-move steps the engine offers none, which must not flicker the list.
     shown: Vec<ActionEntry>,
@@ -139,6 +150,11 @@ impl EngineModel {
     pub fn new(transport: Box<dyn Transport>) -> Self {
         let mut m = Self {
             transport,
+            respawn: None,
+            waker: None,
+            failure: None,
+            heard: Duration::ZERO,
+            stall: STALL,
             replica: Replica::default(),
             next_id: 0,
             pending: HashMap::new(),
@@ -162,7 +178,6 @@ impl EngineModel {
             trace: vec![],
             received: 0,
             colors: ColorMap::default(),
-            keys: KeyMap::default(),
             loading: None,
             shown: vec![],
             status: None,
@@ -188,15 +203,21 @@ impl EngineModel {
         self
     }
 
-    /// Uses the game's own palette for look colours.
-    pub fn with_colors(mut self, colors: ColorMap) -> Self {
-        self.colors = colors;
+    /// How to start the engine again, for `restart`.
+    pub fn with_respawn(mut self, respawn: Respawn) -> Self {
+        self.respawn = Some(respawn);
         self
     }
 
-    /// Uses the game's key settings to label and trigger actions.
-    pub fn with_keys(mut self, keys: KeyMap) -> Self {
-        self.keys = keys;
+    /// Silence that counts as a stall while a request is outstanding.
+    pub fn with_stall(mut self, stall: Duration) -> Self {
+        self.stall = stall;
+        self
+    }
+
+    /// Uses the game's own palette for look colours.
+    pub fn with_colors(mut self, colors: ColorMap) -> Self {
+        self.colors = colors;
         self
     }
 
@@ -319,6 +340,11 @@ impl EngineModel {
                 self.connected = false;
                 self.busy = false;
                 self.messages.push("Engine connection closed.".into());
+                self.failure = Some(Failure {
+                    kind: FailureKind::Exited,
+                    message: "The engine stopped.".into(),
+                    stderr: self.transport.stderr_tail(),
+                });
             }
         }
     }
@@ -548,10 +574,7 @@ impl EngineModel {
                 .map(|a| ActionEntry {
                     id: a.id.clone(),
                     name: a.name.clone(),
-                    keys: a
-                        .keys
-                        .clone()
-                        .unwrap_or_else(|| self.keys.keys(&a.id).to_vec()),
+                    keys: a.keys.clone().unwrap_or_default(),
                 })
                 .collect();
         }
@@ -690,6 +713,65 @@ impl EngineModel {
             .collect()
     }
 
+    /// The cell without its square seed.
+    fn cell_at(&self, at: Pos) -> Cell {
+        let unknown = Cell {
+            glyph: ' ',
+            color: Rgb(128, 128, 128),
+            desc: "unknown".into(),
+            ..Cell::default()
+        };
+        let Some(p) = self.abs(at) else {
+            return unknown;
+        };
+        let world = self.replica.cell(&p.dim, p.x, p.y, p.z);
+        let mut layers = world.map_or(vec![], |c| self.layers(c));
+        if self.avatar_pos() == Some(&p)
+            && let Some(avatar) = self.replica.avatar()
+            && let Some(look) = &avatar.look
+        {
+            let seed = u32::from(avatar.name.bytes().next().unwrap_or(0));
+            layers.push(self.layer(look, seed));
+            layers.extend(self.overlays(look, &avatar.overlays, seed));
+        }
+        let entity = self
+            .replica
+            .entities()
+            .find(|e| e.at == p && e.look.is_some());
+        if let Some(e) = entity {
+            let look = e.look.as_ref().expect("filtered on look");
+            let desc = e.name.clone().unwrap_or_else(|| look_name(look));
+            layers.push(self.layer(look, id_seed(&e.id)));
+            layers.extend(self.overlays(look, &e.overlays, id_seed(&e.id)));
+            layers.extend(self.attitude(e));
+            return Cell {
+                layers,
+                remembered: false,
+                light: world
+                    .and_then(|c| c.light.as_ref()?.as_u64())
+                    .map(|l| l as u8),
+                ..self.styled(look, desc)
+            };
+        }
+        match world {
+            Some(c) => match top_look(c) {
+                Some(l) => Cell {
+                    layers,
+                    remembered: c.known == Known::Remembered,
+                    light: c.light.as_ref().and_then(Value::as_u64).map(|l| l as u8),
+                    ..self.styled(l, look_name(l))
+                },
+                None => Cell {
+                    glyph: '?',
+                    color: Rgb(128, 128, 128),
+                    desc: "sensed".into(),
+                    ..Cell::default()
+                },
+            },
+            None => unknown,
+        }
+    }
+
     /// What a cell draws, bottom first, in the order of the native view: terrain, furniture, trap,
     /// field, item, vehicle part; a cell only remembered draws its memorized terrain and overlay.
     fn layers(&self, c: &WorldCell) -> Vec<Layer> {
@@ -712,19 +794,64 @@ impl EngineModel {
         };
         looks
             .into_iter()
-            .map(|l| {
+            .flat_map(|l| {
                 let seeded = !matches!(l.kind.as_str(), "item" | "trap");
-                self.layer(l, if seeded { seed } else { 0 })
+                let stacked = l.stack.is_some_and(|n| n > 1);
+                // The native view highlights a pile right over its displayed item.
+                let mark = stacked.then(|| self.marker("highlight_item"));
+                [Some(self.layer(l, if seeded { seed } else { 0 })), mark]
             })
+            .flatten()
             .collect()
+    }
+
+    /// A sprite the tileset may have and that stands for nothing else: it draws nothing without one.
+    fn marker(&self, id: &str) -> Layer {
+        Layer {
+            id: id.into(),
+            ..Layer::default()
+        }
+    }
+
+    /// The overlay the native view puts over a monster or NPC for how it regards the avatar.
+    fn attitude(&self, e: &Entity) -> Option<Layer> {
+        let attitude = e.attitude.as_ref()?;
+        let aware = if e.aware { "_sees_player" } else { "" };
+        Some(self.marker(&format!("overlay_{attitude}{aware}")))
     }
 }
 
 impl GameModel for EngineModel {
     fn poll(&mut self) {
+        let now = self.clock.now();
         while let Some(msg) = self.transport.recv() {
             self.received += 1;
+            self.heard = now;
+            // Anything the engine says shows it is alive again.
+            if self
+                .failure
+                .as_ref()
+                .is_some_and(|f| f.kind == FailureKind::Stalled)
+            {
+                self.failure = None;
+            }
             self.handle(msg);
+        }
+        let waiting = self.busy || !self.pending.is_empty();
+        if self.failure.is_none()
+            && self.connected
+            && self.replica.at().is_some()
+            && waiting
+            && now.saturating_sub(self.heard) >= self.stall
+        {
+            self.failure = Some(Failure {
+                kind: FailureKind::Stalled,
+                message: format!(
+                    "The engine has not answered for {} seconds.",
+                    self.stall.as_secs()
+                ),
+                stderr: self.transport.stderr_tail(),
+            });
         }
         self.messages.extend(self.replica.take_log());
         for line in self.replica.take_lines() {
@@ -754,7 +881,40 @@ impl GameModel for EngineModel {
     }
 
     fn set_waker(&mut self, waker: crate::transport::Waker) {
-        self.transport.set_waker(waker);
+        self.transport.set_waker(waker.clone());
+        self.waker = Some(waker);
+    }
+
+    fn failure(&self) -> Option<Failure> {
+        self.failure.clone()
+    }
+
+    fn restart(&mut self) -> bool {
+        let Some(mut respawn) = self.respawn.take() else {
+            return false;
+        };
+        match respawn() {
+            Ok(transport) => {
+                let mut fresh = EngineModel::new(transport)
+                    .with_clock(self.clock.clone())
+                    .with_colors(self.colors.clone())
+                    .with_stall(self.stall);
+                fresh.heard = self.clock.now();
+                fresh.respawn = Some(respawn);
+                if let Some(waker) = self.waker.take() {
+                    fresh.set_waker(waker);
+                }
+                *self = fresh;
+                true
+            }
+            Err(e) => {
+                self.respawn = Some(respawn);
+                if let Some(f) = &mut self.failure {
+                    f.message = format!("The engine could not be restarted: {e}");
+                }
+                false
+            }
+        }
     }
 
     fn origin(&self) -> Pos {
@@ -786,59 +946,10 @@ impl GameModel for EngineModel {
     }
 
     fn cell(&self, at: Pos) -> Cell {
-        let unknown = Cell {
-            glyph: ' ',
-            color: Rgb(128, 128, 128),
-            desc: "unknown".into(),
-            ..Cell::default()
-        };
-        let Some(p) = self.abs(at) else {
-            return unknown;
-        };
-        let world = self.replica.cell(&p.dim, p.x, p.y, p.z);
-        let mut layers = world.map_or(vec![], |c| self.layers(c));
-        if self.avatar_pos() == Some(&p)
-            && let Some(avatar) = self.replica.avatar()
-            && let Some(look) = &avatar.look
-        {
-            let seed = u32::from(avatar.name.bytes().next().unwrap_or(0));
-            layers.push(self.layer(look, seed));
-            layers.extend(self.overlays(look, &avatar.overlays, seed));
-        }
-        let entity = self
-            .replica
-            .entities()
-            .find(|e| e.at == p && e.look.is_some());
-        if let Some(e) = entity {
-            let look = e.look.as_ref().expect("filtered on look");
-            let desc = e.name.clone().unwrap_or_else(|| look_name(look));
-            layers.push(self.layer(look, id_seed(&e.id)));
-            layers.extend(self.overlays(look, &e.overlays, id_seed(&e.id)));
-            return Cell {
-                layers,
-                remembered: false,
-                light: world
-                    .and_then(|c| c.light.as_ref()?.as_u64())
-                    .map(|l| l as u8),
-                ..self.styled(look, desc)
-            };
-        }
-        match world {
-            Some(c) => match top_look(c) {
-                Some(l) => Cell {
-                    layers,
-                    remembered: c.known == Known::Remembered,
-                    light: c.light.as_ref().and_then(Value::as_u64).map(|l| l as u8),
-                    ..self.styled(l, look_name(l))
-                },
-                None => Cell {
-                    glyph: '?',
-                    color: Rgb(128, 128, 128),
-                    desc: "sensed".into(),
-                    ..Cell::default()
-                },
-            },
-            None => unknown,
+        let square = self.abs(at).map_or(0, |p| square_seed(&p));
+        Cell {
+            square,
+            ..self.cell_at(at)
         }
     }
 
@@ -990,14 +1101,19 @@ impl GameModel for EngineModel {
     }
 
     fn press(&mut self, key: &str) -> bool {
-        let offered = self.replica.boundary().and_then(|b| {
-            // The engine names the keys of its active context; the key settings only serve older engines.
-            let bound = self.keys.actions_for(key);
-            b.actions.iter().find(|a| match &a.keys {
-                Some(keys) => keys.iter().any(|k| k == key),
-                None => bound.contains(&a.id.as_str()),
+        // The engine names the keys of its active context, the player's rebinds included; the client
+        // knows none. A digit with no binding may be a numpad key (terminals and windows do not tell
+        // them apart).
+        let bound_to = |key: &str| {
+            self.replica.boundary().and_then(|b| {
+                b.actions.iter().find(|a| {
+                    a.keys
+                        .as_ref()
+                        .is_some_and(|keys| keys.iter().any(|k| k == key))
+                })
             })
-        });
+        };
+        let offered = bound_to(key).or_else(|| keys::numpad(key).and_then(|k| bound_to(&k)));
         if let Some(id) = offered.map(|a| a.id.clone()) {
             return self.invoke_action(&id);
         }
@@ -1083,6 +1199,11 @@ impl GameModel for EngineModel {
                 .iter()
                 .find(|c| tab(c) && c.selected)
                 .and_then(|c| pane_of(&c.label).map(String::from)),
+            focus: i
+                .compat
+                .as_ref()
+                .and_then(|c| c["focus"]["choice_id"].as_str())
+                .map(String::from),
         })
     }
 

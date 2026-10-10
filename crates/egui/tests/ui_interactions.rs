@@ -12,9 +12,9 @@ type H<'a> = Harness<'a, App<EngineModel>>;
 
 fn harness<'a>() -> (H<'a>, ScriptHandle) {
     let (t, h) = session();
-    let t = t
-        .on("bn.command.submit", vec![fixture("submit_result")])
-        .on("bn.command.submit", vec![fixture("submit_result")]);
+    let t = (0..6).fold(t, |t, _| {
+        t.on("bn.command.submit", vec![fixture("submit_result")])
+    });
     let model = EngineModel::new(Box::new(t));
     let harness = Harness::builder()
         .with_size(egui::vec2(1100.0, 800.0))
@@ -82,7 +82,20 @@ fn any_key_popup_closes_on_escape_space_enter_and_letters() {
             "{key:?}"
         );
     }
-    for text in [" ", "w"] {
+    // Space acts on the focused button, as in any toolkit; a letter goes to the engine.
+    {
+        let (mut h, script) = harness();
+        h.run_steps(3);
+        script.push(show(41, json!([]), any_key_popup()));
+        h.run_steps(3);
+        h.key_press(egui::Key::Space);
+        h.run_steps(2);
+        assert_eq!(
+            submits(&script),
+            [json!({"kind":"choose","choice_id":"acknowledge"})]
+        );
+    }
+    for text in ["w"] {
         let (mut h, script) = harness();
         h.run_steps(3);
         script.push(show(41, json!([]), any_key_popup()));
@@ -123,7 +136,7 @@ fn a_popup_shows_one_dismiss_control_and_no_context_name_as_title() {
 }
 
 #[test]
-fn space_runs_the_key_the_popup_context_binds_to_cancel() {
+fn space_closes_a_cancel_popup_through_its_focused_button() {
     let (mut h, script) = harness();
     h.run_steps(3);
     let mut ack = choice("acknowledge", "Cancel popup");
@@ -134,11 +147,11 @@ fn space_runs_the_key_the_popup_context_binds_to_cancel() {
         popup(true, "Welcome", ack),
     ));
     h.run_steps(3);
-    h.event(egui::Event::Text(" ".into()));
+    h.key_press(egui::Key::Space);
     h.run_steps(2);
     assert_eq!(
         submits(&script),
-        [json!({"kind":"action","action_id":"QUIT"})]
+        [json!({"kind":"choose","choice_id":"acknowledge"})]
     );
 }
 
@@ -378,5 +391,90 @@ fn the_cursor_stays_on_its_map_square_when_the_view_scrolls() {
         description(&h).contains("Cursor (7, 5)"),
         "{}",
         description(&h)
+    );
+}
+
+#[test]
+fn control_function_and_shift_tab_keys_run_the_engines_actions_and_a_digit_may_be_numpad() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    script.push(show(
+        41,
+        json!([{"id":"save","name":"Save","keys":["CTRL+S"]},
+               {"id":"help","name":"Help","keys":["F1"]},
+               {"id":"back","name":"Back","keys":["BACKTAB"]},
+               {"id":"pause","name":"Pause","keys":[".","NUMPAD_5"]}]),
+        Value::Null,
+    ));
+    h.run_steps(3);
+    let finish = |h: &mut H, script: &ScriptHandle, n: u32| {
+        script.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{
+            "epoch":"e7f3","command_id":"c:5","stage":"completed"}}));
+        script.push(show(
+            n,
+            json!([
+            {"id":"save","name":"Save","keys":["CTRL+S"]},
+            {"id":"help","name":"Help","keys":["F1"]},
+            {"id":"back","name":"Back","keys":["BACKTAB"]},
+            {"id":"pause","name":"Pause","keys":[".","NUMPAD_5"]}]),
+            Value::Null,
+        ));
+        h.run_steps(3);
+    };
+    h.key_press_modifiers(egui::Modifiers::CTRL, egui::Key::S);
+    h.run_steps(2);
+    finish(&mut h, &script, 42);
+    h.key_press(egui::Key::F1);
+    h.run_steps(2);
+    finish(&mut h, &script, 43);
+    h.key_press_modifiers(egui::Modifiers::SHIFT, egui::Key::Tab);
+    h.run_steps(2);
+    finish(&mut h, &script, 44);
+    h.event(egui::Event::Text("5".into()));
+    h.run_steps(2);
+    assert_eq!(
+        submits(&script),
+        ["save", "help", "back", "pause"].map(|id| json!({"kind":"action","action_id":id}))
+    );
+}
+
+fn list_menu(sequence: u32, focus: &str) -> Value {
+    show(
+        sequence,
+        json!([{"id":"UP","name":"Previous","keys":["UP"]},
+               {"id":"DOWN","name":"Next","keys":["j"]},
+               {"id":"CONFIRM","name":"Confirm","keys":["x"]},
+               {"id":"QUIT","name":"Cancel","keys":["ESC"]}]),
+        json!({"schema_id":"s:list","kind":"choices","context":"UILIST","title":"Pick","message":"",
+            "allow_cancel":true,
+            "choices":[choice("c:1","first"),choice("c:2","second")],
+            "choice_total":2,"allow_set_count":false,
+            "compat":{"focus":{"choice_id":focus},"panes":[]}}),
+    )
+}
+
+#[test]
+fn a_menus_rebound_keys_move_and_confirm_through_the_engine_and_focus_follows_its_cursor() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    script.push(list_menu(41, "c:1"));
+    h.run_steps(4);
+    // The player rebound DOWN to j and CONFIRM to x: the client has no key of its own for either.
+    h.event(egui::Event::Text("j".into()));
+    h.run_steps(2);
+    // The engine moved its cursor to the second row: keyboard focus follows it.
+    script.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{
+        "epoch":"e7f3","command_id":"c:5","stage":"completed"}}));
+    script.push(list_menu(42, "c:2"));
+    h.run_steps(4);
+    assert!(
+        h.get_by_label("second").accesskit_node().is_focused(),
+        "focus on the engine's cursor row"
+    );
+    h.event(egui::Event::Text("x".into()));
+    h.run_steps(2);
+    assert_eq!(
+        submits(&script),
+        ["DOWN", "CONFIRM"].map(|id| json!({"kind":"action","action_id":id}))
     );
 }

@@ -1,7 +1,6 @@
 //! Drives the terminal client's key handling against a real engine:
 //! `BN_ENGINE=... cargo test -p bn-client-tui --test live_tui -- --ignored --nocapture`
-use bn_client_core::keys::KeyMap;
-use bn_client_core::transport::{StdioTransport, game_root};
+use bn_client_core::transport::StdioTransport;
 use bn_client_core::watchdog::Watchdog;
 use bn_client_core::{EngineModel, GameModel};
 use bn_client_tui::TuiApp;
@@ -90,9 +89,7 @@ fn tab(app: &mut App, label: &str) {
 fn live_tui_starts_the_tutorial_opens_the_inventory_and_closes_it() {
     let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
     let transport = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
-    let root = game_root(engine.as_ref(), None);
-    let keys = root.as_deref().map_or_else(KeyMap::default, KeyMap::load);
-    let mut app = TuiApp::new(EngineModel::new(Box::new(transport)).with_keys(keys));
+    let mut app = TuiApp::new(EngineModel::new(Box::new(transport)));
 
     tab(&mut app, "New Game");
     pick(&mut app, "Tutorial");
@@ -126,9 +123,7 @@ fn absolute(app: &App) -> (i32, i32) {
 fn live_tui_walks_with_arrows_then_shows_and_walks_a_route_from_the_look_cursor() {
     let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
     let transport = StdioTransport::spawn(engine.as_ref()).expect("engine starts");
-    let root = game_root(engine.as_ref(), None);
-    let keys = root.as_deref().map_or_else(KeyMap::default, KeyMap::load);
-    let mut app = TuiApp::new(EngineModel::new(Box::new(transport)).with_keys(keys));
+    let mut app = TuiApp::new(EngineModel::new(Box::new(transport)));
 
     tab(&mut app, "New Game");
     pick(&mut app, "Tutorial");
@@ -188,9 +183,7 @@ fn recipes(app: &App) -> Vec<bn_client_core::MenuChoice> {
 fn live_tui_crafting_switches_tabs_shows_details_searches_and_closes() {
     let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
     let transport = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
-    let root = game_root(engine.as_ref(), None);
-    let keys = root.as_deref().map_or_else(KeyMap::default, KeyMap::load);
-    let mut app = TuiApp::new(EngineModel::new(Box::new(transport)).with_keys(keys));
+    let mut app = TuiApp::new(EngineModel::new(Box::new(transport)));
 
     tab(&mut app, "New Game");
     pick(&mut app, "Tutorial");
