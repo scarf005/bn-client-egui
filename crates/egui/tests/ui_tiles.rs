@@ -282,3 +282,52 @@ fn a_saved_choice_wins_over_the_engines_options() {
     settle(&mut h);
     assert!(h.state().display().tiles());
 }
+
+fn lit_cell(sequence: u32, x: i32, light: u8) -> Value {
+    json!({"jsonrpc":"2.0","method":"bn.events","params":{"epoch":"e7f3","events":[{
+        "sequence": sequence.to_string(), "revision": (sequence - 9).to_string(),
+        "type": "cells.seen", "changes": {"cells": [
+            {"at": {"dim":"","x":x,"y":4,"z":0}, "known":"visible", "light": light,
+             "terrain": {"kind":"terrain","id":"t_floor","glyph":".","color":"c_cyan"}}]}}]}})
+}
+
+/// The native view draws a square it cannot see at all (dark) or can only tell is bright (bright only)
+/// as its lighting overlay instead of the terrain; low light, lit and bright draw the terrain.
+#[test]
+fn dark_and_bright_only_squares_draw_the_lowlight_overlay_instead_of_their_terrain() {
+    let root = game_root("ui-light");
+    let run = |light: u8| {
+        let (t, handle) = ScriptedTransport::new();
+        let t = t.on("bn.hello", vec![fixture("hello_result")]).on(
+            "bn.subscribe",
+            vec![
+                fixture("subscribe_result"),
+                fixture("snapshot_part_0"),
+                fixture("snapshot_part_1"),
+            ],
+        );
+        let mut h = harness_with(&root, root.join(format!("l{light}.json")), t);
+        settle(&mut h);
+        handle.push(lit_cell(41, 5, light));
+        h.run_steps(4);
+        let d = h.state().display();
+        (d.drawn(), d.dimmed())
+    };
+    let (clear_drawn, clear_dimmed) = run(4);
+    assert_eq!(clear_dimmed, 0);
+    assert_eq!(run(3), (clear_drawn, 0));
+    assert_eq!(
+        run(1),
+        (clear_drawn, 0),
+        "low light is the grayscale terrain"
+    );
+    for light in [0, 2] {
+        let (drawn, dimmed) = run(light);
+        assert_eq!(dimmed, 1, "light {light} draws the overlay");
+        assert_eq!(
+            drawn,
+            clear_drawn - 1,
+            "light {light} hides the terrain sprite"
+        );
+    }
+}
