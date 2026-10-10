@@ -274,51 +274,58 @@ impl<M: GameModel> App<M> {
         };
         let zone = ui.dnd_drop_zone::<Dragged, _>(egui::Frame::group(ui.style()), |ui| {
             ui.set_min_width(ui.available_width());
-            ui.heading(format!("{name}: {}", pane.area));
-            // The native grid: marker columns, the compass with Above and Below, as drawn by the game.
-            egui::Grid::new(("aim_areas", index))
-                .spacing([4.0, 2.0])
-                .show(ui, |ui| {
-                    for row in GRID {
-                        for cell in row {
-                            let Some((action, area, mark)) = cell else {
-                                ui.label("");
-                                continue;
-                            };
-                            let on = pane.area == area;
-                            let b = ui
-                                .add_enabled(
-                                    has(action) && !self.model.busy(),
-                                    egui::Button::new(mark)
-                                        .selected(on)
-                                        .min_size(egui::vec2(24.0, 0.0)),
-                                )
-                                .on_hover_text(area);
-                            a11y::tab(ui.ctx(), b.id, on);
+            // The title on the left, the area picker at the top right, as the native header draws them.
+            ui.horizontal_top(|ui| {
+                ui.heading(format!("{name}: {}", pane.area));
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
+                    ui.vertical(|ui| {
+                        // The native grid: marker columns, the compass with Above and Below, as drawn by the game.
+                        egui::Grid::new(("aim_areas", index))
+                            .spacing([4.0, 2.0])
+                            .show(ui, |ui| {
+                                for row in GRID {
+                                    for cell in row {
+                                        let Some((action, area, mark)) = cell else {
+                                            ui.label("");
+                                            continue;
+                                        };
+                                        let on = pane.area == area;
+                                        let b = ui
+                                            .add_enabled(
+                                                has(action) && !self.model.busy(),
+                                                egui::Button::new(mark)
+                                                    .selected(on)
+                                                    .min_size(egui::vec2(24.0, 0.0)),
+                                            )
+                                            .on_hover_text(area);
+                                        a11y::tab(ui.ctx(), b.id, on);
+                                        ui.ctx().accesskit_node_builder(b.id, |n| {
+                                            n.set_label(format!("{name} area {area}"));
+                                        });
+                                        out.ids.extend(b.enabled().then_some(b.id));
+                                        if b.clicked() {
+                                            out.todo.push(Step::Action(side(index).into()));
+                                            out.todo.push(Step::Action(action.into()));
+                                        }
+                                    }
+                                    ui.end_row();
+                                }
+                            });
+                        if has("TOGGLE_VEH") {
+                            let b = ui.add_enabled(!self.model.busy(), egui::Button::new("V"));
+                            b.clone().on_hover_text("Vehicle storage");
                             ui.ctx().accesskit_node_builder(b.id, |n| {
-                                n.set_label(format!("{name} area {area}"));
+                                n.set_label(format!("{name} area vehicle storage"));
                             });
                             out.ids.extend(b.enabled().then_some(b.id));
                             if b.clicked() {
                                 out.todo.push(Step::Action(side(index).into()));
-                                out.todo.push(Step::Action(action.into()));
+                                out.todo.push(Step::Action("TOGGLE_VEH".into()));
                             }
                         }
-                        ui.end_row();
-                    }
+                    });
                 });
-            if has("TOGGLE_VEH") {
-                let b = ui.add_enabled(!self.model.busy(), egui::Button::new("V"));
-                b.clone().on_hover_text("Vehicle storage");
-                ui.ctx().accesskit_node_builder(b.id, |n| {
-                    n.set_label(format!("{name} area vehicle storage"));
-                });
-                out.ids.extend(b.enabled().then_some(b.id));
-                if b.clicked() {
-                    out.todo.push(Step::Action(side(index).into()));
-                    out.todo.push(Step::Action("TOGGLE_VEH".into()));
-                }
-            }
+            });
             // The filter box follows what the engine reports until the player types in it.
             let (typed, seen) = &mut self.aim.filters[index];
             if *seen != pane.filter {

@@ -305,11 +305,20 @@ fn the_area_grid_sits_at_the_top_right_of_the_pane_header_beside_its_title() {
     let title = h.get_by_label("Left pane: Directly below you").rect();
     let at = |n: &str| area(&h, "Left pane", n);
     let first_row = at("Container");
-    assert!(first_row.min.x > title.max.x, "the grid is right of the title");
-    assert!(first_row.min.y < title.max.y, "and starts at the title's own height");
+    assert!(
+        first_row.min.x > title.max.x,
+        "the grid is right of the title"
+    );
+    assert!(
+        first_row.min.y < title.max.y,
+        "and starts at the title's own height"
+    );
     let pane_right = at("Above").max.x;
     let right_pane = h.get_by_label("Right pane: Worn Items").rect();
     assert!(pane_right < right_pane.min.x, "inside its own pane");
     let filter = h.get_by_label("Left pane filter").rect();
-    assert!(filter.min.y > at("Surrounding area").max.y, "the filter box is under the grid");
+    assert!(
+        filter.min.y > at("Surrounding area").max.y,
+        "the filter box is under the grid"
+    );
 }
