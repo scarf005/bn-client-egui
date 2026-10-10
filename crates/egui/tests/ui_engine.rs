@@ -487,3 +487,99 @@ fn status_line_offers_interrupt_only_while_a_command_runs() {
     h.run_steps(3);
     assert!(h.query_by_label("Interrupt").is_none());
 }
+
+/// An options-like menu: one page tab and a row per editor kind, plus a row without one.
+fn settings_menu(script: &ScriptHandle, field: Option<serde_json::Value>) {
+    let mut menu = fixture("events_43_menu");
+    let ev = &mut menu["params"]["events"][0];
+    let row = |id: &str, label: &str, editor: Option<serde_json::Value>, enabled: bool| {
+        let mut c = json!({"id":id,"label":label,"description":"","denial":
+            if enabled { "" } else { "Prerequisite not met" },"enabled":enabled,
+            "selectable":enabled,"selected":false,"columns":[],"pane_id":"page:general"});
+        if let Some(editor) = editor {
+            c["editor"] = editor;
+        }
+        c
+    };
+    let editor =
+        |kind: &str, value: &str| json!({"type":kind,"value":value,"values":[],"max_length":-1});
+    let mut select = editor("select", "no");
+    select["values"] = json!([{"id":"no","label":"No"},{"id":"all","label":"All"}]);
+    let mut number = editor("integer", "7");
+    number["minimum"] = 0.into();
+    number["maximum"] = 60.into();
+    ev["changes"]["interaction"]["interaction"]["choices"] = json!([
+        {"id":"page:general","label":"General","description":"","denial":"","enabled":true,
+         "selectable":true,"selected":true,"columns":[]},
+        row("option:SAFEMODE", "Safe mode", Some(editor("bool", "true")), true),
+        row("option:DROP_EMPTY", "Drop empty containers", Some(select), true),
+        row("option:SAFEMODEPROXIMITY", "Proximity", Some(number), true),
+        row("option:LOCKED", "Locked", Some(editor("bool", "false")), false),
+        row("option:PLAIN", "Plain row", None, true),
+    ]);
+    if let Some(field) = field {
+        ev["changes"]["interaction"]["interaction"]["field"] = field;
+    }
+    script.push(menu);
+}
+
+fn open_settings(h: &mut H, script: &ScriptHandle, field: Option<serde_json::Value>) {
+    h.run_steps(3);
+    for name in ["events_41_walk", "events_42_message"] {
+        script.push(fixture(name));
+    }
+    settings_menu(script, field);
+    h.run_steps(3);
+}
+
+#[test]
+fn a_bool_editor_row_is_a_checkbox_and_toggling_it_fills_the_row_with_the_opposite_value() {
+    let (mut h, script) = harness();
+    open_settings(&mut h, &script, None);
+    h.get_by_label("Plain row");
+    h.get_by_label("Safe mode").click();
+    h.run_steps(2);
+    assert_eq!(
+        operations(&script),
+        [json!({"kind":"fill","field_id":"option:SAFEMODE","value":"false","submit":true})]
+    );
+}
+
+#[test]
+fn a_select_editor_offers_its_values_and_a_disabled_row_stays_inert_with_its_denial() {
+    let (mut h, script) = harness();
+    open_settings(&mut h, &script, None);
+    h.get_by_label("Prerequisite not met");
+    h.get_by_label("Locked").click();
+    h.run_steps(2);
+    assert!(
+        operations(&script).is_empty(),
+        "a row with an unmet prerequisite is inert"
+    );
+    h.get_all_by_role(accesskit::Role::ComboBox)
+        .find(|node| node.accesskit_node().value().as_deref() == Some("No"))
+        .expect("the editor's combo box shows its current value")
+        .click();
+    h.run_steps(2);
+    h.get_by_label("All").click();
+    h.run_steps(2);
+    assert_eq!(
+        operations(&script),
+        [json!({"kind":"fill","field_id":"option:DROP_EMPTY","value":"all","submit":true})]
+    );
+}
+
+#[test]
+fn a_key_prompt_fills_its_field_with_the_next_key_and_a_function_key_by_its_name() {
+    let (mut h, script) = harness();
+    let field = json!({"id":"field:key","label":"New key","description":"","value":"","type":"key",
+        "max_length":-1,"printable":false});
+    open_settings(&mut h, &script, Some(field));
+    h.get_by_label("Press the new key");
+    h.event(egui::Event::Text("z".into()));
+    h.run_steps(3);
+    assert_eq!(
+        operations(&script),
+        [json!({"kind":"fill","field_id":"field:key","value":"z","submit":true})]
+    );
+}

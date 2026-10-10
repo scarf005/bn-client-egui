@@ -1,6 +1,7 @@
 mod a11y;
 pub mod app;
 pub mod display;
+pub mod editor;
 pub mod fonts;
 pub mod setup;
 pub mod text;

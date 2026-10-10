@@ -1251,3 +1251,42 @@ fn the_selected_tab_picks_the_pane_and_a_target_interaction_is_a_cursor_not_a_me
         })
     );
 }
+
+#[test]
+fn fill_sets_an_editable_row_or_the_key_field_and_ignores_anything_else() {
+    let (t, h) = session();
+    let mut m = connected(t.on("bn.command.submit", walk_reply()));
+    h.push(fixture("events_41_walk"));
+    h.push(fixture("events_42_message"));
+    let mut menu = fixture("events_43_menu");
+    let interaction = &mut menu["params"]["events"][0]["changes"]["interaction"]["interaction"];
+    interaction["choices"][0]["editor"] =
+        json!({"type":"integer","value":"7","values":[],"minimum":0,"maximum":60,"max_length":-1});
+    interaction["field"] = json!({"id":"field:key","label":"Key","description":"","value":"",
+        "type":"key","max_length":-1,"printable":false});
+    h.push(menu);
+    m.poll();
+    let menu = m.menu().unwrap();
+    assert_eq!(menu.field.as_ref().map(|f| f.kind.as_str()), Some("key"));
+    let editor = menu.choices[0].editor.as_ref().unwrap();
+    assert_eq!(
+        (
+            editor.kind.as_str(),
+            editor.maximum.as_ref().and_then(|n| n.as_f64())
+        ),
+        ("integer", Some(60.0))
+    );
+    assert!(menu.choices[1].editor.is_none());
+
+    m.fill("nowhere", "1", true);
+    m.fill("c:2", "1", true);
+    assert!(
+        submits(&h).is_empty(),
+        "unknown and disabled rows are never filled"
+    );
+    m.fill("c:1", "8", true);
+    assert_eq!(
+        submits(&h)[0]["params"]["operation"],
+        json!({"kind":"fill","field_id":"c:1","value":"8","submit":true})
+    );
+}

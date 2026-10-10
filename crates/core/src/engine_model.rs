@@ -1021,6 +1021,7 @@ impl GameModel for EngineModel {
             id,
             label: text("label").unwrap_or_default(),
             value: text("value").unwrap_or_default(),
+            kind: text("type").unwrap_or_default(),
         });
         // A cursor the engine moves (look mode) is drawn on the map, not listed.
         if i.kind == "target" {
@@ -1066,6 +1067,7 @@ impl GameModel for EngineModel {
                         .iter()
                         .map(|col| (col.label.clone(), col.value.clone()))
                         .collect(),
+                    editor: c.editor.clone(),
                 })
                 .collect(),
             can_cancel: i.allow_cancel,
@@ -1109,9 +1111,13 @@ impl GameModel for EngineModel {
     }
 
     fn fill(&mut self, field_id: &str, value: &str, submit: bool) {
-        let has_field = self
-            .menu()
-            .is_some_and(|m| m.field.is_some_and(|f| f.id == field_id));
+        // An editable row is filled by its own id, like an option of the options menu.
+        let has_field = self.menu().is_some_and(|m| {
+            m.field.is_some_and(|f| f.id == field_id)
+                || m.choices
+                    .iter()
+                    .any(|c| c.id == field_id && c.enabled && c.editor.is_some())
+        });
         if has_field && !self.busy {
             self.submit(Operation::Fill {
                 field_id: field_id.into(),

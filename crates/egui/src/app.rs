@@ -1,5 +1,6 @@
 use crate::a11y;
 use crate::display::Display;
+use crate::editor;
 use crate::text;
 use bn_client_core::{GameModel, Loading, LogLine, Pos, markup};
 use eframe::egui::{self, accesskit};
@@ -423,6 +424,8 @@ impl<M: GameModel> App<M> {
         let mut ids = Vec::new();
         let mut focused = false;
         let mut chosen = None;
+        let mut edited = None;
+        let mut key_chosen = None;
         let mut cancel = ctx.input(|i| i.key_pressed(egui::Key::Escape)) && menu.can_cancel;
         let title = markup::plain(&menu.title);
         egui::Window::new(&title)
@@ -453,7 +456,23 @@ impl<M: GameModel> App<M> {
                         if !menu.message.is_empty() {
                             ui.label(self.rich(ui, &menu.message));
                         }
+                        if menu.field.as_ref().is_some_and(|f| f.kind == "key") {
+                            key_chosen = editor::key_prompt(ui);
+                        }
                         for (i, choice) in menu.entries().into_iter().enumerate() {
+                            if let Some(row) = &choice.editor {
+                                let usable = choice.enabled && !self.model.busy();
+                                let label = markup::plain(&choice.label);
+                                if let Some(value) =
+                                    editor::value_editor(ui, &choice.id, &label, row, usable)
+                                {
+                                    edited = Some((choice.id.clone(), value));
+                                }
+                                if !choice.enabled && !choice.denial.is_empty() {
+                                    ui.label(self.rich(ui, &choice.denial));
+                                }
+                                continue;
+                            }
                             ui.horizontal(|ui| {
                                 let text = self.rich(ui, &choice.label);
                                 let button = self.control(
@@ -500,7 +519,13 @@ impl<M: GameModel> App<M> {
         self.menu_ids = ids;
         self.focus_menu = entered && !focused;
         a11y::dialog(ctx, &title, &menu.message);
-        if let Some(id) = chosen {
+        if let (Some(field), Some(value)) = (&menu.field, key_chosen) {
+            ctx.request_repaint();
+            self.model.fill(&field.id, &value, true);
+        } else if let Some((id, value)) = edited {
+            ctx.request_repaint();
+            self.model.fill(&id, &value, true);
+        } else if let Some(id) = chosen {
             ctx.request_repaint();
             self.model.choose(&id);
         } else if cancel {

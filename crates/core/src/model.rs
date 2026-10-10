@@ -1,6 +1,7 @@
 use crate::colors::ColorMap;
 use crate::markup::{self, Run};
 
+use crate::protocol::Editor;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Pos {
     pub x: i32,
@@ -74,7 +75,7 @@ impl LogLine {
 }
 
 /// One selectable row of the engine's current interaction menu.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct MenuChoice {
     pub id: String,
     pub label: String,
@@ -91,6 +92,8 @@ pub struct MenuChoice {
     pub description: String,
     /// Label and value pairs shown beside the row.
     pub columns: Vec<(String, String)>,
+    /// How the row's value can be set directly, as an option of the options menu.
+    pub editor: Option<Editor>,
 }
 
 /// The text field of a menu, such as the crafting search.
@@ -99,10 +102,12 @@ pub struct MenuField {
     pub id: String,
     pub label: String,
     pub value: String,
+    /// `text`, `integer`, or `key` for a prompt that takes the next key press.
+    pub kind: String,
 }
 
 /// The engine's current interaction, rendered generically.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Menu {
     /// The engine's name for the kind of menu, such as `CRAFTING`.
     pub context: String,

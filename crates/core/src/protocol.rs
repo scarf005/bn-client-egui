@@ -183,7 +183,7 @@ pub struct Action {
     pub keys: Option<Vec<String>>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Choice {
     pub id: String,
     pub label: String,
@@ -196,7 +196,36 @@ pub struct Choice {
     pub selected: bool,
     pub columns: Vec<Column>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub editor: Option<Editor>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub available_count: Option<u64>,
+}
+
+/// A value the row can be set to directly with a `fill` on the row's id.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Editor {
+    /// `bool`, `select`, `integer`, `float` or `text`.
+    #[serde(rename = "type")]
+    pub kind: String,
+    pub value: String,
+    #[serde(default)]
+    pub values: Vec<EditorValue>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub minimum: Option<serde_json::Number>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub maximum: Option<serde_json::Number>,
+    #[serde(default = "no_limit")]
+    pub max_length: i64,
+}
+
+fn no_limit() -> i64 {
+    -1
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EditorValue {
+    pub id: String,
+    pub label: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
