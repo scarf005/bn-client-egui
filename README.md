@@ -12,9 +12,16 @@ License: undecided (no LICENSE file yet).
     cargo test    # egui_kittest UI tests, protocol fixtures, reconstruction, scripted engine
 
 The engine is started as `<engine> --client mcp --userdir <tmp> --configdir <tmp>` with private
-temporary directories. Live integration test (ignored by default, needs an engine build):
+temporary directories. Terminal client over the same model (`Ctrl-C` quits, arrows/vi-keys/game keys act, Up/Down/Enter/Esc in menus):
+
+    cargo run -p bn-client-tui -- --engine /path/to/cataclysm-bn-tiles
+
+Crates: `crates/core` (protocol, transport, replica, models, colours, keys), `crates/egui`, `crates/tui`.
+Live integration tests (ignored by default, need an engine build; the TUI one drives its key handling):
 
     BN_ENGINE=/path/to/cataclysm-bn-tiles cargo test -p bn-client-core --test live_engine -- --ignored
+    BN_ENGINE=/path/to/cataclysm-bn-tiles cargo test -p bn-client-tui --test live_tui -- --ignored
+    BN_ENGINE=... cargo test --release -p bn-client-core --test live_latency -- --ignored --nocapture   # timings
 
 `tests/fixtures/1.0.examples.json` is the contract lane's file (round-trip tested exactly);
 `tests/fixtures/design-1.0.json` is a hand-written session from the design doc, not captured from an engine;

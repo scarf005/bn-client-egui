@@ -563,6 +563,7 @@ dependencies = [
  "bn-client-core",
  "crossterm",
  "ratatui",
+ "serde_json",
 ]
 
 [[package]]
