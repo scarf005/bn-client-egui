@@ -49,13 +49,12 @@ fn operations(script: &ScriptHandle) -> Vec<Value> {
 }
 
 #[test]
-fn rows_show_their_mark_weight_and_volume_and_the_cursor_rows_description() {
+fn the_list_shows_marks_the_predicted_carry_header_and_the_cursor_rows_description() {
     let (h, _) = harness();
     h.get_by_label("[ ] lighter (17/25)");
     h.get_by_label("[x] tin can");
-    for column in ["0.01 kg", "0.025 L", "0.15 kg", "0.25 L"] {
-        h.get_by_label(column);
-    }
+    h.get_by_label("PICK Wgt 0.2/45.0  Vol 0.30/0.00");
+    h.get_by_label_contains("Weight: 0.01 kg");
     h.get_by_label_contains("This is a disposable plastic lighter.");
 }
 

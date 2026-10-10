@@ -109,3 +109,33 @@ fn live_pick_up_a_chosen_ground_item_wield_it_and_drop_it() {
     assert!(model.inventory().is_empty());
     assert_eq!(model.ground(), [item]);
 }
+
+#[test]
+#[ignore = "requires BN_ENGINE"]
+fn live_pickup_list_has_the_carry_header_a_cursor_row_marks_and_the_confirm_action() {
+    use bn_client_core::Pos;
+    let mut model = start_tutorial();
+    let me = model.player();
+    model.step_toward(Pos {
+        x: me.x + 1,
+        y: me.y,
+    });
+    wait_for(&mut model, "idle", |m| !m.busy());
+    dismiss_popups(&mut model);
+    assert!(model.invoke_action("pickup"));
+    settle(&mut model);
+    let menu = model.menu().expect("the native pickup list");
+    assert_eq!(menu.context, "PICKUP");
+    assert!(menu.message.starts_with("PICK Wgt "), "{}", menu.message);
+    assert!(menu.message.contains("Vol "), "{}", menu.message);
+    let row = &menu.choices[0];
+    assert!(!row.selected, "{row:?}");
+    assert!(row.description.contains("Weight:"), "{}", row.description);
+
+    model.choose(&row.id.clone());
+    settle(&mut model);
+    let menu = model.menu().expect("still the pickup list");
+    assert!(menu.choices[0].selected, "the row is marked");
+    assert!(model.actions().iter().any(|a| a.id == "CONFIRM"));
+    assert!(model.invoke_action("CONFIRM"));
+}

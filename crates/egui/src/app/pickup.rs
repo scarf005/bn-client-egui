@@ -1,7 +1,7 @@
-//! The native pickup list: one row per stack with its mark, weight and volume, the count box of a
-//! marked stack, the cursor row's description, and the menu's own Confirm.
+//! The native pickup list: one row per stack with its mark, the count box of a marked stack, the
+//! predicted carry header, the cursor row's description, and the menu's own Confirm.
 use super::{App, a11y};
-use bn_client_core::{GameModel, Menu, MenuChoice};
+use bn_client_core::{GameModel, Menu};
 use eframe::egui::{self, accesskit};
 use std::collections::HashMap;
 
@@ -9,14 +9,6 @@ use std::collections::HashMap;
 pub struct Pickup {
     /// The count box of each marked stack: what the engine last chose, and the text being typed.
     counts: HashMap<String, (Option<u64>, String)>,
-}
-
-/// The value of the column named `label`, shown beside the row.
-fn column<'a>(row: &'a MenuChoice, label: &str) -> Option<&'a str> {
-    let mut columns = row.columns.iter();
-    columns
-        .find(|(l, v)| l == label && !v.is_empty())
-        .map(|(_, v)| v.as_str())
 }
 
 impl<M: GameModel> App<M> {
@@ -68,11 +60,6 @@ impl<M: GameModel> App<M> {
                                 if button.clicked() {
                                     chosen = Some(row.id.clone());
                                 }
-                                for name in ["Weight", "Volume"] {
-                                    if let Some(value) = column(row, name) {
-                                        ui.label(value);
-                                    }
-                                }
                                 let available = row.available_count.filter(|n| *n > 1);
                                 if let (true, Some(available)) = (row.selected, available) {
                                     let (seen, text) = self
@@ -110,6 +97,8 @@ impl<M: GameModel> App<M> {
                             });
                         }
                     });
+                // The row under the pointer, else the native cursor row, else the first.
+                let described = described.or(rows.first().map(|r| &r.description));
                 if let Some(description) = described.filter(|d| !d.is_empty()) {
                     ui.separator();
                     egui::ScrollArea::vertical()
