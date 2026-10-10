@@ -665,3 +665,94 @@ fn travel_to_a_square_the_engine_cannot_resolve_is_reported_once_in_words() {
         ["Travel rejected: that square is outside the map window the engine can resolve."]
     );
 }
+
+fn view_event(sequence: u64, min_x: i32, max_x: i32) -> Value {
+    json!({"jsonrpc":"2.0","method":"bn.events","params":{"epoch":"e7f3","events":[{
+        "sequence": sequence.to_string(), "revision": (sequence - 9).to_string(),
+        "type": "cells.seen", "changes": { "view": {
+            "min": {"dim":"","x":min_x,"y":-8,"z":0}, "max": {"dim":"","x":max_x,"y":16,"z":0}}}}]}})
+}
+
+#[test]
+fn hello_declares_the_map_size_the_client_wants() {
+    let (t, h) = session();
+    let _ = connected(t);
+    assert_eq!(
+        h.sent()[0]["params"]["viewport"],
+        json!({"cols": 40, "rows": 25})
+    );
+}
+
+#[test]
+fn a_resized_panel_is_sent_once_after_it_settles() {
+    let (t, h) = session();
+    let mut m = connected(t.on(
+        "bn.viewport",
+        vec![json!({"jsonrpc":"2.0","id":null,"result":{}})],
+    ));
+    let viewports = |h: &bn_client_core::transport::ScriptHandle| {
+        h.sent()
+            .into_iter()
+            .filter(|s| s["method"] == "bn.viewport")
+            .map(|s| s["params"].clone())
+            .collect::<Vec<_>>()
+    };
+    m.set_viewport(Pos { x: 50, y: 30 });
+    m.set_viewport(Pos { x: 52, y: 30 });
+    m.poll();
+    assert!(viewports(&h).is_empty(), "still changing: nothing sent yet");
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    m.poll();
+    m.poll();
+    assert_eq!(viewports(&h), [json!({"cols": 52, "rows": 30})]);
+    m.set_viewport(Pos { x: 52, y: 30 });
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    m.poll();
+    assert_eq!(
+        viewports(&h).len(),
+        1,
+        "an unchanged size is not sent again"
+    );
+}
+
+#[test]
+fn the_shown_map_is_the_middle_of_the_engines_view_and_never_larger() {
+    let (t, h) = session();
+    let mut m = connected(t);
+    assert_eq!(
+        m.size(),
+        Pos { x: 40, y: 25 },
+        "no view reported yet: as asked"
+    );
+    // A 36-wide engine window around the avatar at (3, 4): the map shrinks to it.
+    h.push(view_event(41, -15, 20));
+    m.poll();
+    assert_eq!(m.size(), Pos { x: 36, y: 25 });
+    assert_eq!(m.origin(), Pos { x: -15, y: -8 });
+    assert_eq!(m.player(), Pos { x: 18, y: 12 });
+    // A larger window than asked for is clipped to the middle.
+    m.set_viewport(Pos { x: 20, y: 10 });
+    h.push(view_event(42, -15, 20));
+    m.poll();
+    assert_eq!(m.size(), Pos { x: 20, y: 10 });
+    assert_eq!(m.origin(), Pos { x: -7, y: -1 });
+    let me = m.player();
+    assert!(
+        (0..20).contains(&me.x) && (0..10).contains(&me.y),
+        "avatar stays in view: {me:?}"
+    );
+}
+
+#[test]
+fn a_click_outside_the_engines_view_is_ignored_without_a_message() {
+    let (t, h) = session();
+    let mut m = connected(t.on("bn.command.submit", walk_reply()));
+    h.push(view_event(41, -15, 20));
+    m.poll();
+    // View column 36 would be absolute x 21, one past the window; column 35 is its last square.
+    assert!(m.travel(Pos { x: 39, y: 12 }));
+    assert!(submits(&h).is_empty());
+    assert!(m.messages().is_empty(), "{:?}", m.messages());
+    assert!(m.travel(Pos { x: 35, y: 12 }));
+    assert_eq!(submits(&h).len(), 1);
+}

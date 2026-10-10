@@ -15,16 +15,21 @@ use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::time::Instant;
 
-/// The visible window onto the engine's much larger coverage.
+/// The map window asked for until the UI reports its own size.
 const VIEW: Pos = Pos { x: 40, y: 25 };
-/// The window re-centres when the avatar gets this close to its edge.
+/// The window re-centres when the avatar gets this close to its edge (engines that report no view).
 const MARGIN: i32 = 3;
+/// A resized panel is sent to the engine once it has stayed this size for this long.
+/// The engine takes up to this many cells on a side.
+const MAX_VIEWPORT: i32 = 512;
+const RESIZE_DEBOUNCE: std::time::Duration = std::time::Duration::from_millis(250);
 
 #[derive(Clone, Copy)]
 enum Pending {
     Hello,
     Subscribe,
     Submit,
+    Viewport,
 }
 
 pub struct EngineModel {
@@ -42,6 +47,11 @@ pub struct EngineModel {
     /// The command in flight was a walking step; only its failure stops the walk.
     walking: bool,
     origin: Option<(i32, i32)>,
+    /// Map cells the UI can show; the engine is told, and the shown map never exceeds them.
+    wanted: Pos,
+    /// The size the engine was last told, and when the UI last asked for another one.
+    declared: Pos,
+    resized: Option<Instant>,
     messages: Vec<String>,
     ground: Vec<String>,
     inventory: Vec<String>,
@@ -108,6 +118,9 @@ impl EngineModel {
             rejected: false,
             walking: false,
             origin: None,
+            wanted: VIEW,
+            declared: VIEW,
+            resized: None,
             messages: vec![],
             ground: vec![],
             inventory: vec![],
@@ -121,7 +134,12 @@ impl EngineModel {
         };
         m.call(
             "bn.hello",
-            json!(protocol::HelloParams::new("bn-client")),
+            json!(
+                protocol::HelloParams::new("bn-client").with_viewport(protocol::Viewport {
+                    cols: VIEW.x as u32,
+                    rows: VIEW.y as u32,
+                })
+            ),
             Pending::Hello,
         );
         m
@@ -292,6 +310,7 @@ impl EngineModel {
                 Ok(s) => self.replica.begin(s),
                 Err(e) => self.messages.push(format!("Bad snapshot: {e}")),
             },
+            Pending::Viewport => {}
             Pending::Submit => {
                 self.mark("received");
                 self.command_id = value["command_id"].as_str().map(String::from);
@@ -400,22 +419,58 @@ impl EngineModel {
         })
     }
 
+    /// The part of the engine's clickable view that is shown: as large as the UI asked for, never larger
+    /// than the engine's own window.
+    fn shown(&self) -> Pos {
+        self.replica.view().map_or(self.wanted, |v| Pos {
+            x: self.wanted.x.min(v.max.x - v.min.x + 1),
+            y: self.wanted.y.min(v.max.y - v.min.y + 1),
+        })
+    }
+
     fn refresh_view(&mut self) {
         let Some(a) = self.avatar_pos() else {
             self.origin = None;
             return;
         };
         let (ax, ay) = (a.x, a.y);
-        let centred = (ax - VIEW.x / 2, ay - VIEW.y / 2);
+        let size = self.shown();
+        if let Some(v) = self.replica.view() {
+            // The engine's window is centred on the avatar; show the middle of it, so every shown
+            // square is one a click can select.
+            self.origin = Some((
+                v.min.x + (v.max.x - v.min.x + 1 - size.x) / 2,
+                v.min.y + (v.max.y - v.min.y + 1 - size.y) / 2,
+            ));
+            return;
+        }
+        let centred = (ax - size.x / 2, ay - size.y / 2);
         self.origin = match self.origin {
             Some((ox, oy))
-                if (MARGIN..VIEW.x - MARGIN).contains(&(ax - ox))
-                    && (MARGIN..VIEW.y - MARGIN).contains(&(ay - oy)) =>
+                if (MARGIN..size.x - MARGIN).contains(&(ax - ox))
+                    && (MARGIN..size.y - MARGIN).contains(&(ay - oy)) =>
             {
                 Some((ox, oy))
             }
             _ => Some(centred),
         };
+    }
+
+    /// Tells the engine the new map size once the panel has stopped changing.
+    fn send_viewport(&mut self) {
+        let settled = self
+            .resized
+            .is_some_and(|at| at.elapsed() >= RESIZE_DEBOUNCE);
+        if settled && self.wanted != self.declared && self.replica.at().is_some() {
+            self.declared = self.wanted;
+            self.resized = None;
+            let (cols, rows) = (self.wanted.x as u32, self.wanted.y as u32);
+            self.call(
+                "bn.viewport",
+                json!({"cols": cols, "rows": rows}),
+                Pending::Viewport,
+            );
+        }
     }
 
     fn refresh_actions(&mut self) {
@@ -487,6 +542,7 @@ impl GameModel for EngineModel {
             self.handle(msg);
         }
         self.messages.extend(self.replica.take_log());
+        self.send_viewport();
         self.refresh_view();
         self.refresh_items();
         self.refresh_actions();
@@ -511,7 +567,7 @@ impl GameModel for EngineModel {
 
     fn size(&self) -> Pos {
         if self.replica.ready() && self.origin.is_some() {
-            VIEW
+            self.shown()
         } else {
             Pos { x: 0, y: 0 }
         }
@@ -618,6 +674,17 @@ impl GameModel for EngineModel {
         self.status.clone()
     }
 
+    fn set_viewport(&mut self, cells: Pos) {
+        let cells = Pos {
+            x: cells.x.clamp(1, MAX_VIEWPORT),
+            y: cells.y.clamp(1, MAX_VIEWPORT),
+        };
+        if cells != self.wanted {
+            self.wanted = cells;
+            self.resized = Some(Instant::now());
+        }
+    }
+
     fn travel(&mut self, at: Pos) -> bool {
         // Like Tiles, walking into a closed door next to you opens it; the engine plans no route to one.
         let (me, desc) = (self.player(), self.cell(at).desc);
@@ -628,11 +695,17 @@ impl GameModel for EngineModel {
             }
             return true;
         }
+        // A square outside the engine's window cannot be selected by a click; ignore it quietly.
+        let reachable = |p: &WorldPos| {
+            self.replica.view().is_none_or(|v| {
+                (v.min.x..=v.max.x).contains(&p.x) && (v.min.y..=v.max.y).contains(&p.y)
+            })
+        };
         let free = self
             .replica
             .boundary()
             .is_some_and(|b| b.interaction.is_none());
-        if let (false, true, Some(pos)) = (self.busy, free, self.abs(at)) {
+        if let (false, true, Some(pos)) = (self.busy, free, self.abs(at).filter(reachable)) {
             self.submit(Operation::Travel { pos });
         }
         true

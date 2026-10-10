@@ -377,6 +377,13 @@ impl<M: GameModel> App<M> {
     }
 
     fn map(&mut self, ui: &mut egui::Ui) {
+        // The room left for the map, less the status line above it, in whole cells.
+        let room =
+            ui.available_size() - egui::vec2(0.0, ui.text_style_height(&egui::TextStyle::Body));
+        self.model.set_viewport(Pos {
+            x: (room.x / CELL) as i32,
+            y: (room.y / CELL) as i32,
+        });
         let size = self.model.size();
         if size.x <= 0 || size.y <= 0 {
             ui.label("No map loaded");
