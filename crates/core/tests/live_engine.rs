@@ -504,18 +504,26 @@ fn live_engine_long_wait_is_never_reported_as_stalled() {
     assert!(model.invoke_action("wait"));
     wait_for(&mut model, "the wait menu", |m| m.menu().is_some());
     wait_for(&mut model, "the command to finish", |m| !m.busy());
+    // An unloaded engine plays six hours in about a second, so ask for a month: the wait has to
+    // outlast the stall limit whatever the machine.
     let id = model
         .menu()
         .unwrap()
         .choices
         .iter()
-        .find(|c| c.label.starts_with("6 hours"))
-        .expect("6 hours")
+        .find(|c| c.label == "Custom input")
+        .expect("Custom input")
         .id
         .clone();
+    model.choose(&id);
+    wait_for(&mut model, "the duration prompt", |m| {
+        m.menu().is_some_and(|menu| menu.field.is_some())
+    });
+    wait_for(&mut model, "the command to finish", |m| !m.busy());
+    let field = model.menu().unwrap().field.unwrap().id;
     // A stall limit far below the wait: only the heartbeats keep the model from reporting one.
     model.set_stall(Duration::from_secs(5));
-    model.choose(&id);
+    model.fill(&field, "30d", true);
     assert!(model.busy());
     let started = std::time::Instant::now();
     while started.elapsed() < Duration::from_secs(20) && model.busy() {
@@ -530,8 +538,11 @@ fn live_engine_long_wait_is_never_reported_as_stalled() {
     }
     assert!(
         model.busy(),
-        "the wait outlasted the stall limit ({:?})",
-        started.elapsed()
+        "the wait ended after {:?}: {:?} menu {:?} messages {:?}",
+        started.elapsed(),
+        model.command(),
+        model.menu().map(|m| (m.title, m.message)),
+        model.messages()
     );
     assert!(model.interrupt());
     wait_for(&mut model, "the stop question", |m| {
