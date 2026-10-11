@@ -35,6 +35,8 @@ pub struct Layer {
     pub tint_fg: Option<Rgb>,
     /// Set on the overlay of a mutation, whose paint the tileset picks from the character's mutations.
     pub mutation: Option<Mutation>,
+    /// The ids a tileset's tints for an item, bionic or effect overlay are keyed by, first match first.
+    pub tint_keys: Vec<String>,
     /// What stands in for the sprite when the tileset has none; NUL for an overlay, which then draws nothing.
     pub glyph: char,
     pub color: Rgb,
