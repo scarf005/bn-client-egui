@@ -20,6 +20,10 @@ fn harness<'a>() -> (H<'a>, ScriptHandle) {
         .on("bn.command.submit", vec![fixture("submit_result")])
         .on(
             "bn.world.describe",
+            vec![json!({"jsonrpc":"2.0","id":0,"result":{"lines":["Floor"]}})],
+        )
+        .on(
+            "bn.world.describe",
             vec![json!({"jsonrpc":"2.0","id":0,"result":{"lines":["Wall","A zombie is here."]}})],
         );
     let clock = Clock::manual();
@@ -105,12 +109,13 @@ fn hovering_a_map_square_asks_the_engine_for_its_native_description_and_shows_it
         .into_iter()
         .filter(|m| m["method"] == "bn.world.describe")
         .collect();
-    assert_eq!(asked.len(), 1, "one request per hovered square");
+    // The focused map's keyboard cursor sits on the avatar's square and is described once, then the hover.
+    assert_eq!(asked.len(), 2, "one request per described square");
     assert_eq!(
-        asked[0]["params"]["pos"],
+        asked[1]["params"]["pos"],
         json!({"dim":"","x":5,"y":4,"z":0})
     );
-    assert_eq!(asked[0]["params"]["boundary_id"], "b:12");
+    assert_eq!(asked[1]["params"]["boundary_id"], "b:12");
     h.run_steps(3);
     h.get_by_label("A zombie is here.");
     // Staying on the square asks nothing more; moving to another asks again.
@@ -121,7 +126,7 @@ fn hovering_a_map_square_asks_the_engine_for_its_native_description_and_shows_it
             .iter()
             .filter(|m| m["method"] == "bn.world.describe")
             .count(),
-        1
+        2
     );
 }
 
