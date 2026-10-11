@@ -94,7 +94,7 @@ fn totals_spans(t: &PaneTotals) -> Vec<Span<'static>> {
 }
 
 /// `text` cut to `width` terminal columns.
-fn fit(text: &str, width: usize) -> String {
+pub(super) fn fit(text: &str, width: usize) -> String {
     let mut out = String::new();
     for c in text.chars() {
         if out.width() + unicode_width::UnicodeWidthChar::width(c).unwrap_or(0) > width {

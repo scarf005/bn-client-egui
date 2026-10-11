@@ -3,6 +3,7 @@
 mod aim;
 mod crafting;
 mod settings;
+mod trade;
 
 use bn_client_core::markup::plain;
 use bn_client_core::{ActionEntry, Failure, GameModel, Loading, Menu, Overmap, Pos, Rgb, keys};
@@ -49,6 +50,8 @@ pub struct TuiApp<M: GameModel> {
     edit: Option<settings::Edit>,
     /// The advanced inventory's drawn rows and queued inputs.
     aim: aim::Aim,
+    /// The trade window's drawn rows and typed count.
+    trade: trade::Trade,
     /// Where the open menu's rows and tabs were last drawn, for mouse clicks.
     menu_hits: MenuHits,
     /// The action row of the open menu the keyboard focus is on (Alt+Down, Alt+Up), where Enter sends it.
@@ -128,6 +131,7 @@ impl<M: GameModel> TuiApp<M> {
             edit: None,
             hovered: None,
             aim: Default::default(),
+            trade: Default::default(),
             menu_hits: Default::default(),
             action_focus: None,
         }
@@ -241,6 +245,7 @@ impl<M: GameModel> TuiApp<M> {
                 "CRAFTING" => self.crafting_key(&menu, key),
                 // Every key of the advanced inventory is the engine's, Tab included (it swaps panes).
                 "ADVANCED_INVENTORY" => self.menu_key(&menu, key),
+                "NPC_TRADE" => self.trade_key(&menu, key),
                 _ if !menu.screen && self.action_row_key(&menu, key) => {}
                 _ if !menu.screen && self.settings_key(&menu, key) => {}
                 _ => self.menu_key(&menu, key),
@@ -462,6 +467,12 @@ impl<M: GameModel> TuiApp<M> {
             .filter(|m| m.context == "ADVANCED_INVENTORY")
         {
             return self.aim_mouse(&menu, ev);
+        }
+        if ev.kind == MouseEventKind::Down(MouseButton::Left)
+            && self.model.menu().is_some_and(|m| m.context == "NPC_TRADE")
+        {
+            self.trade_click(ev.column, ev.row);
+            return;
         }
         if ev.kind == MouseEventKind::Down(MouseButton::Left) && self.menu_click(ev) {
             return;
@@ -687,6 +698,7 @@ impl<M: GameModel> TuiApp<M> {
             match menu.context.as_str() {
                 "CRAFTING" => self.draw_crafting(f, &menu),
                 "ADVANCED_INVENTORY" => self.draw_aim(f, &menu),
+                "NPC_TRADE" => self.draw_trade(f, &menu),
                 _ => self.draw_menu(f, &menu),
             }
         }
@@ -897,6 +909,7 @@ impl<M: GameModel> TuiApp<M> {
                     .map(|(row, _)| row)
             })
             .unwrap_or(self.selected);
+        let any_hotkey = entries.iter().any(|c| !c.hotkey.is_empty());
         let rows = entries
             .iter()
             .enumerate()
@@ -936,7 +949,13 @@ impl<M: GameModel> TuiApp<M> {
                 let hint = bn_client_core::action_hint(&actions, &c.id)
                     .map(|key| format!("  [{key}]"))
                     .unwrap_or_default();
+                let key = match (c.hotkey.as_str(), any_hotkey) {
+                    ("", true) => "  ".to_string(),
+                    ("", false) => String::new(),
+                    (k, _) => format!("{k} "),
+                };
                 (
+                    key,
                     format!("{mark}{}{value}{columns}{hint}{denial}", plain(&c.label)),
                     style,
                 )
@@ -999,7 +1018,7 @@ impl<M: GameModel> TuiApp<M> {
             .model
             .actions()
             .iter()
-            .map(|a| (action_label(a), Style::new()))
+            .map(|a| (String::new(), action_label(a), Style::new()))
             .collect();
         let popup = Popup {
             title: "Actions",
@@ -1020,7 +1039,7 @@ impl<M: GameModel> TuiApp<M> {
             .header
             .iter()
             .map(|l| l.width())
-            .chain(popup.rows.iter().map(|(l, _)| l.width() + 2))
+            .chain(popup.rows.iter().map(|(k, l, _)| k.width() + l.width() + 2))
             .chain(std::iter::once(tab_bar.width()))
             .max()
             .unwrap_or(0);
@@ -1070,9 +1089,22 @@ impl<M: GameModel> TuiApp<M> {
             .iter()
             .enumerate()
             .skip(offset)
-            .map(|(i, (label, style))| match i == popup.selected {
-                true => Line::styled(format!("> {label}"), style.add_modifier(Modifier::REVERSED)),
-                false => Line::styled(format!("  {label}"), *style),
+            .map(|(i, (key, label, style))| {
+                // The native key column in light green; the cursor row is reversed whole.
+                let on = i == popup.selected;
+                let green = match on {
+                    true => Style::new(),
+                    false => Style::new().fg(Color::LightGreen),
+                };
+                let line = Line::from(vec![
+                    Span::raw(if on { "> " } else { "  " }),
+                    Span::styled(key.clone(), green),
+                    Span::raw(label.clone()),
+                ]);
+                match on {
+                    true => line.style(style.add_modifier(Modifier::REVERSED)),
+                    false => line.style(*style),
+                }
             })
             .collect::<Vec<_>>();
         f.render_widget(Paragraph::new(lines), list);
@@ -1146,7 +1178,8 @@ struct Popup<'a> {
     header: Vec<String>,
     /// Tab labels and whether each is the current one.
     tabs: Vec<(String, bool)>,
-    rows: Vec<(String, Style)>,
+    /// Each row's native key (empty or padded), label and style.
+    rows: Vec<(String, String, Style)>,
     selected: usize,
     /// Detail text under the rows, such as the highlighted row's description.
     footer: Vec<String>,
