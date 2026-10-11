@@ -1057,7 +1057,7 @@ fn an_action_row_of_a_tabbed_screen_shows_its_key_and_alt_down_then_enter_sends_
     ));
     h.run_steps(4);
     h.get_by_label("Finish the character");
-    h.get_by_label("[TAB]");
+    h.get_by(|n| n.description().as_deref() == Some("[TAB]"));
     // The engine's keys never land on the row; Alt+Down does.
     h.key_press_modifiers(egui::Modifiers::ALT, egui::Key::ArrowDown);
     h.run_steps(2);

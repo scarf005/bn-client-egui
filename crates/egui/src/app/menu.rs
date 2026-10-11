@@ -266,11 +266,23 @@ impl<M: GameModel> App<M> {
                                     button.request_focus();
                                     focused = button.has_focus();
                                 }
+                                let action_key =
+                                    bn_client_core::action_hint(&self.model.actions(), &choice.id);
                                 ui.ctx().accesskit_node_builder(button.id, |b| {
                                     b.set_role(accesskit::Role::MenuItem);
+                                    // The row's text also carries its key; its name is the label and values only.
+                                    if whole_row {
+                                        let text = column_text(&choice.label, &choice.columns);
+                                        b.set_label(markup::plain(&format!(
+                                            "{}{text}",
+                                            choice.label
+                                        )));
+                                    }
                                     // Said once on screen, but every refused row carries its reason.
                                     if !choice.enabled && !choice.denial.is_empty() {
                                         b.set_description(markup::plain(&choice.denial));
+                                    } else if let Some(key) = &action_key {
+                                        b.set_description(format!("[{key}]"));
                                     }
                                     if choice.id == "acknowledge" {
                                         // Screen readers keep the engine's own name for the row.
