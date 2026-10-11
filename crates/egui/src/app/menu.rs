@@ -44,6 +44,11 @@ impl<M: GameModel> App<M> {
             self.focus_menu = entered && !focused;
             return;
         }
+        if menu.context == "NPC_TRADE" && menu.panes.len() == 2 {
+            let focused = self.trade(ctx, &menu, entered);
+            self.focus_menu = entered && !focused;
+            return;
+        }
         if menu.context == "PICKUP" {
             let focused = self.pickup(ctx, &menu, entered);
             self.focus_menu = entered && !focused;

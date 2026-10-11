@@ -189,6 +189,8 @@ pub struct MenuPane {
     /// The name of the area the pane shows, as the native screen prints it.
     pub area: String,
     pub storage: String,
+    /// The line under the pane's title, such as a trade pane's free capacity; empty when none.
+    pub description: String,
     pub filter: String,
     /// The native sort name, such as `name`; empty when the engine sent none.
     pub sort: String,

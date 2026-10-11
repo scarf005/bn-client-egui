@@ -1,0 +1,104 @@
+{
+  "trade": {
+    "boundary_id": "b:30",
+    "readiness": {
+      "phase": "playing",
+      "game_ready": true,
+      "accepts_interaction_commands": true,
+      "accepts_registered_actions": true
+    },
+    "actions": [
+      {
+        "id": "CONFIRM",
+        "name": "Confirm",
+        "keys": [
+          "RETURN"
+        ]
+      },
+      {
+        "id": "AUTOBALANCE",
+        "name": "Autobalance",
+        "keys": [
+          "b"
+        ]
+      }
+    ],
+    "interaction": {
+      "schema_id": "s:pickup",
+      "kind": "inventory",
+      "context": "NPC_TRADE",
+      "title": "Trading with Lena",
+      "message": "Credit $1.50 | Balance acceptable: yes",
+      "allow_cancel": true,
+      "allow_set_count": true,
+      "choice_total": 2,
+      "choices": [
+        {
+          "id": "trade:n1",
+          "label": "tin can (3)",
+          "enabled": true,
+          "description": "A battered tin can.",
+          "denial": "",
+          "selectable": true,
+          "selected": true,
+          "pane_id": "pane:npc",
+          "columns": [
+            {
+              "label": "Unit price",
+              "value": "$0.50"
+            },
+            {
+              "label": "Weight",
+              "value": "0.10 kg"
+            }
+          ],
+          "available_count": 3,
+          "selected_count": 2
+        },
+        {
+          "id": "trade:y1",
+          "label": "lighter",
+          "enabled": true,
+          "description": "A lighter.",
+          "denial": "",
+          "selectable": true,
+          "selected": false,
+          "pane_id": "pane:you",
+          "columns": [
+            {
+              "label": "Unit price",
+              "value": "$1.00"
+            }
+          ],
+          "available_count": 1,
+          "selected_count": 0
+        }
+      ],
+      "compat": {
+        "focus": {
+          "choice_id": "trade:n1"
+        },
+        "panes": [
+          {
+            "id": "pane:npc",
+            "label": "Lena",
+            "role": "npc",
+            "area_label": "NPC items",
+            "area_description": "Free capacity: 5000.00 kg, 5000.00 L",
+            "filter": "",
+            "storage_kind": "inventory"
+          },
+          {
+            "id": "pane:you",
+            "label": "You",
+            "role": "player",
+            "area_label": "Player items",
+            "area_description": "Free capacity: 12.00 kg, 8.00 L",
+            "filter": "",
+            "storage_kind": "inventory"
+          }
+        ]
+      }
+    }
+  }
+}
