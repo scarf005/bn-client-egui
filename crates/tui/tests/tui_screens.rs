@@ -200,3 +200,101 @@ fn a_click_outside_the_rows_of_a_menu_sends_nothing() {
     app.handle_mouse(click(0, 0));
     assert!(operations(&h).is_empty());
 }
+
+/// Opens `context` with a row the engine's cursor is on and an `action:ACT` row for the action bound to `z`.
+fn open_with_action(app: &mut TuiApp<EngineModel>, h: &ScriptHandle, context: &str, tabs: bool) {
+    for name in ["events_41_walk", "events_42_message"] {
+        h.push(fixture(name));
+    }
+    let mut menu = fixture("events_43_menu");
+    let change = &mut menu["params"]["events"][0]["changes"]["interaction"];
+    change["actions"] = json!([{"id":"ACT","name":"Do it","keys":["z"]}]);
+    let row = |id: &str, label: &str| {
+        json!({"id":id,"label":label,"description":"","denial":"","enabled":true,
+               "selectable":true,"selected":false,"columns":[]})
+    };
+    let mut choices = vec![
+        row("item:0", "first thing"),
+        row("action:ACT", "Do the thing"),
+    ];
+    change["interaction"]["compat"] = json!({"focus":{"choice_id":"item:0"}});
+    if tabs {
+        choices.insert(0, row("tab:0", "A TAB"));
+        choices[0]["selected"] = true.into();
+        change["interaction"]["compat"]["panes"] =
+            json!([{"id":"tab0","label":"A TAB","role":"focused"}]);
+        for c in choices.iter_mut().skip(1) {
+            c["pane_id"] = "tab0".into();
+        }
+    }
+    change["interaction"]["choices"] = json!(choices);
+    change["interaction"]["context"] = context.into();
+    h.push(menu);
+    app.model.poll();
+}
+
+fn alt(code: crossterm::event::KeyCode) -> crossterm::event::KeyEvent {
+    crossterm::event::KeyEvent::new(code, KeyModifiers::ALT)
+}
+
+fn an_action_row_shows_its_key_and_alt_down_then_enter_sends_the_action(context: &str, tabs: bool) {
+    use crossterm::event::{KeyCode, KeyEvent};
+    let (mut app, h) = engine();
+    render(&mut app);
+    open_with_action(&mut app, &h, context, tabs);
+    let shown = text(&render(&mut app));
+    assert!(
+        shown.contains("Do the thing  [z]"),
+        "the action's own key beside the row\n{shown}"
+    );
+    assert!(
+        shown.contains("> first thing"),
+        "the engine's cursor is on its row\n{shown}"
+    );
+    app.handle_key(alt(KeyCode::Down));
+    let shown = text(&render(&mut app));
+    assert!(
+        shown.contains("> Do the thing"),
+        "the focus is on the action row\n{shown}"
+    );
+    assert!(operations(&h).is_empty(), "moving the focus sends nothing");
+    app.handle_key(KeyEvent::from(KeyCode::Enter));
+    assert_eq!(
+        operations(&h),
+        [json!({"kind":"choose","choice_id":"action:ACT"})],
+        "Enter sends the action, not the engine's confirm"
+    );
+}
+
+macro_rules! action_rows {
+    ($name:ident, $context:expr, $tabs:expr) => {
+        #[test]
+        fn $name() {
+            an_action_row_shows_its_key_and_alt_down_then_enter_sends_the_action($context, $tabs);
+        }
+    };
+}
+
+action_rows!(
+    action_rows_of_character_creation,
+    "NEW_CHAR_DESCRIPTION",
+    true
+);
+action_rows!(action_rows_of_a_manager_list, "ZONES_MANAGER", false);
+action_rows!(action_rows_of_a_tabbed_text_screen, "MISSIONS", true);
+
+#[test]
+fn escape_leaves_the_action_rows_before_it_closes_the_menu() {
+    use crossterm::event::{KeyCode, KeyEvent};
+    let (mut app, h) = engine();
+    render(&mut app);
+    open_with_action(&mut app, &h, "ZONES_MANAGER", false);
+    render(&mut app);
+    app.handle_key(alt(KeyCode::Down));
+    app.handle_key(KeyEvent::from(KeyCode::Esc));
+    assert!(
+        operations(&h).is_empty(),
+        "the first Esc only leaves the action rows"
+    );
+    assert!(text(&render(&mut app)).contains("> first thing"));
+}
