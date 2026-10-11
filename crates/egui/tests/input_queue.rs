@@ -78,3 +78,46 @@ fn a_key_that_runs_nothing_is_not_kept_for_later() {
     h.run_steps(2);
     assert_eq!(submits(&script), 1);
 }
+
+fn key_event(key: egui::Key, pressed: bool, repeat: bool) -> egui::Event {
+    egui::Event::Key {
+        key,
+        physical_key: Some(key),
+        pressed,
+        repeat,
+        modifiers: egui::Modifiers::NONE,
+    }
+}
+
+#[test]
+fn releasing_a_held_key_drops_its_repeats_still_waiting() {
+    let (mut h, script) = walking();
+    h.run_steps(3);
+    h.event(key_event(egui::Key::ArrowRight, true, false));
+    h.run_steps(1);
+    for _ in 0..5 {
+        h.event(key_event(egui::Key::ArrowRight, true, true));
+        h.run_steps(1);
+    }
+    h.event(key_event(egui::Key::ArrowRight, false, false));
+    h.run_steps(1);
+    for _ in 0..4 {
+        script.push(fixture("command_completed"));
+        h.run_steps(2);
+    }
+    assert_eq!(
+        submits(&script),
+        1,
+        "only the step in flight when it was released"
+    );
+}
+
+#[test]
+fn tapping_a_key_while_a_command_runs_is_kept_after_release() {
+    let (mut h, script) = walking();
+    h.run_steps(3);
+    repeat(&mut h, egui::Key::ArrowRight, 2);
+    script.push(fixture("command_completed"));
+    h.run_steps(2);
+    assert_eq!(submits(&script), 2, "a tap's key-up does not cancel it");
+}
