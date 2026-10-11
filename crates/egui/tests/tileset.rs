@@ -1,6 +1,8 @@
 #![recursion_limit = "512"]
 mod common;
-use bn_client_egui::tileset::{self, Query, Tileset, Turn, mix};
+use bn_client_core::protocol::{ModTileset, Traits};
+use bn_client_egui::tileset::{self, PaintQuery, Query, Tileset, Turn, mix};
+use bn_client_egui::tint::{Blend, Paint};
 use common::game_root;
 
 fn load(tag: &str) -> Tileset {
@@ -257,4 +259,189 @@ fn a_mod_tileset_for_another_tileset_adds_nothing() {
     let set = Tileset::load(&root.join("gfx/test")).unwrap();
     assert!(set.choose(&query("vp_glass")).is_none());
     assert_eq!(set.sheets.len(), 2);
+}
+
+fn traits(pairs: &[(&str, &[&str])]) -> Traits {
+    pairs
+        .iter()
+        .map(|(k, v)| (k.to_string(), v.iter().map(|s| s.to_string()).collect()))
+        .collect()
+}
+
+/// A mod tileset of the root that only holds tints.
+fn add_tints(root: &std::path::Path, tints: serde_json::Value, pairs: serde_json::Value) {
+    let dir = root.join("data/json/external_tileset");
+    std::fs::create_dir_all(&dir).unwrap();
+    let config = serde_json::json!([
+        {"type": "mod_tileset", "compatibility": ["test"], "tints": tints, "tint_pairs": pairs}
+    ]);
+    std::fs::write(dir.join("tints.json"), config.to_string()).unwrap();
+}
+
+#[test]
+fn a_mutation_takes_the_paint_of_the_character_mutation_its_type_is_paired_with() {
+    let root = game_root("tints");
+    add_tints(
+        &root,
+        serde_json::json!([
+            {"id": "hair_black", "fg": "#383838", "blend_mode": "multiply"},
+            {"id": "SKIN_DARK", "fg": "#55381c80", "bg": {"color": "#102030", "blend_mode": "additive", "contrast": 1.5}}
+        ]),
+        serde_json::json!([{"source_type": "hair_color", "target_type": "hair_style", "override": true}]),
+    );
+    let set = Tileset::load(&root.join("gfx/test")).unwrap();
+    let query = |id: &'static str, types: &'static [String], traits: &'static Traits| PaintQuery {
+        id,
+        types,
+        flags: &[],
+        traits,
+    };
+    let (style, none): (&'static [String], &'static Traits) = (
+        Box::leak(vec!["hair_style".to_string()].into_boxed_slice()),
+        Box::leak(Box::new(Traits::new())),
+    );
+    let black: &'static Traits = Box::leak(Box::new(traits(&[("hair_color", &["hair_black"])])));
+    // The hair takes the color of the character's hair color mutation, multiplied in.
+    let (bg, fg) = set.mutation_paints(&query("hair_long", style, black));
+    assert_eq!(bg, None);
+    assert_eq!(
+        fg,
+        Some(Paint {
+            blend: Blend::Multiply,
+            ..Paint::of([56, 56, 56])
+        })
+    );
+    // Without a hair color mutation, or for another type, a mutation has only its own paint, if any.
+    assert_eq!(
+        set.mutation_paints(&query("hair_long", style, none)),
+        (None, None)
+    );
+    assert_eq!(
+        set.mutation_paints(&query("hair_long", &[], black)),
+        (None, None)
+    );
+    let (bg, fg) = set.mutation_paints(&query("SKIN_DARK", &[], none));
+    assert_eq!(
+        bg,
+        Some(Paint {
+            blend: Blend::Additive,
+            contrast: 1500,
+            ..Paint::of([16, 32, 48])
+        })
+    );
+    // The fourth pair of a color is its brightness in 128ths.
+    assert_eq!(
+        fg.map(|p| (p.color, p.brightness)),
+        Some(([85, 56, 28], 1000))
+    );
+}
+
+#[test]
+fn the_engines_list_of_mod_tilesets_replaces_the_search_of_the_data() {
+    let root = game_root("mod-list");
+    add_mod(
+        &root,
+        "found.json",
+        &["test"],
+        serde_json::json!([{"id": "vp_found", "fg": 0}]),
+    );
+    add_mod(
+        &root,
+        "listed.json",
+        &["test"],
+        serde_json::json!([{"id": "vp_listed", "fg": 0}]),
+    );
+    let dir = root.join("gfx/test");
+    // The engine names its files from the game folder, through the folder of the mod that loads them.
+    std::fs::create_dir_all(root.join("data/mods/bn")).unwrap();
+    let only = |name: &str| ModTileset {
+        path: format!("data/mods/bn/../../json/external_tileset/{name}"),
+        base: "data/mods/bn/../../json".into(),
+        index: 1,
+        compatibility: vec!["test".into()],
+    };
+    let set = Tileset::load_with(&dir, Some(&[only("listed.json")])).unwrap();
+    assert!(set.choose(&query("vp_listed")).is_some());
+    assert!(set.choose(&query("vp_found")).is_none());
+    // The search of the data finds both, in file order.
+    let both = Tileset::load(&dir).unwrap();
+    let sprite = |id: &str| both.choose(&query(id)).unwrap().fg.unwrap().sprite;
+    assert_eq!((sprite("vp_found"), sprite("vp_listed")), (10, 14));
+}
+
+#[test]
+fn an_item_takes_the_paint_of_its_first_flag_or_else_of_its_id() {
+    let root = game_root("key-paints");
+    add_tints(
+        &root,
+        serde_json::json!([
+            {"id": "jeans", "fg": "#112233"},
+            {"id": "FANCY", "fg": "#445566"},
+            {"id": "WATERPROOF", "fg": "#778899"}
+        ]),
+        serde_json::json!([]),
+    );
+    let set = Tileset::load(&root.join("gfx/test")).unwrap();
+    let keys = |k: &[&str]| k.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+    let color = |k: &[&str]| set.key_paints(&keys(k)).1.map(|p| p.color);
+    // The flags come first, in the order the game lists them, then the id.
+    assert_eq!(
+        color(&["VARSIZE", "FANCY", "WATERPROOF", "jeans"]),
+        Some([68, 85, 102])
+    );
+    assert_eq!(color(&["VARSIZE", "jeans"]), Some([17, 34, 51]));
+    assert_eq!(color(&["VARSIZE", "shirt"]), None);
+}
+
+#[test]
+fn a_hair_style_goes_by_the_sprite_of_the_hair_color_where_the_tileset_paints_no_hair() {
+    let root = game_root("legacy-hair");
+    add_mod(
+        &root,
+        "hair.json",
+        &["test"],
+        serde_json::json!([{"id": "overlay_female_mutation_hair_black_long", "fg": 0}]),
+    );
+    let set = Tileset::load(&root.join("gfx/test")).unwrap();
+    let style = vec!["hair_style".to_string()];
+    let black = traits(&[("hair_color", &["hair_black"])]);
+    let blond = traits(&[("hair_color", &["hair_blond"])]);
+    let ask = |id: &str, traits: &Traits, male: bool| {
+        set.colored_hair(
+            &PaintQuery {
+                id,
+                types: &style,
+                flags: &[],
+                traits,
+            },
+            male,
+        )
+    };
+    assert_eq!(
+        ask("hair_long", &black, false),
+        Some([
+            "overlay_female_mutation_hair_black_long".to_string(),
+            "overlay_mutation_hair_black_long".to_string()
+        ])
+    );
+    // No sprite for the color, a style that names its color already, or no hair color: the ordinary overlay.
+    assert_eq!(ask("hair_long", &blond, false), None);
+    assert_eq!(ask("hair_black_long", &black, false), None);
+    assert_eq!(ask("hair_long", &Traits::new(), false), None);
+    // A tileset that pairs hair styles with colors paints them instead.
+    add_tints(
+        &root,
+        serde_json::json!([]),
+        serde_json::json!([
+            {"source_type": "hair_color", "target_type": "hair_style", "override": true}
+        ]),
+    );
+    let painted = Tileset::load(&root.join("gfx/test")).unwrap();
+    let q = PaintQuery {
+        id: "hair_long",
+        types: &style,
+        flags: &[],
+        traits: &black,
+    };
+    assert_eq!(painted.colored_hair(&q, false), None);
 }

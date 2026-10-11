@@ -1,5 +1,5 @@
-//! The game's tint blend (`tint_blend_mode::tint`): a sprite takes the hue of the paint and part of its
-//! saturation and value, as `apply_surf_blend_effect` does for vehicle parts, with the same integer maths.
+//! The game's tint blends (`apply_surf_blend_effect`): by default a sprite takes the hue of the paint and part of its
+//! saturation and value, as for vehicle parts; a tileset can ask for other blends. The same integer maths.
 
 const E: u32 = (1 << 16) - 1;
 
@@ -76,20 +76,117 @@ fn overlay(base: u8, blend: u8) -> u8 {
     mixed.clamp(0, 255) as u8
 }
 
-/// One pixel of a sprite painted with `target`. A tint mask pixel sets how much of the paint's hue, saturation
-/// and value each channel takes (red: how far the colour moves, green: saturation, blue: value); without a mask
-/// the sprite is painted whole, with the saturation and value halfway.
-pub fn tint_pixel(base: [u8; 3], target: [u8; 3], mask: Option<[u8; 3]>) -> [u8; 3] {
-    let (b, t) = (rgb2hsv(base), rgb2hsv(target));
+/// How a paint is blended into a sprite (`tint_blend_mode`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum Blend {
+    #[default]
+    Tint,
+    Additive,
+    Subtract,
+    Multiply,
+    Normal,
+    Divide,
+    Screen,
+    Softlight,
+    Hardlight,
+    Overlay,
+}
+
+impl Blend {
+    /// The blend a tileset names; an unknown or empty name is the default tint.
+    pub fn named(name: &str) -> Self {
+        match name {
+            "additive" => Self::Additive,
+            "subtract" => Self::Subtract,
+            "multiply" => Self::Multiply,
+            "normal" => Self::Normal,
+            "divide" => Self::Divide,
+            "screen" => Self::Screen,
+            "softlight" => Self::Softlight,
+            "hardlight" => Self::Hardlight,
+            "overlay" => Self::Overlay,
+            _ => Self::Tint,
+        }
+    }
+}
+
+/// A color and how it is blended into a sprite; the adjustments are in thousandths, 1000 leaving things alone.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct Paint {
+    pub color: [u8; 3],
+    pub blend: Blend,
+    pub contrast: u32,
+    pub saturation: u32,
+    pub brightness: u32,
+}
+
+impl Paint {
+    /// The paint of a vehicle part or any plain color: the default tint blend.
+    pub fn of(color: [u8; 3]) -> Self {
+        Self {
+            color,
+            blend: Blend::Tint,
+            contrast: 1000,
+            saturation: 1000,
+            brightness: 1000,
+        }
+    }
+}
+
+fn blend_channel(blend: Blend, base: u8, target: u8) -> u8 {
+    let (b, t) = (i32::from(base), i32::from(target));
+    let clamp = |v: i32| v.clamp(0, 255) as u8;
+    match blend {
+        Blend::Additive => clamp(b + t),
+        Blend::Subtract => clamp(b - (255 - t)),
+        Blend::Multiply => (b * t / 256) as u8,
+        // The paint's alpha is full, so a normal blend is the paint.
+        Blend::Normal => target,
+        Blend::Divide => (b / t.max(1)) as u8,
+        Blend::Screen => clamp(255 - (255 - b) * (255 - t) / 128),
+        Blend::Softlight => clamp(((255 - 2 * t) * b * b / 256 + 2 * t * b) / 256),
+        Blend::Hardlight => {
+            if t > 127 {
+                clamp(255 - (255 - t) * ((255 - b).max(1) * 255 / 127) / 255)
+            } else {
+                clamp(t * (b * 255 / 127) / 255)
+            }
+        }
+        Blend::Overlay => overlay(base, target),
+        Blend::Tint => unreachable!("the tint blend works on hue, saturation and value"),
+    }
+}
+
+/// One pixel of a sprite painted with `paint`. A tint mask pixel sets how much of the paint each channel takes
+/// (red: how far the colour moves, green: saturation, blue: value); without a mask the sprite is painted whole,
+/// with the saturation and value halfway.
+pub fn tint_pixel(base: [u8; 3], paint: Paint, mask: Option<[u8; 3]>) -> [u8; 3] {
     let [red, green, blue] = mask.unwrap_or([255, 127, 127]);
     let lerp =
         |a: i32, b: i32, by: u8| ((b * i32::from(by) + a * (255 - i32::from(by))) / 255) as u16;
-    let tinted = hsv2rgb(Hsv {
-        h: t.h,
-        s: lerp(i32::from(b.s.min(t.s)), i32::from(t.s), green),
-        v: lerp(i32::from(b.v), i32::from(overlay(b.v, t.v)), blue) as u8,
-    });
-    let moved = [0, 1, 2].map(|i| lerp(i32::from(base[i]), i32::from(tinted[i]), red) as u8);
-    // The game converts the result through HSV once more before it is stored.
-    hsv2rgb(rgb2hsv(moved))
+    let blended = if paint.blend == Blend::Tint {
+        let (b, t) = (rgb2hsv(base), rgb2hsv(paint.color));
+        hsv2rgb(Hsv {
+            h: t.h,
+            s: lerp(i32::from(b.s.min(t.s)), i32::from(t.s), green),
+            v: lerp(i32::from(b.v), i32::from(overlay(b.v, t.v)), blue) as u8,
+        })
+    } else {
+        [0, 1, 2].map(|i| blend_channel(paint.blend, base[i], paint.color[i]))
+    };
+    let moved = [0, 1, 2].map(|i| lerp(i32::from(base[i]), i32::from(blended[i]), red) as u8);
+    // The game converts the result through HSV once more, adjusted, before it is stored.
+    let Hsv { h, mut s, mut v } = rgb2hsv(moved);
+    let thousandths = |value: u32| value as f32 / 1000.0;
+    if paint.contrast != 1000 {
+        let adjusted = (f32::from(v) - 128.0) * thousandths(paint.contrast) + 128.0;
+        v = adjusted.clamp(0.0, 255.0) as u8;
+    }
+    if paint.saturation != 1000 {
+        s = (f32::from(s) * thousandths(paint.saturation)).clamp(0.0, 65535.0) as u16;
+    }
+    if paint.brightness != 1000 {
+        v = (f32::from(v) * thousandths(paint.brightness)).clamp(0.0, 255.0) as u8;
+    }
+    hsv2rgb(Hsv { h, s, v })
 }

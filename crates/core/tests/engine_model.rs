@@ -27,6 +27,11 @@ fn connects_with_hello_then_subscribe_and_exposes_the_map() {
     assert_eq!(m.cell(Pos { x: 21, y: 11 }).glyph, '#');
     assert_eq!(m.cell(Pos { x: 21, y: 11 }).desc, "plastered wooden wall");
     assert_eq!(
+        m.cell(Pos { x: 21, y: 11 }).id,
+        "t_wall",
+        "the id stays for code that matches"
+    );
+    assert_eq!(
         m.cell(Pos { x: 23, y: 12 }).glyph,
         'Z',
         "entities draw over terrain"
@@ -611,6 +616,11 @@ fn travel_that_plans_nothing_and_moves_nothing_says_the_native_cant_travel_messa
         "epoch":"e7f3","command_id":"c:5","stage":"completed"}}));
     m.poll();
     assert_eq!(m.command().unwrap().stage, "done: You can't travel there.");
+    assert_eq!(
+        m.messages(),
+        ["You can't travel there."],
+        "native puts it in the message log"
+    );
 }
 
 #[test]
@@ -645,7 +655,7 @@ fn remembered_furniture_stays_drawn_from_its_memory_overlay() {
         json!({"at": at, "known": "visible", "terrain": floor, "furniture": bench}),
     ));
     m.poll();
-    assert_eq!(m.cell(view).desc, "f_bench", "seen furniture draws");
+    assert_eq!(m.cell(view).id, "f_bench", "seen furniture draws");
 
     h.push(cell_event(
         42,
@@ -653,10 +663,7 @@ fn remembered_furniture_stays_drawn_from_its_memory_overlay() {
     ));
     m.poll();
     let remembered = m.cell(view);
-    assert_eq!(
-        (remembered.glyph, remembered.desc.as_str()),
-        ('{', "f_bench")
-    );
+    assert_eq!((remembered.glyph, remembered.id.as_str()), ('{', "f_bench"));
 
     h.push(cell_event(
         43,
@@ -844,8 +851,14 @@ fn tiled_session() -> EngineModel {
     });
     subscribe["result"]["avatar"]["overlays"] = json!([{
         "kind": "overlay", "id": "worn_jacket", "glyph": "", "color": "",
-        "tile": "overlay_female_worn_jacket", "looks_like": ["overlay_worn_jacket"]
+        "tile": "overlay_female_worn_jacket", "looks_like": ["overlay_worn_jacket"],
+        "tint_keys": ["VARSIZE", "jacket_light"]
+    }, {
+        "kind": "overlay", "id": "mutation_hair_long", "glyph": "", "color": "",
+        "tile": "overlay_female_mutation_hair_long",
+        "mutation": {"id": "hair_long", "types": ["hair_style"], "flags": []}
     }]);
+    subscribe["result"]["avatar"]["traits"] = json!({"hair_color": ["hair_black"]});
     subscribe["result"]["entities"][0]["look"]
         .as_object_mut()
         .unwrap()
@@ -862,7 +875,7 @@ fn tiled_session() -> EngineModel {
         json!({"at": {"dim": "", "x": 9, "y": 8, "z": 0}, "known": "visible", "light": 1,
             "terrain": {"kind": "terrain", "id": "t_wall", "glyph": "|", "color": "light_gray",
                 "looks_like": ["t_wall_base"], "subtile": "edge", "rotation": 1},
-            "reviving": true,
+            "reviving": true, "cargo": true,
             "vehicle": {"kind": "vehicle_part", "id": "door", "glyph": "+", "color": "white",
                 "tile": "vp_door", "tint": {"fg": "#445566"}},
             "items": [
@@ -905,7 +918,8 @@ fn a_cell_lists_its_sprites_bottom_first_with_the_engines_tile_selection() {
         .collect::<Vec<_>>();
     // The item is named by its sprite id, the corpse of the monster, not the item type.
     // A pile of two is highlighted over its displayed item, with a sprite that has no glyph.
-    // The paint of a vehicle part reaches its foreground sprite only; a corpse that can rise is marked last.
+    // The paint of a vehicle part reaches its foreground sprite only; a loaded cargo part is highlighted over it
+    // and a corpse that can rise is marked last.
     assert_eq!(
         layers,
         [
@@ -913,6 +927,7 @@ fn a_cell_lists_its_sprites_bottom_first_with_the_engines_tile_selection() {
             "corpse_mon_zombie",
             "highlight_item",
             "vp_door",
+            "highlight_item",
             "zombie_revival_indicator"
         ]
     );
@@ -922,6 +937,7 @@ fn a_cell_lists_its_sprites_bottom_first_with_the_engines_tile_selection() {
     );
     assert_eq!(cell.layers[3].tint_bg, None);
     assert_eq!(cell.layers[0].tint_fg, None);
+    assert_eq!(cell.layers[5].glyph, '\0');
     assert_eq!(cell.layers[4].glyph, '\0');
     assert_eq!(cell.layers[2].glyph, '\0');
     let wall = &cell.layers[0];
@@ -988,9 +1004,19 @@ fn creatures_and_the_avatar_draw_over_the_terrain_with_their_overlays() {
             "t_dirt",
             "tin_can",
             "player_female",
-            "overlay_female_worn_jacket"
+            "overlay_female_worn_jacket",
+            "overlay_female_mutation_hair_long"
         ]
     );
+    // A mutation overlay carries what the tileset picks its paint by; a worn item does not.
+    let hair = me.layers[4].mutation.as_ref().unwrap();
+    assert_eq!(
+        (hair.id.as_str(), hair.types.as_slice()),
+        ("hair_long", ["hair_style".to_string()].as_slice())
+    );
+    assert_eq!(hair.traits["hair_color"], ["hair_black"]);
+    assert!(me.layers[3].mutation.is_none());
+    assert_eq!(me.layers[3].tint_keys, ["VARSIZE", "jacket_light"]);
     assert!(!me.layers[2].mirrored && me.layers[2].creature);
     assert_eq!(me.layers[2].glyph, '@');
     assert_eq!(me.layers[3].glyph, '\0');
@@ -1013,6 +1039,7 @@ fn a_look_with_a_display_name_is_described_by_it_instead_of_its_id() {
     ));
     m.poll();
     assert_eq!(m.cell(Pos { x: 22, y: 12 }).desc, "floor");
+    assert_eq!(m.cell(Pos { x: 22, y: 12 }).id, "t_floor");
 }
 
 fn avatar_event(inventory: Value, ground: Value) -> Value {

@@ -6,12 +6,12 @@ use crate::keys;
 use crate::markup::{self, Run};
 use crate::model::{
     ActionEntry, Cell, CommandStatus, Effect, Failure, FailureKind, GameModel, Layer, Loading,
-    LogLine, Menu, MenuChoice, MenuField, MenuPane, Overmap, OvermapCell, OvermapTile, Pos, Rgb,
-    Shape,
+    LogLine, Menu, MenuChoice, MenuField, MenuPane, Mutation, Overmap, OvermapCell, OvermapTile,
+    Pos, Rgb, Shape,
 };
 use crate::protocol::{
-    self, Cell as WorldCell, Entity, Expect, Incoming, Known, LoadingNotice, Look, Operation,
-    Snapshot, Submit, WorldPos,
+    self, Cell as WorldCell, Entity, Expect, Incoming, Known, LoadingNotice, Look, ModTileset,
+    Operation, Snapshot, Submit, Traits, WorldPos,
 };
 use crate::replica::{Outcome, Replica};
 use crate::transport::{Transport, request};
@@ -443,6 +443,10 @@ impl EngineModel {
                                 && from.as_ref() == self.avatar_pos()
                                 && self.replica.route().is_empty();
                             if stuck {
+                                let line = "You can't travel there.".to_string();
+                                if self.messages.last() != Some(&line) {
+                                    self.messages.push(line);
+                                }
                                 "done: You can't travel there."
                             } else {
                                 "done"
@@ -909,6 +913,7 @@ impl EngineModel {
             color,
             bg,
             desc,
+            id: look.id.clone().unwrap_or_default(),
             ..Cell::default()
         }
     }
@@ -930,6 +935,8 @@ impl EngineModel {
             seed,
             tint_bg: paint(look, |t| t.bg.as_deref()),
             tint_fg: paint(look, |t| t.fg.as_deref()),
+            mutation: None,
+            tint_keys: look.tint_keys.clone(),
             glyph: glyph(look),
             color,
             bg,
@@ -937,13 +944,20 @@ impl EngineModel {
     }
 
     /// A character's overlays, which face as it does; an overlay without a sprite draws nothing.
-    fn overlays(&self, body: &Look, overlays: &[Look], seed: u32) -> Vec<Layer> {
+    fn overlays(&self, body: &Look, overlays: &[Look], traits: &Traits, seed: u32) -> Vec<Layer> {
+        let traits = std::sync::Arc::new(traits.clone());
         overlays
             .iter()
             .map(|overlay| Layer {
                 mirrored: body.facing.as_deref() == Some("left"),
                 creature: true,
                 glyph: '\0',
+                mutation: overlay.mutation.as_ref().map(|m| Mutation {
+                    id: m.id.clone(),
+                    types: m.types.clone(),
+                    flags: m.flags.clone(),
+                    traits: traits.clone(),
+                }),
                 ..self.layer(overlay, seed)
             })
             .collect()
@@ -972,7 +986,7 @@ impl EngineModel {
         {
             let seed = u32::from(avatar.name.bytes().next().unwrap_or(0));
             layers.push(self.layer(look, seed));
-            layers.extend(self.overlays(look, &avatar.overlays, seed));
+            layers.extend(self.overlays(look, &avatar.overlays, &avatar.traits, seed));
         }
         let entity = self
             .replica
@@ -982,7 +996,7 @@ impl EngineModel {
             let look = e.look.as_ref().expect("filtered on look");
             let desc = e.name.clone().unwrap_or_else(|| look_name(look));
             layers.push(self.layer(look, id_seed(&e.id)));
-            layers.extend(self.overlays(look, &e.overlays, id_seed(&e.id)));
+            layers.extend(self.overlays(look, &e.overlays, &e.traits, id_seed(&e.id)));
             layers.extend(self.attitude(e));
             layers.extend(self.revival(world));
             return Cell {
@@ -1043,8 +1057,9 @@ impl EngineModel {
             .into_iter()
             .flat_map(|l| {
                 let seeded = !matches!(l.kind.as_str(), "item" | "trap");
-                let stacked = l.stack.is_some_and(|n| n > 1);
-                // The native view highlights a pile right over its displayed item.
+                // A loaded cargo part is highlighted over the part, a pile over its displayed item.
+                let loaded = c.cargo && l.kind == "vehicle_part";
+                let stacked = loaded || l.stack.is_some_and(|n| n > 1);
                 let mark = stacked.then(|| self.marker("highlight_item"));
                 [Some(self.layer(l, if seeded { seed } else { 0 })), mark]
             })
@@ -1245,6 +1260,12 @@ impl GameModel for EngineModel {
         self.replica.environment()?.season.clone()
     }
 
+    fn mod_tilesets(&self) -> &[ModTileset] {
+        self.replica
+            .environment()
+            .map_or(&[], |e| e.mod_tilesets.as_slice())
+    }
+
     fn player(&self) -> Pos {
         let (Some((ox, oy)), Some(a)) = (self.origin, self.avatar_pos()) else {
             return Pos { x: 0, y: 0 };
@@ -1370,9 +1391,9 @@ impl GameModel for EngineModel {
 
     fn travel(&mut self, at: Pos) -> bool {
         // Like Tiles, walking into a closed door next to you opens it; the engine plans no route to one.
-        let (me, desc) = (self.player(), self.cell(at).desc);
+        let (me, id) = (self.player(), self.cell(at).id);
         let step = (at.x - me.x, at.y - me.y);
-        if desc.contains("door") && desc.ends_with("_c") && step.0.abs().max(step.1.abs()) == 1 {
+        if id.contains("door") && id.ends_with("_c") && step.0.abs().max(step.1.abs()) == 1 {
             if let (false, Some(id)) = (self.busy, direction(step.0, step.1)) {
                 self.invoke(&[id.into()]);
             }

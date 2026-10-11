@@ -1,10 +1,12 @@
 //! How the map is drawn: the game's tileset sprites or ASCII glyphs, the player's choice kept between runs.
 
-use crate::tileset::{self, Placed, Query, Tileset, TilesetInfo, Turn};
-use crate::tint::tint_pixel;
+use crate::tileset::{self, PaintQuery, Paints, Placed, Query, Tileset, TilesetInfo, Turn};
+use crate::tint::{Paint, tint_pixel};
+use bn_client_core::protocol::ModTileset;
 use bn_client_core::{Cell, Layer, OvermapTile};
 use eframe::egui::{self, Color32, Mesh, Rect, Shape, TextureHandle, TextureId, TextureOptions};
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::collections::VecDeque;
@@ -167,7 +169,7 @@ struct Atlas {
 }
 
 /// A sprite, the paint and the filter it is made under.
-type PaintKey = (u32, Option<u32>, [u8; 3], Fx);
+type PaintKey = (u32, Option<u32>, Paint, Fx);
 
 /// A sprite painted with a vehicle part's color, made in the background.
 enum Painted {
@@ -197,7 +199,7 @@ impl Atlas {
     fn painted(
         &self,
         ctx: &egui::Context,
-        (placed, paint): (Placed, [u8; 3]),
+        (placed, paint): (Placed, Paint),
         fx: Fx,
     ) -> Option<Source> {
         let sprite = placed.sprite;
@@ -343,7 +345,7 @@ fn paint_sprite(
         mask,
     }: Job,
     fx: Fx,
-    paint: [u8; 3],
+    paint: Paint,
 ) -> Option<egui::ColorImage> {
     let image = decoded_sheet(decoded, n, sheet)?;
     let mask = mask.and_then(|(n, sheet, local)| {
@@ -409,6 +411,8 @@ pub struct Display {
     problem: Option<String>,
     /// The engine's `USE_TILES` and `TILES` options, for what the player has not chosen.
     engine: Option<(bool, String)>,
+    /// The mod tilesets the engine lists, once a game is loaded; until then the game's data is searched.
+    mods: Option<Vec<ModTileset>>,
     /// Sprites drawn by the last map paint.
     drawn: usize,
     /// Squares of the last map paint that lie on the hidden-lighting sprite.
@@ -433,6 +437,7 @@ impl Display {
             atlas: None,
             problem: None,
             engine: None,
+            mods: None,
             drawn: 0,
             hidden: 0,
             dimmed: 0,
@@ -465,7 +470,7 @@ impl Display {
             self.problem = Some("no tileset found in the game's gfx folder".into());
             return;
         };
-        match Tileset::load(&dir) {
+        match Tileset::load_with(&dir, self.mods.as_deref()) {
             Ok(tileset) => self.atlas = Some(Atlas::start(tileset)),
             Err(e) => self.problem = Some(e),
         }
@@ -483,6 +488,14 @@ impl Display {
     pub fn follow_engine(&mut self, options: Option<(bool, String)>) {
         if self.engine != options {
             self.engine = options;
+            self.open();
+        }
+    }
+
+    /// Takes the mod tilesets the engine lists, which a game's active mods may add to.
+    pub fn follow_mods(&mut self, listed: &[ModTileset]) {
+        if !listed.is_empty() && self.mods.as_deref() != Some(listed) {
+            self.mods = Some(listed.to_vec());
             self.open();
         }
     }
@@ -773,15 +786,16 @@ impl Display {
         }
         let mut drawn = 0;
         for layer in &cell.layers {
+            let (layer, paints) = resolve_layer(&atlas.tileset, layer);
+            let layer = layer.as_ref();
             let chosen = atlas.tileset.choose(&query(layer, season));
             let sprites = chosen.iter().flat_map(|c| {
-                [(c.bg, layer.tint_bg), (c.fg, layer.tint_fg)]
+                [(c.bg, paints.0), (c.fg, paints.1)]
                     .into_iter()
                     .filter_map(|(placed, paint)| Some((placed?, paint)))
             });
             let mut any = false;
             for (placed, paint) in sprites {
-                let paint = paint.map(|p| [p.0, p.1, p.2]);
                 any |= draw_sprite(painter, atlas, rect, (sx, sy), (placed, paint), (fx, 255));
                 if cell.depth > 0 {
                     // A level seen through open air is hazed more the deeper it is.
@@ -799,6 +813,37 @@ impl Display {
         self.drawn += drawn;
         true
     }
+}
+
+/// The layer as the game draws it with this tileset, and its paint for the background and the foreground: a
+/// mutation's, an item's, a bionic's or an effect's from the tileset, else the part's own. A hair style
+/// goes by the sprite of the hair color where the tileset paints no hair.
+fn resolve_layer<'a>(tileset: &Tileset, layer: &'a Layer) -> (Cow<'a, Layer>, Paints) {
+    if let Some(m) = &layer.mutation {
+        let q = PaintQuery {
+            id: &m.id,
+            types: &m.types,
+            flags: &m.flags,
+            traits: &m.traits,
+        };
+        let male = layer.id.starts_with("overlay_male_");
+        return match tileset.colored_hair(&q, male) {
+            Some([id, plain]) => {
+                let shown = Layer {
+                    id,
+                    fallbacks: vec![plain],
+                    ..layer.clone()
+                };
+                (Cow::Owned(shown), (None, None))
+            }
+            None => (Cow::Borrowed(layer), tileset.mutation_paints(&q)),
+        };
+    }
+    if !layer.tint_keys.is_empty() {
+        return (Cow::Borrowed(layer), tileset.key_paints(&layer.tint_keys));
+    }
+    let of = |rgb: Option<bn_client_core::Rgb>| rgb.map(|c| Paint::of([c.0, c.1, c.2]));
+    (Cow::Borrowed(layer), (of(layer.tint_bg), of(layer.tint_fg)))
 }
 
 fn query<'a>(layer: &'a Layer, season: Option<&'a str>) -> Query<'a> {
@@ -849,7 +894,7 @@ fn draw_sprite(
     atlas: &Atlas,
     cell: Rect,
     scale: (f32, f32),
-    (placed, paint): (Placed, Option<[u8; 3]>),
+    (placed, paint): (Placed, Option<Paint>),
     (fx, opacity): (Fx, u8),
 ) -> bool {
     // A painted sprite is made in the background; the plain one stands in until it is.
@@ -946,7 +991,7 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let sheet = sheet(&dir);
         let decoded = Mutex::default();
-        let paint = [247, 251, 245];
+        let paint = Paint::of([247, 251, 245]);
         let painted = |mask: Option<(usize, &tileset::Sheet, u32)>| {
             let job = Job {
                 sheet: (0, &sheet, 0),

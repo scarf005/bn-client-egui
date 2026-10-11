@@ -171,8 +171,8 @@ fn live_engine_travel_click_plans_a_route_and_a_second_click_walks_it() {
         .flat_map(|y| (0..w).map(move |x| Pos { x, y }))
         .filter(|&p| (2..=12).contains(&reach(p)))
         .filter(|&p| {
-            let desc = model.cell(p).desc;
-            desc != "unknown" && !desc.contains("wall")
+            let id = model.cell(p).id;
+            !id.is_empty() && !id.contains("wall")
         })
         .collect::<Vec<_>>();
     candidates.sort_by_key(|&p| std::cmp::Reverse(reach(p)));
@@ -252,7 +252,7 @@ fn live_engine_remembered_furniture_stays_drawn_after_walking_past_it() {
         let (w, h) = (model.size().x, model.size().y);
         (0..h)
             .flat_map(|y| (0..w).map(move |x| Pos { x, y }))
-            .filter(|&p| model.cell(p).desc == "f_rack")
+            .filter(|&p| model.cell(p).id == "f_rack")
             .count()
     };
 
