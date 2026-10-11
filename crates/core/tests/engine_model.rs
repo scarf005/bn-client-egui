@@ -875,7 +875,7 @@ fn tiled_session() -> EngineModel {
         json!({"at": {"dim": "", "x": 9, "y": 8, "z": 0}, "known": "visible", "light": 1,
             "terrain": {"kind": "terrain", "id": "t_wall", "glyph": "|", "color": "light_gray",
                 "looks_like": ["t_wall_base"], "subtile": "edge", "rotation": 1,
-                "tint_keys": ["WALL", "t_wall"]},
+                "tint_keys": ["WALL", "t_wall"], "tint_vars": {"fg": {"color": "#102030"}}},
             "reviving": true, "cargo": true,
             "vehicle": {"kind": "vehicle_part", "id": "door", "glyph": "+", "color": "white",
                 "tile": "vp_door", "tint": {"fg": "#445566"}},
@@ -889,6 +889,9 @@ fn tiled_session() -> EngineModel {
         json!({"at": {"dim": "", "x": 10, "y": 6, "z": -1}, "known": "visible", "light": 3,
             "vehicle": {"kind": "vehicle_part", "id": "roof", "glyph": "#", "color": "white",
                 "tile": "vp_roof", "tint": {"fg": "#f7fbf5"}}}),
+        json!({"at": {"dim": "", "x": 11, "y": 8, "z": 0}, "known": "visible", "light": 3,
+            "fields": [{"look": {"kind": "field", "id": "fd_acid_water", "glyph": "~", "color": "green",
+                "tint": {"bg": "#00aa00", "fg": "#00aa00"}}, "intensity": 1}]}),
         json!({"at": {"dim": "", "x": 9, "y": 5, "z": -1}, "known": "remembered",
             "memory": {"terrain": {"kind": "terrain", "id": "t_grass", "glyph": "\"", "color": "green"}}}),
         json!({"at": {"dim": "", "x": 9, "y": 7, "z": 0}, "known": "remembered",
@@ -952,7 +955,10 @@ fn a_cell_lists_its_sprites_bottom_first_with_the_engines_tile_selection() {
     assert_eq!(vars.fg.color.as_deref(), Some("#ff3030"));
     assert_eq!(vars.fg.brightness, Some(0.5));
     assert_eq!(vars.bg.color, None);
-    assert!(wall.tint_vars.is_none());
+    assert_eq!(
+        wall.tint_vars.as_ref().unwrap().fg.color.as_deref(),
+        Some("#102030")
+    );
     assert_eq!(cell.light, Some(1));
     assert!(!cell.remembered);
 }
@@ -1871,4 +1877,21 @@ fn a_two_pane_menu_publishes_its_panes_with_area_role_and_filter() {
     assert!(m.actions().iter().any(|a| a.id == "ITEMS_CE"));
     assert_eq!(menu.panes[0].blocked, ["ITEMS_CONTAINER", "ITEMS_UP"]);
     assert!(menu.panes[1].blocked.is_empty());
+}
+
+#[test]
+fn a_field_is_painted_with_the_tint_of_its_type_on_both_layers() {
+    let m = tiled_session();
+    let origin = m.origin();
+    let cell = m.cell(Pos {
+        x: 11 - origin.x,
+        y: 8 - origin.y,
+    });
+    let field = cell
+        .layers
+        .iter()
+        .find(|l| l.id == "fd_acid_water")
+        .unwrap();
+    assert_eq!(field.tint_bg, Some(Rgb(0, 170, 0)));
+    assert_eq!(field.tint_fg, Some(Rgb(0, 170, 0)));
 }
