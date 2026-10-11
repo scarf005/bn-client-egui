@@ -13,6 +13,8 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Clear, Paragraph, Wrap};
 use unicode_width::UnicodeWidthStr;
 
+/// Width of the amount, weight, volume and unit price columns with their separators.
+const RIGHT: usize = 1 + 7 + 1 + 7 + 1 + 7 + 1 + 10;
 const DESCRIPTION_LINES: u16 = 4;
 /// The menu's actions in the order the last line lists them.
 const ACTIONS: [(&str, &str); 4] = [
@@ -245,9 +247,30 @@ impl<M: GameModel> TuiApp<M> {
                 ..inner
             },
         );
+        // The native column header row, over the same fixed columns the rows use.
+        let name_width = width.saturating_sub(RIGHT + 4 + 2);
+        f.render_widget(
+            Paragraph::new(Line::styled(
+                format!(
+                    "{}{:<name_width$} {:<7} {:<7} {:<7} {:<10}",
+                    " ".repeat(6),
+                    "Name (charges)",
+                    "amt",
+                    "weight",
+                    "vol",
+                    "unit price"
+                ),
+                Style::new().fg(Color::Gray),
+            )),
+            Rect {
+                y: inner.y + 1,
+                height: 1.min(inner.height.saturating_sub(1)),
+                ..inner
+            },
+        );
         let list = Rect {
-            y: inner.y + 1,
-            height: inner.height.saturating_sub(1),
+            y: inner.y + 2,
+            height: inner.height.saturating_sub(2),
             ..inner
         };
         // Category headers sit between the rows like the native list; the highlighted row stays in view.
@@ -266,7 +289,6 @@ impl<M: GameModel> TuiApp<M> {
             .position(|e| matches!(e, Entry::Row(r) if r.highlighted))
             .unwrap_or(0);
         let offset = (at + 1).saturating_sub(usize::from(list.height));
-        let right = 1 + 7 + 1 + 7 + 1 + 7 + 1 + 8;
         for (n, entry) in entries
             .iter()
             .enumerate()
@@ -292,7 +314,7 @@ impl<M: GameModel> TuiApp<M> {
             };
             self.trade.rows.push((cell, row.id.clone()));
             let mark = format!("{} ", selection_mark(row));
-            let name_width = width.saturating_sub(right + 4 + mark.len());
+            let name_width = width.saturating_sub(RIGHT + 4 + mark.len());
             // The native key column: the row's key in green, blank where the row has none.
             let key = match row.hotkey.as_str() {
                 "" => Span::raw("  "),
@@ -330,7 +352,7 @@ impl<M: GameModel> TuiApp<M> {
                 column(row, "Stack volume"),
             )));
             spans.push(Span::styled(
-                format!("{:>8}", column(row, "Unit price")),
+                format!("{:>10}", column(row, "Unit price")),
                 Style::new().fg(tone),
             ));
             let style = match (row.enabled, row.highlighted) {
