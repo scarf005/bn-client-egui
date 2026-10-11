@@ -3,7 +3,7 @@ mod common;
 use bn_client_core::transport::ScriptedTransport;
 use bn_client_core::{EngineModel, GameModel, Pos, Rgb};
 use common::{connected, fixture, session, subscribe_reply};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 fn submits(h: &bn_client_core::transport::ScriptHandle) -> Vec<Value> {
     h.sent()
@@ -110,7 +110,7 @@ fn rejected_command_is_reported_and_blocks_the_walk_once() {
     m.step_toward(Pos { x: 30, y: 12 });
     h.push(fixture("command_rejected"));
     m.poll();
-    assert!(m.messages().last().unwrap().contains("stale_revision"));
+    assert!(m.messages().last().unwrap().contains("the screen changed"));
     assert!(
         !m.step_toward(Pos { x: 30, y: 12 }),
         "walk stops after a rejection"
@@ -561,7 +561,10 @@ fn interrupted_by(error: &str) -> (EngineModel, Vec<String>) {
 #[test]
 fn interrupted_command_shows_the_engine_error_reason() {
     let (_, messages) = interrupted_by("not_ready");
-    assert_eq!(messages.last().unwrap(), "Command interrupted: not_ready.");
+    assert_eq!(
+        messages.last().unwrap(),
+        "Command interrupted: the game is not ready."
+    );
 }
 
 #[test]
