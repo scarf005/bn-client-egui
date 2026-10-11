@@ -336,3 +336,80 @@ fn compact_cell_layers_get_their_kind_and_center_subtile_back() {
         Some("center")
     );
 }
+
+#[test]
+fn an_event_avatar_keeps_the_members_it_names_and_clears_the_others() {
+    use bn_client_core::protocol::{AvatarChange, Changes, Event};
+    let examples: Value = serde_json::from_str(
+        &std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/1.0.examples.json"
+        ))
+        .unwrap(),
+    )
+    .unwrap();
+    let full = examples["valid"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["name"] == "avatar with sidebar")
+        .map(|e| e["value"].clone())
+        .unwrap();
+    let event = |sequence: &str, revision: &str, avatar: AvatarChange| EventsParams {
+        epoch: "e7f3".into(),
+        events: vec![Event {
+            sequence: sequence.into(),
+            revision: revision.into(),
+            kind: "cells.seen".into(),
+            cause: None,
+            command: None,
+            display: None,
+            data: None,
+            changes: Changes {
+                avatar: Some(avatar),
+                ..Default::default()
+            },
+        }],
+    };
+    let mut r = loaded();
+    let avatar: AvatarChange = serde_json::from_value(full).unwrap();
+    assert_eq!(
+        r.events(event("41", "32", avatar.clone())),
+        Outcome::Applied
+    );
+    let before = r.avatar().unwrap().clone();
+    assert!(before.sidebar.is_some());
+
+    let moved = |keep: &[&str]| AvatarChange {
+        at: protocol::WorldPos {
+            x: before.at.x + 1,
+            ..before.at.clone()
+        },
+        look: None,
+        overlays: vec![],
+        traits: Default::default(),
+        stats: None,
+        inventory: None,
+        sidebar: None,
+        ground: None,
+        keep: keep.iter().map(|k| k.to_string()).collect(),
+        ..avatar.clone()
+    };
+    assert_eq!(
+        r.events(event("42", "33", moved(&["stats", "sidebar", "inventory"]))),
+        Outcome::Applied
+    );
+    let kept = r.avatar().unwrap();
+    assert_eq!(kept.at.x, before.at.x + 1);
+    assert_eq!(kept.stats, before.stats);
+    assert_eq!(kept.sidebar, before.sidebar);
+    assert_eq!(kept.inventory, before.inventory);
+
+    assert_eq!(r.events(event("43", "34", moved(&[]))), Outcome::Applied);
+    let cleared = r.avatar().unwrap();
+    assert!(
+        cleared.stats.is_empty(),
+        "an absent member that is not kept is empty"
+    );
+    assert!(cleared.sidebar.is_none());
+}
