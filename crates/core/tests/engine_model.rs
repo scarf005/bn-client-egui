@@ -196,6 +196,45 @@ fn epoch_mismatch_and_resync_resubscribe() {
 }
 
 #[test]
+fn resync_mid_command_rebuilds_the_mirror_and_keeps_the_command_outcome() {
+    let (t, h) = session();
+    let fresh = connected(session().0);
+    let mut m = connected(
+        t.on("bn.command.submit", walk_reply())
+            .on("bn.subscribe", subscribe_reply()),
+    );
+    assert!(m.step_toward(Pos { x: 30, y: 12 }));
+    h.push(fixture("events_41_walk"));
+    h.push(fixture("events_42_message"));
+    m.poll();
+    assert_ne!(m.player(), fresh.player(), "the stream moved the avatar");
+    // The engine resyncs and, in the same publication, reports how the command ended.
+    h.push(fixture("resync"));
+    h.push(fixture("command_completed"));
+    m.poll();
+    assert_eq!(h.sent_methods().last().unwrap(), "bn.subscribe");
+    assert_eq!(m.player(), fresh.player());
+    assert_eq!(m.size(), fresh.size());
+    for at in [Pos { x: 21, y: 11 }, Pos { x: 23, y: 12 }] {
+        assert_eq!(
+            (m.cell(at).glyph, m.cell(at).desc),
+            (fresh.cell(at).glyph, fresh.cell(at).desc)
+        );
+    }
+    assert_eq!(m.ground(), fresh.ground());
+    assert_eq!(m.inventory(), fresh.inventory());
+    let shown: Vec<_> = m.native_log().iter().map(|l| l.shown()).collect();
+    assert_eq!(
+        shown,
+        ["You walk east."],
+        "the log read so far is kept once"
+    );
+    assert!(!m.busy(), "the finished command no longer blocks input");
+    let status = m.command().unwrap();
+    assert_eq!((status.stage.as_str(), status.finished), ("done", true));
+}
+
+#[test]
 fn duplicate_events_do_not_resubscribe_or_duplicate_messages() {
     let (t, h) = session();
     let mut m = connected(t);
