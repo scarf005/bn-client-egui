@@ -5,6 +5,9 @@ use crate::{a11y, editor, text};
 use bn_client_core::{GameModel, markup};
 use eframe::egui::{self, accesskit};
 
+/// Height of the entry description under the list.
+const DESCRIPTION_HEIGHT: f32 = 96.0;
+
 impl<M: GameModel> App<M> {
     /// The engine's current interaction, drawn generically: title, message, tabs, choices, cancel.
     pub(super) fn menu(&mut self, ctx: &egui::Context) {
@@ -266,9 +269,20 @@ impl<M: GameModel> App<M> {
                     ));
                     more |= rest.clicked();
                 }
-                if let Some(description) = described.filter(|d| is_prose(d)) {
+                // A menu that describes its entries keeps the room for the text, so nothing below the list
+                // moves as the hovered entry changes.
+                if menu.choices.iter().any(|c| is_prose(&c.description)) {
                     ui.separator();
-                    ui.label(self.rich(ui, description));
+                    egui::ScrollArea::vertical()
+                        .id_salt("menu_description")
+                        .max_height(DESCRIPTION_HEIGHT)
+                        .show(ui, |ui| {
+                            ui.set_min_height(DESCRIPTION_HEIGHT);
+                            ui.set_min_width(ui.available_width());
+                            if let Some(description) = described.filter(|d| is_prose(d)) {
+                                ui.label(self.rich(ui, description));
+                            }
+                        });
                 }
             });
         self.menu_ids = ids;
