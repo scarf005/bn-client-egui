@@ -136,7 +136,11 @@ impl<M: GameModel> App<M> {
 
     /// Draws the menu; true when it took keyboard focus (on `entered`) this frame.
     pub(super) fn aim(&mut self, ctx: &egui::Context, menu: &Menu, _entered: bool) -> bool {
-        a11y::trap_tab(ctx, self.trapped_by_menu(), false);
+        a11y::trap_tab(
+            ctx,
+            self.trapped_by_menu(),
+            super::menu_forwards_keys(Some(menu)),
+        );
         let offered = self
             .model
             .actions()

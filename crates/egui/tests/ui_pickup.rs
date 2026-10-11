@@ -5,7 +5,7 @@ use bn_client_egui::{App, Clock, EngineModel};
 use common::{fixture, session};
 use eframe::egui;
 use egui_kittest::Harness;
-use egui_kittest::kittest::Queryable;
+use egui_kittest::kittest::{NodeT, Queryable};
 use serde_json::{Value, json};
 
 type H<'a> = Harness<'a, App<EngineModel>>;
@@ -141,4 +141,20 @@ fn the_rows_and_confirm_do_not_move_with_the_length_of_the_hovered_description()
         assert_eq!(h.get_by_label("Confirm").rect(), confirm, "{row}");
         assert_eq!(h.get_by_label("[x] tin can").rect(), can, "{row}");
     }
+}
+
+#[test]
+fn an_arrow_key_keeps_the_focus_on_the_focused_row() {
+    let (mut h, _) = harness();
+    h.key_press(egui::Key::Tab);
+    h.run_steps(3);
+    let focused = |h: &H| {
+        h.get_all_by_role(egui::accesskit::Role::MenuItem)
+            .position(|n| n.accesskit_node().is_focused())
+    };
+    let before = focused(&h);
+    assert!(before.is_some(), "Tab focuses a menu item");
+    h.key_press(egui::Key::ArrowRight);
+    h.run_steps(3);
+    assert_eq!(focused(&h), before);
 }
