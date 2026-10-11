@@ -171,6 +171,8 @@ enum ColorDef {
 struct PairDef {
     source_type: String,
     target_type: String,
+    #[serde(rename = "override", default)]
+    overrides: bool,
 }
 
 /// The foreground and background paint of a mutation.
@@ -298,7 +300,7 @@ pub struct Tileset {
     tiles: HashMap<String, Tile>,
     /// Paints by mutation id, and the mutation types whose paints a type takes.
     tints: HashMap<String, Paints>,
-    tint_pairs: HashMap<String, String>,
+    tint_pairs: HashMap<String, (String, bool)>,
 }
 
 /// What to draw for one thing in a cell.
@@ -482,15 +484,53 @@ impl Tileset {
             }
         }
         for pair in pairs {
-            self.tint_pairs.insert(pair.target_type, pair.source_type);
+            self.tint_pairs
+                .insert(pair.target_type, (pair.source_type, pair.overrides));
         }
+    }
+
+    /// The paint of the first of `keys` the tileset has one for: how the game tints an item, a bionic or an effect.
+    pub fn key_paints(&self, keys: &[String]) -> Paints {
+        keys.iter()
+            .find_map(|key| self.tints.get(key).copied())
+            .unwrap_or((None, None))
+    }
+
+    /// The sprite ids that stand for a hair style in the character's hair color, when the tileset has no tint
+    /// for hair colors and the game picks a sprite per color instead: its gendered id, then the plain one.
+    pub fn colored_hair(&self, q: &PaintQuery, male: bool) -> Option<[String; 2]> {
+        let controlled = |key: &String| self.tint_pairs.get(key).map(|(_, overrides)| *overrides);
+        let overridden = q
+            .types
+            .iter()
+            .chain(q.flags)
+            .find_map(controlled)
+            .unwrap_or(false);
+        if overridden || !q.types.iter().any(|t| t == "hair_style") {
+            return None;
+        }
+        let color = q.traits.get("hair_color")?.first()?;
+        let overlay = format!("mutation_{}", q.id);
+        if overlay.contains(color.as_str()) {
+            return None;
+        }
+        let at = overlay.find("hair_")?;
+        let (prefix, suffix) = overlay.split_at(at);
+        let named = format!("{prefix}{color}{}", &suffix[suffix.find('_')?..]);
+        let ids = [
+            format!("overlay_{}_{named}", if male { "male" } else { "female" }),
+            format!("overlay_{named}"),
+        ];
+        ids.iter()
+            .any(|id| self.tiles.contains_key(id))
+            .then_some(ids)
     }
 
     /// The paint the game gives the sprite of a mutation: that of the character's mutation of the type that
     /// the mutation's types or flags take their color from, else the mutation's own.
     pub fn mutation_paints(&self, q: &PaintQuery) -> Paints {
         let by_source = |key: &String| {
-            let source = self.tint_pairs.get(key)?;
+            let (source, _) = self.tint_pairs.get(key)?;
             q.traits
                 .get(source)?
                 .iter()
