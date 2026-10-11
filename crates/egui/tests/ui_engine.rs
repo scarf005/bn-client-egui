@@ -693,7 +693,7 @@ mod overmap {
         let (h, _script) = open_overmap();
         h.get_by_label("Overmap view");
         h.get_by_label_contains(
-            "Overmap (100, 200, 0). Route of 2 squares; click the cursor to go.",
+            "Overmap (100, 200, 0). Overmap forest. Route of 2 squares; click the cursor to go.",
         );
         assert!(
             h.query_by_label("Map").is_none(),
