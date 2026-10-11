@@ -34,15 +34,6 @@ fn column<'a>(row: &'a MenuChoice, label: &str) -> &'a str {
     found.map_or("", |(_, v)| v.as_str())
 }
 
-/// A per-unit weight or volume such as `0.05 kg` for the whole stack, as the native columns print it.
-fn stack_total(value: &str, count: u64) -> String {
-    let unit = value
-        .split_whitespace()
-        .next()
-        .and_then(|n| n.parse::<f64>().ok());
-    unit.map_or(String::new(), |n| format!("{:.2}", n * count as f64))
-}
-
 /// The key hints of the native header: `[key] label` for each action the engine offers.
 fn key_hints(actions: &[ActionEntry]) -> String {
     let hint = |id: &str, label: &str| {
@@ -92,6 +83,7 @@ impl<M: GameModel> App<M> {
             .anchor(egui::Align2::CENTER_TOP, super::dialog_offset(ctx))
             .collapsible(false)
             .default_width(1000.0)
+            .max_width(ctx.content_rect().width() - 16.0)
             .show(ctx, |ui| {
                 ui.weak(key_hints(&self.model.actions()));
                 let message = bn_client_core::markup::plain(&menu.message);
@@ -274,8 +266,8 @@ impl<M: GameModel> App<M> {
                                 } else {
                                     String::new()
                                 });
-                                ui.label(stack_total(column(row, "Weight"), stack));
-                                ui.label(stack_total(column(row, "Volume"), stack));
+                                ui.label(column(row, "Stack weight"));
+                                ui.label(column(row, "Stack volume"));
                                 let price = egui::RichText::new(column(row, "Unit price"));
                                 ui.label(match column(row, "Price tone") {
                                     "good" => price.color(GREEN),

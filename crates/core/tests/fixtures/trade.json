@@ -93,6 +93,14 @@
             {
               "label": "Category",
               "value": "TOOLS"
+            },
+            {
+              "label": "Stack weight",
+              "value": "0.30"
+            },
+            {
+              "label": "Stack volume",
+              "value": "0.00"
             }
           ],
           "available_count": 3,
@@ -119,6 +127,14 @@
             {
               "label": "Category",
               "value": "TOOLS"
+            },
+            {
+              "label": "Stack weight",
+              "value": "0.00"
+            },
+            {
+              "label": "Stack volume",
+              "value": "0.00"
             }
           ],
           "available_count": 1,
