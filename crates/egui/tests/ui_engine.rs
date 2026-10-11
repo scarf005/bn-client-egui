@@ -783,3 +783,38 @@ fn the_title_screen_draws_the_engines_banner_above_its_menu() {
     h.get_by_label("Version: HEAD-HASH");
     h.get_by_label("combat knife");
 }
+
+#[test]
+fn a_menu_entry_is_where_it_stays_on_the_first_frame_the_menu_is_shown() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    for name in ["events_41_walk", "events_42_message"] {
+        script.push(fixture(name));
+    }
+    let mut menu = fixture("events_43_menu");
+    let ev = &mut menu["params"]["events"][0];
+    let row = |id: &str, label: &str, selected: bool| {
+        json!({"id":id,"label":label,"description":"","denial":"","enabled":true,
+            "selectable":true,"selected":selected,"columns":[]})
+    };
+    ev["changes"]["interaction"]["interaction"]["choices"] = json!([
+        row("tab:new_game", "New Game", true),
+        row("tab:settings", "Settings", false),
+        row("tab:help", "Help", false),
+    ]);
+    script.push(menu);
+    let mut seen = Vec::new();
+    for _ in 0..12 {
+        h.run_steps(1);
+        if let Some(node) = h.query_by_label("New Game") {
+            seen.push(node.rect());
+        }
+    }
+    assert!(seen.len() >= 3, "the menu is shown: {seen:?}");
+    // egui lays a new window out invisibly once to measure it; the frame after that is the first one drawn.
+    let seen = &seen[1..];
+    assert!(
+        seen.iter().all(|r| *r == seen[0]),
+        "first frames moved the entry: {seen:?}"
+    );
+}

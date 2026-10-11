@@ -97,17 +97,21 @@ impl<M: GameModel> App<M> {
         }
         let mut cursor_seen = None;
         let title = markup::plain(&menu.title);
+        let frame = list_frame(ctx);
+        let max_width = (ctx.content_rect().width() * 0.8).max(520.0);
         egui::Window::new(&title)
             .id(a11y::dialog_id(&title))
             .title_bar(!title.is_empty() && menu.banner.is_empty())
             .anchor(egui::Align2::CENTER_TOP, super::dialog_offset(ctx))
             .collapsible(false)
             .resizable(false)
-            .frame(list_frame(ctx))
+            // Rows fill the list, so the window is as wide as it may get from its first frame; growing
+            // into it later would move its centred position.
+            .default_width(max_width + frame.total_margin().sum().x)
+            .frame(frame)
             .show(ctx, |ui| {
                 ui.set_min_width(520.0);
-                // Rows fill the list, so the window must not grow with them frame after frame.
-                ui.set_max_width((ctx.content_rect().width() * 0.8).max(520.0));
+                ui.set_max_width(max_width);
                 self.banner(ui, &menu.banner);
                 // Cancel sits right under the title, so it is at the same place for every dialog.
                 if menu.can_cancel && !menu.acknowledges() {
