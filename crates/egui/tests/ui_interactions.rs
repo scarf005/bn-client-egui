@@ -900,3 +900,104 @@ fn a_popup_right_after_another_takes_the_focus_too() {
         .unwrap();
     assert!(button.accesskit_node().is_focused());
 }
+
+#[test]
+fn a_popups_dismiss_button_tells_screen_readers_which_keys_close_it() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    let mut ack = choice("acknowledge", "Cancel popup");
+    ack["description"] = "QUIT".into();
+    script.push(show(
+        41,
+        json!([{"id":"QUIT","name":"Cancel popup","keys":["ESC","SPACE","RETURN"]}]),
+        popup(true, "Welcome to the tutorial!", ack),
+    ));
+    h.run_steps(3);
+    let button = h.get_by_role_and_label(egui::accesskit::Role::MenuItem, "Cancel popup");
+    let hint = egui_kittest::kittest::NodeT::accesskit_node(&button)
+        .description()
+        .unwrap_or_default();
+    assert_eq!(hint, "Space or Enter closes this popup");
+}
+
+#[test]
+fn list_menu_rows_fill_the_window_like_the_native_highlight_bar() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    script.push(show(
+        41,
+        json!([]),
+        choices_menu(vec![choice("a", "Alpha"), choice("b", "Longer beta row")]),
+    ));
+    h.run_steps(4);
+    let (alpha, beta) = (
+        h.get_by_label("Alpha").rect(),
+        h.get_by_label("Longer beta row").rect(),
+    );
+    assert_eq!(alpha.width(), beta.width(), "{alpha:?} {beta:?}");
+    assert!(alpha.width() >= 500.0, "{alpha:?}");
+}
+
+fn finished_command(h: &mut H, script: &ScriptHandle) {
+    script.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{
+        "epoch":"e7f3","command_id":"c:5","stage":"completed"}}));
+    h.run_steps(4);
+}
+
+#[test]
+fn options_is_in_the_action_palette_and_opens_the_native_options_through_the_main_menu() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    script.push(show(
+        41,
+        json!([{"id":"main_menu","name":"Main Menu","keys":["ESC"]}]),
+        Value::Null,
+    ));
+    h.run_steps(3);
+    open_palette(&mut h);
+    h.get_by_label("Search actions").focus();
+    h.run_steps(2);
+    h.get_by_label("Search actions").type_text("option");
+    h.run_steps(2);
+    h.get_by_label("Options").click();
+    h.run_steps(3);
+    assert_eq!(
+        submits(&script),
+        [json!({"kind":"action","action_id":"main_menu"})]
+    );
+    finished_command(&mut h, &script);
+    let mut menu = choice("main:options", "Options");
+    menu["selected"] = false.into();
+    script.push(show(
+        42,
+        json!([]),
+        json!({"schema_id":"s:mm","kind":"choices","context":"UILIST","title":"",
+            "message":"MAIN MENU","allow_cancel":true,"choices":[choice("main:wiki","Open Wiki"), menu],
+            "choice_total":2,"allow_set_count":false}),
+    ));
+    h.run_steps(5);
+    assert_eq!(
+        submits(&script).last(),
+        Some(&json!({"kind":"choose","choice_id":"main:options"}))
+    );
+}
+
+fn list_with(rows: usize) -> Value {
+    let choices = (0..rows)
+        .map(|i| choice(&format!("r:{i}"), &format!("row {i}")))
+        .collect::<Vec<_>>();
+    json!({"schema_id":"s:list","kind":"choices","context":"UILIST","title":"","message":"Pick",
+        "allow_cancel":true,"choices":choices,"choice_total":rows,"allow_set_count":false})
+}
+
+#[test]
+fn the_filter_button_is_for_long_lists_not_for_a_two_row_question() {
+    let filter = json!([{"id":"FILTER","name":"Filter","keys":["/"]}]);
+    for (rows, shown) in [(2, false), (9, false), (30, true)] {
+        let (mut h, script) = harness();
+        h.run_steps(3);
+        script.push(show(41, filter.clone(), list_with(rows)));
+        h.run_steps(4);
+        assert_eq!(h.query_by_label("Filter").is_some(), shown, "{rows} rows");
+    }
+}

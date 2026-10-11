@@ -153,7 +153,10 @@ fn by_def(def: &str, v: &Value) -> Result<Value, String> {
         "describe_params" => round_trip::<DescribeParams>(v),
         "describe_result" => round_trip::<DescribeResult>(v),
         // The world values are typed by the replica tests; here they only have to be valid JSON.
-        "entity" | "field" | "look" | "cell" | "pane" => Ok(v.clone()),
+        "environment" => round_trip::<protocol::Environment>(v),
+        "entity" => round_trip::<protocol::Entity>(v),
+        "look" => round_trip::<protocol::Look>(v),
+        "field" | "cell" | "pane" => Ok(v.clone()),
         other => Err(format!("no type for {other}")),
     }
 }

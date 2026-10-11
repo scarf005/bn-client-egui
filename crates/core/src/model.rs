@@ -1,7 +1,7 @@
 use crate::colors::ColorMap;
 use crate::markup::{self, Run};
 
-use crate::protocol::Editor;
+use crate::protocol::{Editor, ModTileset};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Pos {
     pub x: i32,
@@ -33,10 +33,24 @@ pub struct Layer {
     /// Paint the tileset blends into the background and the foreground sprite.
     pub tint_bg: Option<Rgb>,
     pub tint_fg: Option<Rgb>,
+    /// Set on the overlay of a mutation, whose paint the tileset picks from the character's mutations.
+    pub mutation: Option<Mutation>,
+    /// The ids a tileset's tints for an item, bionic or effect overlay are keyed by, first match first.
+    pub tint_keys: Vec<String>,
     /// What stands in for the sprite when the tileset has none; NUL for an overlay, which then draws nothing.
     pub glyph: char,
     pub color: Rgb,
     pub bg: Option<Rgb>,
+}
+
+/// What a tileset needs to paint the sprite of a mutation with the character's hair, skin or eye color.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Mutation {
+    pub id: String,
+    pub types: Vec<String>,
+    pub flags: Vec<String>,
+    /// The ids of the character's mutations by mutation type.
+    pub traits: std::sync::Arc<std::collections::BTreeMap<String, Vec<String>>>,
 }
 
 #[derive(Default)]
@@ -505,6 +519,10 @@ pub trait GameModel {
     /// Fetches the next page of a menu that has more choices than it lists.
     fn more_choices(&mut self) {}
     fn cancel_menu(&mut self) {}
+    /// The files of game data that add sprites to the tileset the game draws, in the engine's load order.
+    fn mod_tilesets(&self) -> &[ModTileset] {
+        &[]
+    }
     /// Season of the game calendar (`spring`, `summer`, `autumn`, `winter`), which picks seasonal sprites.
     fn season(&self) -> Option<String> {
         None

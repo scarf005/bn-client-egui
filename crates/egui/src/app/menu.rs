@@ -17,6 +17,7 @@ impl<M: GameModel> App<M> {
             }
             return;
         };
+        self.follow_options(&menu);
         // A popup follows another with the same empty title, so its text tells them apart.
         let shown = format!(
             "{}\n{}",
@@ -160,14 +161,34 @@ impl<M: GameModel> App<M> {
                                 continue;
                             }
                             ui.horizontal(|ui| {
-                                let text = self.rich(ui, &choice.label);
-                                let button = self.control(
-                                    ui,
-                                    text,
-                                    &choice.id,
-                                    choice.enabled,
-                                    choice.selected,
-                                );
+                                let text = if choice.id == "acknowledge" {
+                                    dismiss_text(&choice.label).into()
+                                } else {
+                                    self.rich(ui, &choice.label)
+                                };
+                                // Native list menus highlight the whole row; the title screen's entries,
+                                // a popup's dismiss button and rows with values or a denial beside them
+                                // keep their own width.
+                                let whole_row = menu.context != "MAIN_MENU"
+                                    && choice.id != "acknowledge"
+                                    && choice.columns.is_empty()
+                                    && choice.denial.is_empty();
+                                let layout = if whole_row {
+                                    egui::Layout::top_down_justified(egui::Align::Min)
+                                } else {
+                                    *ui.layout()
+                                };
+                                let button = ui
+                                    .with_layout(layout, |ui| {
+                                        self.control(
+                                            ui,
+                                            text,
+                                            &choice.id,
+                                            choice.enabled,
+                                            choice.selected,
+                                        )
+                                    })
+                                    .inner;
                                 ids.extend(button.enabled().then_some(button.id));
                                 if choice.selected {
                                     cursor_seen = Some(choice.id.clone());
@@ -189,6 +210,11 @@ impl<M: GameModel> App<M> {
                                     if !choice.enabled && !choice.denial.is_empty() {
                                         b.set_description(markup::plain(&choice.denial));
                                     }
+                                    if choice.id == "acknowledge" {
+                                        // Screen readers keep the engine's own name for the row.
+                                        b.set_label(markup::plain(&choice.label));
+                                        b.set_description("Space or Enter closes this popup");
+                                    }
                                 });
                                 if choice.id != "acknowledge"
                                     && (button.hovered()
@@ -209,7 +235,10 @@ impl<M: GameModel> App<M> {
                             self.menu_message(ui, &menu);
                         }
                     });
-                if self.model.actions().iter().any(|a| a.id == "FILTER") && menu.field.is_none() {
+                if self.model.actions().iter().any(|a| a.id == "FILTER")
+                    && menu.field.is_none()
+                    && menu.total > FILTER_MIN_ROWS
+                {
                     let filter = ui.add_enabled(!self.model.busy(), egui::Button::new("Filter"));
                     ids.extend(filter.enabled().then_some(filter.id));
                     filter_clicked = filter.clicked();
@@ -347,4 +376,29 @@ fn is_prose(description: &str) -> bool {
     description
         .chars()
         .any(|c| !(c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_'))
+}
+
+/// What a popup's dismiss button shows: the any-key prompt as the engine words it, otherwise "OK" in
+/// place of the engine's action name ("Cancel popup"), which the native popup never shows.
+fn dismiss_text(engine_label: &str) -> &str {
+    if engine_label == "Press any key" {
+        engine_label
+    } else {
+        "OK"
+    }
+}
+
+/// A list this short is read at a glance; the engine's filter is offered from here on.
+const FILTER_MIN_ROWS: usize = 10;
+
+#[cfg(test)]
+mod tests {
+    use super::dismiss_text;
+
+    #[test]
+    fn a_popup_button_says_ok_and_the_any_key_prompt_keeps_its_words() {
+        assert_eq!(dismiss_text("Cancel popup"), "OK");
+        assert_eq!(dismiss_text("Exit screen"), "OK");
+        assert_eq!(dismiss_text("Press any key"), "Press any key");
+    }
 }

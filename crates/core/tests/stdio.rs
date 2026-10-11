@@ -93,7 +93,7 @@ fn args_of(profile: Option<&Profile>) -> String {
     let script = "#!/bin/sh\nread line\nprintf '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"args\":\"%s\"}}\\n' \"$*\"\n";
     let mut t = spawn_script(&dir, script, |engine| match profile {
         Some(p) => StdioTransport::spawn_with(engine, p),
-        None => StdioTransport::spawn(engine),
+        None => StdioTransport::spawn_with(engine, &Profile::default()),
     });
     t.send(request(1, "bn.hello", json!({})));
     let Incoming::Response { result: Ok(v), .. } = recv(&mut t) else {
