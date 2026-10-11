@@ -53,7 +53,7 @@ impl<M: GameModel> App<M> {
                 .split_whitespace()
                 .any(|w| w.starts_with(&needle))
         });
-        a11y::trap_tab(ctx, &self.palette_ids);
+        a11y::trap_tab(ctx, &self.palette_ids, false);
         let entered = self.palette_ids.is_empty();
         let mut ids = Vec::new();
         egui::Window::new("Actions")

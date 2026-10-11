@@ -31,7 +31,7 @@ fn labelled(ui: &egui::Ui, response: &egui::Response, label: &str) {
 impl<M: GameModel> App<M> {
     /// Draws the menu; true when it took keyboard focus (on `entered`) this frame.
     pub(super) fn crafting(&mut self, ctx: &egui::Context, menu: &Menu, entered: bool) -> bool {
-        a11y::trap_tab(ctx, self.trapped_by_menu());
+        a11y::trap_tab(ctx, self.trapped_by_menu(), false);
         let mut ids = Vec::new();
         let rows = recipes(menu);
         if self.crafting.engine_filter != menu.field.as_ref().map_or("", |f| &f.value) {

@@ -51,9 +51,10 @@ pub fn button(ctx: &egui::Context, id: egui::Id, pressed: bool) {
 }
 
 /// Keeps Tab and Shift+Tab inside `ids` (a modal's controls, in order): focus wraps at either end
-/// and returns from outside. Call every frame the modal is open, before it is drawn. A text field
+/// and returns from outside; `arrows` also keeps the arrow keys from moving focus, for a modal whose
+/// arrows belong to the game. Call every frame the modal is open, before it is drawn. A text field
 /// among `ids` must also be passed to `text_field` after it is drawn.
-pub fn trap_tab(ctx: &egui::Context, ids: &[egui::Id]) {
+pub fn trap_tab(ctx: &egui::Context, ids: &[egui::Id], arrows: bool) {
     let focused = ctx.memory(|m| m.focused());
     let at = focused.and_then(|f| ids.iter().position(|id| *id == f));
     if let Some(f) = focused.filter(|_| at.is_some()) {
@@ -63,6 +64,8 @@ pub fn trap_tab(ctx: &egui::Context, ids: &[egui::Id]) {
                 f,
                 egui::EventFilter {
                     tab: true,
+                    horizontal_arrows: arrows,
+                    vertical_arrows: arrows,
                     ..Default::default()
                 },
             )

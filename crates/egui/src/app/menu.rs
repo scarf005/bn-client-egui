@@ -50,7 +50,11 @@ impl<M: GameModel> App<M> {
             return;
         }
         self.in_popup = menu.acknowledges();
-        a11y::trap_tab(ctx, self.trapped_by_menu());
+        a11y::trap_tab(
+            ctx,
+            self.trapped_by_menu(),
+            super::menu_forwards_keys(Some(&menu)),
+        );
         let mut ids = Vec::new();
         let mut action_ids = Vec::new();
         let mut focused = false;

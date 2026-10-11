@@ -14,7 +14,7 @@ pub struct Pickup {
 impl<M: GameModel> App<M> {
     /// Draws the menu; true when it took keyboard focus (on `entered`) this frame.
     pub(super) fn pickup(&mut self, ctx: &egui::Context, menu: &Menu, entered: bool) -> bool {
-        a11y::trap_tab(ctx, self.trapped_by_menu());
+        a11y::trap_tab(ctx, self.trapped_by_menu(), false);
         let mut ids = Vec::new();
         let mut focused = false;
         let mut chosen = None;

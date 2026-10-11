@@ -902,6 +902,21 @@ fn an_arrow_key_with_nothing_focused_leaves_the_toolbar_alone() {
 }
 
 #[test]
+fn an_arrow_key_on_a_popup_keeps_the_focus_on_its_button() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    script.push(show(41, json!([]), popup_with("First.")));
+    h.run_steps(4);
+    h.key_press(egui::Key::ArrowLeft);
+    h.run_steps(4);
+    let button = h
+        .get_all_by_role_and_label(egui::accesskit::Role::MenuItem, "Cancel popup")
+        .next()
+        .unwrap();
+    assert!(button.accesskit_node().is_focused());
+}
+
+#[test]
 fn a_popup_right_after_another_takes_the_focus_too() {
     let (mut h, script) = harness();
     h.run_steps(3);
