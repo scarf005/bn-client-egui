@@ -32,7 +32,7 @@ pub(super) struct Trade {
     count: Option<String>,
 }
 
-fn column<'a>(row: &'a MenuChoice, name: &str) -> &'a str {
+pub(super) fn column<'a>(row: &'a MenuChoice, name: &str) -> &'a str {
     row.columns
         .iter()
         .find(|(l, _)| l == name)
@@ -40,7 +40,7 @@ fn column<'a>(row: &'a MenuChoice, name: &str) -> &'a str {
 }
 
 /// The native selection mark: all of the stack, some of it, or none.
-fn selection_mark(row: &MenuChoice) -> char {
+pub(super) fn selection_mark(row: &MenuChoice) -> char {
     match (row.selected_count, row.available_count) {
         (Some(n), Some(total)) if n > 0 && n >= total => '+',
         (Some(n), _) if n > 0 => '#',
