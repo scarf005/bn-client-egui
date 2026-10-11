@@ -37,6 +37,22 @@ fn column<'a>(row: &'a MenuChoice, name: &str) -> &'a str {
         .map_or("", |(_, v)| v.as_str())
 }
 
+/// The native selection mark: all of the stack, some of it, or none.
+fn selection_mark(row: &MenuChoice) -> char {
+    match (row.selected_count, row.available_count) {
+        (Some(n), Some(total)) if n > 0 && n >= total => '+',
+        (Some(n), _) if n > 0 => '#',
+        _ if row.selected => '+',
+        _ => '-',
+    }
+}
+
+/// A line of a pane: a category header or a row.
+enum Entry<'a> {
+    Header(&'a str),
+    Row(&'a MenuChoice),
+}
+
 /// Rows of the pane, in the engine's order.
 fn rows<'a>(menu: &'a Menu, pane: &MenuPane) -> Vec<&'a MenuChoice> {
     let all = menu.choices.iter();
@@ -234,11 +250,24 @@ impl<M: GameModel> TuiApp<M> {
             height: inner.height.saturating_sub(1),
             ..inner
         };
-        // The highlighted row stays in view.
-        let at = rows.iter().position(|r| r.highlighted).unwrap_or(0);
+        // Category headers sit between the rows like the native list; the highlighted row stays in view.
+        let mut entries = vec![];
+        let mut category = "";
+        for row in rows {
+            let shown = column(row, "Category");
+            if !shown.is_empty() && shown != category {
+                category = shown;
+                entries.push(Entry::Header(shown));
+            }
+            entries.push(Entry::Row(row));
+        }
+        let at = entries
+            .iter()
+            .position(|e| matches!(e, Entry::Row(r) if r.highlighted))
+            .unwrap_or(0);
         let offset = (at + 1).saturating_sub(usize::from(list.height));
-        let right = 1 + 8 + 1 + 7 + 1 + 9 + 1 + 9;
-        for (n, row) in rows
+        let right = 1 + 7 + 1 + 7 + 1 + 7 + 1 + 8;
+        for (n, entry) in entries
             .iter()
             .enumerate()
             .skip(offset)
@@ -249,11 +278,20 @@ impl<M: GameModel> TuiApp<M> {
                 height: 1,
                 ..list
             };
-            self.trade.rows.push((cell, row.id.clone()));
-            let mark = match row.selected {
-                true => "[x] ",
-                false => "[ ] ",
+            let Entry::Row(row) = entry else {
+                if let Entry::Header(name) = entry {
+                    f.render_widget(
+                        Paragraph::new(Line::styled(
+                            format!("  {name}"),
+                            Style::new().fg(Color::Magenta),
+                        )),
+                        cell,
+                    );
+                }
+                continue;
             };
+            self.trade.rows.push((cell, row.id.clone()));
+            let mark = format!("{} ", selection_mark(row));
             let name_width = width.saturating_sub(right + 4 + mark.len());
             // The native key column: the row's key in green, blank where the row has none.
             let key = match row.hotkey.as_str() {
@@ -275,17 +313,26 @@ impl<M: GameModel> TuiApp<M> {
                 spans.push(Span::styled(text, style));
             }
             spans.push(Span::raw(" ".repeat(name_width.saturating_sub(used))));
-            let count = match (countable(row), row.selected_count) {
-                (Some(available), Some(n)) => format!("{n}/{available}"),
+            // The native amount column: the stack, or how much of a marked stack is offered.
+            let amount = match (countable(row), row.selected_count, row.available_count) {
+                (Some(available), Some(n), _) => format!("{n}/{available}"),
+                (_, _, Some(n)) if n > 1 => n.to_string(),
                 _ => String::new(),
             };
+            let tone = match column(row, "Price tone") {
+                "good" => Color::LightGreen,
+                "bad" => Color::LightRed,
+                _ => Color::Gray,
+            };
             spans.push(Span::raw(format!(
-                " {:>8} {:>7} {:>9} {:>9}",
-                column(row, "Unit price"),
-                count,
-                column(row, "Weight"),
-                column(row, "Volume"),
+                " {amount:>7} {:>7} {:>7} ",
+                column(row, "Stack weight"),
+                column(row, "Stack volume"),
             )));
+            spans.push(Span::styled(
+                format!("{:>8}", column(row, "Unit price")),
+                Style::new().fg(tone),
+            ));
             let style = match (row.enabled, row.highlighted) {
                 (_, true) => Style::new().add_modifier(Modifier::REVERSED),
                 (false, _) => Style::new().fg(Color::DarkGray),

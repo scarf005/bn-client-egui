@@ -83,11 +83,12 @@ fn both_parties_show_rows_prices_capacity_and_the_balance_line() {
         "Lena: NPC items",
         "You: Player items",
         "Free capacity: 12.00 kg, 8.00 L",
-        "[x] tin can (3)",
-        "[ ] lighter",
+        "# tin can (3)",
+        "- lighter",
+        "TOOLS",
         "$0.50",
         "$1.00",
-        "0.10 kg",
+        "0.30",
         "2/3",
         "A battered tin can.",
         "Confirm trade",
@@ -99,7 +100,7 @@ fn both_parties_show_rows_prices_capacity_and_the_balance_line() {
     let (you, _) = find(&t, "lighter");
     assert!(npc < 60 && you >= 60);
     // The cursor row (the engine's focus) is reversed.
-    let (x, y) = find(&t, "[x] tin can");
+    let (x, y) = find(&t, "# tin can");
     let cell = &t.backend().buffer()[(x, y)];
     assert!(cell.modifier.contains(Modifier::REVERSED));
 }
@@ -108,7 +109,7 @@ fn both_parties_show_rows_prices_capacity_and_the_balance_line() {
 fn a_click_on_a_row_marks_it() {
     let (mut app, h) = open(trade());
     let t = render(&mut app);
-    let (x, y) = find(&t, "[ ] lighter");
+    let (x, y) = find(&t, "- lighter");
     app.handle_mouse(MouseEvent {
         kind: MouseEventKind::Down(MouseButton::Left),
         column: x,
@@ -206,10 +207,10 @@ fn trade_rows_show_the_engines_key_in_light_green_and_pad_rows_without_one() {
     boundary["interaction"]["choices"][1]["hotkey"] = "b".into();
     let (mut app, _) = open(boundary);
     let t = render(&mut app);
-    let (x, y) = find(&t, "b [ ] lighter");
+    let (x, y) = find(&t, "b - lighter");
     assert_eq!(t.backend().buffer()[(x, y)].fg, Color::LightGreen);
     // Both panes pad a row without a key to the same column: key, space, mark.
-    let (tx, ty) = find(&t, "[x] tin can");
+    let (tx, ty) = find(&t, "# tin can");
     assert_eq!(t.backend().buffer()[(tx - 2, ty)].symbol(), " ");
 }
 
@@ -239,4 +240,28 @@ fn an_engine_without_category_mode_draws_no_state() {
         .remove("category_mode");
     let (mut app, _) = open(boundary);
     assert!(!lines(&render(&mut app)).join("\n").contains("ON|OFF"));
+}
+
+#[test]
+fn rows_mark_all_some_or_none_like_native_under_a_category_header() {
+    let mut boundary = trade();
+    let all = &mut boundary["interaction"]["choices"][1];
+    all["selected"] = true.into();
+    all["selected_count"] = 1.into();
+    let (mut app, _) = open(boundary);
+    let t = render(&mut app);
+    // Partial of three, all of one, and (in the pane test above) none.
+    find(&t, "# tin can");
+    find(&t, "+ lighter");
+    let (x, y) = find(&t, "TOOLS");
+    assert_eq!(t.backend().buffer()[(x, y)].fg, Color::Magenta);
+    // The header sits on its own line above the first row of the pane.
+    assert_eq!(find(&t, "# tin can").1, y + 1);
+    // The unit price is lit by the engine's tone: good green, bad red.
+    let (px, py) = find(&t, "$0.50");
+    assert_eq!(t.backend().buffer()[(px, py)].fg, Color::LightGreen);
+    let (px, py) = find(&t, "$1.00");
+    assert_eq!(t.backend().buffer()[(px, py)].fg, Color::LightRed);
+    // A marked stack still shows how much of it is offered.
+    assert!(lines(&t).join("\n").contains("2/3"));
 }
