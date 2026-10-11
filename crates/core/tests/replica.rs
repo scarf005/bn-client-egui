@@ -387,6 +387,7 @@ fn an_event_avatar_keeps_the_members_it_names_and_clears_the_others() {
         },
         look: None,
         overlays: vec![],
+        traits: Default::default(),
         stats: None,
         inventory: None,
         sidebar: None,

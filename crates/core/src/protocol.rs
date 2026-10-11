@@ -243,6 +243,8 @@ pub struct AvatarChange {
     pub look: Option<Look>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub overlays: Vec<Look>,
+    #[serde(default, skip_serializing_if = "Traits::is_empty")]
+    pub traits: Traits,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stats: Option<Vec<Stat>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -270,6 +272,11 @@ impl AvatarChange {
                 before.map(|a| a.overlays.clone()).unwrap_or_default()
             } else {
                 self.overlays.clone()
+            },
+            traits: if kept("traits") {
+                before.map(|a| a.traits.clone()).unwrap_or_default()
+            } else {
+                self.traits.clone()
             },
             stats: if kept("stats") {
                 before.map(|a| a.stats.clone()).unwrap_or_default()
