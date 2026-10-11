@@ -5,7 +5,7 @@ use bn_client_egui::watchdog::Watchdog;
 use bn_client_egui::{App, EngineModel, GameModel};
 use eframe::egui;
 use egui_kittest::Harness;
-use egui_kittest::kittest::Queryable;
+use egui_kittest::kittest::{NodeT, Queryable};
 use std::time::{Duration, Instant};
 
 type H<'a> = Harness<'a, App<EngineModel>>;
@@ -26,6 +26,17 @@ fn run_until(h: &mut H, what: &str, secs: u64, mut done: impl FnMut(&mut H) -> b
     }
 }
 
+/// Click a label once its window has stopped moving: the first frames of a dialog lay it out
+/// at another place, and a click aimed at the earlier place lands on its neighbour.
+fn click_settled(h: &mut H, label: &str) {
+    let mut seen = None;
+    while seen != Some(h.get_by_label(label).rect()) {
+        seen = Some(h.get_by_label(label).rect());
+        h.run_steps(2);
+    }
+    h.get_by_label(label).click();
+}
+
 #[test]
 #[ignore = "requires BN_ENGINE pointing at an engine binary"]
 fn clicking_new_game_shows_the_command_status() {
@@ -41,7 +52,7 @@ fn clicking_new_game_shows_the_command_status() {
     run_until(&mut h, "the main menu", 60, |h| {
         h.query_by_label("New Game").is_some()
     });
-    h.get_by_label("New Game").click();
+    click_settled(&mut h, "New Game");
     let clicked = Instant::now();
     // A command that went well is no longer shown, so the model's status is what reports it.
     run_until(&mut h, "the command to finish", 60, |h| {
@@ -79,7 +90,7 @@ fn live_crafting_menu_switches_tabs_searches_shows_details_and_closes() {
     run_until(&mut h, "the main menu", 60, |h| {
         h.query_by_label("New Game").is_some()
     });
-    h.get_by_label("New Game").click();
+    click_settled(&mut h, "New Game");
     // A click can land before the window has settled its layout or while the tab command is still in
     // flight; it is then ignored, so press Tutorial again until the engine reports it was chosen.
     run_until(&mut h, "the tutorial map", 300, |h| {
