@@ -243,6 +243,8 @@ pub struct Menu {
     pub context: String,
     pub title: String,
     pub message: String,
+    /// `good` or `bad` where the native screen colors the message line; empty otherwise.
+    pub message_tone: String,
     /// Lines drawn above the menu in a fixed-width font, with colour tags.
     pub banner: Vec<String>,
     pub choices: Vec<MenuChoice>,
