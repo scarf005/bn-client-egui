@@ -3,6 +3,23 @@
 use bn_client_core::transport::StdioTransport;
 use bn_client_core::watchdog::Watchdog;
 use bn_client_core::{EngineModel, GameModel, Pos};
+/// Nanoseconds the engine's threads have run and have waited for a CPU, from the kernel's scheduler stats.
+fn sched(pid: u32) -> (f64, f64) {
+    let (mut run, mut wait) = (0.0, 0.0);
+    for t in std::fs::read_dir(format!("/proc/{pid}/task"))
+        .unwrap()
+        .flatten()
+    {
+        let s = std::fs::read_to_string(t.path().join("schedstat")).unwrap_or_default();
+        let mut f = s
+            .split_whitespace()
+            .map(|x| x.parse::<f64>().unwrap_or(0.0));
+        run += f.next().unwrap_or(0.0);
+        wait += f.next().unwrap_or(0.0);
+    }
+    (run / 1e6, wait / 1e6)
+}
+
 use std::sync::{Mutex, OnceLock, mpsc};
 use std::time::{Duration, Instant};
 
@@ -56,6 +73,8 @@ fn measure_startup_and_steps() {
     let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
     let t0 = Instant::now();
     let transport = StdioTransport::spawn_fresh(engine.as_ref()).unwrap();
+    let pid = transport.pid();
+    println!("engine pid {pid}");
     let mut model = EngineModel::new(Box::new(transport));
     let (tx, rx) = mpsc::channel();
     let tx = Mutex::new(tx);
@@ -98,7 +117,11 @@ fn measure_startup_and_steps() {
 
     // Walk east, then back west, 10 steps in total, as fast as the protocol allows.
     let mut steps = vec![];
-    for i in 0..10 {
+    let count = std::env::var("BN_STEPS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(10);
+    for i in 0..count {
         pump(&mut model, "idle", |m| !m.busy());
         for _ in 0..20 {
             let Some(menu) = model.menu() else { break };
@@ -119,17 +142,24 @@ fn measure_startup_and_steps() {
         // The view follows the avatar, so only the absolute square tells that it moved.
         let square = |m: &EngineModel| (m.player().x + m.origin().x, m.player().y + m.origin().y);
         let (start, from) = (model.player(), square(&model));
-        let dx = if i < 5 { 1 } else { -1 };
+        let dx = if i / 5 % 2 == 0 { 1 } else { -1 };
         let target = Pos {
             x: start.x + dx,
             y: start.y,
         };
+        let before = sched(pid);
         assert!(
             model.step_toward(target),
             "step {i}: {:?}",
             model.messages()
         );
         pump(&mut model, "step", |m| square(m) != from && !m.busy());
+        let after = sched(pid);
+        println!(
+            "step {i}: engine cpu {:.1} ms, waiting for a cpu {:.1} ms",
+            after.0 - before.0,
+            after.1 - before.1
+        );
         steps.push(model.take_trace());
     }
     let mut rows: Vec<[f64; 6]> = vec![];

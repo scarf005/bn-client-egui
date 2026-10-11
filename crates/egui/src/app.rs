@@ -129,6 +129,8 @@ pub struct App<M: GameModel> {
     menu_cursor: Option<String>,
     /// Input pressed while a command ran, in order; each goes out as soon as the one before it is done.
     queued: VecDeque<Queued>,
+    /// The key whose OS repeats are arriving, until it is released.
+    held: Option<String>,
     /// The palette's Options entry went through the main menu; when it opens, its Options row is chosen.
     open_options: Option<std::time::Duration>,
     /// The loading step the list was last scrolled to; scrolling again every frame would repaint forever.
@@ -186,6 +188,7 @@ impl<M: GameModel> App<M> {
             pickup: Default::default(),
             menu_cursor: None,
             queued: VecDeque::new(),
+            held: None,
             open_options: None,
             scrolled_to: None,
         }
@@ -544,6 +547,29 @@ impl<M: GameModel> App<M> {
             } else if self.model.key_bound(&key) {
                 self.enqueue(Queued::Key(key));
                 self.keys_consumed = true;
+            }
+        }
+        // Releasing a held key drops its repeats still waiting, so the walk ends with the step in flight.
+        let events = ctx.input(|i| i.events.clone());
+        for event in events {
+            if let egui::Event::Key {
+                key,
+                pressed,
+                repeat,
+                modifiers,
+                ..
+            } = event
+                && let Some(name) = name(key, modifiers)
+            {
+                match (pressed, repeat) {
+                    (true, true) => self.held = Some(name),
+                    (false, _) if self.held.as_ref() == Some(&name) => {
+                        self.queued
+                            .retain(|q| !matches!(q, Queued::Key(k) if *k == name));
+                        self.held = None;
+                    }
+                    _ => {}
+                }
             }
         }
     }
