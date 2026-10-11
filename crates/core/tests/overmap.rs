@@ -183,6 +183,27 @@ mod switching {
     }
 
     #[test]
+    fn the_ids_of_the_tileset_tints_are_sent_in_a_hello_once_they_change() {
+        let (t, h) = session();
+        let mut m = connected(t);
+        let ids = ["hair_black".to_string(), "jeans".to_string()];
+        m.set_tint_ids(&[]);
+        m.poll();
+        assert_eq!(hellos(&h).len(), 1, "no tints, nothing sent");
+        m.set_tint_ids(&ids);
+        m.poll();
+        let sent = hellos(&h);
+        assert_eq!(sent.len(), 2);
+        assert_eq!(sent[1]["tint_ids"], json!(["hair_black", "jeans"]));
+        m.set_tint_ids(&ids);
+        m.poll();
+        assert_eq!(hellos(&h).len(), 2, "told once");
+        m.set_tint_ids(&[]);
+        m.poll();
+        assert!(hellos(&h)[2].get("tint_ids").is_none());
+    }
+
+    #[test]
     fn the_preference_waits_while_a_command_runs() {
         let (t, h) = session();
         let mut m = connected(t.on("bn.command.submit", vec![common::fixture("submit_result")]));

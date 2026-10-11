@@ -2,7 +2,8 @@
 //! `cata_tiles` reads them, so the sprite chosen for a cell follows the native view.
 
 use crate::tint::{Blend, Paint};
-use bn_client_core::protocol::{ModTileset, Traits};
+use bn_client_core::protocol::{ModTileset, TintVarsLayer, Traits};
+use bn_client_core::{Layer, Rgb};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -489,11 +490,37 @@ impl Tileset {
         }
     }
 
+    /// The ids the tileset's tints are keyed by, which the engine keys the things it publishes by.
+    pub fn tint_ids(&self) -> Vec<String> {
+        let mut ids = self.tints.keys().cloned().collect::<Vec<_>>();
+        ids.sort();
+        ids
+    }
+
     /// The paint of the first of `keys` the tileset has one for: how the game tints an item, a bionic or an effect.
     pub fn key_paints(&self, keys: &[String]) -> Paints {
         keys.iter()
             .find_map(|key| self.tints.get(key).copied())
             .unwrap_or((None, None))
+    }
+
+    /// The paint of a layer that is not a mutation, as the game works it out: the tileset's tint for the first of
+    /// its keys, its own color (a vehicle part's paint) in place of that tint's color, then the tint its item's
+    /// variables ask for over both.
+    pub fn layer_paints(&self, layer: &Layer) -> Paints {
+        let (bg, fg) = self.key_paints(&layer.tint_keys);
+        let recolor = |base: Option<Paint>, own: Option<Rgb>| match own {
+            Some(Rgb(r, g, b)) => Some(Paint {
+                color: [r, g, b],
+                ..base.unwrap_or(Paint::of([r, g, b]))
+            }),
+            None => base,
+        };
+        let (bg, fg) = (recolor(bg, layer.tint_bg), recolor(fg, layer.tint_fg));
+        match &layer.tint_vars {
+            Some(vars) => (with_vars(bg, &vars.bg), with_vars(fg, &vars.fg)),
+            None => (bg, fg),
+        }
     }
 
     /// The sprite ids that stand for a hair style in the character's hair color, when the tileset has no tint
@@ -720,6 +747,25 @@ fn parse_color(text: &str) -> Option<([u8; 3], f32)> {
         1.0
     };
     Some(([pair(0)?, pair(2)?, pair(4)?], brightness))
+}
+
+/// `base` with what the variables of an item set over it: without a color of its own or in `base` there is no
+/// paint.
+fn with_vars(base: Option<Paint>, vars: &TintVarsLayer) -> Option<Paint> {
+    let mut paint = match (vars.color.as_deref().and_then(parse_color), base) {
+        (Some((color, _)), base) => Paint {
+            color,
+            ..base.unwrap_or(Paint::of(color))
+        },
+        (None, base) => base?,
+    };
+    if let Some(name) = &vars.blend_mode {
+        paint.blend = Blend::named(name);
+    }
+    paint.contrast = vars.contrast.map_or(paint.contrast, milli);
+    paint.saturation = vars.saturation.map_or(paint.saturation, milli);
+    paint.brightness = vars.brightness.map_or(paint.brightness, milli);
+    Some(paint)
 }
 
 fn milli(value: f32) -> u32 {

@@ -1,8 +1,9 @@
 #![recursion_limit = "512"]
 mod common;
-use bn_client_core::protocol::{ModTileset, Traits};
+use bn_client_core::protocol::{ModTileset, TintVars, TintVarsLayer, Traits};
+use bn_client_core::{Layer, Rgb};
 use bn_client_egui::tileset::{self, PaintQuery, Query, Tileset, Turn, mix};
-use bn_client_egui::tint::{Blend, Paint};
+use bn_client_egui::tint::{Blend, Paint, tint_pixel};
 use common::game_root;
 
 fn load(tag: &str) -> Tileset {
@@ -391,6 +392,105 @@ fn an_item_takes_the_paint_of_its_first_flag_or_else_of_its_id() {
     );
     assert_eq!(color(&["VARSIZE", "jeans"]), Some([17, 34, 51]));
     assert_eq!(color(&["VARSIZE", "shirt"]), None);
+}
+
+fn keyed(keys: &[&str]) -> Layer {
+    Layer {
+        tint_keys: keys.iter().map(|k| k.to_string()).collect(),
+        ..Layer::default()
+    }
+}
+
+#[test]
+fn a_terrain_sprite_is_tinted_by_the_first_tint_its_keys_have_and_the_pixel_gets_its_color() {
+    let root = game_root("terrain-tint");
+    add_tints(
+        &root,
+        serde_json::json!([
+            {"id": "t_grass", "bg": "#112233", "fg": "#445566"},
+            {"id": "FLAMMABLE", "fg": "#778899"}
+        ]),
+        serde_json::json!([]),
+    );
+    let set = Tileset::load(&root.join("gfx/test")).unwrap();
+    assert_eq!(set.tint_ids(), ["FLAMMABLE", "t_grass"]);
+    let (bg, fg) = set.layer_paints(&keyed(&["FLAMMABLE", "t_grass"]));
+    assert_eq!((bg, fg.map(|p| p.color)), (None, Some([119, 136, 153])));
+    let (bg, fg) = set.layer_paints(&keyed(&["t_grass"]));
+    let painted = tint_pixel([128, 128, 128], fg.unwrap(), None);
+    assert_eq!(bg.map(|p| p.color), Some([17, 34, 51]));
+    assert_eq!(
+        painted,
+        tint_pixel([128, 128, 128], Paint::of([68, 85, 102]), None)
+    );
+    assert_ne!(painted, [128, 128, 128]);
+    // Nothing the tileset tints leaves the sprite as it is.
+    assert_eq!(set.layer_paints(&keyed(&["t_dirt"])), (None, None));
+    assert_eq!(set.layer_paints(&Layer::default()), (None, None));
+}
+
+#[test]
+fn an_item_dyed_by_its_variables_takes_their_color_over_the_tileset_tint() {
+    let root = game_root("dyed-item");
+    add_tints(
+        &root,
+        serde_json::json!([{"id": "jeans", "fg": "#112233"}]),
+        serde_json::json!([]),
+    );
+    let set = Tileset::load(&root.join("gfx/test")).unwrap();
+    let dyed = |keys: &[&str], fg: TintVarsLayer| Layer {
+        tint_vars: Some(TintVars {
+            fg,
+            bg: TintVarsLayer::default(),
+        }),
+        ..keyed(keys)
+    };
+    let red = TintVarsLayer {
+        color: Some("#ff3030".into()),
+        blend_mode: Some("multiply".into()),
+        brightness: Some(0.5),
+        ..TintVarsLayer::default()
+    };
+    let (bg, fg) = set.layer_paints(&dyed(&["jeans"], red.clone()));
+    let fg = fg.unwrap();
+    assert_eq!(bg, None);
+    assert_eq!(
+        (fg.color, fg.blend, fg.brightness),
+        ([255, 48, 48], Blend::Multiply, 500)
+    );
+    // Without a color of its own it adjusts the tileset's, and with neither there is no paint.
+    let dim = TintVarsLayer {
+        brightness: Some(0.5),
+        ..TintVarsLayer::default()
+    };
+    let adjusted = set.layer_paints(&dyed(&["jeans"], dim.clone())).1.unwrap();
+    assert_eq!((adjusted.color, adjusted.brightness), ([17, 34, 51], 500));
+    assert_eq!(set.layer_paints(&dyed(&["shirt"], dim)).1, None);
+    // A dye alone paints an item the tileset does not tint.
+    let alone = set.layer_paints(&dyed(&["shirt"], red)).1.unwrap();
+    assert_eq!(alone.color, [255, 48, 48]);
+}
+
+#[test]
+fn a_vehicle_part_keeps_its_own_color_over_the_blend_of_its_tileset_tint() {
+    let root = game_root("part-tint");
+    add_tints(
+        &root,
+        serde_json::json!([{"id": "door", "fg": {"color": "#112233", "blend_mode": "multiply"}}]),
+        serde_json::json!([]),
+    );
+    let set = Tileset::load(&root.join("gfx/test")).unwrap();
+    let part = Layer {
+        tint_fg: Some(Rgb(0x44, 0x55, 0x66)),
+        ..keyed(&["door"])
+    };
+    let fg = set.layer_paints(&part).1.unwrap();
+    assert_eq!((fg.color, fg.blend), ([0x44, 0x55, 0x66], Blend::Multiply));
+    let plain = Layer {
+        tint_fg: Some(Rgb(1, 2, 3)),
+        ..Layer::default()
+    };
+    assert_eq!(set.layer_paints(&plain).1, Some(Paint::of([1, 2, 3])));
 }
 
 #[test]

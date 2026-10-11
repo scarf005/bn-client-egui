@@ -63,6 +63,9 @@ pub struct EngineModel {
     /// Whether the client draws tiles now, and what the engine was last told.
     tiles: bool,
     tiles_told: bool,
+    /// The ids of the tints the client's tileset has, and what the engine was last told.
+    tint_ids: Vec<String>,
+    tints_told: Vec<String>,
     /// The engine's `USE_TILES` and `TILES` options from its hello.
     display: Option<(bool, String)>,
     /// The earliest time to tell the engine again after it refused.
@@ -291,6 +294,8 @@ impl EngineModel {
         let mut m = Self {
             tiles,
             tiles_told: tiles,
+            tint_ids: vec![],
+            tints_told: vec![],
             display: None,
             tiles_retry: Duration::ZERO,
             transport,
@@ -781,7 +786,7 @@ impl EngineModel {
     /// Tells the engine whether tile ids are wanted once it is idle: a hello says so, and a viewport
     /// of the same size makes it publish the open screen again, now with or without them.
     fn send_tiles(&mut self) {
-        if self.tiles == self.tiles_told
+        if (self.tiles == self.tiles_told && self.tint_ids == self.tints_told)
             || self.busy
             || self.replica.at().is_none()
             || self.clock.now() < self.tiles_retry
@@ -789,9 +794,14 @@ impl EngineModel {
             return;
         }
         self.tiles_told = self.tiles;
+        self.tints_told = self.tint_ids.clone();
         self.call(
             "bn.hello",
-            json!(protocol::HelloParams::new("bn-client").with_tiles(self.tiles)),
+            json!(
+                protocol::HelloParams::new("bn-client")
+                    .with_tiles(self.tiles)
+                    .with_tint_ids(self.tint_ids.clone())
+            ),
             Pending::Retile,
         );
         let (cols, rows) = (self.declared.x as u32, self.declared.y as u32);
@@ -937,6 +947,7 @@ impl EngineModel {
             tint_fg: paint(look, |t| t.fg.as_deref()),
             mutation: None,
             tint_keys: look.tint_keys.clone(),
+            tint_vars: look.tint_vars.clone(),
             glyph: glyph(look),
             color,
             bg,
@@ -1185,6 +1196,12 @@ impl GameModel for EngineModel {
 
     fn set_tiles(&mut self, tiles: bool) {
         self.tiles = tiles;
+    }
+
+    fn set_tint_ids(&mut self, ids: &[String]) {
+        if self.tint_ids != ids {
+            self.tint_ids = ids.to_vec();
+        }
     }
 
     fn failure(&self) -> Option<Failure> {
