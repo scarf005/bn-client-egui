@@ -98,8 +98,11 @@ impl<M: GameModel> App<M> {
             .anchor(egui::Align2::CENTER_TOP, super::dialog_offset(ctx))
             .collapsible(false)
             .resizable(false)
+            .frame(list_frame(ctx))
             .show(ctx, |ui| {
                 ui.set_min_width(520.0);
+                // Rows fill the list, so the window must not grow with them frame after frame.
+                ui.set_max_width((ctx.content_rect().width() * 0.8).max(520.0));
                 self.banner(ui, &menu.banner);
                 // Cancel sits right under the title, so it is at the same place for every dialog.
                 if menu.can_cancel && !menu.acknowledges() {
@@ -176,18 +179,42 @@ impl<M: GameModel> App<M> {
                                 continue;
                             }
                             ui.horizontal(|ui| {
+                                let whole_row = menu.context != "MAIN_MENU"
+                                    && choice.id != "acknowledge"
+                                    && choice.denial.is_empty();
+                                if whole_row {
+                                    list_row_style(ui);
+                                }
                                 let text = if choice.id == "acknowledge" {
                                     dismiss_text(&choice.label).into()
+                                } else if whole_row {
+                                    // Label, values and key share the row, so its highlight covers them.
+                                    let hint = choice
+                                        .id
+                                        .starts_with("action:")
+                                        .then(|| {
+                                            bn_client_core::action_hint(
+                                                &self.model.actions(),
+                                                &choice.id,
+                                            )
+                                        })
+                                        .flatten()
+                                        .map(|k| format!("  <color_dark_gray>[{k}]</color>"));
+                                    self.rich(
+                                        ui,
+                                        &format!(
+                                            "{}{}{}",
+                                            choice.label,
+                                            column_text(&choice.label, &choice.columns),
+                                            hint.unwrap_or_default()
+                                        ),
+                                    )
                                 } else {
                                     self.rich(ui, &choice.label)
                                 };
                                 // Native list menus highlight the whole row; the title screen's entries,
                                 // a popup's dismiss button and rows with values or a denial beside them
                                 // keep their own width.
-                                let whole_row = menu.context != "MAIN_MENU"
-                                    && choice.id != "acknowledge"
-                                    && choice.columns.is_empty()
-                                    && choice.denial.is_empty();
                                 let layout = if whole_row {
                                     egui::Layout::top_down_justified(egui::Align::Min)
                                 } else {
@@ -208,9 +235,12 @@ impl<M: GameModel> App<M> {
                                 if choice.id.starts_with("action:") {
                                     action_ids.push(button.id);
                                     // The key the game binds to it, as the native screens print their keys.
-                                    if let Some(key) = bn_client_core::action_hint(
-                                        &self.model.actions(),
-                                        &choice.id,
+                                    if let (false, Some(key)) = (
+                                        whole_row,
+                                        bn_client_core::action_hint(
+                                            &self.model.actions(),
+                                            &choice.id,
+                                        ),
                                     ) {
                                         ui.weak(format!("[{key}]"));
                                     }
@@ -247,7 +277,11 @@ impl<M: GameModel> App<M> {
                                 {
                                     described = Some(&choice.description);
                                 }
-                                self.columns(ui, &choice.label, &choice.columns);
+                                if !whole_row {
+                                    ui.label(
+                                        self.rich(ui, &column_text(&choice.label, &choice.columns)),
+                                    );
+                                }
                                 if !choice.enabled && !choice.denial.is_empty() && !said {
                                     ui.label(self.rich(ui, &choice.denial));
                                 }
@@ -378,33 +412,56 @@ impl<M: GameModel> App<M> {
             ui.label(self.rich(ui, &menu.message));
         }
     }
+}
 
-    /// An entry's labelled values; a `<name> color` column colours the value of `<name>`, and a column
-    /// named like the entry itself is just its value.
-    fn columns(&self, ui: &mut egui::Ui, entry: &str, columns: &[(String, String)]) {
-        let tint = |name: &str| {
-            columns
-                .iter()
-                .find(|(label, _)| label.strip_suffix(" color") == Some(name))
-                .map(|(_, color)| color.as_str())
-        };
-        let shown = columns.iter().filter(|(label, value)| {
-            // `source` names the selector column an item comes from; the engine keeps it for clients.
+/// The native list's window: black, with its thin pink border.
+fn list_frame(ctx: &egui::Context) -> egui::Frame {
+    egui::Frame::window(&ctx.global_style())
+        .fill(egui::Color32::BLACK)
+        .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(139, 58, 98)))
+        .corner_radius(0)
+}
+
+/// Rows of a native list have no button frame; the cursor row is a blue bar.
+fn list_row_style(ui: &mut egui::Ui) {
+    let visuals = ui.visuals_mut();
+    visuals.widgets.inactive.weak_bg_fill = egui::Color32::TRANSPARENT;
+    visuals.widgets.inactive.bg_stroke = egui::Stroke::NONE;
+    visuals.selection.bg_fill = egui::Color32::from_rgb(10, 10, 220);
+    visuals.selection.stroke = egui::Stroke::new(1.0, egui::Color32::WHITE);
+}
+
+/// An entry's labelled values as markup after its label; a `<name> color` column colours the value of
+/// `<name>`, and a column named like the entry itself is just its value.
+fn column_text(entry: &str, columns: &[(String, String)]) -> String {
+    let tint = |name: &str| {
+        columns
+            .iter()
+            .find(|(label, _)| label.strip_suffix(" color") == Some(name))
+            .map(|(_, color)| color.as_str())
+    };
+    columns
+        .iter()
+        // `source` names the selector column an item comes from; the engine keeps it for clients.
+        .filter(|(label, value)| {
             !label.ends_with(" color") && label != "source" && !value.is_empty()
-        });
-        for (label, value) in shown {
+        })
+        .map(|(label, value)| {
             let value = match tint(label) {
                 Some(color) => format!("<color_{color}>{value}</color>"),
                 None => value.clone(),
             };
-            let text = if label.is_empty() || label == entry {
-                value
+            if label.is_empty() || label == entry {
+                // A value that only repeats the entry's own text adds nothing.
+                if markup::plain(value.as_str()) == markup::plain(entry) {
+                    return String::new();
+                }
+                format!("  {value}")
             } else {
-                format!("{}: {value}", label.trim_end_matches(':'))
-            };
-            ui.label(self.rich(ui, &text));
-        }
-    }
+                format!("  {}: {value}", label.trim_end_matches(':'))
+            }
+        })
+        .collect()
 }
 
 /// A description the player can read; the engine fills it with the bound action's name (`NO`,

@@ -271,8 +271,25 @@ fn a_description_and_columns_of_the_selected_entry_are_shown() {
     h.run_steps(3);
     assert!(h.get_all_by_label("Character information").count() >= 1);
     h.get_by_label("Strength affects your melee damage.");
-    h.get_by_label("Current: 8");
-    h.get_by_label("Base: 9");
+    // The values sit in the entry's own row, so its highlight covers them.
+    h.get_by_label("Strength:  Current: 8  Base: 9");
+}
+
+#[test]
+fn a_value_that_repeats_the_entry_text_is_not_printed_twice() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    let mut item = choice("c:1", "lighter (3/25)");
+    item["columns"] = json!([{"label":"lighter (3/25)","value":"lighter (3/25)"}]);
+    script.push(show(
+        41,
+        json!([]),
+        json!({"schema_id":"s:m","kind":"choices","context":"UILIST","title":"Wield item",
+            "message":"","allow_cancel":true,"choices":[item],
+            "choice_total":1,"allow_set_count":false}),
+    ));
+    h.run_steps(3);
+    h.get_by_label("lighter (3/25)");
 }
 
 #[test]
