@@ -887,6 +887,21 @@ fn space_closes_a_popup_while_the_focus_is_still_on_the_map() {
 }
 
 #[test]
+fn an_arrow_key_with_nothing_focused_leaves_the_toolbar_alone() {
+    let (mut h, _script) = harness();
+    h.run_steps(3);
+    h.key_press(egui::Key::ArrowLeft);
+    h.run_steps(3);
+    assert!(
+        !h.get_by_label("Reduced motion")
+            .accesskit_node()
+            .is_focused(),
+        "arrows walk; they do not move the toolkit focus"
+    );
+    assert!(h.get_by_label("Map").accesskit_node().is_focused());
+}
+
+#[test]
 fn a_popup_right_after_another_takes_the_focus_too() {
     let (mut h, script) = harness();
     h.run_steps(3);
