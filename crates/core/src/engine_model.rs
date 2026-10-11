@@ -7,7 +7,7 @@ use crate::markup::{self, Run};
 use crate::model::{
     ActionEntry, Cell, CommandStatus, Effect, Failure, FailureKind, GameModel, Layer, Loading,
     LogLine, Menu, MenuChoice, MenuField, MenuPane, Mutation, Overmap, OvermapCell, OvermapTile,
-    Pos, Rgb, Shape,
+    PaneTotals, Pos, Rgb, Shape,
 };
 use crate::protocol::{
     self, Cell as WorldCell, Entity, Expect, Incoming, Known, LoadingNotice, Look, ModTileset,
@@ -913,6 +913,7 @@ impl EngineModel {
             color,
             bg,
             desc,
+            id: look.id.clone().unwrap_or_default(),
             ..Cell::default()
         }
     }
@@ -1390,9 +1391,9 @@ impl GameModel for EngineModel {
 
     fn travel(&mut self, at: Pos) -> bool {
         // Like Tiles, walking into a closed door next to you opens it; the engine plans no route to one.
-        let (me, desc) = (self.player(), self.cell(at).desc);
+        let (me, id) = (self.player(), self.cell(at).id);
         let step = (at.x - me.x, at.y - me.y);
-        if desc.contains("door") && desc.ends_with("_c") && step.0.abs().max(step.1.abs()) == 1 {
+        if id.contains("door") && id.ends_with("_c") && step.0.abs().max(step.1.abs()) == 1 {
             if let (false, Some(id)) = (self.busy, direction(step.0, step.1)) {
                 self.invoke(&[id.into()]);
             }
@@ -1549,6 +1550,22 @@ impl GameModel for EngineModel {
                         area: text("area_label"),
                         storage: text("storage_kind"),
                         filter: text("filter"),
+                        sort: text("sort"),
+                        totals: p["totals"].is_object().then(|| {
+                            let t =
+                                |k: &str| p["totals"][k].as_str().unwrap_or_default().to_string();
+                            let b = |k: &str| p["totals"][k].as_bool().unwrap_or_default();
+                            PaneTotals {
+                                weight: t("weight"),
+                                weight_max: t("weight_max"),
+                                weight_unit: t("weight_unit"),
+                                volume: t("volume"),
+                                volume_max: t("volume_max"),
+                                volume_unit: t("volume_unit"),
+                                over_weight: b("over_weight"),
+                                over_volume: b("over_volume"),
+                            }
+                        }),
                         blocked: p["blocked_areas"]
                             .as_array()
                             .into_iter()

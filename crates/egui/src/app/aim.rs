@@ -276,7 +276,17 @@ impl<M: GameModel> App<M> {
             ui.set_min_width(ui.available_width());
             // The title on the left, the area picker at the top right, as the native header draws them.
             ui.horizontal_top(|ui| {
-                ui.heading(format!("{name}: {}", pane.area));
+                ui.vertical(|ui| {
+                    ui.heading(format!("{name}: {}", pane.area));
+                    if let Some(totals) = &pane.totals {
+                        ui.label(format!(
+                            "{}  {}  Sort: {}",
+                            totals.weight_text(),
+                            totals.volume_text(),
+                            pane.sort
+                        ));
+                    }
+                });
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
                     ui.vertical(|ui| {
                         // The native grid: marker columns, the compass with Above and Below, as drawn by the game.

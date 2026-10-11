@@ -472,6 +472,17 @@
       "area_description": "",
       "filter": "",
       "storage_kind": "ground",
+      "sort": "name",
+      "totals": {
+       "weight": "0.5",
+       "weight_max": "",
+       "weight_unit": "kg",
+       "volume": "0.50",
+       "volume_max": "1000.00",
+       "volume_unit": "L",
+       "over_weight": false,
+       "over_volume": false
+      },
       "blocked_areas": [
        "ITEMS_CONTAINER",
        "ITEMS_UP"
@@ -485,7 +496,18 @@
       "area_label": "Worn Items",
       "area_description": "",
       "filter": "",
-      "storage_kind": "worn"
+      "storage_kind": "worn",
+      "sort": "name",
+      "totals": {
+       "weight": "3.1",
+       "weight_max": "35.0",
+       "weight_unit": "kg",
+       "volume": "5.00",
+       "volume_max": "30.00",
+       "volume_unit": "L",
+       "over_weight": false,
+       "over_volume": false
+      }
      }
     ]
    }

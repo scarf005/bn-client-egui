@@ -27,6 +27,11 @@ fn connects_with_hello_then_subscribe_and_exposes_the_map() {
     assert_eq!(m.cell(Pos { x: 21, y: 11 }).glyph, '#');
     assert_eq!(m.cell(Pos { x: 21, y: 11 }).desc, "plastered wooden wall");
     assert_eq!(
+        m.cell(Pos { x: 21, y: 11 }).id,
+        "t_wall",
+        "the id stays for code that matches"
+    );
+    assert_eq!(
         m.cell(Pos { x: 23, y: 12 }).glyph,
         'Z',
         "entities draw over terrain"
@@ -653,7 +658,7 @@ fn remembered_furniture_stays_drawn_from_its_memory_overlay() {
         json!({"at": at, "known": "visible", "terrain": floor, "furniture": bench}),
     ));
     m.poll();
-    assert_eq!(m.cell(view).desc, "f_bench", "seen furniture draws");
+    assert_eq!(m.cell(view).id, "f_bench", "seen furniture draws");
 
     h.push(cell_event(
         42,
@@ -661,10 +666,7 @@ fn remembered_furniture_stays_drawn_from_its_memory_overlay() {
     ));
     m.poll();
     let remembered = m.cell(view);
-    assert_eq!(
-        (remembered.glyph, remembered.desc.as_str()),
-        ('{', "f_bench")
-    );
+    assert_eq!((remembered.glyph, remembered.id.as_str()), ('{', "f_bench"));
 
     h.push(cell_event(
         43,
@@ -1040,6 +1042,7 @@ fn a_look_with_a_display_name_is_described_by_it_instead_of_its_id() {
     ));
     m.poll();
     assert_eq!(m.cell(Pos { x: 22, y: 12 }).desc, "floor");
+    assert_eq!(m.cell(Pos { x: 22, y: 12 }).id, "t_floor");
 }
 
 fn avatar_event(inventory: Value, ground: Value) -> Value {

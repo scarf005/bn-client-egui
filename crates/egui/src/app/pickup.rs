@@ -101,13 +101,19 @@ impl<M: GameModel> App<M> {
                             });
                         }
                     });
-                if let Some(description) = described.filter(|d| !d.is_empty()) {
-                    ui.separator();
-                    egui::ScrollArea::vertical()
-                        .id_salt("pickup_description")
-                        .max_height(ctx.content_rect().height() * 0.3)
-                        .show(ui, |ui| ui.label(self.rich(ui, description)));
-                }
+                // Always the same height, so the rows and buttons do not move as the hovered row changes.
+                ui.separator();
+                let height = ctx.content_rect().height() * 0.3;
+                egui::ScrollArea::vertical()
+                    .id_salt("pickup_description")
+                    .max_height(height)
+                    .show(ui, |ui| {
+                        ui.set_min_height(height);
+                        ui.set_min_width(ui.available_width());
+                        if let Some(description) = described {
+                            ui.label(self.rich(ui, description));
+                        }
+                    });
                 ui.separator();
                 ui.horizontal(|ui| {
                     let any = rows.iter().any(|r| r.selected);

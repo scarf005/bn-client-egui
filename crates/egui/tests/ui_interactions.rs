@@ -982,6 +982,48 @@ fn options_is_in_the_action_palette_and_opens_the_native_options_through_the_mai
     );
 }
 
+#[test]
+fn an_action_row_of_a_tabbed_screen_shows_its_key_and_alt_down_then_enter_sends_the_action() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    let tab = |id: &str, label: &str, on: bool| {
+        let mut c = choice(id, label);
+        c["selected"] = on.into();
+        c
+    };
+    let mut finish = choice("action:NEXT_TAB", "Finish the character");
+    finish["pane_id"] = "tab0".into();
+    let mut row = choice("row", "A row");
+    row["pane_id"] = "tab0".into();
+    row["selected"] = true.into();
+    script.push(show(
+        41,
+        json!([{"id":"NEXT_TAB","name":"Next tab","keys":["TAB"]},
+               {"id":"QUIT","name":"Cancel","keys":["ESC"]}]),
+        json!({"schema_id":"s:newchar","kind":"choices","context":"NEW_CHAR_DESCRIPTION",
+            "title":"Character creation","message":"","allow_cancel":true,
+            "choices":[tab("tab:0", "OVERVIEW", true), tab("tab:1", "SKILLS", false), row, finish],
+            "choice_total":4,"allow_set_count":false,
+            "compat":{"focus":{"choice_id":"row"},
+                "panes":[{"id":"tab0","label":"OVERVIEW","role":"focused"},
+                         {"id":"tab1","label":"SKILLS","role":"category"}]}}),
+    ));
+    h.run_steps(4);
+    h.get_by_label("Finish the character");
+    h.get_by_label("[TAB]");
+    // The engine's keys never land on the row; Alt+Down does.
+    h.key_press_modifiers(egui::Modifiers::ALT, egui::Key::ArrowDown);
+    h.run_steps(2);
+    assert!(submits(&script).is_empty(), "Alt+Down is not the engine's");
+    h.key_press(egui::Key::Enter);
+    h.run_steps(3);
+    assert_eq!(
+        submits(&script),
+        [json!({"kind":"choose","choice_id":"action:NEXT_TAB"})],
+        "Enter on the focused row sends the action, not CONFIRM"
+    );
+}
+
 fn list_with(rows: usize) -> Value {
     let choices = (0..rows)
         .map(|i| choice(&format!("r:{i}"), &format!("row {i}")))

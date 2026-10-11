@@ -692,12 +692,14 @@ mod overmap {
     fn the_overmap_replaces_the_map_and_names_the_cursor_square() {
         let (h, _script) = open_overmap();
         h.get_by_label("Overmap view");
-        h.get_by_label("Overmap (100, 200, 0). Route of 2 squares; click the cursor to go.");
+        h.get_by_label_contains(
+            "Overmap (100, 200, 0). Overmap forest. Route of 2 squares; click the cursor to go.",
+        );
         assert!(
             h.query_by_label("Map").is_none(),
             "the map is not drawn under it"
         );
-        h.get_by_label("  forest");
+        h.get_by_label("forest");
     }
 
     #[test]

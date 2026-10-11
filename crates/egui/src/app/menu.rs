@@ -5,12 +5,16 @@ use crate::{a11y, editor, text};
 use bn_client_core::{GameModel, markup};
 use eframe::egui::{self, accesskit};
 
+/// Height of the entry description under the list.
+const DESCRIPTION_HEIGHT: f32 = 96.0;
+
 impl<M: GameModel> App<M> {
     /// The engine's current interaction, drawn generically: title, message, tabs, choices, cancel.
     pub(super) fn menu(&mut self, ctx: &egui::Context) {
         let Some(menu) = self.model.menu() else {
             self.focus_menu = false;
             self.menu_ids.clear();
+            self.action_ids.clear();
             self.refocus_map |= self.menu_title.take().is_some();
             if std::mem::take(&mut self.in_popup) {
                 self.ack_closed = Some(self.clock.now());
@@ -48,6 +52,7 @@ impl<M: GameModel> App<M> {
         self.in_popup = menu.acknowledges();
         a11y::trap_tab(ctx, self.trapped_by_menu());
         let mut ids = Vec::new();
+        let mut action_ids = Vec::new();
         let mut focused = false;
         let mut chosen = None;
         let follows = self.menu_focus != menu.focus;
@@ -196,6 +201,16 @@ impl<M: GameModel> App<M> {
                                     })
                                     .inner;
                                 ids.extend(button.enabled().then_some(button.id));
+                                if choice.id.starts_with("action:") {
+                                    action_ids.push(button.id);
+                                    // The key the game binds to it, as the native screens print their keys.
+                                    if let Some(key) = bn_client_core::action_hint(
+                                        &self.model.actions(),
+                                        &choice.id,
+                                    ) {
+                                        ui.weak(format!("[{key}]"));
+                                    }
+                                }
                                 if choice.selected {
                                     cursor_seen = Some(choice.id.clone());
                                     if self.menu_cursor.as_deref() != Some(&choice.id) {
@@ -260,12 +275,24 @@ impl<M: GameModel> App<M> {
                     ));
                     more |= rest.clicked();
                 }
-                if let Some(description) = described.filter(|d| is_prose(d)) {
+                // A menu that describes its entries keeps the room for the text, so nothing below the list
+                // moves as the hovered entry changes.
+                if menu.choices.iter().any(|c| is_prose(&c.description)) {
                     ui.separator();
-                    ui.label(self.rich(ui, description));
+                    egui::ScrollArea::vertical()
+                        .id_salt("menu_description")
+                        .max_height(DESCRIPTION_HEIGHT)
+                        .show(ui, |ui| {
+                            ui.set_min_height(DESCRIPTION_HEIGHT);
+                            ui.set_min_width(ui.available_width());
+                            if let Some(description) = described.filter(|d| is_prose(d)) {
+                                ui.label(self.rich(ui, description));
+                            }
+                        });
                 }
             });
         self.menu_ids = ids;
+        self.action_ids = action_ids;
         if filter_clicked {
             self.model.invoke_action("FILTER");
         }

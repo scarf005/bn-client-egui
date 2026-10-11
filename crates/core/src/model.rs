@@ -59,7 +59,11 @@ pub struct Cell {
     pub color: Rgb,
     /// Background behind the glyph, when the game colour has one.
     pub bg: Option<Rgb>,
+    /// What a reader or a tooltip says: the display name when the engine sends one, else the id.
     pub desc: String,
+    /// The data id of the topmost look (`t_wall`), stable under translation; empty when nothing is known.
+    /// Code that decides by what is on a square matches this, never `desc`.
+    pub id: String,
     /// What is drawn here from the bottom up; empty when the model offers no sprites.
     pub layers: Vec<Layer>,
     /// Only remembered, not in sight.
@@ -184,8 +188,46 @@ pub struct MenuPane {
     pub area: String,
     pub storage: String,
     pub filter: String,
+    /// The native sort name, such as `name`; empty when the engine sent none.
+    pub sort: String,
+    /// The header totals the native pane prints; absent from engines that predate them.
+    pub totals: Option<PaneTotals>,
     /// Actions of the areas this pane cannot put items in; the native picker draws them red.
     pub blocked: Vec<String>,
+}
+
+/// The weight and volume line of a pane header: `weight`/`volume` against an optional maximum.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct PaneTotals {
+    pub weight: String,
+    /// Empty where the native header shows no weight capacity.
+    pub weight_max: String,
+    pub weight_unit: String,
+    pub volume: String,
+    /// Empty where the native header shows no volume capacity.
+    pub volume_max: String,
+    pub volume_unit: String,
+    pub over_weight: bool,
+    pub over_volume: bool,
+}
+
+impl PaneTotals {
+    /// `weight[/max] unit`, as the native header prints it.
+    pub fn weight_text(&self) -> String {
+        Self::text(&self.weight, &self.weight_max, &self.weight_unit)
+    }
+
+    /// `volume[/max] unit`, as the native header prints it.
+    pub fn volume_text(&self) -> String {
+        Self::text(&self.volume, &self.volume_max, &self.volume_unit)
+    }
+
+    fn text(value: &str, max: &str, unit: &str) -> String {
+        match max.is_empty() {
+            true => format!("{value} {unit}"),
+            false => format!("{value}/{max} {unit}"),
+        }
+    }
 }
 
 /// The engine's current interaction, rendered generically.
@@ -240,6 +282,16 @@ pub struct ActionEntry {
     pub id: String,
     pub name: String,
     pub keys: Vec<String>,
+}
+
+/// The key the game binds to the action a menu row stands for (`action:NEXT_TAB`), shown as a hint
+/// beside the row as the native screens print their keys; `None` for any other row or an unbound action.
+pub fn action_hint(actions: &[ActionEntry], row_id: &str) -> Option<String> {
+    let id = row_id.strip_prefix("action:")?;
+    actions
+        .iter()
+        .find(|a| a.id == id)
+        .and_then(|a| a.keys.first().cloned())
 }
 
 /// The command in flight, or the last one's outcome, for the status line and the pressed control.
@@ -322,6 +374,38 @@ impl Overmap {
     /// The absolute overmap square drawn in view cell `(col, row)`.
     pub fn square(&self, col: i32, row: i32) -> (i32, i32, i32) {
         (self.origin.0 + col, self.origin.1 + row, self.origin.2)
+    }
+
+    /// The cursor square as the native sidebar describes it: its first paragraph, without the window
+    /// frame and the leading glyph of the square.
+    pub fn here(&self) -> Option<String> {
+        let lines = self
+            .legend
+            .iter()
+            .map(|l| l.trim_start_matches(['│', '|']).trim())
+            .skip_while(|l| l.is_empty())
+            .take_while(|l| !l.is_empty())
+            .collect::<Vec<_>>()
+            .join(" ");
+        let text = match lines.split_once(' ') {
+            Some((glyph, rest))
+                if glyph.chars().count() == 1 && !glyph.chars().all(char::is_alphanumeric) =>
+            {
+                rest
+            }
+            _ => &lines,
+        };
+        (!text.is_empty()).then(|| text.to_string())
+    }
+
+    /// Every note in view, for a reader that cannot see the markers.
+    pub fn notes_text(&self) -> Option<String> {
+        let notes = self
+            .notes
+            .iter()
+            .map(|(p, t)| format!("({}, {}, {}) {t}", p.0, p.1, p.2))
+            .collect::<Vec<_>>();
+        (!notes.is_empty()).then(|| format!("Notes: {}.", notes.join("; ")))
     }
 
     /// The tile of view cell `(col, row)`, when the engine sent tile ids.

@@ -1,3 +1,4 @@
+#![recursion_limit = "512"]
 //! Every native mouse behavior of the game, checked in the egui client against the wire it uses.
 mod common;
 use bn_client_egui::app::CELL;
@@ -343,4 +344,43 @@ fn clicking_the_text_of_a_composed_screen_sends_nothing_as_native_has_no_tab_cli
     }
     h.run_steps(2);
     assert!(operations(&script).is_empty());
+}
+
+#[test]
+fn the_map_does_not_move_with_the_length_of_the_hovered_description() {
+    let long = "very dark interlocking wooden tiles that are more than likely treated against fire, with wooden posts and beams supporting a roof. ".repeat(4);
+    let (t, _script) = session();
+    let t = t
+        .on("bn.command.submit", vec![fixture("submit_result")])
+        .on(
+            "bn.world.describe",
+            vec![json!({"jsonrpc":"2.0","id":0,"result":{"lines":[long, "Move cost: 150"]}})],
+        )
+        .on(
+            "bn.world.describe",
+            vec![json!({"jsonrpc":"2.0","id":0,"result":{"lines":["floor"]}})],
+        );
+    let clock = Clock::manual();
+    let model = EngineModel::new(Box::new(t)).with_clock(clock.clone());
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(1100.0, 800.0))
+        .build_ui_state(
+            |ui, app: &mut App<EngineModel>| app.show(ui),
+            App::new(model).with_clock(clock),
+        );
+    h.run_steps(3);
+    let map = h.get_by_label("Map").rect();
+    let at = |h: &mut H, x: f32| {
+        let p = square(h, (x, 12.5));
+        h.hover_at(p);
+        h.run_steps(4);
+    };
+    at(&mut h, 22.5);
+    assert_eq!(h.get_by_label("Map").rect(), map, "long text moved the map");
+    at(&mut h, 23.5);
+    assert_eq!(
+        h.get_by_label("Map").rect(),
+        map,
+        "short text moved the map"
+    );
 }

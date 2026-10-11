@@ -12,6 +12,9 @@ use egui_kittest::Harness;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+/// How long the key is held, in seconds.
+const HOLD_SECS: u64 = 10;
+
 type H<'a> = Harness<'a, App<EngineModel>>;
 
 #[derive(Default)]
@@ -308,11 +311,11 @@ fn frame_cost_idle_and_while_stepping() {
         run(&mut h, &clock, 180, "quiet", |h| !h.state().model.busy());
         let _ = run_for(&mut h, &clock, 1);
     }
-    // A held key: the OS repeats it every 33 ms; the avatar turns round when a wall stops it.
+    // A held key: the OS repeats it every 40 ms (X's default 25 Hz); the avatar turns round when a wall stops it.
     let mut hold = Frames::default();
     let (mut moves, mut last, mut moved_at) = (0, square(&h), Instant::now());
     let (start, mut next_repeat) = (Instant::now(), Instant::now());
-    while start.elapsed() < Duration::from_secs(6) {
+    while start.elapsed() < Duration::from_secs(HOLD_SECS) {
         if Instant::now() >= next_repeat {
             if moved_at.elapsed() > Duration::from_millis(1500) {
                 held = if held == "l" { "h" } else { "l" };
@@ -320,7 +323,7 @@ fn frame_cost_idle_and_while_stepping() {
             }
             h.input_mut().events.push(egui::Event::Text(held.into()));
             h.ctx.request_repaint();
-            next_repeat += Duration::from_millis(33);
+            next_repeat += Duration::from_millis(40);
         }
         if clock.wait(next_repeat) {
             frame(&mut h, &mut hold);
@@ -340,8 +343,8 @@ fn frame_cost_idle_and_while_stepping() {
         }
     }
     println!(
-        "PERF {scenario} tiles={tiles} held key: {released} steps in 6 s = {:.2} steps/s, {} more after release, load={}",
-        released as f64 / 6.0,
+        "PERF {scenario} tiles={tiles} held key: {released} steps in {HOLD_SECS} s = {:.2} steps/s, {} more after release, load={}",
+        released as f64 / HOLD_SECS as f64,
         moves - released,
         load()
     );

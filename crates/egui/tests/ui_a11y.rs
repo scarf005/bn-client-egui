@@ -12,8 +12,19 @@ use serde_json::json;
 type H<'a> = Harness<'a, App<EngineModel>>;
 
 fn harness<'a>() -> (H<'a>, ScriptHandle) {
+    described(&["Wall", "A zombie is here."])
+}
+
+/// A harness whose engine answers every `bn.world.describe` with `lines`.
+fn described<'a>(lines: &[&str]) -> (H<'a>, ScriptHandle) {
     let (t, h) = session();
-    let t = t.on("bn.command.submit", vec![fixture("submit_result")]);
+    let t = t
+        .on("bn.command.submit", vec![fixture("submit_result")])
+        .on("bn.command.submit", vec![fixture("submit_result")])
+        .on(
+            "bn.world.describe",
+            vec![json!({"jsonrpc":"2.0","id":0,"result":{"lines":lines}})],
+        );
     let model = EngineModel::new(Box::new(t));
     let harness = Harness::builder()
         .with_size(egui::vec2(1100.0, 800.0))
@@ -418,4 +429,111 @@ fn tab_in_a_palette_opened_over_a_menu_stays_in_the_palette() {
             "focus left the palette: {at}"
         );
     }
+}
+
+mod overmap {
+    use super::*;
+    use serde_json::Value;
+
+    fn open<'a>() -> (H<'a>, ScriptHandle) {
+        let (mut h, script) = harness();
+        h.run_steps(3);
+        let mut ev: Value = common::overmap_event(100);
+        ev["params"]["events"][0]["changes"]["interaction"]["interaction"]["overmap"]["legend"] =
+            json!([
+                "│",
+                "│# lake on the northwest",
+                "│  outskirts of Bristol",
+                "│",
+                "│Use movement keys to pan."
+            ]);
+        script.push(ev);
+        h.run_steps(3);
+        (h, script)
+    }
+
+    #[test]
+    fn the_cursor_status_reads_the_squares_description_and_the_view_lists_the_notes() {
+        let (h, _script) = open();
+        let said = "Overmap (100, 200, 0). lake on the northwest outskirts of Bristol.";
+        let live = announced(&h);
+        assert!(live.iter().any(|v| v.starts_with(said)), "{live:?}");
+        let view = h.get_by_label("Overmap view").accesskit_node();
+        let described = view.description().unwrap_or_default();
+        assert!(described.starts_with(said), "{described}");
+        assert!(
+            described.contains("Notes: (99, 200, 0) cache."),
+            "{described}"
+        );
+    }
+
+    #[test]
+    fn the_sidebar_frame_is_not_read_and_blank_rows_are_hidden() {
+        let (h, _script) = open();
+        let rows: Vec<_> = h
+            .root()
+            .children_recursive()
+            .filter(|n| n.accesskit_node().role() == accesskit::Role::Label)
+            .filter(|n| !n.accesskit_node().is_hidden())
+            .filter_map(|n| n.accesskit_node().value())
+            .filter(|v| v.contains('│') || v.trim().is_empty())
+            .collect();
+        assert!(rows.is_empty(), "frame or blank rows read aloud: {rows:?}");
+        h.get_by_label("Use movement keys to pan.");
+    }
+}
+
+#[test]
+fn the_keyboard_cursor_square_is_described_by_the_engines_native_text() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    h.get_by_label("Map").focus();
+    h.run_steps(6);
+    let asked = script
+        .sent()
+        .iter()
+        .filter(|m| m["method"] == "bn.world.describe")
+        .count();
+    assert_eq!(asked, 1, "the cursor square is asked for without a pointer");
+    let described = h
+        .get_by_label("Map")
+        .accesskit_node()
+        .description()
+        .unwrap_or_default();
+    assert!(
+        described.contains("Wall A zombie is here."),
+        "the map reads the native text: {described}"
+    );
+}
+
+#[test]
+fn shift_f10_on_the_map_is_the_right_click_on_the_cursor_square() {
+    let (mut h, script) = harness();
+    h.run_steps(4);
+    h.get_by_label("Map").focus();
+    h.run_steps(2);
+    h.key_press_modifiers(egui::Modifiers::SHIFT, egui::Key::F10);
+    h.run_steps(3);
+    let contexts: Vec<_> = script
+        .sent()
+        .into_iter()
+        .filter(|m| m["method"] == "bn.command.submit")
+        .map(|m| m["params"]["operation"].clone())
+        .filter(|o| o["kind"] == "context")
+        .collect();
+    assert_eq!(contexts.len(), 1, "{contexts:?}");
+}
+
+#[test]
+fn blank_native_lines_and_a_final_period_do_not_garble_the_cursor_description() {
+    let (mut h, _script) = described(&[" ", "Unseen."]);
+    h.run_steps(3);
+    h.get_by_label("Map").focus();
+    h.run_steps(6);
+    let said = h
+        .get_by_label("Map")
+        .accesskit_node()
+        .description()
+        .unwrap_or_default();
+    assert!(said.ends_with(": Unseen."), "{said}");
 }
