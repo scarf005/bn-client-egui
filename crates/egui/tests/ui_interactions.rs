@@ -1022,7 +1022,7 @@ fn an_action_row_of_a_tabbed_screen_shows_its_key_and_alt_down_then_enter_sends_
         [json!({"kind":"choose","choice_id":"action:NEXT_TAB"})],
         "Enter on the focused row sends the action, not CONFIRM"
     );
-||||||| ea3c791
+}
 
 fn list_with(rows: usize) -> Value {
     let choices = (0..rows)
