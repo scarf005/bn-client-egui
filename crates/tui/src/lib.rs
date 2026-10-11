@@ -51,6 +51,8 @@ pub struct TuiApp<M: GameModel> {
     aim: aim::Aim,
     /// Where the open menu's rows and tabs were last drawn, for mouse clicks.
     menu_hits: MenuHits,
+    /// The action row of the open menu the keyboard focus is on (Alt+Down, Alt+Up), where Enter sends it.
+    action_focus: Option<usize>,
 }
 
 /// What a click on the open menu can reach: the row ids from the first drawn one, and the tab ids.
@@ -127,6 +129,7 @@ impl<M: GameModel> TuiApp<M> {
             hovered: None,
             aim: Default::default(),
             menu_hits: Default::default(),
+            action_focus: None,
         }
     }
 
@@ -153,6 +156,7 @@ impl<M: GameModel> TuiApp<M> {
                 self.edit = None;
             }
             self.selected = 0;
+            self.action_focus = None;
             self.menu_sig = sig;
         }
         // The engine's own cursor is the highlight; its navigation keys move it. The crafting
@@ -237,6 +241,7 @@ impl<M: GameModel> TuiApp<M> {
                 "CRAFTING" => self.crafting_key(&menu, key),
                 // Every key of the advanced inventory is the engine's, Tab included (it swaps panes).
                 "ADVANCED_INVENTORY" => self.menu_key(&menu, key),
+                _ if !menu.screen && self.action_row_key(&menu, key) => {}
                 _ if !menu.screen && self.settings_key(&menu, key) => {}
                 _ => self.menu_key(&menu, key),
             };
@@ -282,6 +287,49 @@ impl<M: GameModel> TuiApp<M> {
         Pos {
             x: absolute.x - origin.x,
             y: absolute.y - origin.y,
+        }
+    }
+
+    /// The rows of the menu that stand for an engine action (`action:NAME`), which the engine's own cursor
+    /// never reaches. Alt+Down and Alt+Up move the focus among them; Enter sends the one in focus, and
+    /// any other key leaves them (the action's own key, shown beside the row, works throughout).
+    fn action_row_key(&mut self, menu: &Menu, key: KeyEvent) -> bool {
+        let rows = menu
+            .entries()
+            .into_iter()
+            .filter(|c| c.id.starts_with("action:") && c.enabled)
+            .map(|c| c.id.clone())
+            .collect::<Vec<_>>();
+        let alt = key.modifiers.contains(KeyModifiers::ALT);
+        match (key.code, alt, self.action_focus) {
+            (KeyCode::Down, true, at) if !rows.is_empty() => {
+                self.action_focus = Some(at.map_or(0, |i| (i + 1).min(rows.len() - 1)));
+                true
+            }
+            (KeyCode::Up, true, Some(0)) => {
+                self.action_focus = None;
+                true
+            }
+            (KeyCode::Up, true, Some(i)) => {
+                self.action_focus = Some(i - 1);
+                true
+            }
+            (KeyCode::Enter, _, Some(i)) => {
+                self.action_focus = None;
+                if let Some(id) = rows.get(i) {
+                    self.model.choose(id);
+                }
+                true
+            }
+            (KeyCode::Esc, _, Some(_)) => {
+                self.action_focus = None;
+                true
+            }
+            (_, _, Some(_)) => {
+                self.action_focus = None;
+                false
+            }
+            _ => false,
         }
     }
 
@@ -836,6 +884,19 @@ impl<M: GameModel> TuiApp<M> {
 
     fn draw_menu(&mut self, f: &mut Frame, menu: &Menu) {
         let entries = menu.entries();
+        let actions = self.model.actions();
+        // The focused action row, when the keyboard is on one, is the highlighted row.
+        let selected = self
+            .action_focus
+            .and_then(|i| {
+                entries
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, c)| c.id.starts_with("action:") && c.enabled)
+                    .nth(i)
+                    .map(|(row, _)| row)
+            })
+            .unwrap_or(self.selected);
         let rows = entries
             .iter()
             .enumerate()
@@ -871,8 +932,12 @@ impl<M: GameModel> TuiApp<M> {
                     true => "[x] ",
                     false => "",
                 };
+                // The key the game binds to an action row, as the native screens print their keys.
+                let hint = bn_client_core::action_hint(&actions, &c.id)
+                    .map(|key| format!("  [{key}]"))
+                    .unwrap_or_default();
                 (
-                    format!("{mark}{}{value}{columns}{denial}", plain(&c.label)),
+                    format!("{mark}{}{value}{columns}{hint}{denial}", plain(&c.label)),
                     style,
                 )
             })
@@ -884,7 +949,7 @@ impl<M: GameModel> TuiApp<M> {
             .collect::<Vec<_>>();
         // What the engine says about the row its cursor is on.
         let footer = entries
-            .get(self.selected)
+            .get(selected)
             .map(|c| plain(&c.description))
             .unwrap_or_default()
             .lines()
@@ -899,7 +964,7 @@ impl<M: GameModel> TuiApp<M> {
                 .collect(),
             tabs,
             rows,
-            selected: self.selected,
+            selected,
             footer,
         };
         let layout = Self::draw_popup(f, &popup);

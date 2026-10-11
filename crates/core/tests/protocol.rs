@@ -142,6 +142,8 @@ fn by_def(def: &str, v: &Value) -> Result<Value, String> {
             round_trip::<CommandNotice>(v)
         }
         "result_params" => round_trip::<ResultParams>(v),
+        "describe_params" => round_trip::<DescribeParams>(v),
+        "describe_result" => round_trip::<DescribeResult>(v),
         "snapshot_part" => round_trip::<SnapshotPart>(v),
         "events_notification" => round_trip::<EventsParams>(v),
         "resync_notification" => round_trip::<Resync>(v),
@@ -150,8 +152,6 @@ fn by_def(def: &str, v: &Value) -> Result<Value, String> {
         "avatar" => round_trip::<Avatar>(v),
         "loading_notification" => round_trip::<LoadingNotice>(v),
         "choice" => round_trip::<Choice>(v),
-        "describe_params" => round_trip::<DescribeParams>(v),
-        "describe_result" => round_trip::<DescribeResult>(v),
         // The world values are typed by the replica tests; here they only have to be valid JSON.
         "environment" => round_trip::<protocol::Environment>(v),
         "entity" => round_trip::<protocol::Entity>(v),

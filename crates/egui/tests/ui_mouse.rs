@@ -1,3 +1,4 @@
+#![recursion_limit = "512"]
 //! Every native mouse behavior of the game, checked in the egui client against the wire it uses.
 mod common;
 use bn_client_egui::app::CELL;

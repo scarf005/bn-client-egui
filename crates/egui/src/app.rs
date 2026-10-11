@@ -101,6 +101,8 @@ pub struct App<M: GameModel> {
     status_live: a11y::Announcer,
     /// The enabled controls of the open menu, in Tab order, as of the last frame.
     menu_ids: Vec<egui::Id>,
+    /// The controls of the open menu that stand for an engine action, for Alt+Up and Alt+Down.
+    action_ids: Vec<egui::Id>,
     /// The same for the action palette.
     palette_ids: Vec<egui::Id>,
     /// Where the engine's cursor was in the open menu, so keyboard focus can follow it.
@@ -168,6 +170,7 @@ impl<M: GameModel> App<M> {
             effects: Effects::default(),
             was_looking: false,
             menu_ids: Vec::new(),
+            action_ids: Vec::new(),
             palette_ids: Vec::new(),
             menu_focus: None,
             native_live: a11y::Announcer::new(" "),
@@ -492,7 +495,10 @@ impl<M: GameModel> App<M> {
                             pressed: true,
                             modifiers,
                             ..
-                        } if !(*key == Key::Escape && (interrupted || esc_cancels)) => {
+                        } if !(*key == Key::Escape && (interrupted || esc_cancels))
+                            // Alt with an arrow moves the focus among the action rows, not the engine's cursor.
+                            && !(modifiers.alt && matches!(key, Key::ArrowUp | Key::ArrowDown)) =>
+                        {
                             name(*key, *modifiers)
                         }
                         _ => None,
@@ -507,6 +513,7 @@ impl<M: GameModel> App<M> {
             named.into_iter().filter(|t| !toolkit(t)).collect(),
         );
         self.keys_consumed = false;
+        self.focus_action_row(ctx);
         if self.palette.is_some() {
             return;
         }
@@ -573,6 +580,41 @@ impl<M: GameModel> App<M> {
     fn settled(&self) -> bool {
         self.pending_since
             .is_some_and(|t| self.clock.now().saturating_sub(t) >= SETTLE)
+    }
+
+    /// Alt+Down and Alt+Up put the keyboard focus on the next and previous action row of the open menu,
+    /// where Enter sends that action; the engine's own keys never reach those rows.
+    fn focus_action_row(&mut self, ctx: &egui::Context) {
+        let step = ctx.input(|i| {
+            i.events.iter().fold(0_isize, |step, e| match e {
+                egui::Event::Key {
+                    key: egui::Key::ArrowDown,
+                    pressed: true,
+                    modifiers,
+                    ..
+                } if modifiers.alt => step + 1,
+                egui::Event::Key {
+                    key: egui::Key::ArrowUp,
+                    pressed: true,
+                    modifiers,
+                    ..
+                } if modifiers.alt => step - 1,
+                _ => step,
+            })
+        });
+        if step == 0 || self.action_ids.is_empty() {
+            return;
+        }
+        let at = ctx
+            .memory(|m| m.focused())
+            .and_then(|id| self.action_ids.iter().position(|a| *a == id));
+        let last = self.action_ids.len() as isize - 1;
+        let to = match at {
+            Some(i) => (i as isize + step).clamp(0, last),
+            None if step > 0 => 0,
+            None => last,
+        };
+        ctx.memory_mut(|m| m.request_focus(self.action_ids[to as usize]));
     }
 
     /// A button for a choice or action. Once a command has lasted a while, the pressed one is
@@ -664,7 +706,12 @@ impl<M: GameModel> App<M> {
             } else {
                 ""
             };
-            format!("Overmap ({}, {}, {}).{here}{note}", at.0, at.1, at.2)
+            // The sidebar describes the square under the cursor, and only that one.
+            let what = om
+                .here()
+                .filter(|_| at == om.cursor)
+                .map_or_else(String::new, |t| format!(" {t}."));
+            format!("Overmap ({}, {}, {}).{here}{what}{note}", at.0, at.1, at.2)
         };
         let route = match om.path.len() {
             0 => String::new(),
@@ -688,7 +735,13 @@ impl<M: GameModel> App<M> {
             });
             ui.ctx().accesskit_node_builder(response.id, |b| {
                 b.set_role(accesskit::Role::Canvas);
-                b.set_description(status(om.cursor));
+                b.set_description(
+                    [Some(status(om.cursor)), om.notes_text()]
+                        .into_iter()
+                        .flatten()
+                        .collect::<Vec<_>>()
+                        .join(" "),
+                );
             });
             painter.rect_filled(response.rect, 0.0, egui::Color32::BLACK);
             for row in 0..om.rows {
@@ -783,10 +836,16 @@ impl<M: GameModel> App<M> {
             egui::ScrollArea::vertical().show(ui, |ui| {
                 ui.vertical(|ui| {
                     for line in &om.legend {
-                        ui.add(
+                        let label = ui.add(
                             egui::Label::new(egui::RichText::new(line).monospace())
                                 .wrap_mode(egui::TextWrapMode::Extend),
                         );
+                        // The window frame and blank rows are layout, not text to read.
+                        let text = line.trim_start_matches(['│', '|']).trim();
+                        ui.ctx().accesskit_node_builder(label.id, |b| match text {
+                            "" => b.set_hidden(),
+                            _ => b.set_value(text),
+                        });
                     }
                     if !om.notes.is_empty() {
                         ui.separator();
@@ -859,7 +918,17 @@ impl<M: GameModel> App<M> {
             to_abs(player).y,
             to_abs(cursor).x,
             to_abs(cursor).y,
-            self.model.cell(cursor).desc
+            // The engine's mouse-view text when it has answered for this square.
+            self.model
+                .hover_text(cursor)
+                .map_or_else(
+                    || self.model.cell(cursor).desc,
+                    |lines| {
+                        let lines = lines.iter().map(|l| l.trim()).filter(|l| !l.is_empty());
+                        lines.collect::<Vec<_>>().join(" ")
+                    },
+                )
+                .trim_end_matches('.')
         );
         if let Some(end) = route.last() {
             status += &format!(
@@ -940,6 +1009,16 @@ impl<M: GameModel> App<M> {
                     x: (cursor.x + dx).clamp(0, size.x - 1),
                     y: (cursor.y + dy).clamp(0, size.y - 1),
                 };
+            }
+            // A keyboard cursor gets the same native description a hovering pointer does.
+            if self.model.focus().is_none() {
+                self.model.hover(cursor);
+            }
+            // Shift+F10, the keyboard's context-menu key, is the right click on the cursor square.
+            if ui.input(|i| i.modifiers.shift && i.key_pressed(egui::Key::F10))
+                && !self.model.context_click(cursor)
+            {
+                self.menu_cell = cursor;
             }
         }
         self.cursor = to_abs(cursor);

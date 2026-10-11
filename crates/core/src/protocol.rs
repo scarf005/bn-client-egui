@@ -232,6 +232,79 @@ pub struct Avatar {
     pub ground: Option<Vec<InventoryItem>>,
 }
 
+/// An avatar in an event. The members named in `keep` are left out and carry over from the previous
+/// avatar; any other absent member is empty.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct AvatarChange {
+    pub id: String,
+    pub at: WorldPos,
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub look: Option<Look>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub overlays: Vec<Look>,
+    #[serde(default, skip_serializing_if = "Traits::is_empty")]
+    pub traits: Traits,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stats: Option<Vec<Stat>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inventory: Option<Vec<InventoryItem>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sidebar: Option<Sidebar>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ground: Option<Vec<InventoryItem>>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub keep: Vec<String>,
+}
+
+impl AvatarChange {
+    /// The whole avatar after the event, taking the kept members from `previous`.
+    pub fn apply(self, previous: Option<&Avatar>) -> Avatar {
+        let kept = |member: &str| self.keep.iter().any(|k| k == member);
+        let before = previous.filter(|_| !self.keep.is_empty());
+        Avatar {
+            look: if kept("look") {
+                before.and_then(|a| a.look.clone())
+            } else {
+                self.look.clone()
+            },
+            overlays: if kept("overlays") {
+                before.map(|a| a.overlays.clone()).unwrap_or_default()
+            } else {
+                self.overlays.clone()
+            },
+            traits: if kept("traits") {
+                before.map(|a| a.traits.clone()).unwrap_or_default()
+            } else {
+                self.traits.clone()
+            },
+            stats: if kept("stats") {
+                before.map(|a| a.stats.clone()).unwrap_or_default()
+            } else {
+                self.stats.clone().unwrap_or_default()
+            },
+            inventory: if kept("inventory") {
+                before.and_then(|a| a.inventory.clone())
+            } else {
+                self.inventory.clone()
+            },
+            sidebar: if kept("sidebar") {
+                before.and_then(|a| a.sidebar.clone())
+            } else {
+                self.sidebar.clone()
+            },
+            ground: if kept("ground") {
+                before.and_then(|a| a.ground.clone())
+            } else {
+                self.ground.clone()
+            },
+            id: self.id,
+            at: self.at,
+            name: self.name,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct InventoryItem {
     pub look: Look,
@@ -433,7 +506,7 @@ pub struct Changes {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub gone: Vec<Gone>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub avatar: Option<Avatar>,
+    pub avatar: Option<AvatarChange>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub environment: Option<Environment>,
     /// Replaces the planned route; `[]` clears it.

@@ -107,7 +107,6 @@ fn progress_without_steps_shows_just_the_title() {
 /// Needs the game's data directory: set `BN_ROOT`, or keep the default sibling worktree.
 #[test]
 fn the_games_webp_loading_images_decode() {
-    use eframe::egui::load::{ImagePoll, LoadError};
     let root = std::env::var_os("BN_ROOT")
         .map(PathBuf::from)
         .unwrap_or_else(|| "/home/scarf/repo/cata/Cataclysm-BN-worktrees/magnum-opus".into());
@@ -117,29 +116,10 @@ fn the_games_webp_loading_images_decode() {
         .map(|e| e.path())
         .find(|p| p.extension().is_some_and(|e| e == "webp"))
         .expect("a webp loading image in the game data");
-    let ctx = egui::Context::default();
-    egui_extras::install_image_loaders(&ctx);
-    let uri = format!("file://{}", webp.display());
-    let mut result = None;
-    // Decoding runs on another thread; a loaded machine can take far longer than a quiet one.
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
-    while std::time::Instant::now() < deadline {
-        ctx.run_ui(egui::RawInput::default(), |_| {})
-            .textures_delta
-            .clear();
-        match ctx.try_load_image(&uri, egui::SizeHint::default()) {
-            Ok(ImagePoll::Pending { .. }) => {
-                std::thread::sleep(std::time::Duration::from_millis(10))
-            }
-            other => {
-                result = Some(other);
-                break;
-            }
-        }
-    }
-    match result.expect("decoding finished") {
-        Ok(ImagePoll::Ready { image }) => assert!(image.size[0] > 1 && image.size[1] > 1),
-        Err(LoadError::NoImageLoaders | LoadError::Loading(_)) => panic!("webp not decodable"),
-        _ => panic!("loading did not finish"),
-    }
+    // The loaders decode on a worker thread, so waiting on them races the machine's load; decode with
+    // the very function they call, and the answer is there when it returns.
+    let bytes = std::fs::read(&webp).unwrap();
+    let image = egui_extras::image::load_image_bytes(&bytes)
+        .unwrap_or_else(|e| panic!("webp not decodable: {e}"));
+    assert!(image.size[0] > 1 && image.size[1] > 1);
 }

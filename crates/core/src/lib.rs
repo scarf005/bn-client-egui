@@ -17,5 +17,5 @@ pub use engine_model::EngineModel;
 pub use model::{
     ActionEntry, Cell, CommandStatus, Effect, Failure, FailureKind, FakeModel, GameModel, Layer,
     Loading, LogLine, Menu, MenuChoice, MenuPane, Mutation, Overmap, OvermapCell, OvermapTile,
-    PaneTotals, Pos, Rgb, Shape,
+    PaneTotals, Pos, Rgb, Shape, action_hint,
 };
