@@ -114,8 +114,6 @@ pub struct EngineModel {
     /// Actions on show: between auto-move steps the engine offers none, which must not flicker the list.
     shown: Vec<ActionEntry>,
     status: Option<CommandStatus>,
-    /// Where the avatar stood when a travel click was sent; a click that plans and moves nothing found no route.
-    travel_from: Option<WorldPos>,
     /// An item picked or dropped from the panels: the native menu opens, this finishes it.
     chore: Option<Chore>,
     /// The main menu was showing at the last poll; coming back to it ends the game whose lines are kept.
@@ -332,7 +330,6 @@ impl EngineModel {
             loading: None,
             shown: vec![],
             status: None,
-            travel_from: None,
             chore: None,
             at_main_menu: false,
             hovered: None,
@@ -442,22 +439,7 @@ impl EngineModel {
                     let swap = reason.as_deref() == Some("stale_epoch");
                     let stage = match n.stage.as_str() {
                         "validated" => "accepted".into(),
-                        "completed" => {
-                            let from = self.travel_from.take();
-                            let stuck = from.is_some()
-                                && from.as_ref() == self.avatar_pos()
-                                && self.replica.route().is_empty();
-                            if stuck {
-                                let line = "You can't travel there.".to_string();
-                                if self.messages.last() != Some(&line) {
-                                    self.messages.push(line);
-                                }
-                                "done: You can't travel there."
-                            } else {
-                                "done"
-                            }
-                            .into()
-                        }
+                        "completed" => "done".into(),
                         _ if swap => "done".into(),
                         "rejected" | "interrupted" => match reason.as_deref() {
                             Some(why) => format!("{}: {}", n.stage, explain(why)),
@@ -652,9 +634,6 @@ impl EngineModel {
             operation,
         };
         self.status = Some(self.describe(&submit.operation));
-        self.travel_from = matches!(submit.operation, Operation::Travel { .. })
-            .then(|| self.avatar_pos().cloned())
-            .flatten();
         self.busy = true;
         self.rejected = false;
         self.walking = false;
@@ -1728,6 +1707,27 @@ impl GameModel for EngineModel {
             x: at.x - ox,
             y: at.y - oy,
         })
+    }
+
+    fn aiming(&self) -> Option<String> {
+        let i = self.replica.boundary()?.interaction.as_ref()?;
+        let t = i.target.as_ref().filter(|_| i.context == "TARGET")?;
+        let at = |k: &str| serde_json::from_value::<WorldPos>(t[k].clone()).ok();
+        let (from, to, range) = (at("source")?, at("current")?, t["range"].as_i64()?);
+        let (dx, dy) = (f64::from(to.x - from.x), f64::from(to.y - from.y));
+        let distance = if t["distance_metric"] == "trig" {
+            dx.hypot(dy).round()
+        } else {
+            dx.abs().max(dy.abs())
+        };
+        let status = match t["status"].as_str()? {
+            "good" => "ready to fire",
+            "out_of_range" => "out of range",
+            "out_of_ammo" => "out of ammo",
+            _ => "no valid target",
+        };
+        let title = markup::plain(&i.title);
+        Some(format!("{title}: range {distance}/{range}, {status}"))
     }
 
     fn styled(&self, text: &str) -> Vec<Run> {

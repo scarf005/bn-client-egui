@@ -535,6 +535,11 @@ pub trait GameModel {
     fn focus(&self) -> Option<Pos> {
         None
     }
+    /// What the engine's aiming screen shows beside the cursor: its title, the cursor's distance
+    /// against the range, and whether a shot can be taken; none outside aiming.
+    fn aiming(&self) -> Option<String> {
+        None
+    }
     /// `text` split at its colour tags, coloured with the game's palette.
     fn styled(&self, text: &str) -> Vec<Run> {
         markup::runs(text, &ColorMap::default())

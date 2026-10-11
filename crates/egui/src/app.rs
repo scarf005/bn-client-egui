@@ -242,7 +242,13 @@ impl<M: GameModel> App<M> {
 
     /// `text` with its colour tags drawn as colours.
     fn rich(&self, ui: &egui::Ui, text: &str) -> egui::WidgetText {
-        let font = egui::TextStyle::Body.resolve(ui.style());
+        // Text the engine padded into `|` separated columns lines up only in a fixed-width font.
+        let style = if text.contains(" | ") {
+            egui::TextStyle::Monospace
+        } else {
+            egui::TextStyle::Body
+        };
+        let font = style.resolve(ui.style());
         text::job(&self.model.styled(text), &font).into()
     }
 
@@ -971,6 +977,9 @@ impl<M: GameModel> App<M> {
                 end.x,
                 end.y
             );
+        }
+        if let Some(aiming) = self.model.aiming() {
+            status = format!("{aiming}. {status}");
         }
         // Always the same height, so the map does not move under the pointer as the text changes length.
         let status_label = egui::ScrollArea::vertical()

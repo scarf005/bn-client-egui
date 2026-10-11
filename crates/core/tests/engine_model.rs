@@ -611,19 +611,15 @@ fn clicking_a_distant_closed_door_still_asks_the_engine_for_a_route() {
 }
 
 #[test]
-fn travel_that_plans_nothing_and_moves_nothing_says_the_native_cant_travel_message() {
+fn travel_that_plans_nothing_is_silent_like_native_where_a_failed_click_route_prints_no_message() {
     let (t, h) = session();
     let mut m = connected(t.on("bn.command.submit", walk_reply()));
     assert!(m.travel(Pos { x: 22, y: 12 }));
     h.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{
         "epoch":"e7f3","command_id":"c:5","stage":"completed"}}));
     m.poll();
-    assert_eq!(m.command().unwrap().stage, "done: You can't travel there.");
-    assert_eq!(
-        m.messages(),
-        ["You can't travel there."],
-        "native puts it in the message log"
-    );
+    assert_eq!(m.command().unwrap().stage, "done");
+    assert!(m.messages().is_empty());
 }
 
 #[test]
@@ -1325,6 +1321,43 @@ fn the_selected_tab_picks_the_pane_and_a_target_interaction_is_a_cursor_not_a_me
             y: 4 - origin.y
         })
     );
+}
+
+#[test]
+fn aiming_reports_the_cursor_distance_against_the_range_and_the_shot_status_only_while_firing() {
+    let aim = |context: &str, status: &str, x: i32| {
+        json!({"schema_id":"s:a","kind":"target","context":context,"title":"Firing Uzi 9mm","message":"",
+            "allow_cancel":true,"choices":[],"choice_total":0,"allow_set_count":false,
+            "target":{"source":{"dim":"","x":2,"y":4,"z":0},"current":{"dim":"","x":x,"y":6,"z":0},
+                "range":8,"distance_metric":"square","status":status,"candidates":[]}})
+    };
+    let (t, h) = session();
+    let mut m = connected(t);
+    for (sequence, (context, status, x, want)) in (41..).zip([
+        (
+            "TARGET",
+            "good",
+            6,
+            Some("Firing Uzi 9mm: range 4/8, ready to fire"),
+        ),
+        (
+            "TARGET",
+            "out_of_range",
+            12,
+            Some("Firing Uzi 9mm: range 10/8, out of range"),
+        ),
+        (
+            "TARGET",
+            "out_of_ammo",
+            3,
+            Some("Firing Uzi 9mm: range 2/8, out of ammo"),
+        ),
+        ("LOOK", "good", 6, None),
+    ]) {
+        h.push(show(sequence, json!([]), aim(context, status, x)));
+        m.poll();
+        assert_eq!(m.aiming().as_deref(), want, "{context} {status}");
+    }
 }
 
 #[test]
