@@ -120,8 +120,8 @@ fn the_screen_shows_values_description_and_plain_labels_and_a_click_chooses_a_ro
         "the highlighted row's description\n{shown}"
     );
     assert!(
-        shown.contains("[x] second thing"),
-        "a row the screen marks as on\n{shown}"
+        shown.contains("second thing") && !shown.contains("[x]") && !shown.contains("[ ]"),
+        "native lists have no selection markers\n{shown}"
     );
     assert!(shown.contains("Heading"), "{shown}");
     assert!(
@@ -148,6 +148,11 @@ fn the_screen_shows_values_description_and_plain_labels_and_a_click_chooses_a_ro
         render(&mut app);
     }
     let (x, y) = at("second thing");
+    assert_eq!(
+        t.backend().buffer()[(x, y)].fg,
+        ratatui::style::Color::White,
+        "a row the screen marks as on is lit white"
+    );
     app.handle_mouse(click(x + 1, y));
     assert_eq!(
         operations(&h).last(),

@@ -76,6 +76,15 @@ fn press(app: &mut TuiApp<EngineModel>, code: KeyCode) {
 fn both_parties_show_rows_prices_capacity_and_the_balance_line() {
     let (mut app, _) = open(trade());
     let t = render(&mut app);
+    println!(
+        "DUMP-TRADE\n{}",
+        lines(&t)
+            .iter()
+            .filter(|l| !l.trim().is_empty())
+            .map(|l| l.trim_end().to_string())
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
     let all = lines(&t).join("\n");
     for text in [
         "Trading with Lena",
@@ -197,8 +206,41 @@ fn row_hotkeys_are_light_green_before_the_labels_with_blank_padding() {
     let buf = t.backend().buffer();
     assert_eq!(buf[(x, y)].fg, Color::LightGreen);
     // The row without a key is padded to the same column.
-    let (tx, _) = find(&t, "[x] tin can");
+    let (tx, _) = find(&t, "tin can");
     assert_eq!(tx, x + 2);
+    // Native list menus have no selection markers.
+    let all = lines(&t).join("\n");
+    assert!(!all.contains("[x]") && !all.contains("[ ]"), "{all}");
+}
+
+#[test]
+fn list_rows_tint_a_value_by_its_color_column_and_skip_the_source_column() {
+    let mut boundary = trade();
+    let i = &mut boundary["interaction"];
+    i["context"] = "ITEM_LIST".into();
+    i["compat"]["panes"] = json!([]);
+    for c in i["choices"].as_array_mut().unwrap() {
+        c["pane_id"] = Value::Null;
+    }
+    i["choices"][1]["columns"] = json!([
+        ["weight", "0.30 kg"],
+        ["weight color", "light_red"],
+        ["source", "hidden-pane"]
+    ]);
+    let (mut app, _) = open(boundary);
+    let t = render(&mut app);
+    println!(
+        "DUMP-LIST\n{}",
+        lines(&t)
+            .iter()
+            .filter(|l| !l.trim().is_empty())
+            .map(|l| l.trim_end().to_string())
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
+    let (x, y) = find(&t, "weight: 0.30 kg");
+    assert_eq!(t.backend().buffer()[(x + 8, y)].fg, Color::Rgb(240, 90, 90));
+    assert!(!lines(&t).join("\n").contains("hidden-pane"));
 }
 
 #[test]

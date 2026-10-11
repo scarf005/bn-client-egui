@@ -927,23 +927,36 @@ impl<M: GameModel> TuiApp<M> {
                     (Some(e), _) => format!(": {}", settings::shown_value(e)),
                     _ => String::new(),
                 };
-                // The row's values beside it, as the native lists print them.
+                // The row's values beside it, as the native lists print them; a `<name> color` column
+                // tints the value of `<name>`, and `source` only names the selector column.
+                let tint = |name: &str| {
+                    c.columns
+                        .iter()
+                        .find(|(label, _)| label.strip_suffix(" color") == Some(name))
+                        .map(|(_, color)| color.as_str())
+                };
                 let columns = c
                     .columns
                     .iter()
-                    .filter(|(label, value)| !value.is_empty() && !label.ends_with(" color"))
-                    .map(
-                        |(label, value)| match label.is_empty() || *label == c.label {
-                            true => format!("  {}", plain(value)),
-                            false => format!("  {label}: {}", plain(value)),
-                        },
-                    )
+                    .filter(|(label, value)| {
+                        !label.ends_with(" color") && label != "source" && !value.is_empty()
+                    })
+                    .map(|(label, value)| {
+                        let value = match tint(label) {
+                            Some(color) => format!("<color_{color}>{value}</color>"),
+                            None => value.clone(),
+                        };
+                        match label.is_empty() || *label == c.label {
+                            true => format!("  {value}"),
+                            false => format!("  {label}: {value}"),
+                        }
+                    })
                     .collect::<String>();
-                // With the engine's cursor shown, a chosen row is one the screen marks as on: an enabled
-                // panel or zone, an active mutation or mod.
-                let mark = match c.selected && menu.focus.is_some() {
-                    true => "[x] ",
-                    false => "",
+                // Chosen rows (an enabled panel or zone, an active mutation or mod) are lit white; the
+                // native cursor row drops its colours.
+                let style = match c.selected && menu.focus.is_some() {
+                    true => style.fg(Color::White),
+                    false => style,
                 };
                 // The key the game binds to an action row, as the native screens print their keys.
                 let hint = bn_client_core::action_hint(&actions, &c.id)
@@ -954,11 +967,21 @@ impl<M: GameModel> TuiApp<M> {
                     ("", false) => String::new(),
                     (k, _) => format!("{k} "),
                 };
-                (
-                    key,
-                    format!("{mark}{}{value}{columns}{hint}{denial}", plain(&c.label)),
-                    style,
-                )
+                let text = format!("{}{value}{columns}{hint}{denial}", c.label);
+                // The cursor row is drawn whole in one colour, so it loses the markup.
+                let spans = match i == selected {
+                    true => vec![Span::raw(plain(&text))],
+                    false => self
+                        .model
+                        .styled(&text)
+                        .into_iter()
+                        .map(|run| {
+                            let fg = run.color.map(|c| Style::new().fg(color(c)));
+                            Span::styled(run.text, fg.unwrap_or_default())
+                        })
+                        .collect(),
+                };
+                (key, spans, style)
             })
             .collect::<Vec<_>>();
         let tabs = menu
@@ -1018,7 +1041,13 @@ impl<M: GameModel> TuiApp<M> {
             .model
             .actions()
             .iter()
-            .map(|a| (String::new(), action_label(a), Style::new()))
+            .map(|a| {
+                (
+                    String::new(),
+                    vec![Span::raw(action_label(a))],
+                    Style::new(),
+                )
+            })
             .collect();
         let popup = Popup {
             title: "Actions",
@@ -1039,7 +1068,12 @@ impl<M: GameModel> TuiApp<M> {
             .header
             .iter()
             .map(|l| l.width())
-            .chain(popup.rows.iter().map(|(k, l, _)| k.width() + l.width() + 2))
+            .chain(
+                popup
+                    .rows
+                    .iter()
+                    .map(|(k, l, _)| k.width() + Line::from(l.clone()).width() + 2),
+            )
             .chain(std::iter::once(tab_bar.width()))
             .max()
             .unwrap_or(0);
@@ -1096,11 +1130,15 @@ impl<M: GameModel> TuiApp<M> {
                     true => Style::new(),
                     false => Style::new().fg(Color::LightGreen),
                 };
-                let line = Line::from(vec![
-                    Span::raw(if on { "> " } else { "  " }),
-                    Span::styled(key.clone(), green),
-                    Span::raw(label.clone()),
-                ]);
+                let line = Line::from(
+                    [
+                        Span::raw(if on { "> " } else { "  " }),
+                        Span::styled(key.clone(), green),
+                    ]
+                    .into_iter()
+                    .chain(label.clone())
+                    .collect::<Vec<_>>(),
+                );
                 match on {
                     true => line.style(style.add_modifier(Modifier::REVERSED)),
                     false => line.style(*style),
@@ -1179,7 +1217,7 @@ struct Popup<'a> {
     /// Tab labels and whether each is the current one.
     tabs: Vec<(String, bool)>,
     /// Each row's native key (empty or padded), label and style.
-    rows: Vec<(String, String, Style)>,
+    rows: Vec<(String, Vec<Span<'static>>, Style)>,
     selected: usize,
     /// Detail text under the rows, such as the highlighted row's description.
     footer: Vec<String>,
