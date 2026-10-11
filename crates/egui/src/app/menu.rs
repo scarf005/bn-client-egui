@@ -166,6 +166,7 @@ impl<M: GameModel> App<M> {
                             self.prompt_focused = None;
                         }
                         // A run of rows refused for the same reason says it once.
+                        let any_hotkey = menu.choices.iter().any(|c| !c.hotkey.is_empty());
                         let mut last_denial = "";
                         for (i, choice) in menu.entries().into_iter().enumerate() {
                             let said = std::mem::replace(&mut last_denial, &choice.denial)
@@ -205,10 +206,16 @@ impl<M: GameModel> App<M> {
                                         })
                                         .flatten()
                                         .map(|k| format!("  <color_dark_gray>[{k}]</color>"));
+                                    // The native key column: the row's key in green, blank where a row has none.
+                                    let key = match (choice.hotkey.as_str(), any_hotkey) {
+                                        ("", true) => "  ".to_string(),
+                                        ("", false) => String::new(),
+                                        (k, _) => format!("<color_light_green>{k}</color> "),
+                                    };
                                     self.rich(
                                         ui,
                                         &format!(
-                                            "{}{}{}",
+                                            "{key}{}{}{}",
                                             choice.label,
                                             column_text(&choice.label, &choice.columns),
                                             hint.unwrap_or_default()
@@ -232,7 +239,7 @@ impl<M: GameModel> App<M> {
                                             text,
                                             &choice.id,
                                             choice.enabled,
-                                            choice.selected,
+                                            choice.selected || (whole_row && choice.highlighted),
                                         )
                                     })
                                     .inner;
@@ -264,11 +271,23 @@ impl<M: GameModel> App<M> {
                                     button.request_focus();
                                     focused = button.has_focus();
                                 }
+                                let action_key =
+                                    bn_client_core::action_hint(&self.model.actions(), &choice.id);
                                 ui.ctx().accesskit_node_builder(button.id, |b| {
                                     b.set_role(accesskit::Role::MenuItem);
+                                    // The row's text also carries its key; its name is the label and values only.
+                                    if whole_row {
+                                        let text = column_text(&choice.label, &choice.columns);
+                                        b.set_label(markup::plain(&format!(
+                                            "{}{text}",
+                                            choice.label
+                                        )));
+                                    }
                                     // Said once on screen, but every refused row carries its reason.
                                     if !choice.enabled && !choice.denial.is_empty() {
                                         b.set_description(markup::plain(&choice.denial));
+                                    } else if let Some(key) = &action_key {
+                                        b.set_description(format!("[{key}]"));
                                     }
                                     if choice.id == "acknowledge" {
                                         // Screen readers keep the engine's own name for the row.

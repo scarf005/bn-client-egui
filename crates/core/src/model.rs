@@ -150,6 +150,8 @@ pub struct MenuChoice {
     pub enabled: bool,
     /// Why the row cannot be chosen; empty when enabled.
     pub denial: String,
+    /// The key that chooses the row natively, printed before the label; empty when it has none.
+    pub hotkey: String,
     /// The engine's committed selection, such as the current tab.
     pub selected: bool,
     /// The tab this entry belongs to; tab rows and plain list rows have none.
