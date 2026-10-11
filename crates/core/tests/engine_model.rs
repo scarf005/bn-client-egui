@@ -1860,3 +1860,14 @@ fn a_two_pane_menu_publishes_its_panes_with_area_role_and_filter() {
     assert_eq!(menu.panes[0].blocked, ["ITEMS_CONTAINER", "ITEMS_UP"]);
     assert!(menu.panes[1].blocked.is_empty());
 }
+
+#[test]
+fn a_rejected_command_is_logged_in_words_not_as_the_engines_error_name() {
+    let (t, h) = session();
+    let mut m = connected(t.on("bn.command.submit", walk_reply()));
+    assert!(m.invoke_action("RIGHT"));
+    h.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{
+        "epoch":"e7f3","command_id":"c:5","stage":"rejected","error":"validation_failed"}}));
+    m.poll();
+    assert_eq!(m.messages(), ["Command rejected: not possible here."]);
+}
