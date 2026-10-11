@@ -818,6 +818,47 @@ fn interrupt_with_no_command_in_flight_sends_nothing() {
 }
 
 #[test]
+fn a_not_ready_interrupt_settles_a_command_whose_completion_was_never_heard() {
+    let (t, h) = session();
+    let mut m = connected(
+        t.on("bn.command.submit", walk_reply())
+            .on("bn.interrupt", vec![not_ready()])
+            .on(
+                "bn.command.result",
+                vec![json!({"jsonrpc":"2.0","id":null,"result":{
+                    "epoch":"e7f3","command_id":"c:5","stage":"completed"}})],
+            ),
+    );
+    assert!(m.step_toward(Pos { x: 30, y: 12 }));
+    assert!(m.busy());
+    assert!(m.interrupt());
+    m.poll();
+    m.poll();
+    assert!(h.sent_methods().contains(&"bn.command.result".to_string()));
+    assert!(!m.busy(), "the engine's answer ends the command");
+    assert_eq!(m.command().unwrap().stage, "done");
+}
+
+#[test]
+fn a_not_ready_interrupt_keeps_a_command_the_engine_still_runs() {
+    let (t, _h) = session();
+    let mut m = connected(
+        t.on("bn.command.submit", walk_reply())
+            .on("bn.interrupt", vec![not_ready()])
+            .on(
+                "bn.command.result",
+                vec![json!({"jsonrpc":"2.0","id":null,"result":{
+                    "epoch":"e7f3","command_id":"c:5","stage":"executing"}})],
+            ),
+    );
+    assert!(m.step_toward(Pos { x: 30, y: 12 }));
+    assert!(m.interrupt());
+    m.poll();
+    m.poll();
+    assert!(m.busy());
+}
+
+#[test]
 fn a_not_ready_interrupt_is_explained_once() {
     let (t, _h) = session();
     let mut m = connected(

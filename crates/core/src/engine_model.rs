@@ -35,6 +35,8 @@ enum Pending {
     Submit,
     Viewport,
     Interrupt,
+    /// The outcome of the command in flight, asked for when the engine says it has nothing to interrupt.
+    Outcome,
     /// A hello that only changes whether the engine sends tile ids.
     Retile,
     Describe,
@@ -427,43 +429,7 @@ impl EngineModel {
                 self.resubscribe_on(outcome);
             }
             Incoming::Events(_) => {}
-            Incoming::Command(n) => {
-                self.mark(match n.stage.as_str() {
-                    "validated" => "validated",
-                    "executing" => "executing",
-                    "completed" => "completed",
-                    _ => "stage",
-                });
-                if self.command_id.as_deref() == Some(&n.command_id) {
-                    let reason = n.error.as_ref().map(error_kind);
-                    let swap = reason.as_deref() == Some("stale_epoch");
-                    let stage = match n.stage.as_str() {
-                        "validated" => "accepted".into(),
-                        "completed" => "done".into(),
-                        _ if swap => "done".into(),
-                        "rejected" | "interrupted" => match reason.as_deref() {
-                            Some(why) => format!("{}: {}", n.stage, explain(why)),
-                            None => n.stage.clone(),
-                        },
-                        other => other.into(),
-                    };
-                    if let Some(s) = &mut self.status {
-                        s.set_stage(stage, n.is_terminal());
-                    }
-                }
-                if n.is_terminal() && self.command_id.as_deref() == Some(&n.command_id) {
-                    self.busy = false;
-                    self.command_id = None;
-                    // The world swap after choosing the Tutorial ends its command with stale_epoch.
-                    let swap = n.stage == "interrupted"
-                        && n.error.as_ref().is_some_and(|e| e == "stale_epoch");
-                    if n.stage != "completed" && !swap {
-                        self.rejected = self.walking;
-                        let reason = n.error.as_ref().map(error_kind);
-                        self.report_failure(&n.stage, reason.as_deref());
-                    }
-                }
-            }
+            Incoming::Command(n) => self.command_notice(n),
             Incoming::Resync(r) => {
                 let outcome = self.replica.resync(&r);
                 self.resubscribe_on(outcome);
@@ -494,6 +460,45 @@ impl EngineModel {
                     message,
                     stderr: self.transport.stderr_tail(),
                 });
+            }
+        }
+    }
+
+    /// A command's stage, from a notification or from `bn.command.result`.
+    fn command_notice(&mut self, n: protocol::CommandNotice) {
+        self.mark(match n.stage.as_str() {
+            "validated" => "validated",
+            "executing" => "executing",
+            "completed" => "completed",
+            _ => "stage",
+        });
+        if self.command_id.as_deref() == Some(&n.command_id) {
+            let reason = n.error.as_ref().map(error_kind);
+            let swap = reason.as_deref() == Some("stale_epoch");
+            let stage = match n.stage.as_str() {
+                "validated" => "accepted".into(),
+                "completed" => "done".into(),
+                _ if swap => "done".into(),
+                "rejected" | "interrupted" => match reason.as_deref() {
+                    Some(why) => format!("{}: {}", n.stage, explain(why)),
+                    None => n.stage.clone(),
+                },
+                other => other.into(),
+            };
+            if let Some(s) = &mut self.status {
+                s.set_stage(stage, n.is_terminal());
+            }
+        }
+        if n.is_terminal() && self.command_id.as_deref() == Some(&n.command_id) {
+            self.busy = false;
+            self.command_id = None;
+            // The world swap after choosing the Tutorial ends its command with stale_epoch.
+            let swap =
+                n.stage == "interrupted" && n.error.as_ref().is_some_and(|e| e == "stale_epoch");
+            if n.stage != "completed" && !swap {
+                self.rejected = self.walking;
+                let reason = n.error.as_ref().map(error_kind);
+                self.report_failure(&n.stage, reason.as_deref());
             }
         }
     }
@@ -542,6 +547,20 @@ impl EngineModel {
                 if self.messages.last() != Some(&text) {
                     self.messages.push(text);
                 }
+                // An engine with nothing to interrupt may have finished the command without our hearing of it.
+                if let (Some(at), Some(command_id)) = (self.replica.at(), self.command_id.clone()) {
+                    let params = protocol::ResultParams {
+                        epoch: at.epoch.clone(),
+                        command_id,
+                    };
+                    self.call("bn.command.result", json!(params), Pending::Outcome);
+                }
+            }
+            return;
+        }
+        if matches!(kind, Pending::Outcome) {
+            if let Some(n) = result.ok().and_then(|v| serde_json::from_value(v).ok()) {
+                self.command_notice(n);
             }
             return;
         }
@@ -569,7 +588,11 @@ impl EngineModel {
                 Ok(s) => self.replica.begin(s),
                 Err(e) => self.messages.push(format!("Bad snapshot: {e}")),
             },
-            Pending::Viewport | Pending::Interrupt | Pending::Retile | Pending::Describe => {}
+            Pending::Viewport
+            | Pending::Interrupt
+            | Pending::Outcome
+            | Pending::Retile
+            | Pending::Describe => {}
             Pending::Choices => {
                 self.paged.waiting = false;
                 if let Ok(page) = serde_json::from_value::<protocol::ChoicesResult>(value)
