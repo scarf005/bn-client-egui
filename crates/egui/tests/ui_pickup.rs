@@ -158,3 +158,16 @@ fn an_arrow_key_keeps_the_focus_on_the_focused_row() {
     h.run_steps(3);
     assert_eq!(focused(&h), before);
 }
+
+#[test]
+fn enter_on_a_focused_row_confirms_like_the_native_key_instead_of_unmarking_it() {
+    let (mut h, script) = harness();
+    h.key_press(egui::Key::Tab);
+    h.run_steps(3);
+    h.key_press(egui::Key::Enter);
+    h.run_steps(3);
+    assert_eq!(
+        operations(&script),
+        [json!({"kind":"action","action_id":"CONFIRM"})]
+    );
+}

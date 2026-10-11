@@ -28,6 +28,7 @@ impl<M: GameModel> App<M> {
             && ctx.input(|i| i.key_pressed(egui::Key::Escape))
             && menu.can_cancel;
         let rows = menu.choices.iter().filter(|c| !c.tab).collect::<Vec<_>>();
+        let any = rows.iter().any(|r| r.selected);
         let title = bn_client_core::markup::plain(&menu.title);
         egui::Window::new(&title)
             .id(a11y::dialog_id(&title))
@@ -65,8 +66,13 @@ impl<M: GameModel> App<M> {
                                 if button.hovered() || (row.highlighted && described.is_none()) {
                                     described = Some(&row.description);
                                 }
+                                // Enter on a focused row is the native confirm key; Space or a click marks.
                                 if button.clicked() {
-                                    chosen = Some(row.id.clone());
+                                    if ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                                        confirm = any;
+                                    } else {
+                                        chosen = Some(row.id.clone());
+                                    }
                                 }
                                 let available = row.available_count.filter(|n| *n > 1);
                                 if let (true, Some(available)) = (row.selected, available) {
@@ -120,10 +126,9 @@ impl<M: GameModel> App<M> {
                     });
                 ui.separator();
                 ui.horizontal(|ui| {
-                    let any = rows.iter().any(|r| r.selected);
                     let button = self.control(ui, "Confirm", "CONFIRM", any, false);
                     ids.extend(button.enabled().then_some(button.id));
-                    confirm = button.clicked();
+                    confirm |= button.clicked();
                     if menu.can_cancel {
                         let button =
                             ui.add_enabled(!self.model.busy(), egui::Button::new("Cancel"));
