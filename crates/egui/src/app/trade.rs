@@ -178,6 +178,8 @@ impl<M: GameModel> App<M> {
                         .choices
                         .iter()
                         .filter(|c| c.group.as_deref() == Some(pane.id.as_str()));
+                    // What the number columns and the spacing leave for a name; longer ones are cut.
+                    let name_width = (ui.available_width() - 270.0).max(120.0);
                     egui::Grid::new(("trade_table", &pane.id))
                         .spacing([10.0, 2.0])
                         .show(ui, |ui| {
@@ -194,6 +196,8 @@ impl<M: GameModel> App<M> {
                                     ui.end_row();
                                 }
                                 ui.horizontal(|ui| {
+                                    ui.set_max_width(name_width);
+                                    ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Truncate);
                                     let label = bn_client_core::markup::plain(&row.label);
                                     let mark = if row.selected { "[x]" } else { "[ ]" };
                                     let button = self.control(
