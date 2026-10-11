@@ -196,17 +196,23 @@ impl<M: GameModel> App<M> {
                                     ui.end_row();
                                 }
                                 ui.horizontal(|ui| {
-                                    ui.set_max_width(name_width);
-                                    ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Truncate);
                                     let label = bn_client_core::markup::plain(&row.label);
                                     let mark = if row.selected { "[x]" } else { "[ ]" };
-                                    let button = self.control(
-                                        ui,
-                                        format!("{mark} {label}"),
-                                        &row.id,
-                                        row.enabled,
-                                        row.highlighted,
-                                    );
+                                    let button = ui
+                                        .scope(|ui| {
+                                            ui.set_max_width(name_width);
+                                            ui.style_mut().wrap_mode =
+                                                Some(egui::TextWrapMode::Truncate);
+                                            let text = format!("{mark} {label}");
+                                            self.control(
+                                                ui,
+                                                text,
+                                                &row.id,
+                                                row.enabled,
+                                                row.highlighted,
+                                            )
+                                        })
+                                        .inner;
                                     out.ids.extend(button.enabled().then_some(button.id));
                                     ui.ctx().accesskit_node_builder(button.id, |b| {
                                         b.set_role(accesskit::Role::MenuItem);
