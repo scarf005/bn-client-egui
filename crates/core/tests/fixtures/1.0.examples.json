@@ -476,8 +476,12 @@
                 "glyph": "/",
                 "color": "brown"
               },
-              "name": "stick",
-              "slot": "wielded"
+              "name": "|| stick",
+              "slot": "wielded",
+              "durability": {
+                "symbol": "||",
+                "color": "light_green"
+              }
             },
             {
               "look": {

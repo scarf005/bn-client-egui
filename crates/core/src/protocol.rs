@@ -347,6 +347,15 @@ pub struct InventoryItem {
     /// `wielded`, `worn` or `carried`; absent for items on the ground.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub slot: Option<String>,
+    /// The condition marker `name` starts with and the colour the native lists draw it in.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub durability: Option<Durability>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Durability {
+    pub symbol: String,
+    pub color: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
