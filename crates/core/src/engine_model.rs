@@ -935,6 +935,7 @@ impl EngineModel {
             tint_bg: paint(look, |t| t.bg.as_deref()),
             tint_fg: paint(look, |t| t.fg.as_deref()),
             mutation: None,
+            tint_keys: look.tint_keys.clone(),
             glyph: glyph(look),
             color,
             bg,

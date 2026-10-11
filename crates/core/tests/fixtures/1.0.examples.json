@@ -1758,6 +1758,21 @@
         },
         "cargo": true
       }
+    },
+    {
+      "def": "look",
+      "name": "look of an item overlay with the ids its tints are keyed by",
+      "value": {
+        "kind": "overlay",
+        "id": "worn_jeans",
+        "glyph": "",
+        "color": "",
+        "tile": "overlay_female_worn_jeans",
+        "tint_keys": [
+          "VARSIZE",
+          "jeans"
+        ]
+      }
     }
   ],
   "invalid": [

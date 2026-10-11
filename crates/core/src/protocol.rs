@@ -62,6 +62,9 @@ pub struct Look {
     /// Set on the overlay of a mutation.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mutation: Option<LookMutation>,
+    /// Set on the overlay of an item, a bionic or an effect: the ids a tileset's tints are keyed by.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tint_keys: Vec<String>,
 }
 
 /// What a tileset's `tint_pairs` are keyed by to tint the sprite of a mutation.
