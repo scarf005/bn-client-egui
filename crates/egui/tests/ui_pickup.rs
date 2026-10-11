@@ -20,6 +20,10 @@ fn pickup() -> Value {
 }
 
 fn harness<'a>() -> (H<'a>, ScriptHandle) {
+    harness_with(pickup())
+}
+
+fn harness_with<'a>(pickup: Value) -> (H<'a>, ScriptHandle) {
     let (t, script) = session();
     let t = t.on("bn.command.submit", vec![fixture("submit_result")]);
     let clock = Clock::manual();
@@ -34,7 +38,7 @@ fn harness<'a>() -> (H<'a>, ScriptHandle) {
     script.push(
         json!({"jsonrpc":"2.0","method":"bn.events","params":{"epoch":"e7f3","events":[{
         "sequence": "41", "revision": "32", "type": "interaction.changed",
-        "changes": {"interaction": pickup()}}]}}),
+        "changes": {"interaction": pickup}}]}}),
     );
     h.run_steps(4);
     (h, script)
@@ -120,4 +124,21 @@ fn a_count_beyond_the_stack_is_not_sent() {
 fn an_unmarked_row_has_no_count_box() {
     let (h, _) = harness();
     assert!(h.query_by_label("Count of lighter (17/25)").is_none());
+}
+
+#[test]
+fn the_rows_and_confirm_do_not_move_with_the_length_of_the_hovered_description() {
+    let mut menu = pickup();
+    let long = "A long description that wraps over many lines of the dialog. ".repeat(12);
+    menu["interaction"]["choices"][0]["description"] = long.into();
+    let (mut h, _) = harness_with(menu);
+    let confirm = h.get_by_label("Confirm").rect();
+    let can = h.get_by_label("[x] tin can").rect();
+    for row in ["[ ] lighter (17/25)", "[x] tin can"] {
+        let at = h.get_by_label(row).rect().center();
+        h.hover_at(at);
+        h.run_steps(3);
+        assert_eq!(h.get_by_label("Confirm").rect(), confirm, "{row}");
+        assert_eq!(h.get_by_label("[x] tin can").rect(), can, "{row}");
+    }
 }

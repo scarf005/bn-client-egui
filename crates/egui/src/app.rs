@@ -45,6 +45,11 @@ fn dialog_scroll_height(ctx: &egui::Context) -> f32 {
     (ctx.content_rect().height() * 0.88 - 150.0).max(150.0)
 }
 
+/// The height of the status block above the map: two lines, whatever the hovered square says; the rest scrolls.
+fn status_height(ui: &egui::Ui) -> f32 {
+    2.0 * ui.text_style_height(&egui::TextStyle::Body)
+}
+
 /// Names the drag handle of the panel with this id for screen readers.
 fn label_resize_handle(ctx: &egui::Context, panel: &str, label: &str) {
     ctx.accesskit_node_builder(egui::Id::new(panel).with("__resize"), |b| {
@@ -870,9 +875,8 @@ impl<M: GameModel> App<M> {
         self.display.controls(ui);
         let cell_px = self.display.cell(CELL);
         self.display.begin();
-        // The room left for the map, less the status line above it, in whole cells.
-        let room =
-            ui.available_size() - egui::vec2(0.0, ui.text_style_height(&egui::TextStyle::Body));
+        // The room left for the map, less the status block above it, in whole cells.
+        let room = ui.available_size() - egui::vec2(0.0, status_height(ui));
         self.model.set_viewport(Pos {
             x: (room.x / cell_px) as i32,
             y: (room.y / cell_px) as i32,
@@ -938,7 +942,17 @@ impl<M: GameModel> App<M> {
                 end.y
             );
         }
-        let status_label = ui.label(&status);
+        // Always the same height, so the map does not move under the pointer as the text changes length.
+        let status_label = egui::ScrollArea::vertical()
+            .id_salt("map_status")
+            .min_scrolled_height(status_height(ui))
+            .max_height(status_height(ui))
+            .show(ui, |ui| {
+                ui.set_min_height(status_height(ui));
+                ui.set_min_width(ui.available_width());
+                ui.label(&status)
+            })
+            .inner;
         ui.ctx()
             .accesskit_node_builder(status_label.id, |b| b.set_live(accesskit::Live::Polite));
         let (response, painter) = ui.allocate_painter(
