@@ -47,16 +47,84 @@ fn operations(script: &ScriptHandle) -> Vec<Value> {
 }
 
 #[test]
-fn both_parties_show_their_rows_prices_capacity_and_the_balance_line() {
+fn both_parties_show_their_rows_prices_and_the_balance_line() {
     let (h, _) = harness();
-    h.get_by_label("Lena: NPC items");
-    h.get_by_label("You: Player items");
-    h.get_by_label("Free capacity: 12.00 kg, 8.00 L");
+    h.get_by_label("Inventory: Lena");
+    h.get_by_label("Inventory: You");
     h.get_by_label("Credit $1.50 | Balance acceptable: yes");
     h.get_by_label("[x] tin can (3)");
     h.get_by_label("[ ] lighter");
     h.get_by_label("$0.50");
     h.get_by_label("$1.00");
+}
+
+#[test]
+fn rows_sit_under_their_category_in_an_amount_weight_volume_table() {
+    let (h, _) = harness();
+    assert_eq!(h.query_all_by_label("TOOLS").count(), 2);
+    assert_eq!(h.query_all_by_label("amt").count(), 2);
+    assert_eq!(h.query_all_by_label("unit price").count(), 2);
+    // 3 cans of 0.10 kg
+    h.get_by_label("0.30");
+}
+
+#[test]
+fn the_pane_header_shows_carried_against_capacity_not_free_capacity() {
+    let (h, _) = harness();
+    h.get_by_label("/45.00 kg");
+    h.get_by_label("1.17");
+    h.get_by_label("/8.00 L");
+    assert!(
+        h.query_by_label("Free capacity: 12.00 kg, 8.00 L")
+            .is_none()
+    );
+}
+
+#[test]
+fn the_header_lists_the_keys_of_the_offered_actions() {
+    let (h, _) = harness();
+    h.get_by_label("[e] examine item  [TAB] switch panes  [RETURN] confirm trade  [b] autobalance  [;] category select");
+}
+
+#[test]
+fn category_select_is_the_native_action() {
+    let (mut h, script) = harness();
+    h.get_by_label("Category select").click();
+    h.run_steps(3);
+    assert_eq!(
+        operations(&script),
+        [json!({"kind":"action","action_id":"CATEGORY_SELECTION"})]
+    );
+}
+
+#[test]
+fn a_filter_typed_in_the_other_pane_switches_panes_before_it_filters() {
+    let (mut h, script) = harness();
+    h.get_by_label("You filter").click();
+    h.run_steps(2);
+    h.get_by_label("You filter").type_text("lig");
+    h.run_steps(2);
+    h.key_press(egui::Key::Enter);
+    h.run_steps(8);
+    assert_eq!(
+        operations(&script)[0],
+        json!({"kind":"action","action_id":"SWITCH_LISTS"})
+    );
+}
+
+#[test]
+fn a_filter_in_the_pane_under_the_cursor_filters_without_switching() {
+    let (mut h, script) = harness();
+    h.get_by_label("Lena filter").click();
+    h.run_steps(2);
+    h.get_by_label("Lena filter").type_text("tin");
+    h.run_steps(2);
+    h.key_press(egui::Key::Enter);
+    h.run_steps(8);
+    assert_eq!(
+        operations(&script)[0],
+        json!({"kind":"action","action_id":"FILTER"})
+    );
 }
 
 #[test]

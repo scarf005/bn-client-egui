@@ -455,6 +455,9 @@ pub struct Interaction {
     pub context: String,
     pub title: String,
     pub message: String,
+    /// `good` or `bad` where the native screen colors the message line.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message_tone: Option<String>,
     /// Fixed-width lines drawn above the menu: the main menu's title art and version.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub banner: Option<Vec<String>>,

@@ -1511,6 +1511,7 @@ impl GameModel for EngineModel {
             can_set_count: i.allow_set_count,
             title: i.title.clone(),
             message: i.message.clone(),
+            message_tone: i.message_tone.clone().unwrap_or_default(),
             banner: i.banner.clone().unwrap_or_default(),
             total: i.choice_total as usize,
             choices: all()

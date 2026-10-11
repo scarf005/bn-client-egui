@@ -130,7 +130,7 @@ impl<M: GameModel> App<M> {
         }
     }
 
-    fn aim_do(&mut self, steps: impl IntoIterator<Item = Step>) {
+    pub(super) fn aim_do(&mut self, steps: impl IntoIterator<Item = Step>) {
         self.aim.steps.extend(steps);
     }
 
