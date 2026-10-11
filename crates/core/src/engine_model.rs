@@ -1545,6 +1545,7 @@ impl GameModel for EngineModel {
                         role: text("role"),
                         area: text("area_label"),
                         storage: text("storage_kind"),
+                        description: text("area_description"),
                         filter: text("filter"),
                         sort: text("sort"),
                         totals: p["totals"].is_object().then(|| {

@@ -12,6 +12,7 @@ mod menu;
 mod palette;
 mod pickup;
 mod sidebar;
+mod trade;
 
 /// A command must outlast this before the controls show it; keeps short commands from blinking the UI.
 const SETTLE: std::time::Duration = std::time::Duration::from_millis(150);
@@ -125,6 +126,7 @@ pub struct App<M: GameModel> {
     crafting: crafting::Crafting,
     aim: aim::Aim,
     pickup: pickup::Pickup,
+    trade: trade::Trade,
     /// The engine's selected row of the open menu, to keep it in view when the wheel moves it.
     menu_cursor: Option<String>,
     /// Input pressed while a command ran, in order; each goes out as soon as the one before it is done.
@@ -188,6 +190,7 @@ impl<M: GameModel> App<M> {
             crafting: Default::default(),
             aim: Default::default(),
             pickup: Default::default(),
+            trade: Default::default(),
             menu_cursor: None,
             queued: VecDeque::new(),
             held: None,
