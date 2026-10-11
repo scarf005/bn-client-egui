@@ -1001,3 +1001,23 @@ fn the_filter_button_is_for_long_lists_not_for_a_two_row_question() {
         assert_eq!(h.query_by_label("Filter").is_some(), shown, "{rows} rows");
     }
 }
+
+#[test]
+fn a_filter_prompt_that_follows_an_untitled_list_takes_the_typing_at_once() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    let filter = json!([{"id":"FILTER","name":"Filter","keys":["/"]}]);
+    script.push(show(41, filter.clone(), list_with(30)));
+    h.run_steps(4);
+    let mut prompt = text_prompt("");
+    prompt["title"] = "".into();
+    script.push(show(42, json!([]), prompt));
+    h.run_steps(4);
+    h.get_by_label("Filter:").type_text("zombie");
+    h.run_steps(3);
+    let sent = submits(&script);
+    assert!(
+        sent.iter().any(|s| s["kind"] == "fill"),
+        "typed text reaches the engine without a click first: {sent:?}"
+    );
+}
