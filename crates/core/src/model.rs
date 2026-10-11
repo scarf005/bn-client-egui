@@ -14,7 +14,7 @@ pub struct Rgb(pub u8, pub u8, pub u8);
 
 /// One thing drawn in a cell, with what a tileset needs to pick its sprite the way the game does and
 /// the glyph that stands in for it when the tileset has none.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct Layer {
     /// Tile id to look up first.
     pub id: String,
@@ -37,6 +37,8 @@ pub struct Layer {
     pub mutation: Option<Mutation>,
     /// The ids a tileset's tints for an item, bionic or effect overlay are keyed by, first match first.
     pub tint_keys: Vec<String>,
+    /// The tint an item's own variables ask for, over what its keys give.
+    pub tint_vars: Option<crate::protocol::TintVars>,
     /// What stands in for the sprite when the tileset has none; NUL for an overlay, which then draws nothing.
     pub glyph: char,
     pub color: Rgb,
@@ -504,6 +506,8 @@ pub trait GameModel {
     }
     /// Says whether the client draws tiles now, so the engine sends tile ids where it has them.
     fn set_tiles(&mut self, _tiles: bool) {}
+    /// Gives the ids of the tints the client's tileset has, so the engine publishes the `tint_keys` among them.
+    fn set_tint_ids(&mut self, _ids: &[String]) {}
     /// The overmap screen, while it is open.
     fn overmap(&self) -> Option<Overmap> {
         None

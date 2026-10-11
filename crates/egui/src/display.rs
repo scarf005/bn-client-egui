@@ -407,6 +407,8 @@ pub struct Display {
     rooted: bool,
     tilesets: Vec<TilesetInfo>,
     atlas: Option<Atlas>,
+    /// The ids of the tints of the tileset in use.
+    tint_ids: Vec<String>,
     /// Why the chosen tileset is not in use.
     problem: Option<String>,
     /// The engine's `USE_TILES` and `TILES` options, for what the player has not chosen.
@@ -435,6 +437,7 @@ impl Display {
             rooted: root.is_some(),
             tilesets: root.map_or(vec![], tileset::available),
             atlas: None,
+            tint_ids: vec![],
             problem: None,
             engine: None,
             mods: None,
@@ -462,6 +465,7 @@ impl Display {
     /// Loads the chosen tileset when sprites are wanted.
     fn open(&mut self) {
         self.atlas = None;
+        self.tint_ids.clear();
         self.problem = None;
         if !self.wants_tiles() || !self.rooted {
             return;
@@ -471,7 +475,10 @@ impl Display {
             return;
         };
         match Tileset::load_with(&dir, self.mods.as_deref()) {
-            Ok(tileset) => self.atlas = Some(Atlas::start(tileset)),
+            Ok(tileset) => {
+                self.tint_ids = tileset.tint_ids();
+                self.atlas = Some(Atlas::start(tileset));
+            }
             Err(e) => self.problem = Some(e),
         }
     }
@@ -515,6 +522,11 @@ impl Display {
     /// Sprites are being drawn, not glyphs.
     pub fn tiles(&self) -> bool {
         self.atlas.is_some()
+    }
+
+    /// The ids of the tints the tileset in use has; none without one.
+    pub fn tint_ids(&self) -> &[String] {
+        &self.tint_ids
     }
 
     /// The player asked for no map animation.
@@ -839,11 +851,7 @@ fn resolve_layer<'a>(tileset: &Tileset, layer: &'a Layer) -> (Cow<'a, Layer>, Pa
             None => (Cow::Borrowed(layer), tileset.mutation_paints(&q)),
         };
     }
-    if !layer.tint_keys.is_empty() {
-        return (Cow::Borrowed(layer), tileset.key_paints(&layer.tint_keys));
-    }
-    let of = |rgb: Option<bn_client_core::Rgb>| rgb.map(|c| Paint::of([c.0, c.1, c.2]));
-    (Cow::Borrowed(layer), (of(layer.tint_bg), of(layer.tint_fg)))
+    (Cow::Borrowed(layer), tileset.layer_paints(layer))
 }
 
 fn query<'a>(layer: &'a Layer, season: Option<&'a str>) -> Query<'a> {

@@ -874,13 +874,15 @@ fn tiled_session() -> EngineModel {
     part["params"]["cells"].as_array_mut().unwrap().extend([
         json!({"at": {"dim": "", "x": 9, "y": 8, "z": 0}, "known": "visible", "light": 1,
             "terrain": {"kind": "terrain", "id": "t_wall", "glyph": "|", "color": "light_gray",
-                "looks_like": ["t_wall_base"], "subtile": "edge", "rotation": 1},
+                "looks_like": ["t_wall_base"], "subtile": "edge", "rotation": 1,
+                "tint_keys": ["WALL", "t_wall"]},
             "reviving": true, "cargo": true,
             "vehicle": {"kind": "vehicle_part", "id": "door", "glyph": "+", "color": "white",
                 "tile": "vp_door", "tint": {"fg": "#445566"}},
             "items": [
                 {"kind": "item", "id": "corpse", "glyph": "%", "color": "red", "tile": "corpse_mon_zombie",
-                 "looks_like": ["corpse"], "stack": 2}
+                 "looks_like": ["corpse"], "stack": 2, "tint_keys": ["corpse"],
+                 "tint_vars": {"fg": {"color": "#ff3030", "blend_mode": "multiply", "brightness": 0.5}}}
             ]}),
         json!({"at": {"dim": "", "x": 9, "y": 6, "z": -1}, "known": "visible", "light": 3,
             "terrain": {"kind": "terrain", "id": "t_dirt", "glyph": ".", "color": "brown"}}),
@@ -944,6 +946,13 @@ fn a_cell_lists_its_sprites_bottom_first_with_the_engines_tile_selection() {
     assert_eq!((wall.subtile.as_deref(), wall.rotation), (Some("edge"), 1));
     assert_eq!(wall.fallbacks, ["t_wall_base"]);
     assert_eq!(cell.layers[1].fallbacks, ["corpse"]);
+    // The keys of a terrain and the variables of an item reach the layers the tileset paints.
+    assert_eq!(wall.tint_keys, ["WALL", "t_wall"]);
+    let vars = cell.layers[1].tint_vars.as_ref().unwrap();
+    assert_eq!(vars.fg.color.as_deref(), Some("#ff3030"));
+    assert_eq!(vars.fg.brightness, Some(0.5));
+    assert_eq!(vars.bg.color, None);
+    assert!(wall.tint_vars.is_none());
     assert_eq!(cell.light, Some(1));
     assert!(!cell.remembered);
 }

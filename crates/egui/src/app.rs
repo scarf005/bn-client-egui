@@ -311,6 +311,7 @@ impl<M: GameModel> App<M> {
         self.display.follow_engine(self.model.display_default());
         self.display.follow_mods(self.model.mod_tilesets());
         self.model.set_tiles(self.display.tiles());
+        self.model.set_tint_ids(self.display.tint_ids());
         a11y::name_window(ui.ctx(), "Cataclysm: Bright Nights client");
         self.pending_since = self
             .model

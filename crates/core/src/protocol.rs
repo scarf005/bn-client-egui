@@ -27,7 +27,7 @@ pub struct At {
     pub revision: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Look {
     /// Absent in a cell layer, whose name already says it.
     #[serde(default, skip_serializing_if = "String::is_empty")]
@@ -65,6 +65,39 @@ pub struct Look {
     /// Set on the overlay of an item, a bionic or an effect: the ids a tileset's tints are keyed by.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tint_keys: Vec<String>,
+    /// The tint an item's own variables ask for, over what the tileset's tints give it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tint_vars: Option<TintVars>,
+}
+
+/// The paint an item's variables ask for in the background and the foreground.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct TintVars {
+    #[serde(default, skip_serializing_if = "TintVarsLayer::is_empty")]
+    pub bg: TintVarsLayer,
+    #[serde(default, skip_serializing_if = "TintVarsLayer::is_empty")]
+    pub fg: TintVarsLayer,
+}
+
+/// One layer of an item's tint variables: a field it does not set keeps the tileset's.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct TintVarsLayer {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blend_mode: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub contrast: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub saturation: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub brightness: Option<f32>,
+}
+
+impl TintVarsLayer {
+    pub fn is_empty(&self) -> bool {
+        *self == Self::default()
+    }
 }
 
 /// What a tileset's `tint_pairs` are keyed by to tint the sprite of a mutation.
@@ -86,7 +119,7 @@ pub struct Tint {
     pub fg: Option<String>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct FieldLook {
     pub look: Look,
     pub intensity: u32,
@@ -305,7 +338,7 @@ impl AvatarChange {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct InventoryItem {
     pub look: Look,
     pub name: String,
@@ -690,6 +723,9 @@ pub struct HelloParams {
     /// The client draws tiles, so the engine adds tile ids where it has them (the overmap).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub tiles: bool,
+    /// The ids of the tints the client's tileset has; the engine publishes `tint_keys` among them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tint_ids: Vec<String>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -708,7 +744,12 @@ impl HelloParams {
             },
             viewport: None,
             tiles: false,
+            tint_ids: vec![],
         }
+    }
+
+    pub fn with_tint_ids(self, tint_ids: Vec<String>) -> Self {
+        Self { tint_ids, ..self }
     }
 
     pub fn with_tiles(self, tiles: bool) -> Self {
