@@ -401,6 +401,9 @@ pub struct Choice {
     pub label: String,
     pub description: String,
     pub denial: String,
+    /// The key that chooses the row natively; absent when it has none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hotkey: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pane_id: Option<String>,
     pub enabled: bool,

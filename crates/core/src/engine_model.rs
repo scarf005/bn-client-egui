@@ -1519,6 +1519,7 @@ impl GameModel for EngineModel {
                     label: c.label.clone(),
                     enabled: c.enabled && c.selectable,
                     denial: c.denial.clone(),
+                    hotkey: c.hotkey.clone().unwrap_or_default(),
                     selected: c.selected,
                     group: c.pane_id.clone(),
                     tab: tab(c),

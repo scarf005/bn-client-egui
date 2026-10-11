@@ -1745,6 +1745,29 @@ fn pickup_rows_carry_the_native_highlight_marks_and_counts() {
 }
 
 #[test]
+fn menu_rows_carry_the_engines_hotkey_and_empty_when_absent() {
+    let text = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/pickup.json"
+    ))
+    .unwrap();
+    let mut boundary = serde_json::from_str::<Value>(&text).unwrap()["pickup"].clone();
+    boundary["interaction"]["choices"][0]["hotkey"] = json!("e");
+    let (t, h) = session();
+    let mut m = connected(t);
+    h.push(change(41, json!({"interaction": boundary})));
+    m.poll();
+    let keys = m
+        .menu()
+        .unwrap()
+        .choices
+        .iter()
+        .map(|c| c.hotkey.clone())
+        .collect::<Vec<_>>();
+    assert_eq!(keys, ["e", ""]);
+}
+
+#[test]
 fn a_client_line_repeating_the_newest_one_is_not_added_again() {
     let (t, _h) = session();
     let mut m = connected(t);
