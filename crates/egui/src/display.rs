@@ -1,12 +1,18 @@
 //! How the map is drawn: the game's tileset sprites or ASCII glyphs, the player's choice kept between runs.
 
-use crate::tileset::{self, Placed, Query, Tileset, TilesetInfo, Turn};
-use bn_client_core::{Cell, Layer};
+use crate::tileset::{self, PaintQuery, Paints, Placed, Query, Tileset, TilesetInfo, Turn};
+use crate::tint::{Paint, tint_pixel};
+use bn_client_core::protocol::ModTileset;
+use bn_client_core::{Cell, Layer, OvermapTile};
 use eframe::egui::{self, Color32, Mesh, Rect, Shape, TextureHandle, TextureId, TextureOptions};
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, channel};
+use std::sync::{Arc, Mutex, OnceLock};
 
 /// The game's default `TILES` option value.
 const DEFAULT_TILESET: &str = "UNDEAD_PEOPLE_BASE";
@@ -17,21 +23,17 @@ const MEMORY: Color32 = Color32::from_gray(100);
 const SHADOW: Color32 = Color32::from_gray(170);
 
 /// The choice that survives a restart.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Settings {
-    /// Draw sprites; false draws ASCII glyphs.
-    pub tiles: bool,
+    /// Draw sprites (true) or ASCII glyphs (false); absent until the player chooses, so the engine's
+    /// `USE_TILES` option decides.
+    #[serde(default)]
+    pub tiles: Option<bool>,
     /// The `TILES` name of the tileset; the game's default when absent.
     pub tileset: Option<String>,
-}
-
-impl Default for Settings {
-    fn default() -> Self {
-        Self {
-            tiles: true,
-            tileset: None,
-        }
-    }
+    /// Play no shot, explosion or floating-text overlays on the map.
+    #[serde(default)]
+    pub reduced_motion: bool,
 }
 
 /// `$XDG_CONFIG_HOME/bn-client-egui/settings.json`, or the same under `~/.config`.
@@ -42,16 +44,18 @@ pub fn settings_path() -> Option<PathBuf> {
     Some(base.join("bn-client-egui/settings.json"))
 }
 
-/// The game's filters for what is not plainly in sight: grayscale for low light, sepia for memory.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// The game's filters for what is not plainly in sight: grayscale for low light, sepia for memory, and
+/// the cyan haze laid over levels seen through open air.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Fx {
     Plain,
     Shadow,
     Memory,
+    ZOverlay,
 }
 
 impl Fx {
-    const ALL: [Fx; 3] = [Fx::Plain, Fx::Shadow, Fx::Memory];
+    const ALL: [Fx; 4] = [Fx::Plain, Fx::Shadow, Fx::Memory, Fx::ZOverlay];
 
     fn index(self) -> usize {
         self as usize
@@ -63,6 +67,7 @@ impl Fx {
             Fx::Plain => Color32::WHITE,
             Fx::Shadow => SHADOW,
             Fx::Memory => MEMORY,
+            Fx::ZOverlay => Color32::TRANSPARENT,
         }
     }
 
@@ -71,6 +76,7 @@ impl Fx {
         let average = ((85 * (u32::from(r) + u32::from(g) + u32::from(b))) >> 8) as u8;
         match self {
             Fx::Plain => [r, g, b],
+            Fx::ZOverlay => [128, 255, 255],
             _ if r == 0 && g == 0 && b == 0 => [r, g, b],
             Fx::Shadow => [((u32::from(average) * 5) >> 3).max(1) as u8; 3],
             Fx::Memory => {
@@ -89,15 +95,20 @@ struct Strips {
     strips: Vec<egui::ColorImage>,
 }
 
+/// Wakes the UI when a background thread has finished a sheet; known once the first frame has run.
+type Wake = Arc<OnceLock<egui::Context>>;
+
 /// The sheets of a tileset under one filter, decoded in the background and uploaded as they arrive.
 struct Sheets {
     incoming: Receiver<Strips>,
+    /// Decoded sheets waiting for their turn: one is uploaded per frame, so no frame stalls on a copy.
+    decoded: VecDeque<Strips>,
     textures: HashMap<usize, Vec<TextureHandle>>,
     loading: usize,
 }
 
 impl Sheets {
-    fn start(sheets: Vec<tileset::Sheet>, fx: Fx) -> Self {
+    fn start(sheets: Vec<tileset::Sheet>, fx: Fx, wake: Wake) -> Self {
         let (send, incoming) = channel();
         let loading = sheets.len();
         std::thread::spawn(move || {
@@ -106,18 +117,21 @@ impl Sheets {
                 if send.send(Strips { sheet: n, strips }).is_err() {
                     return;
                 }
+                wake.get().inspect(|ctx| ctx.request_repaint());
             }
         });
         Self {
             incoming,
+            decoded: VecDeque::new(),
             textures: HashMap::new(),
             loading,
         }
     }
 
-    /// Uploads the sheets decoded since the last call; true while more are coming.
+    /// Uploads the next decoded sheet; true while more are waiting for the next frame.
     fn upload(&mut self, ctx: &egui::Context, fx: Fx) -> bool {
-        while let Ok(done) = self.incoming.try_recv() {
+        self.decoded.extend(self.incoming.try_iter());
+        if let Some(done) = self.decoded.pop_front() {
             self.loading -= 1;
             let textures = done
                 .strips
@@ -130,12 +144,13 @@ impl Sheets {
                 .collect();
             self.textures.insert(done.sheet, textures);
         }
-        self.loading > 0
+        !self.decoded.is_empty()
     }
 }
 
 /// Where a sprite is: its texture, its rectangle in it (0..1), the sheet's offset and the filter the
 /// texture already has.
+#[derive(Clone, Copy)]
 struct Source {
     texture: TextureId,
     uv: Rect,
@@ -146,26 +161,113 @@ struct Source {
 /// A tileset, with its plain sheets from the start and the filtered ones once a square needs them.
 struct Atlas {
     tileset: Tileset,
-    sheets: [Option<Sheets>; 3],
+    sheets: [Option<Sheets>; 4],
+    /// Sheets decoded for painting single sprites, shared by the threads that paint them.
+    decoded: Arc<Mutex<HashMap<usize, Arc<image::RgbaImage>>>>,
+    painted: RefCell<HashMap<PaintKey, Painted>>,
+    wake: Wake,
+}
+
+/// A sprite, the paint and the filter it is made under.
+type PaintKey = (u32, Option<u32>, Paint, Fx);
+
+/// A sprite painted with a vehicle part's color, made in the background.
+enum Painted {
+    Pending(Receiver<Option<egui::ColorImage>>),
+    /// The handle keeps the texture alive.
+    Ready {
+        _texture: TextureHandle,
+        source: Source,
+    },
+    Failed,
 }
 
 impl Atlas {
     fn start(tileset: Tileset) -> Self {
-        let plain = Sheets::start(tileset.sheets.clone(), Fx::Plain);
+        let wake = Wake::default();
+        let plain = Sheets::start(tileset.sheets.clone(), Fx::Plain, wake.clone());
         Self {
             tileset,
-            sheets: [Some(plain), None, None],
+            sheets: [Some(plain), None, None, None],
+            decoded: Arc::default(),
+            painted: RefCell::default(),
+            wake,
+        }
+    }
+
+    /// The sprite painted with `paint` under a filter; none while it is being made or when it cannot be.
+    fn painted(
+        &self,
+        ctx: &egui::Context,
+        (placed, paint): (Placed, Paint),
+        fx: Fx,
+    ) -> Option<Source> {
+        let sprite = placed.sprite;
+        let (n, local) = self.tileset.locate(sprite)?;
+        let mut cache = self.painted.borrow_mut();
+        let key = (sprite, placed.mask, paint, fx);
+        let Some(entry) = cache.get_mut(&key) else {
+            let (sheet, decoded) = (self.tileset.sheets[n].clone(), self.decoded.clone());
+            let mask = placed.mask.and_then(|m| {
+                let (n, local) = self.tileset.locate(m)?;
+                Some((n, self.tileset.sheets[n].clone(), local))
+            });
+            let (send, receive) = channel();
+            std::thread::spawn(move || {
+                let job = Job {
+                    sheet: (n, &sheet, local),
+                    mask: mask.as_ref().map(|(n, s, l)| (*n, s, *l)),
+                };
+                let _ = send.send(paint_sprite(&decoded, job, fx, paint));
+            });
+            cache.insert(key, Painted::Pending(receive));
+            ctx.request_repaint_after(std::time::Duration::from_millis(30));
+            return None;
+        };
+        if let Painted::Pending(receive) = entry {
+            let sheet = &self.tileset.sheets[n];
+            *entry = match receive.try_recv() {
+                Ok(Some(image)) => {
+                    let name = format!("paint{sprite}.{paint:?}.{fx:?}");
+                    let texture = ctx.load_texture(name, image, TextureOptions::NEAREST);
+                    let source = Source {
+                        texture: texture.id(),
+                        uv: Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
+                        offset: (sheet.offset.0 as f32, sheet.offset.1 as f32),
+                        fx,
+                    };
+                    Painted::Ready {
+                        _texture: texture,
+                        source,
+                    }
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => {
+                    ctx.request_repaint_after(std::time::Duration::from_millis(30));
+                    return None;
+                }
+                _ => Painted::Failed,
+            };
+        }
+        match entry {
+            Painted::Ready { source, .. } => Some(*source),
+            _ => None,
         }
     }
 
     /// Starts decoding the sheets of a filter the first time something is drawn with it.
     fn request(&mut self, fx: Fx) {
         if self.sheets[fx.index()].is_none() {
-            self.sheets[fx.index()] = Some(Sheets::start(self.tileset.sheets.clone(), fx));
+            self.sheets[fx.index()] = Some(Sheets::start(
+                self.tileset.sheets.clone(),
+                fx,
+                self.wake.clone(),
+            ));
         }
     }
 
     fn upload(&mut self, ctx: &egui::Context) -> bool {
+        // Set before looking for sheets, so one finished meanwhile either is seen now or wakes the UI.
+        let _ = self.wake.set(ctx.clone());
         let mut more = false;
         for fx in Fx::ALL {
             if let Some(sheets) = &mut self.sheets[fx.index()] {
@@ -204,14 +306,80 @@ impl Atlas {
     }
 }
 
+/// A sheet's pixels with its transparency key made transparent.
+fn load(sheet: &tileset::Sheet) -> Option<image::RgbaImage> {
+    let mut image = image::open(&sheet.file).ok()?.into_rgba8();
+    if let Some(key) = sheet.key {
+        for px in image.pixels_mut().filter(|px| px.0[..3] == key) {
+            px.0[3] = 0;
+        }
+    }
+    Some(image)
+}
+
+/// The sheet of a sprite as `(sheet number, sheet, index in the sheet)`, and of the sprite masking its paint.
+struct Job<'a> {
+    sheet: (usize, &'a tileset::Sheet, u32),
+    mask: Option<(usize, &'a tileset::Sheet, u32)>,
+}
+
+/// The decoded pixels of sheet `n`, kept for the other sprites painted from it.
+fn decoded_sheet(
+    decoded: &Mutex<HashMap<usize, Arc<image::RgbaImage>>>,
+    n: usize,
+    sheet: &tileset::Sheet,
+) -> Option<Arc<image::RgbaImage>> {
+    let mut sheets = decoded.lock().ok()?;
+    match sheets.get(&n) {
+        Some(image) => Some(image.clone()),
+        None => Some(sheets.entry(n).or_insert(Arc::new(load(sheet)?)).clone()),
+    }
+}
+
+/// One sprite of a sheet painted with `paint`, where its mask lets the paint through, and then filtered, like
+/// the game's tinted sprite lookup.
+fn paint_sprite(
+    decoded: &Mutex<HashMap<usize, Arc<image::RgbaImage>>>,
+    Job {
+        sheet: (n, sheet, local),
+        mask,
+    }: Job,
+    fx: Fx,
+    paint: Paint,
+) -> Option<egui::ColorImage> {
+    let image = decoded_sheet(decoded, n, sheet)?;
+    let mask = mask.and_then(|(n, sheet, local)| {
+        let image = decoded_sheet(decoded, n, sheet)?;
+        let (w, h) = sheet.sprite;
+        let (col, row) = (local % sheet.columns, local / sheet.columns);
+        Some(image::imageops::crop_imm(&*image, col * w, row * h, w, h).to_image())
+    });
+    let (w, h) = sheet.sprite;
+    let (col, row) = (local % sheet.columns, local / sheet.columns);
+    let mut sprite = image::imageops::crop_imm(&*image, col * w, row * h, w, h).to_image();
+    for (x, y, px) in sprite
+        .enumerate_pixels_mut()
+        .filter(|(_, _, px)| px.0[3] > 0)
+    {
+        let pixel = |p: &image::Rgba<u8>| [p.0[0], p.0[1], p.0[2]];
+        let mask = mask
+            .as_ref()
+            .and_then(|m| m.get_pixel_checked(x, y))
+            .map(pixel);
+        let tinted = tint_pixel(pixel(px), paint, mask);
+        px.0[..3].copy_from_slice(&fx.pixel(tinted));
+    }
+    Some(egui::ColorImage::from_rgba_unmultiplied(
+        [w as usize, h as usize],
+        sprite.as_raw(),
+    ))
+}
+
 /// Decodes a sheet to RGBA under a filter, makes its transparency key transparent and cuts it into
 /// strips of whole sprite rows.
 fn decode(sheet: &tileset::Sheet, fx: Fx) -> Option<Vec<egui::ColorImage>> {
-    let mut image = image::open(&sheet.file).ok()?.into_rgba8();
+    let mut image = load(sheet)?;
     for px in image.pixels_mut() {
-        if sheet.key.is_some_and(|key| px.0[..3] == key) {
-            px.0[3] = 0;
-        }
         let [r, g, b] = fx.pixel([px.0[0], px.0[1], px.0[2]]);
         px.0[..3].copy_from_slice(&[r, g, b]);
     }
@@ -241,10 +409,16 @@ pub struct Display {
     atlas: Option<Atlas>,
     /// Why the chosen tileset is not in use.
     problem: Option<String>,
+    /// The engine's `USE_TILES` and `TILES` options, for what the player has not chosen.
+    engine: Option<(bool, String)>,
+    /// The mod tilesets the engine lists, once a game is loaded; until then the game's data is searched.
+    mods: Option<Vec<ModTileset>>,
     /// Sprites drawn by the last map paint.
     drawn: usize,
     /// Squares of the last map paint that lie on the hidden-lighting sprite.
     hidden: usize,
+    /// Squares of the last map paint drawn as a lowlight overlay instead of their terrain.
+    dimmed: usize,
 }
 
 impl Display {
@@ -262,8 +436,11 @@ impl Display {
             tilesets: root.map_or(vec![], tileset::available),
             atlas: None,
             problem: None,
+            engine: None,
+            mods: None,
             drawn: 0,
             hidden: 0,
+            dimmed: 0,
         };
         display.open();
         display
@@ -272,10 +449,12 @@ impl Display {
     /// The tileset to use: the chosen one, else the game's default, else the first.
     fn chosen(&self) -> Option<&TilesetInfo> {
         let by_name = |name: &str| self.tilesets.iter().find(|t| t.name == name);
+        let engine = self.engine.as_ref().map(|(_, name)| name.as_str());
         self.settings
             .tileset
             .as_deref()
             .and_then(by_name)
+            .or_else(|| engine.and_then(by_name))
             .or_else(|| by_name(DEFAULT_TILESET))
             .or(self.tilesets.first())
     }
@@ -284,16 +463,40 @@ impl Display {
     fn open(&mut self) {
         self.atlas = None;
         self.problem = None;
-        if !self.settings.tiles || !self.rooted {
+        if !self.wants_tiles() || !self.rooted {
             return;
         }
         let Some(dir) = self.chosen().map(|t| t.dir.clone()) else {
             self.problem = Some("no tileset found in the game's gfx folder".into());
             return;
         };
-        match Tileset::load(&dir) {
+        match Tileset::load_with(&dir, self.mods.as_deref()) {
             Ok(tileset) => self.atlas = Some(Atlas::start(tileset)),
             Err(e) => self.problem = Some(e),
+        }
+    }
+
+    /// Sprites are wanted: the player's choice, else the engine's option, else yes.
+    fn wants_tiles(&self) -> bool {
+        self.settings
+            .tiles
+            .or(self.engine.as_ref().map(|(tiles, _)| *tiles))
+            .unwrap_or(true)
+    }
+
+    /// Takes the engine's `USE_TILES` and `TILES` options as the default for choices not yet made.
+    pub fn follow_engine(&mut self, options: Option<(bool, String)>) {
+        if self.engine != options {
+            self.engine = options;
+            self.open();
+        }
+    }
+
+    /// Takes the mod tilesets the engine lists, which a game's active mods may add to.
+    pub fn follow_mods(&mut self, listed: &[ModTileset]) {
+        if !listed.is_empty() && self.mods.as_deref() != Some(listed) {
+            self.mods = Some(listed.to_vec());
+            self.open();
         }
     }
 
@@ -314,6 +517,11 @@ impl Display {
         self.atlas.is_some()
     }
 
+    /// The player asked for no map animation.
+    pub fn reduced_motion(&self) -> bool {
+        self.settings.reduced_motion
+    }
+
     /// The choice kept between runs.
     pub fn settings(&self) -> &Settings {
         &self.settings
@@ -329,12 +537,24 @@ impl Display {
         self.hidden
     }
 
+    /// Squares of the last map paint shown as a lowlight overlay: dark or only known to be bright.
+    pub fn dimmed(&self) -> usize {
+        self.dimmed
+    }
+
     /// Whether every sheet of the tileset is ready to draw.
     pub fn ready(&self) -> bool {
         self.atlas
             .as_ref()
             .and_then(|a| a.sheets[Fx::Plain.index()].as_ref())
             .is_some_and(|s| s.loading == 0)
+    }
+
+    /// Some requested sheet is still being decoded or uploaded.
+    pub fn loading(&self) -> bool {
+        self.atlas
+            .as_ref()
+            .is_some_and(|a| a.sheets.iter().flatten().any(|s| s.loading > 0))
     }
 
     /// The side of a map square in points: a tile of the tileset, or the glyph square.
@@ -350,15 +570,15 @@ impl Display {
         ui.horizontal(|ui| {
             for (tiles, label) in [(true, "Tiles"), (false, "ASCII")] {
                 if ui
-                    .selectable_label(self.settings.tiles == tiles, label)
+                    .selectable_label(self.wants_tiles() == tiles, label)
                     .clicked()
                 {
-                    self.settings.tiles = tiles;
+                    self.settings.tiles = Some(tiles);
                 }
             }
             let shown = self.chosen().map_or("none".to_string(), |t| t.view.clone());
             let mut pick = None;
-            ui.add_enabled_ui(self.settings.tiles, |ui| {
+            ui.add_enabled_ui(self.wants_tiles(), |ui| {
                 egui::ComboBox::from_label("Tileset")
                     .selected_text(shown)
                     .show_ui(ui, |ui| {
@@ -376,6 +596,7 @@ impl Display {
             if let Some(problem) = &self.problem {
                 ui.label(format!("Tileset unavailable: {problem}"));
             }
+            ui.checkbox(&mut self.settings.reduced_motion, "Reduced motion");
         });
         if self.settings != before {
             self.save();
@@ -383,12 +604,13 @@ impl Display {
         }
     }
 
-    /// Uploads sheets that finished decoding; keeps repainting until all are in.
+    /// Uploads a sheet that finished decoding; a finished thread wakes the UI, so nothing polls.
     pub fn update(&mut self, ctx: &egui::Context) {
+        profiling::scope!("Display::update");
         if let Some(atlas) = &mut self.atlas
             && atlas.upload(ctx)
         {
-            ctx.request_repaint_after(std::time::Duration::from_millis(30));
+            ctx.request_repaint();
         }
     }
 
@@ -396,6 +618,82 @@ impl Display {
     pub fn begin(&mut self) {
         self.drawn = 0;
         self.hidden = 0;
+        self.dimmed = 0;
+    }
+
+    /// Draws an overmap square's tile into `rect`; false when no tileset is in use or it has no sprite
+    /// for the tile or any of its fallbacks.
+    pub fn paint_overmap(
+        &mut self,
+        painter: &egui::Painter,
+        rect: Rect,
+        tile: &OvermapTile,
+    ) -> bool {
+        let Some(atlas) = &mut self.atlas else {
+            return false;
+        };
+        atlas.request(Fx::Plain);
+        let scale = (
+            rect.width() / atlas.tileset.tile.0 as f32,
+            rect.height() / atlas.tileset.tile.1 as f32,
+        );
+        let query = Query {
+            id: &tile.id,
+            fallbacks: &tile.fallbacks,
+            subtile: (!tile.subtile.is_empty()).then_some(tile.subtile.as_str()),
+            rotation: tile.rotation,
+            mirrored: false,
+            creature: false,
+            seed: 0,
+            season: None,
+        };
+        let chosen = atlas.tileset.choose(&query);
+        let mut drawn = false;
+        for placed in chosen.iter().flat_map(|c| [c.bg, c.fg]).flatten() {
+            drawn |= draw_sprite(
+                painter,
+                atlas,
+                rect,
+                scale,
+                (placed, None),
+                (Fx::Plain, 255),
+            );
+        }
+        self.drawn += usize::from(drawn);
+        drawn
+    }
+
+    /// Whether the tileset has a sprite for the layer.
+    pub fn has_sprite(&self, layer: &Layer) -> bool {
+        self.atlas
+            .as_ref()
+            .is_some_and(|a| a.tileset.choose(&query(layer, None)).is_some())
+    }
+
+    /// Draws one tile into `rect` when the tileset has a sprite for it; false draws nothing.
+    pub fn paint_sprite(&mut self, painter: &egui::Painter, rect: Rect, layer: &Layer) -> bool {
+        let Some(atlas) = &mut self.atlas else {
+            return false;
+        };
+        atlas.request(Fx::Plain);
+        let scale = (
+            rect.width() / atlas.tileset.tile.0 as f32,
+            rect.height() / atlas.tileset.tile.1 as f32,
+        );
+        let chosen = atlas.tileset.choose(&query(layer, None));
+        let sprites = chosen.iter().flat_map(|c| [c.bg, c.fg]).flatten();
+        let mut any = false;
+        for placed in sprites {
+            any |= draw_sprite(
+                painter,
+                atlas,
+                rect,
+                scale,
+                (placed, None),
+                (Fx::Plain, 255),
+            );
+        }
+        any
     }
 
     /// Draws a cell's layers into `rect`, bottom first, the way the game's tile view does: sprites where
@@ -408,6 +706,7 @@ impl Display {
         cell: &Cell,
         season: Option<&str>,
     ) -> bool {
+        profiling::scope!("Display::paint");
         let Some(atlas) = &mut self.atlas else {
             return false;
         };
@@ -436,20 +735,75 @@ impl Display {
             };
             let sprites = atlas.tileset.choose(&hidden);
             for placed in sprites.iter().flat_map(|c| [c.bg, c.fg]).flatten() {
-                backdrop |= draw_sprite(painter, atlas, rect, (sx, sy), placed, Fx::Plain);
+                backdrop |= draw_sprite(
+                    painter,
+                    atlas,
+                    rect,
+                    (sx, sy),
+                    (placed, None),
+                    (Fx::Plain, 255),
+                );
             }
         }
         self.hidden += usize::from(backdrop);
         if cell.layers.is_empty() {
             return backdrop;
         }
+        // The game cannot see a dark square at all and can only tell a bright-only one is bright: it draws
+        // the lowlight overlay in place of the square's terrain.
+        let overlay = match (cell.remembered, cell.light) {
+            (false, Some(0)) => Some("lighting_lowlight_dark"),
+            (false, Some(2)) => Some("lighting_lowlight_light"),
+            _ => None,
+        };
+        if let Some(id) = overlay {
+            let query = Query {
+                id,
+                fallbacks: &[],
+                subtile: None,
+                rotation: 0,
+                mirrored: false,
+                creature: false,
+                seed: cell.square,
+                season,
+            };
+            let sprites = atlas.tileset.choose(&query);
+            let mut any = false;
+            for placed in sprites.iter().flat_map(|c| [c.bg, c.fg]).flatten() {
+                any |= draw_sprite(
+                    painter,
+                    atlas,
+                    rect,
+                    (sx, sy),
+                    (placed, None),
+                    (Fx::Plain, 255),
+                );
+            }
+            if any {
+                self.dimmed += 1;
+                return true;
+            }
+        }
         let mut drawn = 0;
         for layer in &cell.layers {
+            let (layer, paints) = resolve_layer(&atlas.tileset, layer);
+            let layer = layer.as_ref();
             let chosen = atlas.tileset.choose(&query(layer, season));
-            let sprites = chosen.iter().flat_map(|c| [c.bg, c.fg]).flatten();
+            let sprites = chosen.iter().flat_map(|c| {
+                [(c.bg, paints.0), (c.fg, paints.1)]
+                    .into_iter()
+                    .filter_map(|(placed, paint)| Some((placed?, paint)))
+            });
             let mut any = false;
-            for placed in sprites {
-                any |= draw_sprite(painter, atlas, rect, (sx, sy), placed, fx);
+            for (placed, paint) in sprites {
+                any |= draw_sprite(painter, atlas, rect, (sx, sy), (placed, paint), (fx, 255));
+                if cell.depth > 0 {
+                    // A level seen through open air is hazed more the deeper it is.
+                    let haze = (24 * (u32::from(cell.depth) + 1)).min(192) as u8;
+                    atlas.request(Fx::ZOverlay);
+                    let sprite = (placed, None);
+                    draw_sprite(painter, atlas, rect, (sx, sy), sprite, (Fx::ZOverlay, haze));
+                }
             }
             drawn += usize::from(any);
             if !any && layer.glyph != '\0' {
@@ -459,6 +813,37 @@ impl Display {
         self.drawn += drawn;
         true
     }
+}
+
+/// The layer as the game draws it with this tileset, and its paint for the background and the foreground: a
+/// mutation's, an item's, a bionic's or an effect's from the tileset, else the part's own. A hair style
+/// goes by the sprite of the hair color where the tileset paints no hair.
+fn resolve_layer<'a>(tileset: &Tileset, layer: &'a Layer) -> (Cow<'a, Layer>, Paints) {
+    if let Some(m) = &layer.mutation {
+        let q = PaintQuery {
+            id: &m.id,
+            types: &m.types,
+            flags: &m.flags,
+            traits: &m.traits,
+        };
+        let male = layer.id.starts_with("overlay_male_");
+        return match tileset.colored_hair(&q, male) {
+            Some([id, plain]) => {
+                let shown = Layer {
+                    id,
+                    fallbacks: vec![plain],
+                    ..layer.clone()
+                };
+                (Cow::Owned(shown), (None, None))
+            }
+            None => (Cow::Borrowed(layer), tileset.mutation_paints(&q)),
+        };
+    }
+    if !layer.tint_keys.is_empty() {
+        return (Cow::Borrowed(layer), tileset.key_paints(&layer.tint_keys));
+    }
+    let of = |rgb: Option<bn_client_core::Rgb>| rgb.map(|c| Paint::of([c.0, c.1, c.2]));
+    (Cow::Borrowed(layer), (of(layer.tint_bg), of(layer.tint_fg)))
 }
 
 fn query<'a>(layer: &'a Layer, season: Option<&'a str>) -> Query<'a> {
@@ -493,27 +878,39 @@ fn glyph(painter: &egui::Painter, rect: Rect, layer: &Layer, tint: Color32) {
     );
 }
 
+/// Whether the game at `root` would be shown with sprites: sprites are chosen in the saved settings
+/// at `path` (on by default) and the game has a tileset.
+pub fn tiles_wanted(root: Option<&Path>, path: Option<&Path>) -> bool {
+    let settings = path
+        .and_then(|p| std::fs::read(p).ok())
+        .and_then(|b| serde_json::from_slice::<Settings>(&b).ok())
+        .unwrap_or_default();
+    settings.tiles.unwrap_or(true) && root.is_some_and(|r| !tileset::available(r).is_empty())
+}
+
 /// One sprite at its place in the cell, turned as the tileset asks; false when its sheet is not loaded.
 fn draw_sprite(
     painter: &egui::Painter,
     atlas: &Atlas,
     cell: Rect,
     scale: (f32, f32),
-    placed: Placed,
-    fx: Fx,
+    (placed, paint): (Placed, Option<Paint>),
+    (fx, opacity): (Fx, u8),
 ) -> bool {
+    // A painted sprite is made in the background; the plain one stands in until it is.
+    let painted = paint.and_then(|p| atlas.painted(painter.ctx(), (placed, p), fx));
     let Some(Source {
         texture,
         uv,
         offset,
         fx: shown,
-    }) = atlas.source(placed.sprite, fx)
+    }) = painted.or_else(|| atlas.source(placed.sprite, fx))
     else {
         return false;
     };
     // A sprite whose filtered sheet is still being decoded is darkened by colour meanwhile.
     let tint = if shown == fx {
-        Color32::WHITE
+        Color32::from_white_alpha(opacity)
     } else {
         fx.stand_in()
     };
@@ -560,4 +957,61 @@ fn draw_sprite(
     mesh.indices.extend([0, 1, 2, 0, 2, 3]);
     painter.add(Shape::mesh(mesh));
     true
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A sheet of two 2x1 sprites in `dir`: a sprite of two grey pixels and its mask, whose first pixel lets
+    /// the paint through and whose second does not.
+    fn sheet(dir: &Path) -> tileset::Sheet {
+        let file = dir.join("masked.png");
+        let mut image = image::RgbaImage::new(4, 1);
+        let pixels = [[128, 128, 128], [200, 40, 40], [255, 255, 127], [0, 0, 0]];
+        for (x, rgb) in pixels.into_iter().enumerate() {
+            image.put_pixel(x as u32, 0, image::Rgba([rgb[0], rgb[1], rgb[2], 255]));
+        }
+        image.save(&file).unwrap();
+        tileset::Sheet {
+            file,
+            sprite: (2, 1),
+            offset: (0, 0),
+            pixelscale: 1.0,
+            key: None,
+            columns: 2,
+            first: 0,
+            count: 2,
+        }
+    }
+
+    #[test]
+    fn a_sprite_is_painted_only_where_its_mask_lets_the_paint_through() {
+        let dir = std::env::temp_dir().join(format!("bn-client-mask-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let sheet = sheet(&dir);
+        let decoded = Mutex::default();
+        let paint = Paint::of([247, 251, 245]);
+        let painted = |mask: Option<(usize, &tileset::Sheet, u32)>| {
+            let job = Job {
+                sheet: (0, &sheet, 0),
+                mask,
+            };
+            paint_sprite(&decoded, job, Fx::Plain, paint)
+                .unwrap()
+                .pixels
+        };
+        let color = |p: [u8; 3]| Color32::from_rgb(p[0], p[1], p[2]);
+        let masked = painted(Some((0, &sheet, 1)));
+        assert_eq!(
+            masked[0],
+            color(tint_pixel([128; 3], paint, Some([255, 255, 127])))
+        );
+        assert_ne!(masked[0], color([128; 3]));
+        assert_eq!(masked[1], color([200, 40, 40]));
+        // Without a mask the whole sprite is painted.
+        let whole = painted(None);
+        assert_eq!(whole[1], color(tint_pixel([200, 40, 40], paint, None)));
+        assert_ne!(whole[1], color([200, 40, 40]));
+    }
 }

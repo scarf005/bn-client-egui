@@ -240,3 +240,99 @@ fn changes_apply_coverage_cells_forgotten_and_gone_in_order() {
         "entity outside coverage is dropped"
     );
 }
+
+#[test]
+fn an_event_boundary_without_actions_keeps_the_previous_actions() {
+    use bn_client_core::protocol::{BoundaryChange, Changes, Event};
+    let mut r = loaded();
+    let kept = r.boundary().unwrap().actions.clone();
+    assert!(!kept.is_empty(), "the snapshot boundary lists actions");
+    let event = |sequence: &str, revision: &str, interaction| EventsParams {
+        epoch: "e7f3".into(),
+        events: vec![Event {
+            sequence: sequence.into(),
+            revision: revision.into(),
+            kind: "interaction.changed".into(),
+            cause: None,
+            command: None,
+            display: None,
+            data: None,
+            changes: Changes {
+                interaction: Some(interaction),
+                ..Default::default()
+            },
+        }],
+    };
+    let readiness = r.boundary().unwrap().readiness.clone();
+    let boundary = |id: &str, actions: Option<Vec<protocol::Action>>| BoundaryChange {
+        boundary_id: id.into(),
+        readiness: readiness.clone(),
+        actions,
+        interaction: None,
+    };
+    let next = boundary("boundary:next", None);
+    assert_eq!(r.events(event("41", "32", next)), Outcome::Applied);
+    let now = r.boundary().unwrap();
+    assert_eq!(now.boundary_id, "boundary:next");
+    assert_eq!(now.actions, kept);
+
+    let none = boundary("boundary:none", Some(vec![]));
+    assert_eq!(r.events(event("42", "33", none)), Outcome::Applied);
+    assert!(
+        r.boundary().unwrap().actions.is_empty(),
+        "an empty list replaces them"
+    );
+}
+
+#[test]
+fn compact_cell_layers_get_their_kind_and_center_subtile_back() {
+    use bn_client_core::protocol::{Cell, Changes, Event};
+    let compact: Cell = serde_json::from_value(serde_json::json!({
+        "at": {"dim": "", "x": 3, "y": 4, "z": 0},
+        "known": "visible",
+        "terrain": {"id": "t_floor", "glyph": ".", "color": "c_cyan"},
+        "items": [{"id": "rock", "glyph": "*", "color": "c_light_gray"}],
+        "memory": {
+            "terrain": {"id": "t_wall", "glyph": "|", "color": "c_light_gray", "rotation": 1},
+            "overlay": {"kind": "trap", "id": "tr_x", "glyph": "^", "color": "c_red"},
+        },
+    }))
+    .unwrap();
+    let mut r = loaded();
+    let event = EventsParams {
+        epoch: "e7f3".into(),
+        events: vec![Event {
+            sequence: "41".into(),
+            revision: "32".into(),
+            kind: "cells.seen".into(),
+            cause: None,
+            command: None,
+            display: None,
+            data: None,
+            changes: Changes {
+                cells: vec![compact],
+                ..Default::default()
+            },
+        }],
+    };
+    assert_eq!(r.events(event), Outcome::Applied);
+    let cell = r.cell("", 3, 4, 0).unwrap();
+    let terrain = cell.terrain.as_ref().unwrap();
+    assert_eq!(
+        (terrain.kind.as_str(), terrain.subtile.as_deref()),
+        ("terrain", Some("center"))
+    );
+    let item = &cell.items[0];
+    assert_eq!(
+        (item.kind.as_str(), item.subtile.as_deref()),
+        ("item", None)
+    );
+    let memory = cell.memory.as_ref().unwrap();
+    assert_eq!(memory.terrain.kind, "terrain");
+    assert_eq!(memory.terrain.rotation, Some(1));
+    assert_eq!(memory.overlay.as_ref().unwrap().kind, "trap");
+    assert_eq!(
+        memory.overlay.as_ref().unwrap().subtile.as_deref(),
+        Some("center")
+    );
+}

@@ -1,0 +1,494 @@
+{
+ "aim": {
+  "boundary_id": "b:40",
+  "readiness": {
+   "phase": "waiting_for_input",
+   "game_ready": true,
+   "accepts_interaction_commands": true,
+   "accepts_registered_actions": true
+  },
+  "actions": [
+   {
+    "id": "HELP_KEYBINDINGS",
+    "name": "Display keybindings menu",
+    "keys": [
+     "?"
+    ]
+   },
+   {
+    "id": "QUIT",
+    "name": "Exit screen",
+    "keys": [
+     "ESC",
+     "q",
+     "Q",
+     "SPACE"
+    ]
+   },
+   {
+    "id": "UP",
+    "name": "Pan up",
+    "keys": [
+     "k",
+     "UP"
+    ]
+   },
+   {
+    "id": "DOWN",
+    "name": "Pan down",
+    "keys": [
+     "j",
+     "DOWN"
+    ]
+   },
+   {
+    "id": "LEFT",
+    "name": "Select left inventory",
+    "keys": [
+     "h",
+     "LEFT"
+    ]
+   },
+   {
+    "id": "RIGHT",
+    "name": "Select right inventory",
+    "keys": [
+     "l",
+     "RIGHT"
+    ]
+   },
+   {
+    "id": "PAGE_DOWN",
+    "name": "Page down",
+    "keys": [
+     "NPAGE"
+    ]
+   },
+   {
+    "id": "PAGE_UP",
+    "name": "Page up",
+    "keys": [
+     "PPAGE"
+    ]
+   },
+   {
+    "id": "TOGGLE_TAB",
+    "name": "Toggle tab",
+    "keys": [
+     "TAB"
+    ]
+   },
+   {
+    "id": "TOGGLE_VEH",
+    "name": "Toggle vehicle",
+    "keys": [
+     "v",
+     "V"
+    ]
+   },
+   {
+    "id": "FILTER",
+    "name": "Filter",
+    "keys": [
+     "f",
+     "F",
+     "/"
+    ]
+   },
+   {
+    "id": "RESET_FILTER",
+    "name": "Reset filter",
+    "keys": [
+     "r",
+     "R"
+    ]
+   },
+   {
+    "id": "TOGGLE_FILTER_AUTORESET",
+    "name": "Toggle AIM Filter Autoreset",
+    "keys": [
+     "T"
+    ]
+   },
+   {
+    "id": "EXAMINE",
+    "name": "Examine",
+    "keys": [
+     "e",
+     "E"
+    ]
+   },
+   {
+    "id": "SORT",
+    "name": "Change sorting mode",
+    "keys": [
+     "s",
+     "S"
+    ]
+   },
+   {
+    "id": "TOGGLE_AUTO_PICKUP",
+    "name": "Toggle auto-pickup for item",
+    "keys": [
+     "p"
+    ]
+   },
+   {
+    "id": "TOGGLE_FAVORITE",
+    "name": "Toggle item as favorite",
+    "keys": [
+     "*"
+    ]
+   },
+   {
+    "id": "MOVE_SINGLE_ITEM",
+    "name": "Move a single item",
+    "keys": [
+     "RETURN"
+    ]
+   },
+   {
+    "id": "MOVE_VARIABLE_ITEM",
+    "name": "Move an amount of item",
+    "keys": [
+     "m"
+    ]
+   },
+   {
+    "id": "MOVE_ITEM_STACK",
+    "name": "Move item stack",
+    "keys": [
+     "M"
+    ]
+   },
+   {
+    "id": "MOVE_ALL_ITEMS",
+    "name": "Move all items",
+    "keys": [
+     ","
+    ]
+   },
+   {
+    "id": "CATEGORY_SELECTION",
+    "name": "Toggle category selection mode",
+    "keys": [
+     "t"
+    ]
+   },
+   {
+    "id": "ITEMS_NW",
+    "name": "Select items @ North-West",
+    "keys": [
+     "7",
+     "NUMPAD_7"
+    ]
+   },
+   {
+    "id": "ITEMS_N",
+    "name": "Select items @ North",
+    "keys": [
+     "8",
+     "NUMPAD_8"
+    ]
+   },
+   {
+    "id": "ITEMS_NE",
+    "name": "Select items @ North-East",
+    "keys": [
+     "9",
+     "NUMPAD_9"
+    ]
+   },
+   {
+    "id": "ITEMS_W",
+    "name": "Select items @ West",
+    "keys": [
+     "4",
+     "NUMPAD_4"
+    ]
+   },
+   {
+    "id": "ITEMS_CE",
+    "name": "Select items @ center",
+    "keys": [
+     "5",
+     "NUMPAD_5"
+    ]
+   },
+   {
+    "id": "ITEMS_E",
+    "name": "Select items @ East",
+    "keys": [
+     "6",
+     "NUMPAD_6"
+    ]
+   },
+   {
+    "id": "ITEMS_SW",
+    "name": "Select items @ South-West",
+    "keys": [
+     "1",
+     "NUMPAD_1"
+    ]
+   },
+   {
+    "id": "ITEMS_S",
+    "name": "Select items @ South",
+    "keys": [
+     "2",
+     "NUMPAD_2"
+    ]
+   },
+   {
+    "id": "ITEMS_SE",
+    "name": "Select items @ South-East",
+    "keys": [
+     "3",
+     "NUMPAD_3"
+    ]
+   },
+   {
+    "id": "ITEMS_UP",
+    "name": "Select items from above",
+    "keys": [
+     "<"
+    ]
+   },
+   {
+    "id": "ITEMS_DOWN",
+    "name": "Select items from below",
+    "keys": [
+     ">"
+    ]
+   },
+   {
+    "id": "ITEMS_INVENTORY",
+    "name": "Select items in inventory",
+    "keys": [
+     "i",
+     "I",
+     "0",
+     "NUMPAD_0"
+    ]
+   },
+   {
+    "id": "ITEMS_WORN",
+    "name": "Select items currently worn",
+    "keys": [
+     "w",
+     "W"
+    ]
+   },
+   {
+    "id": "ITEMS_AROUND",
+    "name": "Select items @ all 9 fields",
+    "keys": [
+     "a",
+     "A"
+    ]
+   },
+   {
+    "id": "ITEMS_DRAGGED_CONTAINER",
+    "name": "Select items in dragged container",
+    "keys": [
+     "d",
+     "D"
+    ]
+   },
+   {
+    "id": "ITEMS_CONTAINER",
+    "name": "Select items in container",
+    "keys": [
+     "c",
+     "C"
+    ]
+   },
+   {
+    "id": "ITEMS_DEFAULT",
+    "name": "Restore default layout",
+    "keys": []
+   },
+   {
+    "id": "SAVE_DEFAULT",
+    "name": "Save default layout",
+    "keys": []
+   }
+  ],
+  "interaction": {
+   "schema_id": "s:aim",
+   "context": "ADVANCED_INVENTORY",
+   "kind": "inventory",
+   "allow_cancel": true,
+   "allow_set_count": false,
+   "title": "Advanced inventory",
+   "message": "",
+   "choices": [
+    {
+     "id": "aim:shirt",
+     "label": "long-sleeved shirt",
+     "description": "A shirt.",
+     "denial": "",
+     "pane_id": "pane:1",
+     "area_id": "area:x",
+     "storage_kind": "ground",
+     "enabled": true,
+     "selectable": true,
+     "selected": false,
+     "highlighted": true,
+     "columns": [
+      {
+       "label": "Type",
+       "value": "long-sleeved shirt"
+      },
+      {
+       "label": "Pane",
+       "value": "left"
+      },
+      {
+       "label": "Area",
+       "value": "Directly below you"
+      },
+      {
+       "label": "Storage",
+       "value": "ground"
+      },
+      {
+       "label": "Count",
+       "value": "1"
+      },
+      {
+       "label": "Weight",
+       "value": "0.15 kg"
+      },
+      {
+       "label": "Volume",
+       "value": "0.75 L"
+      }
+     ],
+     "available_count": 1
+    },
+    {
+     "id": "aim:cans",
+     "label": "tin can",
+     "description": "",
+     "denial": "",
+     "pane_id": "pane:1",
+     "area_id": "area:x",
+     "storage_kind": "ground",
+     "enabled": true,
+     "selectable": true,
+     "selected": false,
+     "highlighted": false,
+     "columns": [
+      {
+       "label": "Type",
+       "value": "tin can"
+      },
+      {
+       "label": "Pane",
+       "value": "left"
+      },
+      {
+       "label": "Area",
+       "value": "Directly below you"
+      },
+      {
+       "label": "Storage",
+       "value": "ground"
+      },
+      {
+       "label": "Count",
+       "value": "3"
+      },
+      {
+       "label": "Weight",
+       "value": "0.30 kg"
+      },
+      {
+       "label": "Volume",
+       "value": "0.75 L"
+      }
+     ],
+     "available_count": 3
+    },
+    {
+     "id": "aim:coat",
+     "label": "trench coat",
+     "description": "",
+     "denial": "",
+     "pane_id": "pane:2",
+     "area_id": "area:x",
+     "storage_kind": "worn",
+     "enabled": true,
+     "selectable": true,
+     "selected": false,
+     "highlighted": false,
+     "columns": [
+      {
+       "label": "Type",
+       "value": "trench coat"
+      },
+      {
+       "label": "Pane",
+       "value": "right"
+      },
+      {
+       "label": "Area",
+       "value": "Worn Items"
+      },
+      {
+       "label": "Storage",
+       "value": "worn"
+      },
+      {
+       "label": "Count",
+       "value": "1"
+      },
+      {
+       "label": "Weight",
+       "value": "1.00 kg"
+      },
+      {
+       "label": "Volume",
+       "value": "3.00 L"
+      }
+     ],
+     "available_count": 1
+    }
+   ],
+   "choice_total": 3,
+   "compat": {
+    "focus": {
+     "choice_id": "aim:shirt",
+     "pane_id": "pane:1"
+    },
+    "panes": [
+     {
+      "id": "pane:1",
+      "label": "Left pane",
+      "role": "source",
+      "area_id": "area:c",
+      "area_label": "Directly below you",
+      "area_description": "",
+      "filter": "",
+      "storage_kind": "ground",
+      "blocked_areas": [
+       "ITEMS_CONTAINER",
+       "ITEMS_UP"
+      ]
+     },
+     {
+      "id": "pane:2",
+      "label": "Right pane",
+      "role": "destination",
+      "area_id": "area:w",
+      "area_label": "Worn Items",
+      "area_description": "",
+      "filter": "",
+      "storage_kind": "worn"
+     }
+    ]
+   }
+  }
+ }
+}

@@ -457,7 +457,7 @@ mod overmap {
         let (h, _script) = open();
         let said = "Overmap (100, 200, 0). lake on the northwest outskirts of Bristol.";
         let live = announced(&h);
-        assert!(live.iter().any(|v| v == said), "{live:?}");
+        assert!(live.iter().any(|v| v.starts_with(said)), "{live:?}");
         let view = h.get_by_label("Overmap view").accesskit_node();
         let described = view.description().unwrap_or_default();
         assert!(described.starts_with(said), "{described}");

@@ -109,7 +109,8 @@ fn any_key_popup_closes_on_escape_space_enter_and_letters() {
             [json!({"kind":"choose","choice_id":"acknowledge"})]
         );
     }
-    for text in ["w"] {
+    {
+        let text = "w";
         let (mut h, script) = harness();
         h.run_steps(3);
         script.push(show(41, json!([]), any_key_popup()));
@@ -239,7 +240,9 @@ fn the_engines_look_cursor_is_the_map_cursor_and_arrows_do_not_move_it_twice() {
     script.push(look_mode(41, 6));
     h.run_steps(3);
     let focus = h.state().model.focus().expect("look cursor");
-    let status = format!("Cursor ({}, {})", focus.x, focus.y);
+    // The status line names squares by their absolute position, not their place in the window.
+    let at = h.state().model.origin();
+    let status = format!("Cursor ({}, {})", focus.x + at.x, focus.y + at.y);
     let map = h.get_by_label("Map");
     assert!(
         map.accesskit_node()
@@ -315,7 +318,8 @@ fn tabbed(sequence: u32, selected: &str) -> Value {
         .collect();
     show(
         sequence,
-        json!([]),
+        json!([{"id":"NEXT_TAB","name":"Next tab","keys":["TAB"]},
+               {"id":"PREV_TAB","name":"Previous tab","keys":["BACKTAB"]}]),
         json!({"schema_id":"s:tabs","kind":"choices","context":"PLAYER_INFO","title":"Info",
             "message":"","allow_cancel":true,"choices":choices,"choice_total":5,
             "allow_set_count":false,"compat":{"focus":{},"panes":panes}}),
@@ -340,6 +344,26 @@ fn only_the_selected_tabs_entries_are_listed_and_an_entryless_tab_keeps_its_tab_
         "tabs stay tabs when the tab has no entries"
     );
     assert!(menu.entries().is_empty());
+}
+
+#[test]
+fn tab_and_shift_tab_are_the_engines_tab_keys_on_a_tabbed_screen() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    script.push(tabbed(41, "stats"));
+    h.run_steps(3);
+    h.key_press(egui::Key::Tab);
+    h.run_steps(2);
+    script.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{
+        "epoch":"e7f3","command_id":"c:5","stage":"completed"}}));
+    script.push(tabbed(42, "skills"));
+    h.run_steps(3);
+    h.key_press_modifiers(egui::Modifiers::SHIFT, egui::Key::Tab);
+    h.run_steps(2);
+    assert_eq!(
+        submits(&script),
+        ["NEXT_TAB", "PREV_TAB"].map(|id| json!({"kind":"action","action_id":id}))
+    );
 }
 
 #[test]
@@ -397,18 +421,13 @@ fn the_cursor_stays_on_its_map_square_when_the_view_scrolls() {
             .unwrap_or_default()
             .to_string()
     };
-    assert!(
-        description(&h).contains("Cursor (10, 5)"),
-        "{}",
-        description(&h)
-    );
+    // Absolute: the square keeps its name while the window scrolls under the cursor.
+    let at = h.state().model.origin();
+    let named = format!("Cursor ({}, {})", 10 + at.x, 5 + at.y);
+    assert!(description(&h).contains(&named), "{}", description(&h));
     script.push(view_event(42, -13, 26));
     h.run_steps(3);
-    assert!(
-        description(&h).contains("Cursor (7, 5)"),
-        "{}",
-        description(&h)
-    );
+    assert!(description(&h).contains(&named), "{}", description(&h));
 }
 
 #[test]
@@ -521,4 +540,464 @@ fn a_composed_screen_is_shown_as_text_and_every_key_including_tab_is_the_engines
         submits(&script),
         [json!({"kind":"action","action_id":"NEXT_TAB"})]
     );
+}
+
+#[test]
+fn leaving_look_mode_puts_the_cursor_back_on_the_player() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    script.push(look_mode(41, 9));
+    h.run_steps(3);
+    script.push(show(42, json!([]), Value::Null));
+    h.run_steps(3);
+    let me = h.state().model.player();
+    let at = h.state().model.origin();
+    let status = format!("Cursor ({}, {})", me.x + at.x, me.y + at.y);
+    let map = h.get_by_label("Map");
+    let description = map.accesskit_node().description().unwrap_or_default();
+    assert!(description.contains(&status), "{status} in {description}");
+}
+
+fn text_prompt(value: &str) -> Value {
+    json!({"schema_id":"s:filter","kind":"field","context":"STRING_INPUT","title":"Set filter",
+        "message":"","allow_cancel":true,"choices":[],"choice_total":0,"allow_set_count":false,
+        "field":{"id":"field:text","label":"Filter:","description":"","value":value,
+            "type":"text","max_length":30,"printable":false}})
+}
+
+#[test]
+fn a_text_prompt_is_typed_into_a_box_and_enter_sends_it() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    script.push(show(41, json!([]), text_prompt("old")));
+    h.run_steps(3);
+    let edit = h.get_by_label("Filter:");
+    edit.click();
+    h.run_steps(2);
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+    h.run_steps(1);
+    h.get_by_label("Filter:").type_text("shirt");
+    h.run_steps(2);
+    // Every change is sent as a fill that keeps the prompt open; the engine takes the next one once
+    // the command in flight is done, and Enter submits the newest text.
+    let typed = submits(&script);
+    assert!(!typed.is_empty());
+    assert!(
+        typed
+            .iter()
+            .all(|s| s["kind"] == "fill" && s["submit"] == false),
+        "{typed:?}"
+    );
+    script.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{
+        "epoch":"e7f3","command_id":"c:5","stage":"completed"}}));
+    h.run_steps(2);
+    h.key_press(egui::Key::Enter);
+    h.run_steps(3);
+    let last = submits(&script).pop().unwrap();
+    assert_eq!(
+        last,
+        json!({"kind":"fill","field_id":"field:text","value":"shirt","submit":true})
+    );
+}
+
+#[test]
+fn typing_in_a_text_prompt_runs_no_game_action() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    script.push(show(
+        41,
+        json!([{"id":"WIELD","name":"Wield","keys":["w"]}]),
+        text_prompt(""),
+    ));
+    h.run_steps(3);
+    h.get_by_label("Filter:").click();
+    h.get_by_label("Filter:").type_text("w");
+    h.run_steps(3);
+    assert!(
+        submits(&script).iter().all(|s| s["kind"] == "fill"),
+        "typing sends fills, never the game's own action"
+    );
+}
+
+fn popup_with(message: &str) -> Value {
+    let mut ack = choice("acknowledge", "Cancel popup");
+    ack["description"] = "QUIT".into();
+    popup(true, message, ack)
+}
+
+#[test]
+fn a_popups_confirm_button_is_where_it_was_whatever_its_text_length() {
+    let mut tops = vec![];
+    for message in [
+        "Short.",
+        "A much longer popup.\nIt has\nmany\nlines\nof text.",
+    ] {
+        let (mut h, script) = harness();
+        h.run_steps(3);
+        script.push(show(
+            41,
+            json!([{"id":"QUIT","name":"Cancel popup","keys":["ESC"]}]),
+            popup_with(message),
+        ));
+        h.run_steps(4);
+        let button = h
+            .get_all_by_role_and_label(egui::accesskit::Role::MenuItem, "Cancel popup")
+            .next()
+            .expect("the confirm row");
+        tops.push(button.rect().min.y);
+    }
+    assert_eq!(tops[0], tops[1], "{tops:?}");
+}
+
+#[test]
+fn space_right_after_a_popup_closes_does_not_reach_the_game_until_the_hold_ends() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    script.push(show(
+        41,
+        json!([{"id":"jump","name":"Jump","keys":["SPACE"]}]),
+        popup_with("Welcome."),
+    ));
+    h.run_steps(3);
+    h.key_press(egui::Key::Space);
+    h.run_steps(2);
+    assert_eq!(submits(&script).len(), 1, "the popup took the Space");
+    script.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{
+        "epoch":"e7f3","command_id":"c:5","stage":"completed"}}));
+    script.push(show(
+        42,
+        json!([{"id":"jump","name":"Jump","keys":["SPACE"]}]),
+        Value::Null,
+    ));
+    h.run_steps(3);
+    h.event(egui::Event::Text(" ".into()));
+    h.run_steps(2);
+    assert_eq!(
+        submits(&script).len(),
+        1,
+        "held back while the player is still dismissing"
+    );
+    // A burst keeps the hold alive: each Space within 500 ms of the last held one is held too.
+    for _ in 0..4 {
+        h.state()
+            .clock()
+            .advance(std::time::Duration::from_millis(300));
+        h.event(egui::Event::Text(" ".into()));
+        h.run_steps(2);
+    }
+    assert_eq!(
+        submits(&script).len(),
+        1,
+        "a steady burst never reaches the game"
+    );
+    h.state()
+        .clock()
+        .advance(std::time::Duration::from_millis(600));
+    h.event(egui::Event::Text(" ".into()));
+    h.run_steps(2);
+    assert_eq!(
+        submits(&script).last(),
+        Some(&json!({"kind":"action","action_id":"jump"}))
+    );
+}
+
+fn choices_menu(choices: Vec<Value>) -> Value {
+    json!({"schema_id":"s:list","kind":"choices","context":"UILIST","title":"Options",
+        "message":"","allow_cancel":true,"choices":choices,"choice_total":0,
+        "allow_set_count":false})
+}
+
+#[test]
+fn an_entry_described_only_by_its_action_name_shows_no_description_row() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    let mut no = choice("no", "No");
+    no["selected"] = true.into();
+    no["description"] = "NO".into();
+    script.push(show(
+        41,
+        json!([]),
+        choices_menu(vec![choice("yes", "Yes"), no]),
+    ));
+    h.run_steps(4);
+    h.get_by_label("No");
+    assert!(h.query_by_label("NO").is_none());
+    // Real prose is still shown.
+    let mut helped = choice("help", "Help");
+    helped["selected"] = true.into();
+    helped["description"] = "Shows what the keys do.".into();
+    script.push(show(42, json!([]), choices_menu(vec![helped])));
+    h.run_steps(4);
+    h.get_by_label("Shows what the keys do.");
+}
+
+#[test]
+fn rows_refused_for_the_same_reason_say_it_once_and_each_carries_it_as_its_description() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    let refused = |id: &str, label: &str, denial: &str| {
+        let mut c = choice(id, label);
+        c["enabled"] = false.into();
+        c["denial"] = denial.into();
+        c
+    };
+    script.push(show(
+        41,
+        json!([]),
+        choices_menu(vec![
+            choice("a", "Auto pickup enabled"),
+            refused("b", "Adjacent", "Needs auto pickup"),
+            refused("c", "Weight limit", "Needs auto pickup"),
+            refused("d", "Volume limit", "Needs auto pickup"),
+            refused("e", "Other", "Needs something else"),
+        ]),
+    ));
+    h.run_steps(4);
+    assert_eq!(h.get_all_by_label("Needs auto pickup").count(), 1);
+    h.get_by_label("Needs something else");
+    for row in ["Adjacent", "Weight limit", "Volume limit"] {
+        let node = h.get_by_label(row);
+        assert_eq!(
+            node.accesskit_node().description().as_deref(),
+            Some("Needs auto pickup"),
+            "{row}"
+        );
+    }
+}
+
+#[test]
+fn the_status_line_gives_absolute_coordinates_that_do_not_change_when_the_view_scrolls() {
+    let (mut h, script) = harness();
+    h.run_steps(5);
+    h.get_by_label_contains("Player at (3, 4).");
+    // The engine's window moves while the avatar stays where it is.
+    script.push(view_event(41, -16, 23));
+    h.run_steps(4);
+    h.get_by_label_contains("Player at (3, 4).");
+}
+
+#[test]
+fn the_cell_tooltip_does_not_hang_over_a_dialog() {
+    let (mut h, script) = harness();
+    h.run_steps(5);
+    let map = h.get_by_label("Map").rect();
+    // The avatar's own square is tin_can in the fixture, as is a ground row; the tooltip is one more.
+    let over = map.min + egui::vec2(20.5 * CELL, 12.5 * CELL);
+    let named = |h: &H| h.query_all_by_label("tin_can").count();
+    let rows = named(&h);
+    h.hover_at(over);
+    h.run_steps(3);
+    assert_eq!(named(&h), rows + 1, "the tooltip shows without a dialog");
+    script.push(show(
+        41,
+        json!([]),
+        choices_menu(vec![choice("a", "Alpha")]),
+    ));
+    h.run_steps(4);
+    h.hover_at(over + egui::vec2(1.0, 1.0));
+    h.run_steps(3);
+    assert_eq!(named(&h), rows, "no tooltip over a dialog");
+}
+
+#[test]
+fn the_interrupt_button_appearing_does_not_move_the_map_or_the_sidebar() {
+    let (mut h, _script) = harness();
+    // The real theme: its button padding is what made the bar one pixel taller.
+    bn_client_egui::theme::apply(&h.ctx);
+    h.run_steps(5);
+    let top = |h: &H| {
+        (
+            h.get_by_label("Map").rect().min.y,
+            h.get_by_label("Ground").rect().min.y,
+        )
+    };
+    let idle = top(&h);
+    assert!(h.query_by_label("Interrupt").is_none());
+    h.event(egui::Event::Text("k".into()));
+    h.run_steps(3);
+    assert!(
+        h.query_by_label("Interrupt").is_some(),
+        "a command is running"
+    );
+    assert_eq!(top(&h), idle);
+}
+
+#[test]
+fn a_long_menu_scrolls_inside_the_window_instead_of_running_off_it() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    let rows = (0..60)
+        .map(|n| choice(&format!("r{n}"), &format!("Row {n}")))
+        .collect();
+    script.push(show(41, json!([]), choices_menu(rows)));
+    h.run_steps(5);
+    let last_shown = (0..60)
+        .filter(|n| {
+            h.query_by_label(&format!("Row {n}"))
+                .is_some_and(|row| row.rect().max.y <= 800.0)
+        })
+        .count();
+    assert!(
+        last_shown >= 20,
+        "{last_shown} rows are fully inside the window"
+    );
+    assert!(
+        h.query_by_label("Row 59")
+            .is_none_or(|row| row.rect().min.y >= 800.0 * 0.85),
+        "the rest waits behind the scroll bar"
+    );
+}
+
+#[test]
+fn a_popup_that_ignored_a_key_still_takes_the_next_one() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    script.push(show(
+        41,
+        json!([{"id":"QUIT","name":"Cancel popup","keys":["x","y"]}]),
+        popup_with("Welcome."),
+    ));
+    h.run_steps(3);
+    // The first key is sent but the engine keeps the popup open; the next key must still be sent.
+    h.event(egui::Event::Text("x".into()));
+    h.run_steps(3);
+    script.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{
+        "epoch":"e7f3","command_id":"c:5","stage":"completed"}}));
+    h.run_steps(3);
+    h.event(egui::Event::Text("y".into()));
+    h.run_steps(3);
+    assert_eq!(submits(&script).len(), 2, "{:?}", submits(&script));
+}
+
+#[test]
+fn space_closes_a_popup_while_the_focus_is_still_on_the_map() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    h.get_by_label("Map").focus();
+    h.run_steps(2);
+    script.push(show(
+        41,
+        json!([{"id":"QUIT","name":"Cancel popup","keys":["ESC","SPACE"]}]),
+        popup_with("Close the door with c."),
+    ));
+    // A frame without the popup's controls in focus: the map still has it.
+    h.event(egui::Event::Text(" ".into()));
+    h.run_steps(3);
+    assert!(!submits(&script).is_empty(), "Space reaches the engine");
+}
+
+#[test]
+fn a_popup_right_after_another_takes_the_focus_too() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    script.push(show(41, json!([]), popup_with("First.")));
+    h.run_steps(4);
+    script.push(show(42, json!([]), popup_with("Second.")));
+    h.run_steps(4);
+    let button = h
+        .get_all_by_role_and_label(egui::accesskit::Role::MenuItem, "Cancel popup")
+        .next()
+        .unwrap();
+    assert!(button.accesskit_node().is_focused());
+}
+
+#[test]
+fn a_popups_dismiss_button_tells_screen_readers_which_keys_close_it() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    let mut ack = choice("acknowledge", "Cancel popup");
+    ack["description"] = "QUIT".into();
+    script.push(show(
+        41,
+        json!([{"id":"QUIT","name":"Cancel popup","keys":["ESC","SPACE","RETURN"]}]),
+        popup(true, "Welcome to the tutorial!", ack),
+    ));
+    h.run_steps(3);
+    let button = h.get_by_role_and_label(egui::accesskit::Role::MenuItem, "Cancel popup");
+    let hint = egui_kittest::kittest::NodeT::accesskit_node(&button)
+        .description()
+        .unwrap_or_default();
+    assert_eq!(hint, "Space or Enter closes this popup");
+}
+
+#[test]
+fn list_menu_rows_fill_the_window_like_the_native_highlight_bar() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    script.push(show(
+        41,
+        json!([]),
+        choices_menu(vec![choice("a", "Alpha"), choice("b", "Longer beta row")]),
+    ));
+    h.run_steps(4);
+    let (alpha, beta) = (
+        h.get_by_label("Alpha").rect(),
+        h.get_by_label("Longer beta row").rect(),
+    );
+    assert_eq!(alpha.width(), beta.width(), "{alpha:?} {beta:?}");
+    assert!(alpha.width() >= 500.0, "{alpha:?}");
+}
+
+fn finished_command(h: &mut H, script: &ScriptHandle) {
+    script.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{
+        "epoch":"e7f3","command_id":"c:5","stage":"completed"}}));
+    h.run_steps(4);
+}
+
+#[test]
+fn options_is_in_the_action_palette_and_opens_the_native_options_through_the_main_menu() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    script.push(show(
+        41,
+        json!([{"id":"main_menu","name":"Main Menu","keys":["ESC"]}]),
+        Value::Null,
+    ));
+    h.run_steps(3);
+    open_palette(&mut h);
+    h.get_by_label("Search actions").focus();
+    h.run_steps(2);
+    h.get_by_label("Search actions").type_text("option");
+    h.run_steps(2);
+    h.get_by_label("Options").click();
+    h.run_steps(3);
+    assert_eq!(
+        submits(&script),
+        [json!({"kind":"action","action_id":"main_menu"})]
+    );
+    finished_command(&mut h, &script);
+    let mut menu = choice("main:options", "Options");
+    menu["selected"] = false.into();
+    script.push(show(
+        42,
+        json!([]),
+        json!({"schema_id":"s:mm","kind":"choices","context":"UILIST","title":"",
+            "message":"MAIN MENU","allow_cancel":true,"choices":[choice("main:wiki","Open Wiki"), menu],
+            "choice_total":2,"allow_set_count":false}),
+    ));
+    h.run_steps(5);
+    assert_eq!(
+        submits(&script).last(),
+        Some(&json!({"kind":"choose","choice_id":"main:options"}))
+    );
+}
+
+fn list_with(rows: usize) -> Value {
+    let choices = (0..rows)
+        .map(|i| choice(&format!("r:{i}"), &format!("row {i}")))
+        .collect::<Vec<_>>();
+    json!({"schema_id":"s:list","kind":"choices","context":"UILIST","title":"","message":"Pick",
+        "allow_cancel":true,"choices":choices,"choice_total":rows,"allow_set_count":false})
+}
+
+#[test]
+fn the_filter_button_is_for_long_lists_not_for_a_two_row_question() {
+    let filter = json!([{"id":"FILTER","name":"Filter","keys":["/"]}]);
+    for (rows, shown) in [(2, false), (9, false), (30, true)] {
+        let (mut h, script) = harness();
+        h.run_steps(3);
+        script.push(show(41, filter.clone(), list_with(rows)));
+        h.run_steps(4);
+        assert_eq!(h.query_by_label("Filter").is_some(), shown, "{rows} rows");
+    }
 }

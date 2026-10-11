@@ -284,3 +284,64 @@ fn a_click_goes_to_the_square_it_landed_on_even_when_the_pointer_just_arrived() 
         [json!({"kind":"context","pos":{"dim":"","x":6,"y":4,"z":0}})]
     );
 }
+
+#[test]
+fn a_double_click_on_a_row_chooses_it_once_as_native_has_no_double_click() {
+    let (mut h, script) = harness();
+    let rows = json!([
+        row("c:0", "first", true, None),
+        row("c:1", "second", false, None),
+    ]);
+    open_menu(&mut h, &script, rows, json!([]), None);
+    let at = h.get_by_label("second").rect().center();
+    h.hover_at(at);
+    h.run_steps(2);
+    // Two presses in quick succession: the second finds a command in flight and is not sent.
+    for _ in 0..2 {
+        for pressed in [true, false] {
+            h.event(egui::Event::PointerButton {
+                pos: at,
+                button: egui::PointerButton::Primary,
+                pressed,
+                modifiers: egui::Modifiers::NONE,
+            });
+            h.run_steps(1);
+        }
+    }
+    h.run_steps(2);
+    assert_eq!(
+        operations(&script),
+        [json!({"kind":"choose","choice_id":"c:1"})]
+    );
+}
+
+#[test]
+fn clicking_the_text_of_a_composed_screen_sends_nothing_as_native_has_no_tab_click_there() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    for name in ["events_41_walk", "events_42_message"] {
+        script.push(fixture(name));
+    }
+    let mut menu = fixture("events_43_menu");
+    let interaction = &mut menu["params"]["events"][0]["changes"]["interaction"]["interaction"];
+    interaction["context"] = "NEW_CHAR_POINTS".into();
+    interaction["title"] = "Character creation".into();
+    interaction["message"] = "POINTS  SCENARIO  PROFESSION".into();
+    interaction["choices"] = json!([]);
+    script.push(menu);
+    h.run_steps(3);
+    let at = h.get_by_label_contains("SCENARIO").rect().center();
+    h.hover_at(at);
+    h.run_steps(2);
+    for pressed in [true, false] {
+        h.event(egui::Event::PointerButton {
+            pos: at,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        });
+        h.run_steps(1);
+    }
+    h.run_steps(2);
+    assert!(operations(&script).is_empty());
+}

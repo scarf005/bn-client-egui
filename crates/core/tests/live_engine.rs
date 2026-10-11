@@ -171,8 +171,8 @@ fn live_engine_travel_click_plans_a_route_and_a_second_click_walks_it() {
         .flat_map(|y| (0..w).map(move |x| Pos { x, y }))
         .filter(|&p| (2..=12).contains(&reach(p)))
         .filter(|&p| {
-            let desc = model.cell(p).desc;
-            desc != "unknown" && !desc.contains("wall")
+            let id = model.cell(p).id;
+            !id.is_empty() && !id.contains("wall")
         })
         .collect::<Vec<_>>();
     candidates.sort_by_key(|&p| std::cmp::Reverse(reach(p)));
@@ -252,7 +252,7 @@ fn live_engine_remembered_furniture_stays_drawn_after_walking_past_it() {
         let (w, h) = (model.size().x, model.size().y);
         (0..h)
             .flat_map(|y| (0..w).map(move |x| Pos { x, y }))
-            .filter(|&p| model.cell(p).desc == "f_rack")
+            .filter(|&p| model.cell(p).id == "f_rack")
             .count()
     };
 
@@ -485,6 +485,18 @@ fn live_engine_killed_mid_game_shows_the_failure_and_restart_brings_the_menu_bac
     });
 }
 
+/// A noise interrupts a wait with "Stop waiting?"; answering No lets it go on. True when it was asked.
+fn keep_waiting(model: &mut EngineModel) -> bool {
+    let no = model
+        .menu()
+        .filter(|m| m.message.contains("Stop waiting"))
+        .and_then(|m| m.choices.into_iter().find(|c| c.label == "No"));
+    no.is_some_and(|choice| {
+        model.choose(&choice.id);
+        true
+    })
+}
+
 #[test]
 #[ignore = "requires BN_ENGINE with bn.progress heartbeats"]
 fn live_engine_long_wait_is_never_reported_as_stalled() {
@@ -504,21 +516,30 @@ fn live_engine_long_wait_is_never_reported_as_stalled() {
     assert!(model.invoke_action("wait"));
     wait_for(&mut model, "the wait menu", |m| m.menu().is_some());
     wait_for(&mut model, "the command to finish", |m| !m.busy());
+    // An unloaded engine plays six hours in about a second, so ask for 200 days, the most the engine's
+    // int move count holds: the wait has to outlast the stall limit whatever the machine.
     let id = model
         .menu()
         .unwrap()
         .choices
         .iter()
-        .find(|c| c.label.starts_with("6 hours"))
-        .expect("6 hours")
+        .find(|c| c.label == "Custom input")
+        .expect("Custom input")
         .id
         .clone();
+    model.choose(&id);
+    wait_for(&mut model, "the duration prompt", |m| {
+        m.menu().is_some_and(|menu| menu.field.is_some())
+    });
+    wait_for(&mut model, "the command to finish", |m| !m.busy());
+    let field = model.menu().unwrap().field.unwrap().id;
     // A stall limit far below the wait: only the heartbeats keep the model from reporting one.
     model.set_stall(Duration::from_secs(5));
-    model.choose(&id);
+    model.fill(&field, "200d", true);
     assert!(model.busy());
     let started = std::time::Instant::now();
-    while started.elapsed() < Duration::from_secs(20) && model.busy() {
+    while started.elapsed() < Duration::from_secs(20) && (model.busy() || keep_waiting(&mut model))
+    {
         model.poll();
         assert!(
             model.failure().is_none(),
@@ -528,19 +549,28 @@ fn live_engine_long_wait_is_never_reported_as_stalled() {
         );
         std::thread::sleep(Duration::from_millis(100));
     }
+    // The tutorial ends a long wait with a lesson pop-up when the day turns dark, so the wait may
+    // end by itself; it must at least outlast the stall limit.
     assert!(
-        model.busy(),
-        "the wait outlasted the stall limit ({:?})",
-        started.elapsed()
+        started.elapsed() > Duration::from_secs(5),
+        "the wait ended after {:?}: {:?} menu {:?} messages {:?}",
+        started.elapsed(),
+        model.command(),
+        model.menu().map(|m| (m.title, m.message)),
+        model.messages()
     );
-    assert!(model.interrupt());
-    wait_for(&mut model, "the stop question", |m| {
-        m.menu()
-            .is_some_and(|menu| menu.choices.iter().any(|c| c.label == "Yes"))
-    });
-    wait_for(&mut model, "the command to finish", |m| !m.busy());
+    if model.busy() {
+        assert!(model.interrupt());
+        wait_for(&mut model, "the stop question", |m| {
+            m.menu()
+                .is_some_and(|menu| menu.choices.iter().any(|c| c.label == "Yes"))
+        });
+        wait_for(&mut model, "the command to finish", |m| !m.busy());
+        model.set_stall(Duration::from_secs(120));
+        choose_label(&mut model, "Yes");
+    }
     model.set_stall(Duration::from_secs(120));
-    choose_label(&mut model, "Yes");
+    dismiss_popups(&mut model);
     assert!(model.failure().is_none());
 }
 
@@ -549,7 +579,7 @@ fn live_engine_long_wait_is_never_reported_as_stalled() {
 fn live_engine_opens_the_overmap_moves_its_cursor_and_closes_it() {
     let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
     let transport = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
-    let mut model = EngineModel::new(Box::new(transport));
+    let mut model = EngineModel::connect(Box::new(transport), true);
     wait_for(&mut model, "subscription", |m| m.live());
     choose_label(&mut model, "New Game");
     choose_label(&mut model, "Tutorial");
@@ -571,6 +601,11 @@ fn live_engine_opens_the_overmap_moves_its_cursor_and_closes_it() {
     assert!(first.cols > 10 && first.rows > 5);
     assert_eq!(first.cursor, first.player, "it opens on the player");
     assert!(first.legend.iter().any(|l| !l.trim().is_empty()));
+    // The client said it draws tiles: every square names a tile, the one under the player a known one.
+    assert_eq!(first.tiles.len(), (first.cols * first.rows) as usize);
+    let under = first.tile(first.cols / 2, first.rows / 2).unwrap();
+    println!("tile under the player: {under:?}");
+    assert!(!under.id.is_empty() && under.id != "unknown_terrain");
 
     let to = (first.cursor.0 + 3, first.cursor.1 - 2, first.cursor.2);
     model.overmap_cursor_to(to);
@@ -591,5 +626,45 @@ fn live_engine_opens_the_overmap_moves_its_cursor_and_closes_it() {
         m.overmap().is_none()
     });
     wait_for(&mut model, "idle", |m| !m.busy());
+    assert!(model.failure().is_none());
+}
+
+#[test]
+#[ignore = "requires BN_ENGINE with the structured overmap"]
+fn live_engine_overmap_gains_and_loses_tile_ids_when_the_client_switches() {
+    let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
+    let transport = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
+    let mut model = EngineModel::connect(Box::new(transport), false);
+    wait_for(&mut model, "subscription", |m| m.live());
+    choose_label(&mut model, "New Game");
+    choose_label(&mut model, "Tutorial");
+    wait_for(&mut model, "the tutorial map", |m| m.size().x > 0);
+    wait_for(&mut model, "idle", |m| !m.busy());
+    dismiss_popups(&mut model);
+
+    assert!(model.invoke_action("map"));
+    wait_for(&mut model, "the overmap", |m| m.overmap().is_some());
+    wait_for(&mut model, "idle", |m| !m.busy());
+    assert!(
+        model.overmap().unwrap().tiles.is_empty(),
+        "ASCII client: no tile ids"
+    );
+
+    // The player picks Tiles while the overmap is open: the open screen is published again with ids.
+    model.set_tiles(true);
+    wait_for(&mut model, "tile ids", |m| {
+        m.overmap().is_some_and(|o| !o.tiles.is_empty())
+    });
+    let tiled = model.overmap().unwrap();
+    assert_eq!(tiled.tiles.len(), (tiled.cols * tiled.rows) as usize);
+
+    model.set_tiles(false);
+    wait_for(&mut model, "no tile ids", |m| {
+        m.overmap().is_some_and(|o| o.tiles.is_empty())
+    });
+    model.close_overmap();
+    wait_for(&mut model, "the overmap to close", |m| {
+        m.overmap().is_none()
+    });
     assert!(model.failure().is_none());
 }

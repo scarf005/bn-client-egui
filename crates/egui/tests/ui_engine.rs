@@ -609,6 +609,34 @@ fn a_key_prompt_fills_its_field_with_the_next_key_and_a_function_key_by_its_name
     );
 }
 
+#[test]
+fn a_bare_text_prompt_is_a_field_that_enter_submits() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    for name in ["events_41_walk", "events_42_message"] {
+        script.push(fixture(name));
+    }
+    let mut menu = fixture("events_43_menu");
+    let interaction = &mut menu["params"]["events"][0]["changes"]["interaction"]["interaction"];
+    interaction["choices"] = json!([]);
+    interaction["field"] = json!({"id":"field:value","label":"World name","description":"",
+        "value":"","type":"text","max_length":-1,"printable":true});
+    script.push(menu);
+    h.run_steps(3);
+    let prompt = h.get_by_role(accesskit::Role::TextInput);
+    prompt.click();
+    prompt.type_text("Ada");
+    h.run_steps(2);
+    script.push(notice("completed", None));
+    h.run_steps(2);
+    h.key_press(egui::Key::Enter);
+    h.run_steps(3);
+    assert_eq!(
+        operations(&script).last(),
+        Some(&json!({"kind":"fill","field_id":"field:value","value":"Ada","submit":true}))
+    );
+}
+
 mod failures {
     use super::*;
     use bn_client_core::transport::ScriptedTransport;
@@ -664,7 +692,9 @@ mod overmap {
     fn the_overmap_replaces_the_map_and_names_the_cursor_square() {
         let (h, _script) = open_overmap();
         h.get_by_label("Overmap view");
-        h.get_by_label_contains("Overmap (100, 200, 0).");
+        h.get_by_label_contains(
+            "Overmap (100, 200, 0). Route of 2 squares; click the cursor to go.",
+        );
         assert!(
             h.query_by_label("Map").is_none(),
             "the map is not drawn under it"
@@ -731,4 +761,25 @@ fn the_title_screen_is_only_its_menu() {
             "{panel} belongs to a running game"
         );
     }
+}
+
+#[test]
+fn the_title_screen_draws_the_engines_banner_above_its_menu() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    let mut menu = fixture("events_43_menu");
+    let interaction = &mut menu["params"]["events"][0]["changes"]["interaction"]["interaction"];
+    interaction["context"] = json!("MAIN_MENU");
+    interaction["banner"] = json!([
+        "<color_light_cyan> _ART_ </color>",
+        "",
+        "Version: HEAD-HASH"
+    ]);
+    script.push(fixture("events_41_walk"));
+    script.push(fixture("events_42_message"));
+    script.push(menu);
+    h.run_steps(4);
+    h.get_by_label(" _ART_ ");
+    h.get_by_label("Version: HEAD-HASH");
+    h.get_by_label("combat knife");
 }

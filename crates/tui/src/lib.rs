@@ -1,8 +1,10 @@
 //! Terminal client over the same `GameModel` as the egui client.
 
+mod aim;
 mod crafting;
 mod settings;
 
+use bn_client_core::markup::plain;
 use bn_client_core::{ActionEntry, Failure, GameModel, Loading, Menu, Overmap, Pos, Rgb, keys};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::Frame;
@@ -30,6 +32,8 @@ pub struct TuiApp<M: GameModel> {
     map_cells: Rect,
     /// Where the overmap's cells were last drawn, and the overmap they show.
     overmap_cells: Rect,
+    /// Where the overmap's note list was last drawn, one note per row.
+    overmap_notes: Rect,
     overmap_shown: Option<Overmap>,
     /// View coordinates of the first drawn cell.
     map_first: Pos,
@@ -39,8 +43,23 @@ pub struct TuiApp<M: GameModel> {
     log_back: usize,
     /// The crafting search or batch count being typed.
     input: Option<crafting::Input>,
+    /// The map square the mouse last hovered, in absolute coordinates.
+    hovered: Option<Pos>,
     /// A settings value being typed.
     edit: Option<settings::Edit>,
+    /// The advanced inventory's drawn rows and queued inputs.
+    aim: aim::Aim,
+    /// Where the open menu's rows and tabs were last drawn, for mouse clicks.
+    menu_hits: MenuHits,
+}
+
+/// What a click on the open menu can reach: the row ids from the first drawn one, and the tab ids.
+#[derive(Default)]
+struct MenuHits {
+    list: Rect,
+    rows: Vec<String>,
+    bar: Rect,
+    tabs: Vec<(String, u16, u16)>,
 }
 
 fn color(c: Rgb) -> Color {
@@ -98,12 +117,16 @@ impl<M: GameModel> TuiApp<M> {
             destination: None,
             map_cells: Rect::default(),
             overmap_cells: Rect::default(),
+            overmap_notes: Rect::default(),
             overmap_shown: None,
             map_first: Pos { x: 0, y: 0 },
             actions_open: None,
             log_back: 0,
             input: None,
             edit: None,
+            hovered: None,
+            aim: Default::default(),
+            menu_hits: Default::default(),
         }
     }
 
@@ -142,6 +165,10 @@ impl<M: GameModel> TuiApp<M> {
                 .position(|c| menu.focus.as_deref() == Some(c.id.as_str()))
                 .or_else(|| entries.iter().position(|c| c.selected));
             self.selected = at.unwrap_or(self.selected);
+            // The rest of a long list comes in pages as the cursor nears the end of what is listed.
+            if menu.total > menu.choices.len() && self.selected + PAGE >= entries.len() {
+                self.model.more_choices();
+            }
         }
         menu
     }
@@ -153,6 +180,7 @@ impl<M: GameModel> TuiApp<M> {
 
     /// One step of our own walk (models without engine travel); call between frames.
     pub fn tick(&mut self) {
+        self.run_aim_steps();
         let Some(dest) = self.destination else {
             return;
         };
@@ -207,6 +235,8 @@ impl<M: GameModel> TuiApp<M> {
         if let Some(menu) = self.menu() {
             return match menu.context.as_str() {
                 "CRAFTING" => self.crafting_key(&menu, key),
+                // Every key of the advanced inventory is the engine's, Tab included (it swaps panes).
+                "ADVANCED_INVENTORY" => self.menu_key(&menu, key),
                 _ if !menu.screen && self.settings_key(&menu, key) => {}
                 _ => self.menu_key(&menu, key),
             };
@@ -259,6 +289,13 @@ impl<M: GameModel> TuiApp<M> {
     /// are whatever the player bound in it, and the engine moves its own cursor.
     fn menu_key(&mut self, menu: &Menu, key: KeyEvent) {
         if token(key).is_some_and(|t| self.model.press(&t)) {
+            return;
+        }
+        // A menu the engine binds no confirm key in still acts on the row under its cursor.
+        if key.code == KeyCode::Enter
+            && let Some(row) = menu.entries().get(self.selected).filter(|c| c.enabled)
+        {
+            self.model.choose(&row.id);
             return;
         }
         // A menu the engine gives no cancel key still closes with Esc.
@@ -364,8 +401,34 @@ impl<M: GameModel> TuiApp<M> {
         }
     }
 
-    /// Left click on a map cell moves the look cursor there and travels; the first click shows the route.
+    /// The mouse as the game reads it: the wheel steps an engine menu, hovering a map cell asks for its
+    /// native description (or moves the engine's own cursor), the left click moves the look cursor there
+    /// and travels (the first click shows the route), the right click is the engine's context click.
     pub fn handle_mouse(&mut self, ev: MouseEvent) {
+        if self.model.loading().is_some() {
+            return;
+        }
+        if let Some(menu) = self
+            .model
+            .menu()
+            .filter(|m| m.context == "ADVANCED_INVENTORY")
+        {
+            return self.aim_mouse(&menu, ev);
+        }
+        if ev.kind == MouseEventKind::Down(MouseButton::Left) && self.menu_click(ev) {
+            return;
+        }
+        let wheel = match ev.kind {
+            MouseEventKind::ScrollUp => Some(true),
+            MouseEventKind::ScrollDown => Some(false),
+            _ => None,
+        };
+        if let Some(up) = wheel {
+            // Only a list the engine scrolls natively (it registers SCROLL_UP/SCROLL_DOWN) takes the
+            // wheel; the highlight is the engine's own cursor, so any other menu ignores it, as native.
+            self.model.scroll_menu(up);
+            return;
+        }
         if let Some(om) = self
             .overmap_shown
             .clone()
@@ -376,20 +439,75 @@ impl<M: GameModel> TuiApp<M> {
         let area = self.map_cells;
         let inside = (area.x..area.x + area.width).contains(&ev.column)
             && (area.y..area.y + area.height).contains(&ev.row);
-        let click = ev.kind == MouseEventKind::Down(MouseButton::Left);
-        if !click || !inside || self.model.loading().is_some() || self.model.menu().is_some() {
+        if !inside || self.model.menu().is_some() {
             return;
         }
         let view = Pos {
             x: self.map_first.x + i32::from(ev.column - area.x),
             y: self.map_first.y + i32::from(ev.row - area.y),
         };
-        self.cursor = Some(self.absolute(view));
-        self.go_to(view);
+        match ev.kind {
+            MouseEventKind::Moved => {
+                self.hovered = Some(self.absolute(view));
+                if !self.model.aim(view) {
+                    self.model.hover(view);
+                }
+            }
+            MouseEventKind::Down(MouseButton::Left) => {
+                self.cursor = Some(self.absolute(view));
+                if !self.model.aim(view) {
+                    self.go_to(view);
+                }
+            }
+            MouseEventKind::Down(MouseButton::Right) => {
+                self.model.context_click(view);
+            }
+            _ => {}
+        }
+    }
+
+    /// A left click on a row or tab of the open menu chooses it, as the engine's own choose does.
+    fn menu_click(&mut self, ev: MouseEvent) -> bool {
+        let Some(menu) = self.model.menu() else {
+            return false;
+        };
+        if menu.screen || matches!(menu.context.as_str(), "CRAFTING" | "ADVANCED_INVENTORY") {
+            return false;
+        }
+        let within = |r: Rect| {
+            (r.x..r.x + r.width).contains(&ev.column) && (r.y..r.y + r.height).contains(&ev.row)
+        };
+        let hits = &self.menu_hits;
+        let id = if within(hits.bar) {
+            hits.tabs
+                .iter()
+                .find(|(_, from, to)| (*from..*to).contains(&(ev.column - hits.bar.x)))
+                .map(|(id, ..)| id.clone())
+        } else if within(hits.list) {
+            hits.rows.get(usize::from(ev.row - hits.list.y)).cloned()
+        } else {
+            None
+        };
+        match id {
+            Some(id) => {
+                self.model.choose(&id);
+                true
+            }
+            None => false,
+        }
     }
 
     /// A click moves the overmap cursor to the square; a click on the cursor travels there.
     fn overmap_mouse(&mut self, om: &Overmap, ev: MouseEvent) {
+        let notes = self.overmap_notes;
+        let on_notes = (notes.x..notes.x + notes.width).contains(&ev.column)
+            && (notes.y..notes.y + notes.height).contains(&ev.row);
+        if ev.kind == MouseEventKind::Down(MouseButton::Left) && on_notes {
+            if let Some((at, _)) = om.notes.get(usize::from(ev.row - notes.y)) {
+                self.model.overmap_cursor_to(*at);
+            }
+            return;
+        }
         let area = self.overmap_cells;
         let inside = (area.x..area.x + area.width).contains(&ev.column)
             && (area.y..area.y + area.height).contains(&ev.row);
@@ -429,6 +547,9 @@ impl<M: GameModel> TuiApp<M> {
                 if let Some(bg) = cell.bg {
                     style = style.bg(color(bg));
                 }
+                if om.path.contains(&om.square(col, row)) {
+                    style = style.bg(Color::Cyan);
+                }
                 if (col, row) == cursor {
                     style = style.add_modifier(Modifier::REVERSED);
                 }
@@ -449,8 +570,28 @@ impl<M: GameModel> TuiApp<M> {
         if let Some(note) = om.note(om.cursor) {
             sidebar.push(Line::from(format!("Note: {note}")));
         }
+        if !om.path.is_empty() {
+            sidebar.push(Line::from(format!(
+                "Route of {} squares: click the cursor to go",
+                om.path.len()
+            )));
+        }
         sidebar.extend(om.legend.iter().map(|l| Line::from(l.clone())));
-        f.render_widget(Paragraph::new(sidebar), legend);
+        let listed = om.notes.len().min(usize::from(legend.height) / 3);
+        let [text, notes] =
+            Layout::vertical([Constraint::Min(0), Constraint::Length(listed as u16)]).areas(legend);
+        f.render_widget(Paragraph::new(sidebar), text);
+        // One row per note, nearest the foot of the sidebar; a click on a row moves the cursor to it.
+        self.overmap_notes = notes;
+        let rows = om.notes.iter().take(listed).map(|((x, y, _), note)| {
+            Line::styled(
+                format!("({x}, {y}) {note}"),
+                Style::new()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::UNDERLINED),
+            )
+        });
+        f.render_widget(Paragraph::new(rows.collect::<Vec<_>>()), notes);
     }
 
     pub fn draw(&mut self, f: &mut Frame) {
@@ -497,6 +638,7 @@ impl<M: GameModel> TuiApp<M> {
         if let Some(menu) = self.menu() {
             match menu.context.as_str() {
                 "CRAFTING" => self.draw_crafting(f, &menu),
+                "ADVANCED_INVENTORY" => self.draw_aim(f, &menu),
                 _ => self.draw_menu(f, &menu),
             }
         }
@@ -515,6 +657,13 @@ impl<M: GameModel> TuiApp<M> {
             true => format!("{command} [Esc: interrupt]"),
             false => command,
         };
+        // What the engine's mouse view prints for the hovered square, once it has answered.
+        let hover = self
+            .hovered
+            .and_then(|at| self.model.hover_text(self.view(at)))
+            .map(|lines| format!(" | {}", lines.join(" / ")))
+            .unwrap_or_default();
+        let command = format!("{command}{hover}");
         let Some(at) = self.cursor else {
             return command;
         };
@@ -686,8 +835,8 @@ impl<M: GameModel> TuiApp<M> {
     }
 
     fn draw_menu(&mut self, f: &mut Frame, menu: &Menu) {
-        let rows = menu
-            .entries()
+        let entries = menu.entries();
+        let rows = entries
             .iter()
             .enumerate()
             .map(|(i, c)| {
@@ -704,18 +853,46 @@ impl<M: GameModel> TuiApp<M> {
                     (Some(e), _) => format!(": {}", settings::shown_value(e)),
                     _ => String::new(),
                 };
-                (format!("{}{value}{denial}", c.label), style)
+                // The row's values beside it, as the native lists print them.
+                let columns = c
+                    .columns
+                    .iter()
+                    .filter(|(label, value)| !value.is_empty() && !label.ends_with(" color"))
+                    .map(
+                        |(label, value)| match label.is_empty() || *label == c.label {
+                            true => format!("  {}", plain(value)),
+                            false => format!("  {label}: {}", plain(value)),
+                        },
+                    )
+                    .collect::<String>();
+                // With the engine's cursor shown, a chosen row is one the screen marks as on: an enabled
+                // panel or zone, an active mutation or mod.
+                let mark = match c.selected && menu.focus.is_some() {
+                    true => "[x] ",
+                    false => "",
+                };
+                (
+                    format!("{mark}{}{value}{columns}{denial}", plain(&c.label)),
+                    style,
+                )
             })
             .collect::<Vec<_>>();
         let tabs = menu
             .tabs()
             .iter()
-            .map(|t| (t.label.clone(), t.selected))
+            .map(|t| (plain(&t.label), t.selected))
             .collect::<Vec<_>>();
+        // What the engine says about the row its cursor is on.
+        let footer = entries
+            .get(self.selected)
+            .map(|c| plain(&c.description))
+            .unwrap_or_default()
+            .lines()
+            .map(str::to_string)
+            .collect();
         let popup = Popup {
             title: &menu.title,
-            header: menu
-                .message
+            header: plain(&menu.message)
                 .lines()
                 .map(str::to_string)
                 .chain(self.settings_hint(menu))
@@ -723,8 +900,33 @@ impl<M: GameModel> TuiApp<M> {
             tabs,
             rows,
             selected: self.selected,
+            footer,
         };
-        Self::draw_popup(f, &popup);
+        let layout = Self::draw_popup(f, &popup);
+        let tab_ids = menu
+            .tabs()
+            .into_iter()
+            .map(|t| t.id.clone())
+            .collect::<Vec<_>>();
+        let widths = popup.tabs.iter().map(|(label, _)| label.width() as u16 + 3);
+        let mut from = 0;
+        self.menu_hits = MenuHits {
+            list: layout.list,
+            rows: entries
+                .iter()
+                .skip(layout.offset)
+                .map(|c| c.id.clone())
+                .collect(),
+            bar: layout.bar,
+            tabs: tab_ids
+                .into_iter()
+                .zip(widths)
+                .map(|(id, w)| {
+                    from += w;
+                    (id, from - w, from - 1)
+                })
+                .collect(),
+        };
     }
 
     fn draw_action_list(&mut self, f: &mut Frame, row: usize) {
@@ -740,12 +942,13 @@ impl<M: GameModel> TuiApp<M> {
             tabs: vec![],
             rows,
             selected: row,
+            footer: vec![],
         };
         Self::draw_popup(f, &popup);
     }
 
     /// A centred box: message lines, a tab bar, then the rows scrolled to keep the highlighted one visible.
-    fn draw_popup(f: &mut Frame, popup: &Popup) {
+    fn draw_popup(f: &mut Frame, popup: &Popup) -> PopupLayout {
         let area = f.area();
         let tab_bar = bar(&popup.tabs);
         let widest = popup
@@ -764,7 +967,13 @@ impl<M: GameModel> TuiApp<M> {
             .collect::<Vec<_>>();
         let head = (header.len() as u16).min(area.height.saturating_sub(2) / 2);
         let bar = u16::from(!popup.tabs.is_empty());
-        let want = head + bar + popup.rows.len() as u16 + 2;
+        let footer = popup
+            .footer
+            .iter()
+            .flat_map(|l| wrap(l, usize::from(width) - 2))
+            .collect::<Vec<_>>();
+        let foot = (footer.len() as u16).min(area.height.saturating_sub(2) / 3);
+        let want = head + bar + popup.rows.len() as u16 + foot + 2;
         let height = want.min(area.height);
         let rect = Rect::new(
             area.x + (area.width - width) / 2,
@@ -776,10 +985,11 @@ impl<M: GameModel> TuiApp<M> {
         let block = Block::bordered().title(popup.title.to_string());
         let inner = block.inner(rect);
         f.render_widget(block, rect);
-        let [header_area, bar_area, list] = Layout::vertical([
+        let [header_area, bar_area, list, footer_area] = Layout::vertical([
             Constraint::Length(head),
             Constraint::Length(bar),
             Constraint::Min(0),
+            Constraint::Length(foot),
         ])
         .areas(inner);
         let header_lines = header;
@@ -801,7 +1011,29 @@ impl<M: GameModel> TuiApp<M> {
             })
             .collect::<Vec<_>>();
         f.render_widget(Paragraph::new(lines), list);
+        f.render_widget(
+            Paragraph::new(
+                footer
+                    .iter()
+                    .map(|l| Line::styled(l.clone(), Style::new().fg(Color::Gray)))
+                    .collect::<Vec<_>>(),
+            ),
+            footer_area,
+        );
+        PopupLayout {
+            list,
+            offset,
+            bar: bar_area,
+        }
     }
+}
+
+/// Where `draw_popup` put the rows and the tab bar.
+struct PopupLayout {
+    list: Rect,
+    /// Index of the first row drawn.
+    offset: usize,
+    bar: Rect,
 }
 
 /// Tab labels in a row, the selected one reversed.
@@ -851,6 +1083,8 @@ struct Popup<'a> {
     tabs: Vec<(String, bool)>,
     rows: Vec<(String, Style)>,
     selected: usize,
+    /// Detail text under the rows, such as the highlighted row's description.
+    footer: Vec<String>,
 }
 
 fn action_label(a: &ActionEntry) -> String {

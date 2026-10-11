@@ -1,9 +1,9 @@
-use bn_client_egui::display::settings_path;
+use bn_client_egui::display::{self, settings_path};
 use bn_client_egui::fonts;
 use bn_client_egui::launch::{LaunchArgs, Opened, Search, open_engine, resolve};
 use bn_client_egui::setup::{Launcher, Starter};
 use bn_client_egui::theme;
-use bn_client_egui::transport::Profile;
+use bn_client_egui::transport::{Profile, game_root};
 use bn_client_egui::{App, FakeModel, GameModel};
 use clap::Parser;
 use eframe::egui;
@@ -59,7 +59,11 @@ fn start_engine(
     engine: PathBuf,
     profile: &Profile,
 ) -> Result<Box<dyn eframe::App>, String> {
-    let Opened { model, root } = open_engine(&engine, profile)?;
+    let tiles = display::tiles_wanted(
+        game_root(&engine, std::env::var_os("BN_ROOT").map(PathBuf::from)).as_deref(),
+        settings_path().as_deref(),
+    );
+    let Opened { model, root } = open_engine(&engine, profile, tiles)?;
     if let Some(root) = &root {
         fonts::install(ctx, root);
     }
@@ -84,17 +88,21 @@ fn main() -> eframe::Result {
             theme::apply(&cc.egui_ctx);
             let starter = profile.clone();
             let start: Starter = Box::new(move |ctx, engine| start_engine(ctx, engine, &starter));
+            let remember = |l: Launcher| match bn_client_egui::launch::config_file() {
+                Some(file) => l.with_config(file),
+                None => l,
+            };
             Ok(Box::new(match found {
                 Ok(engine) => match start_engine(&cc.egui_ctx, engine, &profile) {
                     Ok(app) => Launcher::running(app, start),
                     Err(e) => {
                         eprintln!("{e}");
-                        Launcher::new(String::new(), start).with_error(e)
+                        remember(Launcher::new(String::new(), start)).with_error(e)
                     }
                 },
                 Err(not_found) => {
                     eprintln!("{not_found}");
-                    Launcher::new(not_found.to_string(), start)
+                    remember(Launcher::new(not_found.to_string(), start))
                 }
             }))
         }),

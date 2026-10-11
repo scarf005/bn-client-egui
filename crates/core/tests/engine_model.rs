@@ -27,6 +27,11 @@ fn connects_with_hello_then_subscribe_and_exposes_the_map() {
     assert_eq!(m.cell(Pos { x: 21, y: 11 }).glyph, '#');
     assert_eq!(m.cell(Pos { x: 21, y: 11 }).desc, "plastered wooden wall");
     assert_eq!(
+        m.cell(Pos { x: 21, y: 11 }).id,
+        "t_wall",
+        "the id stays for code that matches"
+    );
+    assert_eq!(
         m.cell(Pos { x: 23, y: 12 }).glyph,
         'Z',
         "entities draw over terrain"
@@ -603,14 +608,19 @@ fn clicking_a_distant_closed_door_still_asks_the_engine_for_a_route() {
 }
 
 #[test]
-fn travel_that_plans_nothing_and_moves_nothing_says_there_is_no_route() {
+fn travel_that_plans_nothing_and_moves_nothing_says_the_native_cant_travel_message() {
     let (t, h) = session();
     let mut m = connected(t.on("bn.command.submit", walk_reply()));
     assert!(m.travel(Pos { x: 22, y: 12 }));
     h.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{
         "epoch":"e7f3","command_id":"c:5","stage":"completed"}}));
     m.poll();
-    assert_eq!(m.command().unwrap().stage, "done: no route there");
+    assert_eq!(m.command().unwrap().stage, "done: You can't travel there.");
+    assert_eq!(
+        m.messages(),
+        ["You can't travel there."],
+        "native puts it in the message log"
+    );
 }
 
 #[test]
@@ -645,7 +655,7 @@ fn remembered_furniture_stays_drawn_from_its_memory_overlay() {
         json!({"at": at, "known": "visible", "terrain": floor, "furniture": bench}),
     ));
     m.poll();
-    assert_eq!(m.cell(view).desc, "f_bench", "seen furniture draws");
+    assert_eq!(m.cell(view).id, "f_bench", "seen furniture draws");
 
     h.push(cell_event(
         42,
@@ -653,10 +663,7 @@ fn remembered_furniture_stays_drawn_from_its_memory_overlay() {
     ));
     m.poll();
     let remembered = m.cell(view);
-    assert_eq!(
-        (remembered.glyph, remembered.desc.as_str()),
-        ('{', "f_bench")
-    );
+    assert_eq!((remembered.glyph, remembered.id.as_str()), ('{', "f_bench"));
 
     h.push(cell_event(
         43,
@@ -844,8 +851,14 @@ fn tiled_session() -> EngineModel {
     });
     subscribe["result"]["avatar"]["overlays"] = json!([{
         "kind": "overlay", "id": "worn_jacket", "glyph": "", "color": "",
-        "tile": "overlay_female_worn_jacket", "looks_like": ["overlay_worn_jacket"]
+        "tile": "overlay_female_worn_jacket", "looks_like": ["overlay_worn_jacket"],
+        "tint_keys": ["VARSIZE", "jacket_light"]
+    }, {
+        "kind": "overlay", "id": "mutation_hair_long", "glyph": "", "color": "",
+        "tile": "overlay_female_mutation_hair_long",
+        "mutation": {"id": "hair_long", "types": ["hair_style"], "flags": []}
     }]);
+    subscribe["result"]["avatar"]["traits"] = json!({"hair_color": ["hair_black"]});
     subscribe["result"]["entities"][0]["look"]
         .as_object_mut()
         .unwrap()
@@ -862,10 +875,20 @@ fn tiled_session() -> EngineModel {
         json!({"at": {"dim": "", "x": 9, "y": 8, "z": 0}, "known": "visible", "light": 1,
             "terrain": {"kind": "terrain", "id": "t_wall", "glyph": "|", "color": "light_gray",
                 "looks_like": ["t_wall_base"], "subtile": "edge", "rotation": 1},
+            "reviving": true, "cargo": true,
+            "vehicle": {"kind": "vehicle_part", "id": "door", "glyph": "+", "color": "white",
+                "tile": "vp_door", "tint": {"fg": "#445566"}},
             "items": [
                 {"kind": "item", "id": "corpse", "glyph": "%", "color": "red", "tile": "corpse_mon_zombie",
                  "looks_like": ["corpse"], "stack": 2}
             ]}),
+        json!({"at": {"dim": "", "x": 9, "y": 6, "z": -1}, "known": "visible", "light": 3,
+            "terrain": {"kind": "terrain", "id": "t_dirt", "glyph": ".", "color": "brown"}}),
+        json!({"at": {"dim": "", "x": 10, "y": 6, "z": -1}, "known": "visible", "light": 3,
+            "vehicle": {"kind": "vehicle_part", "id": "roof", "glyph": "#", "color": "white",
+                "tile": "vp_roof", "tint": {"fg": "#f7fbf5"}}}),
+        json!({"at": {"dim": "", "x": 9, "y": 5, "z": -1}, "known": "remembered",
+            "memory": {"terrain": {"kind": "terrain", "id": "t_grass", "glyph": "\"", "color": "green"}}}),
         json!({"at": {"dim": "", "x": 9, "y": 7, "z": 0}, "known": "remembered",
             "memory": {"terrain": {"kind": "terrain", "id": "t_grass", "glyph": "\"", "color": "green",
                 "subtile": "center", "rotation": 0},
@@ -895,7 +918,27 @@ fn a_cell_lists_its_sprites_bottom_first_with_the_engines_tile_selection() {
         .collect::<Vec<_>>();
     // The item is named by its sprite id, the corpse of the monster, not the item type.
     // A pile of two is highlighted over its displayed item, with a sprite that has no glyph.
-    assert_eq!(layers, ["t_wall", "corpse_mon_zombie", "highlight_item"]);
+    // The paint of a vehicle part reaches its foreground sprite only; a loaded cargo part is highlighted over it
+    // and a corpse that can rise is marked last.
+    assert_eq!(
+        layers,
+        [
+            "t_wall",
+            "corpse_mon_zombie",
+            "highlight_item",
+            "vp_door",
+            "highlight_item",
+            "zombie_revival_indicator"
+        ]
+    );
+    assert_eq!(
+        cell.layers[3].tint_fg,
+        Some(bn_client_core::Rgb(0x44, 0x55, 0x66))
+    );
+    assert_eq!(cell.layers[3].tint_bg, None);
+    assert_eq!(cell.layers[0].tint_fg, None);
+    assert_eq!(cell.layers[5].glyph, '\0');
+    assert_eq!(cell.layers[4].glyph, '\0');
     assert_eq!(cell.layers[2].glyph, '\0');
     let wall = &cell.layers[0];
     assert_eq!((wall.subtile.as_deref(), wall.rotation), (Some("edge"), 1));
@@ -961,9 +1004,19 @@ fn creatures_and_the_avatar_draw_over_the_terrain_with_their_overlays() {
             "t_dirt",
             "tin_can",
             "player_female",
-            "overlay_female_worn_jacket"
+            "overlay_female_worn_jacket",
+            "overlay_female_mutation_hair_long"
         ]
     );
+    // A mutation overlay carries what the tileset picks its paint by; a worn item does not.
+    let hair = me.layers[4].mutation.as_ref().unwrap();
+    assert_eq!(
+        (hair.id.as_str(), hair.types.as_slice()),
+        ("hair_long", ["hair_style".to_string()].as_slice())
+    );
+    assert_eq!(hair.traits["hair_color"], ["hair_black"]);
+    assert!(me.layers[3].mutation.is_none());
+    assert_eq!(me.layers[3].tint_keys, ["VARSIZE", "jacket_light"]);
     assert!(!me.layers[2].mirrored && me.layers[2].creature);
     assert_eq!(me.layers[2].glyph, '@');
     assert_eq!(me.layers[3].glyph, '\0');
@@ -986,6 +1039,7 @@ fn a_look_with_a_display_name_is_described_by_it_instead_of_its_id() {
     ));
     m.poll();
     assert_eq!(m.cell(Pos { x: 22, y: 12 }).desc, "floor");
+    assert_eq!(m.cell(Pos { x: 22, y: 12 }).id, "t_floor");
 }
 
 fn avatar_event(inventory: Value, ground: Value) -> Value {
@@ -1356,6 +1410,21 @@ mod failures {
     }
 
     #[test]
+    fn the_failure_names_how_the_engine_process_ended() {
+        let (t, h) = session();
+        let mut m = connected(t);
+        h.exit_with("exit code 0");
+        h.close(&["mcp: the engine is exiting: the client closed its end of stdin"]);
+        m.poll();
+        let failure = m.failure().expect("the exit is reported");
+        assert_eq!(failure.message, "The engine stopped (exit code 0).");
+        assert_eq!(
+            failure.stderr,
+            ["mcp: the engine is exiting: the client closed its end of stdin"]
+        );
+    }
+
+    #[test]
     fn silence_with_a_command_in_flight_is_a_stall_that_a_message_clears() {
         let (t, h) = session();
         let (mut m, clock) = with_clock(t.on("bn.command.submit", walk_reply()));
@@ -1449,6 +1518,121 @@ mod failures {
         assert!(!m.restart());
         assert!(m.failure().is_some());
     }
+}
+
+fn fact_event(kind: &str, data: Value, duration_ms: u64) -> Value {
+    json!({"jsonrpc": "2.0", "method": "bn.events", "params": {"epoch": "e7f3", "events": [
+        {"sequence": "41", "revision": "32", "type": kind, "data": data, "display": {"duration_ms": duration_ms}}
+    ]}})
+}
+
+fn square(x: i32, y: i32, z: i32) -> Value {
+    json!({"dim": "", "x": x, "y": y, "z": z})
+}
+
+#[test]
+fn animation_facts_become_effects_in_view_coordinates() {
+    use bn_client_core::{Pos, Shape};
+    let (t, h) = session();
+    let mut m = connected(t);
+    let me = m.player();
+    h.push(fact_event(
+        "projectile.moved",
+        json!({"projectile": "projectile:1", "path": [square(4, 4, 0), square(5, 4, 0), square(5, 4, 1)],
+            "look": {"kind": "projectile", "id": null, "glyph": "*", "color": "red"}}),
+        30,
+    ));
+    m.poll();
+    let effects = m.take_effects();
+    assert_eq!(effects.len(), 1);
+    assert_eq!(effects[0].duration_ms, 30);
+    let Shape::Projectile { path, glyph, .. } = &effects[0].shape else {
+        panic!("{:?}", effects[0]);
+    };
+    assert_eq!(*glyph, '*');
+    assert_eq!(
+        *path,
+        [
+            Pos {
+                x: me.x + 1,
+                y: me.y
+            },
+            Pos {
+                x: me.x + 2,
+                y: me.y
+            }
+        ],
+        "squares on another level are dropped"
+    );
+    assert!(m.take_effects().is_empty(), "each fact is handed out once");
+}
+
+#[test]
+fn explosion_and_floating_text_facts_carry_their_colors() {
+    use bn_client_core::Shape;
+    let (t, h) = session();
+    let mut m = connected(t);
+    h.push(fact_event(
+        "explosion.started",
+        json!({"explosion": "explosion:1", "at": square(3, 4, 0), "radius": 3, "color": "c_red"}),
+        40,
+    ));
+    m.poll();
+    let effects = m.take_effects();
+    let Shape::Burst { radius, color, .. } = &effects[0].shape else {
+        panic!("{:?}", effects[0]);
+    };
+    assert_eq!(*radius, 3);
+    assert_eq!(
+        *color,
+        bn_client_core::Rgb(170, 40, 40),
+        "c_red resolves to the game's red"
+    );
+    let mut text = fact_event(
+        "combat_text.shown",
+        json!({"at": square(3, 4, 0), "segments": [{"text": "-12", "color": "light_red"}]}),
+        80,
+    );
+    text["params"]["events"][0]["sequence"] = json!("42");
+    h.push(text);
+    m.poll();
+    let effects = m.take_effects();
+    let Shape::Text { segments, .. } = &effects[0].shape else {
+        panic!("{:?}", effects[0]);
+    };
+    assert_eq!(segments[0].0, "-12");
+}
+
+#[test]
+fn a_square_in_sight_below_open_air_is_drawn_with_its_depth_and_only_when_in_sight() {
+    let m = tiled_session();
+    let origin = m.origin();
+    let at = |x: i32, y: i32| {
+        m.cell(Pos {
+            x: x - origin.x,
+            y: y - origin.y,
+        })
+    };
+    // Nothing is published on the avatar's level at (9, 6), but the level below is in sight there.
+    let open = at(9, 6);
+    let layers = open
+        .layers
+        .iter()
+        .map(|l| l.id.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!((layers, open.depth), (vec!["t_dirt"], 1));
+    // A vehicle roof seen through open air has no terrain of its own and is drawn all the same.
+    let roof = at(10, 6);
+    let layers = roof
+        .layers
+        .iter()
+        .map(|l| l.id.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!((layers, roof.depth), (vec!["vp_roof"], 1));
+    // A level below that is only remembered stays hidden, and the avatar's own level has no depth.
+    assert!(at(9, 5).layers.is_empty());
+    assert_eq!(at(9, 8).depth, 0);
+    assert_eq!(at(3, 4).depth, 0);
 }
 
 #[test]
@@ -1554,4 +1738,128 @@ fn query_popup_rows_do_not_carry_the_action_id_as_a_description() {
         .find(|c| c.id == "recipe:aa")
         .unwrap();
     assert!(kept.description.starts_with("Time to complete"));
+}
+
+#[test]
+fn a_menu_banner_is_published_line_by_line() {
+    let mut menu = crafting("favorites");
+    menu["interaction"]["banner"] = json!(["<color_light_cyan>art</color>", "", "Version: x"]);
+    let (t, h) = session();
+    let mut m = connected(t);
+    h.push(change(41, json!({"interaction": menu})));
+    m.poll();
+    assert_eq!(
+        m.menu().unwrap().banner,
+        ["<color_light_cyan>art</color>", "", "Version: x"]
+    );
+}
+
+fn subscribe_with_log(lines: &[(&str, &str, u32)]) -> Vec<serde_json::Value> {
+    let mut reply = subscribe_reply();
+    reply[0]["result"]["messages"] = lines
+        .iter()
+        .map(|(id, text, count)| {
+            json!({"id": id, "text": text, "kind": "bad", "color": "c_red", "count": count})
+        })
+        .collect();
+    reply
+}
+
+#[test]
+fn the_log_a_snapshot_carries_is_the_native_log_before_any_event() {
+    let (t, _h) = ScriptedTransport::new();
+    let t = t.on("bn.hello", vec![fixture("hello_result")]).on(
+        "bn.subscribe",
+        subscribe_with_log(&[("3", "You wake up.", 1), ("7", "Bang!", 2)]),
+    );
+    let m = connected(t);
+    let shown: Vec<_> = m.native_log().iter().map(|l| l.shown()).collect();
+    assert_eq!(shown, ["You wake up.", "Bang! x2"]);
+    assert!(m.native_log().iter().all(|l| l.color.is_some()));
+}
+
+#[test]
+fn a_second_snapshot_with_the_same_log_replaces_lines_instead_of_duplicating_them() {
+    let (t, h) = ScriptedTransport::new();
+    let t = t
+        .on("bn.hello", vec![fixture("hello_result")])
+        .on(
+            "bn.subscribe",
+            subscribe_with_log(&[("3", "You wake up.", 1)]),
+        )
+        .on(
+            "bn.subscribe",
+            subscribe_with_log(&[
+                ("3", "You wake up.", 1),
+                ("7", "Bang!", 1),
+                ("8", "Crash!", 1),
+            ]),
+        );
+    let mut m = connected(t);
+    h.push(fixture("events_45_gap"));
+    m.poll();
+    let shown: Vec<_> = m.native_log().iter().map(|l| l.shown()).collect();
+    assert_eq!(shown, ["You wake up.", "Bang!", "Crash!"]);
+}
+
+#[test]
+fn the_engines_display_options_from_hello_are_the_default_map_mode() {
+    let mut hello = fixture("hello_result");
+    hello["result"]["engine"]["display"] = json!({"tiles": false, "tileset": "MSX"});
+    let (t, _h) = ScriptedTransport::new();
+    let t = t
+        .on("bn.hello", vec![hello])
+        .on("bn.subscribe", subscribe_reply());
+    let m = connected(t);
+    assert_eq!(m.display_default(), Some((false, "MSX".to_string())));
+    let (t, _h) = session();
+    assert_eq!(
+        connected(t).display_default(),
+        None,
+        "older engines publish none"
+    );
+}
+
+#[test]
+fn a_two_pane_menu_publishes_its_panes_with_area_role_and_filter() {
+    let text = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/aim.json"
+    ))
+    .unwrap();
+    let boundary = serde_json::from_str::<Value>(&text).unwrap()["aim"].clone();
+    let (t, h) = session();
+    let mut m = connected(t);
+    h.push(change(41, json!({"interaction": boundary})));
+    m.poll();
+    let menu = m.menu().unwrap();
+    assert_eq!(menu.context, "ADVANCED_INVENTORY");
+    let panes = menu
+        .panes
+        .iter()
+        .map(|p| {
+            (
+                p.label.as_str(),
+                p.role.as_str(),
+                p.area.as_str(),
+                p.storage.as_str(),
+            )
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        panes,
+        [
+            ("Left pane", "source", "Directly below you", "ground"),
+            ("Right pane", "destination", "Worn Items", "worn")
+        ]
+    );
+    let in_left = menu
+        .choices
+        .iter()
+        .filter(|c| c.group.as_deref() == Some("pane:1"))
+        .count();
+    assert_eq!(in_left, 2);
+    assert!(m.actions().iter().any(|a| a.id == "ITEMS_CE"));
+    assert_eq!(menu.panes[0].blocked, ["ITEMS_CONTAINER", "ITEMS_UP"]);
+    assert!(menu.panes[1].blocked.is_empty());
 }

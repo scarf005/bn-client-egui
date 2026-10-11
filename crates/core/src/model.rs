@@ -1,7 +1,7 @@
 use crate::colors::ColorMap;
 use crate::markup::{self, Run};
 
-use crate::protocol::Editor;
+use crate::protocol::{Editor, ModTileset};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Pos {
     pub x: i32,
@@ -30,10 +30,27 @@ pub struct Layer {
     pub creature: bool,
     /// Picks between the weighted variants of a sprite, like the game's per-tile seed.
     pub seed: u32,
+    /// Paint the tileset blends into the background and the foreground sprite.
+    pub tint_bg: Option<Rgb>,
+    pub tint_fg: Option<Rgb>,
+    /// Set on the overlay of a mutation, whose paint the tileset picks from the character's mutations.
+    pub mutation: Option<Mutation>,
+    /// The ids a tileset's tints for an item, bionic or effect overlay are keyed by, first match first.
+    pub tint_keys: Vec<String>,
     /// What stands in for the sprite when the tileset has none; NUL for an overlay, which then draws nothing.
     pub glyph: char,
     pub color: Rgb,
     pub bg: Option<Rgb>,
+}
+
+/// What a tileset needs to paint the sprite of a mutation with the character's hair, skin or eye color.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Mutation {
+    pub id: String,
+    pub types: Vec<String>,
+    pub flags: Vec<String>,
+    /// The ids of the character's mutations by mutation type.
+    pub traits: std::sync::Arc<std::collections::BTreeMap<String, Vec<String>>>,
 }
 
 #[derive(Default)]
@@ -42,15 +59,62 @@ pub struct Cell {
     pub color: Rgb,
     /// Background behind the glyph, when the game colour has one.
     pub bg: Option<Rgb>,
+    /// What a reader or a tooltip says: the display name when the engine sends one, else the id.
     pub desc: String,
+    /// The data id of the topmost look (`t_wall`), stable under translation; empty when nothing is known.
+    /// Code that decides by what is on a square matches this, never `desc`.
+    pub id: String,
     /// What is drawn here from the bottom up; empty when the model offers no sprites.
     pub layers: Vec<Layer>,
     /// Only remembered, not in sight.
     pub remembered: bool,
     /// The game's light level of a square in sight: 0 dark, 1 low, 2 bright only, 3 lit, 4 bright.
     pub light: Option<u8>,
+    /// How many levels down the layers lie, seen through open air; 0 on the avatar's own level.
+    pub depth: u8,
     /// The game's per-square seed for weighted sprite variants, also for squares nothing is known about.
     pub square: u32,
+}
+
+/// One short animation the native game would play on the map, in view coordinates.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Effect {
+    pub shape: Shape,
+    /// How long the native animation holds it.
+    pub duration_ms: u64,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Shape {
+    /// A shot flying along `path`; a tiles client looks `sprite` up first.
+    Projectile {
+        path: Vec<Pos>,
+        glyph: char,
+        sprite: Option<String>,
+        color: Rgb,
+    },
+    /// An explosion starting at `at` and reaching `radius` squares.
+    Burst {
+        at: Pos,
+        radius: u32,
+        color: Rgb,
+        /// The tile id the native tiles draw it with.
+        tile: String,
+    },
+    /// The squares one step of an explosion blasts, or its shrapnel lands on.
+    Blast {
+        cells: Vec<Pos>,
+        shrapnel: bool,
+        tile: String,
+    },
+    /// Floating text at `at`, in colored segments, moving by `scroll` each animation step as the
+    /// native text does; `hp` marks a creature's hit-point readout, which stays beside it.
+    Text {
+        at: Pos,
+        segments: Vec<(String, Rgb)>,
+        scroll: Pos,
+        hp: bool,
+    },
 }
 
 /// One line of the game's own message log. A repeat of the newest line keeps its `id` and raises
@@ -113,6 +177,21 @@ pub struct MenuField {
     pub kind: String,
 }
 
+/// One pane of a two-pane menu such as the advanced inventory: where it looks and how it is filtered.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MenuPane {
+    pub id: String,
+    pub label: String,
+    /// `source` for the pane the engine acts on, `destination` for the other.
+    pub role: String,
+    /// The name of the area the pane shows, as the native screen prints it.
+    pub area: String,
+    pub storage: String,
+    pub filter: String,
+    /// Actions of the areas this pane cannot put items in; the native picker draws them red.
+    pub blocked: Vec<String>,
+}
+
 /// The engine's current interaction, rendered generically.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Menu {
@@ -120,7 +199,13 @@ pub struct Menu {
     pub context: String,
     pub title: String,
     pub message: String,
+    /// Lines drawn above the menu in a fixed-width font, with colour tags.
+    pub banner: Vec<String>,
     pub choices: Vec<MenuChoice>,
+    /// The panes of a two-pane menu; empty for other menus.
+    pub panes: Vec<MenuPane>,
+    /// How many choices the engine has in all; more than `choices.len()` until the rest is fetched.
+    pub total: usize,
     pub can_cancel: bool,
     pub can_set_count: bool,
     pub field: Option<MenuField>,
@@ -202,6 +287,17 @@ pub struct OvermapCell {
     pub bg: Option<Rgb>,
 }
 
+/// What the tiles view draws on an overmap square.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OvermapTile {
+    pub id: String,
+    pub rotation: u8,
+    /// The multitile key, empty for a plain tile.
+    pub subtile: String,
+    /// Tile ids to try when the tileset has no sprite for `id`, nearest first.
+    pub fallbacks: Vec<String>,
+}
+
 /// The overmap screen (`m`): the native window's cells and sidebar, with the cursor.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Overmap {
@@ -215,6 +311,10 @@ pub struct Overmap {
     pub player: (i32, i32, i32),
     pub legend: Vec<String>,
     pub notes: Vec<((i32, i32, i32), String)>,
+    /// The planned travel route, nearest square first.
+    pub path: Vec<(i32, i32, i32)>,
+    /// Row-major like `cells`; empty unless the client said it draws tiles.
+    pub tiles: Vec<OvermapTile>,
 }
 
 impl Overmap {
@@ -258,6 +358,16 @@ impl Overmap {
             .map(|(p, t)| format!("({}, {}, {}) {t}", p.0, p.1, p.2))
             .collect::<Vec<_>>();
         (!notes.is_empty()).then(|| format!("Notes: {}.", notes.join("; ")))
+    }
+
+    /// The tile of view cell `(col, row)`, when the engine sent tile ids.
+    pub fn tile(&self, col: i32, row: i32) -> Option<&OvermapTile> {
+        let inside = (0..self.cols).contains(&col) && (0..self.rows).contains(&row);
+        self.tiles.get(
+            usize::try_from(row * self.cols + col)
+                .ok()
+                .filter(|_| inside)?,
+        )
     }
 
     /// The note on this square, if any.
@@ -323,6 +433,10 @@ pub trait GameModel {
     fn interrupt(&mut self) -> bool {
         false
     }
+    /// The game key would run an action if the model were not busy; the UI queues such keys meanwhile.
+    fn key_bound(&self, _key: &str) -> bool {
+        false
+    }
     /// A game key token (`g`, `SPACE`, `UP`); true if it ran an action.
     fn press(&mut self, _key: &str) -> bool {
         false
@@ -336,6 +450,12 @@ pub trait GameModel {
     fn route(&self) -> Vec<Pos> {
         vec![]
     }
+    /// The engine's `USE_TILES` and `TILES` options, when it publishes them: the map mode a new profile starts in.
+    fn display_default(&self) -> Option<(bool, String)> {
+        None
+    }
+    /// Says whether the client draws tiles now, so the engine sends tile ids where it has them.
+    fn set_tiles(&mut self, _tiles: bool) {}
     /// The overmap screen, while it is open.
     fn overmap(&self) -> Option<Overmap> {
         None
@@ -394,7 +514,13 @@ pub trait GameModel {
     fn scroll_menu(&mut self, _up: bool) -> bool {
         false
     }
+    /// Fetches the next page of a menu that has more choices than it lists.
+    fn more_choices(&mut self) {}
     fn cancel_menu(&mut self) {}
+    /// The files of game data that add sprites to the tileset the game draws, in the engine's load order.
+    fn mod_tilesets(&self) -> &[ModTileset] {
+        &[]
+    }
     /// Season of the game calendar (`spring`, `summer`, `autumn`, `winter`), which picks seasonal sprites.
     fn season(&self) -> Option<String> {
         None
@@ -423,6 +549,10 @@ pub trait GameModel {
         &[]
     }
     fn say(&mut self, text: String);
+    /// The map animations produced since the last call; models without a game have none.
+    fn take_effects(&mut self) -> Vec<Effect> {
+        vec![]
+    }
 }
 
 pub struct FakeModel {
@@ -432,6 +562,14 @@ pub struct FakeModel {
     ground: Vec<String>,
     inventory: Vec<String>,
     messages: Vec<String>,
+    effects: Vec<Effect>,
+}
+
+impl FakeModel {
+    /// An animation the next `take_effects` hands out.
+    pub fn queue_effect(&mut self, effect: Effect) {
+        self.effects.push(effect);
+    }
 }
 
 impl Default for FakeModel {
@@ -442,6 +580,7 @@ impl Default for FakeModel {
             ground: vec!["Rusty knife".into(), "Tin can".into()],
             inventory: vec!["Flashlight".into()],
             messages: vec!["Welcome to the prototype.".into()],
+            effects: vec![],
         }
     }
 }
@@ -464,6 +603,10 @@ impl GameModel for FakeModel {
             action("LEFTDOWN", "Move down left", &["END", "b"]),
             action("RIGHTDOWN", "Move down right", &["NPAGE", "n"]),
         ]
+    }
+
+    fn take_effects(&mut self) -> Vec<Effect> {
+        std::mem::take(&mut self.effects)
     }
 
     fn size(&self) -> Pos {

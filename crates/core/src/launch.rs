@@ -25,7 +25,7 @@ Engine lookup order (first hit wins):
   1. --engine PATH
   2. BN_ENGINE environment variable
   3. cataclysm-bn-tiles / cataclysm-bn (+ .exe) next to this executable or in its parent directory
-  4. the path saved in the config file (updated after every successful start)
+  4. the path saved in the config file (written only when you pick the engine in the setup window)
   5. cataclysm-bn-tiles / cataclysm-bn on PATH
 Default profile: the engine's own user and config dirs (your saves, options, keybindings).
 Game data is taken from BN_ROOT, else the nearest ancestor of the engine containing data/json.")]
@@ -168,13 +168,13 @@ pub struct Opened {
     pub root: Option<PathBuf>,
 }
 
-/// Starts the engine, remembers its path in the config file and loads colours and keys from its game root.
-pub fn open_engine(engine: &Path, profile: &Profile) -> Result<Opened, String> {
+/// Starts the engine and loads colours and keys from its game root. Writes no file: remembering the engine
+/// path is the user's act (`save_engine`).
+///
+/// `tiles` says the client draws tiles: the engine then sends tile ids where it has them.
+pub fn open_engine(engine: &Path, profile: &Profile, tiles: bool) -> Result<Opened, String> {
     let transport = StdioTransport::spawn_with(engine, profile)
         .map_err(|e| format!("cannot start engine {}: {e}", engine.display()))?;
-    if let Some(file) = config_file() {
-        let _ = save_engine(&file, engine);
-    }
     let root = game_root(engine, std::env::var_os("BN_ROOT").map(PathBuf::from));
     let colors = root
         .as_deref()
@@ -183,7 +183,7 @@ pub fn open_engine(engine: &Path, profile: &Profile) -> Result<Opened, String> {
     let respawn = Box::new(move || {
         StdioTransport::spawn_with(&engine, &profile).map(|t| Box::new(t) as Box<dyn Transport>)
     });
-    let model = EngineModel::new(Box::new(transport))
+    let model = EngineModel::connect(Box::new(transport), tiles)
         .with_colors(colors)
         .with_respawn(respawn);
     Ok(Opened { model, root })

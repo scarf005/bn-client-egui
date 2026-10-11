@@ -27,6 +27,8 @@ impl<M: GameModel> App<M> {
         let title = bn_client_core::markup::plain(&menu.title);
         egui::Window::new(&title)
             .id(a11y::dialog_id(&title))
+            .anchor(egui::Align2::CENTER_TOP, super::dialog_offset(ctx))
+            .collapsible(false)
             .default_width(560.0)
             .show(ctx, |ui| {
                 if !menu.message.is_empty() {

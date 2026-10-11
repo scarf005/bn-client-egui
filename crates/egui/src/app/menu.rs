@@ -1,7 +1,7 @@
 //! The engine's current interaction as a window at the same place every time.
 
 use super::App;
-use crate::{a11y, editor};
+use crate::{a11y, editor, text};
 use bn_client_core::{GameModel, markup};
 use eframe::egui::{self, accesskit};
 
@@ -12,12 +12,31 @@ impl<M: GameModel> App<M> {
             self.focus_menu = false;
             self.menu_ids.clear();
             self.refocus_map |= self.menu_title.take().is_some();
+            if std::mem::take(&mut self.in_popup) {
+                self.ack_closed = Some(self.clock.now());
+            }
             return;
         };
-        let entered = self.focus_menu
-            | (self.menu_title.replace(menu.title.clone()).as_ref() != Some(&menu.title));
+        self.follow_options(&menu);
+        // A popup follows another with the same empty title, so its text tells them apart.
+        let shown = format!(
+            "{}\n{}",
+            menu.title,
+            if menu.acknowledges() {
+                &menu.message
+            } else {
+                ""
+            }
+        );
+        let entered =
+            self.focus_menu | (self.menu_title.replace(shown.clone()).as_ref() != Some(&shown));
         if menu.context == "CRAFTING" {
             let focused = self.crafting(ctx, &menu, entered);
+            self.focus_menu = entered && !focused;
+            return;
+        }
+        if menu.context == "ADVANCED_INVENTORY" {
+            let focused = self.aim(ctx, &menu, entered);
             self.focus_menu = entered && !focused;
             return;
         }
@@ -26,6 +45,7 @@ impl<M: GameModel> App<M> {
             self.focus_menu = entered && !focused;
             return;
         }
+        self.in_popup = menu.acknowledges();
         a11y::trap_tab(ctx, self.trapped_by_menu());
         let mut ids = Vec::new();
         let mut focused = false;
@@ -33,6 +53,8 @@ impl<M: GameModel> App<M> {
         let follows = self.menu_focus != menu.focus;
         let mut edited = None;
         let mut key_chosen = None;
+        let mut more = false;
+        let mut filter_clicked = false;
         let mut cancel = self.palette.is_none()
             && ctx.input(|i| i.key_pressed(egui::Key::Escape))
             && menu.can_cancel;
@@ -63,12 +85,13 @@ impl<M: GameModel> App<M> {
         let title = markup::plain(&menu.title);
         egui::Window::new(&title)
             .id(a11y::dialog_id(&title))
-            .title_bar(!title.is_empty())
+            .title_bar(!title.is_empty() && menu.banner.is_empty())
             .anchor(egui::Align2::CENTER_TOP, super::dialog_offset(ctx))
             .collapsible(false)
             .resizable(false)
             .show(ctx, |ui| {
                 ui.set_min_width(520.0);
+                self.banner(ui, &menu.banner);
                 // Cancel sits right under the title, so it is at the same place for every dialog.
                 if menu.can_cancel && !menu.acknowledges() {
                     let button = ui.add_enabled(!self.model.busy(), egui::Button::new("Cancel"));
@@ -99,25 +122,31 @@ impl<M: GameModel> App<M> {
                 } else {
                     egui::ScrollArea::vertical()
                 };
-                area.max_height(ctx.content_rect().height() * 0.6)
+                area.max_height(super::dialog_scroll_height(ctx))
                     .scroll_source(egui::scroll_area::ScrollSource {
                         mouse_wheel: !engine_scroll,
                         ..Default::default()
                     })
                     .show(ui, |ui| {
-                        if menu.screen {
-                            // A composed screen: columns line up only in a fixed-width font.
-                            ui.add(
-                                egui::Label::new(egui::RichText::new(&menu.message).monospace())
-                                    .wrap_mode(egui::TextWrapMode::Extend),
-                            );
-                        } else if !menu.message.is_empty() {
-                            ui.label(self.rich(ui, &menu.message));
+                        // A popup's one button comes first, so it is where the last one was whatever the text.
+                        if !menu.acknowledges() {
+                            self.menu_message(ui, &menu);
                         }
                         if menu.field.as_ref().is_some_and(|f| f.kind == "key") {
                             key_chosen = editor::key_prompt(ui);
+                        } else if let Some(field) = &menu.field {
+                            let response = self.text_prompt(ui, field);
+                            ids.push(response.id);
+                            if entered {
+                                response.request_focus();
+                                focused = response.has_focus();
+                            }
                         }
+                        // A run of rows refused for the same reason says it once.
+                        let mut last_denial = "";
                         for (i, choice) in menu.entries().into_iter().enumerate() {
+                            let said = std::mem::replace(&mut last_denial, &choice.denial)
+                                == choice.denial;
                             if let Some(row) = &choice.editor {
                                 let usable = choice.enabled && !self.model.busy();
                                 let label = markup::plain(&choice.label);
@@ -126,20 +155,40 @@ impl<M: GameModel> App<M> {
                                 {
                                     edited = Some((choice.id.clone(), value));
                                 }
-                                if !choice.enabled && !choice.denial.is_empty() {
+                                if !choice.enabled && !choice.denial.is_empty() && !said {
                                     ui.label(self.rich(ui, &choice.denial));
                                 }
                                 continue;
                             }
                             ui.horizontal(|ui| {
-                                let text = self.rich(ui, &choice.label);
-                                let button = self.control(
-                                    ui,
-                                    text,
-                                    &choice.id,
-                                    choice.enabled,
-                                    choice.selected,
-                                );
+                                let text = if choice.id == "acknowledge" {
+                                    dismiss_text(&choice.label).into()
+                                } else {
+                                    self.rich(ui, &choice.label)
+                                };
+                                // Native list menus highlight the whole row; the title screen's entries,
+                                // a popup's dismiss button and rows with values or a denial beside them
+                                // keep their own width.
+                                let whole_row = menu.context != "MAIN_MENU"
+                                    && choice.id != "acknowledge"
+                                    && choice.columns.is_empty()
+                                    && choice.denial.is_empty();
+                                let layout = if whole_row {
+                                    egui::Layout::top_down_justified(egui::Align::Min)
+                                } else {
+                                    *ui.layout()
+                                };
+                                let button = ui
+                                    .with_layout(layout, |ui| {
+                                        self.control(
+                                            ui,
+                                            text,
+                                            &choice.id,
+                                            choice.enabled,
+                                            choice.selected,
+                                        )
+                                    })
+                                    .inner;
                                 ids.extend(button.enabled().then_some(button.id));
                                 if choice.selected {
                                     cursor_seen = Some(choice.id.clone());
@@ -156,7 +205,16 @@ impl<M: GameModel> App<M> {
                                     focused = button.has_focus();
                                 }
                                 ui.ctx().accesskit_node_builder(button.id, |b| {
-                                    b.set_role(accesskit::Role::MenuItem)
+                                    b.set_role(accesskit::Role::MenuItem);
+                                    // Said once on screen, but every refused row carries its reason.
+                                    if !choice.enabled && !choice.denial.is_empty() {
+                                        b.set_description(markup::plain(&choice.denial));
+                                    }
+                                    if choice.id == "acknowledge" {
+                                        // Screen readers keep the engine's own name for the row.
+                                        b.set_label(markup::plain(&choice.label));
+                                        b.set_description("Space or Enter closes this popup");
+                                    }
                                 });
                                 if choice.id != "acknowledge"
                                     && (button.hovered()
@@ -165,7 +223,7 @@ impl<M: GameModel> App<M> {
                                     described = Some(&choice.description);
                                 }
                                 self.columns(ui, &choice.label, &choice.columns);
-                                if !choice.enabled && !choice.denial.is_empty() {
+                                if !choice.enabled && !choice.denial.is_empty() && !said {
                                     ui.label(self.rich(ui, &choice.denial));
                                 }
                                 if button.clicked() {
@@ -173,13 +231,49 @@ impl<M: GameModel> App<M> {
                                 }
                             });
                         }
+                        if menu.acknowledges() {
+                            self.menu_message(ui, &menu);
+                        }
                     });
-                if let Some(description) = described.filter(|d| !d.is_empty()) {
+                if self.model.actions().iter().any(|a| a.id == "FILTER")
+                    && menu.field.is_none()
+                    && menu.total > FILTER_MIN_ROWS
+                {
+                    let filter = ui.add_enabled(!self.model.busy(), egui::Button::new("Filter"));
+                    ids.extend(filter.enabled().then_some(filter.id));
+                    filter_clicked = filter.clicked();
+                }
+                if menu.total > menu.choices.len() {
+                    // A character creation list is all there is to pick from, so its pages are fetched
+                    // as they are missing; any other long list comes one page per click.
+                    more = menu.context.starts_with("NEW_CHAR_");
+                    let rest = ui.button(format!(
+                        "Load more ({} of {})",
+                        menu.choices.len(),
+                        menu.total
+                    ));
+                    more |= rest.clicked();
+                }
+                if let Some(description) = described.filter(|d| is_prose(d)) {
                     ui.separator();
                     ui.label(self.rich(ui, description));
                 }
             });
         self.menu_ids = ids;
+        if filter_clicked {
+            self.model.invoke_action("FILTER");
+        }
+        if more {
+            self.model.more_choices();
+            ctx.request_repaint();
+        }
+        // Every change is sent, and the newest text goes out again once an in-flight command is done.
+        if let Some((id, text, submit)) = self.prompt_send.clone()
+            && !self.model.busy()
+        {
+            self.prompt_send = None;
+            self.model.fill(&id, &text, submit);
+        }
         self.menu_focus = menu.focus.clone();
         self.menu_cursor = cursor_seen;
         self.focus_menu = entered && !focused;
@@ -195,6 +289,56 @@ impl<M: GameModel> App<M> {
             self.model.choose(&id);
         } else if cancel {
             self.model.cancel_menu();
+        }
+    }
+
+    /// The engine's text prompt, such as a list filter: a box whose every change is sent and that Enter
+    /// submits. The text is the engine's until the box is edited.
+    fn text_prompt(
+        &mut self,
+        ui: &mut egui::Ui,
+        field: &bn_client_core::model::MenuField,
+    ) -> egui::Response {
+        let (seen, text) = &mut self.prompt;
+        if *seen != (field.id.clone(), field.value.clone()) {
+            *seen = (field.id.clone(), field.value.clone());
+            text.clone_from(&field.value);
+        }
+        let label = markup::plain(&field.label);
+        let edit = egui::TextEdit::singleline(text).desired_width(f32::INFINITY);
+        let response = ui.add(edit.hint_text(label.as_str()));
+        let name = label.clone();
+        ui.ctx()
+            .accesskit_node_builder(response.id, move |b| b.set_label(name));
+        let enter = ui.input(|i| i.key_pressed(egui::Key::Enter));
+        let submit = (response.lost_focus() || response.has_focus()) && enter;
+        if response.changed() || submit {
+            let submit = submit || self.prompt_send.as_ref().is_some_and(|s| s.2);
+            self.prompt_send = Some((field.id.clone(), text.clone(), submit));
+        }
+        response
+    }
+
+    /// The title art and version line: fixed-width text, so the art keeps its shape.
+    fn banner(&self, ui: &mut egui::Ui, lines: &[String]) {
+        let font = egui::FontId::monospace(12.0);
+        ui.spacing_mut().item_spacing.y = 0.0;
+        for line in lines {
+            let runs = self.model.styled(line);
+            ui.add(egui::Label::new(text::job(&runs, &font)).wrap_mode(egui::TextWrapMode::Extend));
+        }
+        ui.spacing_mut().item_spacing.y = 4.0;
+    }
+
+    fn menu_message(&self, ui: &mut egui::Ui, menu: &bn_client_core::Menu) {
+        if menu.screen {
+            // A composed screen: columns line up only in a fixed-width font.
+            ui.add(
+                egui::Label::new(egui::RichText::new(&menu.message).monospace())
+                    .wrap_mode(egui::TextWrapMode::Extend),
+            );
+        } else if !menu.message.is_empty() {
+            ui.label(self.rich(ui, &menu.message));
         }
     }
 
@@ -223,5 +367,38 @@ impl<M: GameModel> App<M> {
             };
             ui.label(self.rich(ui, &text));
         }
+    }
+}
+
+/// A description the player can read; the engine fills it with the bound action's name (`NO`,
+/// `QUIT`, `ANY_INPUT`) when an entry has no text of its own.
+fn is_prose(description: &str) -> bool {
+    description
+        .chars()
+        .any(|c| !(c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_'))
+}
+
+/// What a popup's dismiss button shows: the any-key prompt as the engine words it, otherwise "OK" in
+/// place of the engine's action name ("Cancel popup"), which the native popup never shows.
+fn dismiss_text(engine_label: &str) -> &str {
+    if engine_label == "Press any key" {
+        engine_label
+    } else {
+        "OK"
+    }
+}
+
+/// A list this short is read at a glance; the engine's filter is offered from here on.
+const FILTER_MIN_ROWS: usize = 10;
+
+#[cfg(test)]
+mod tests {
+    use super::dismiss_text;
+
+    #[test]
+    fn a_popup_button_says_ok_and_the_any_key_prompt_keeps_its_words() {
+        assert_eq!(dismiss_text("Cancel popup"), "OK");
+        assert_eq!(dismiss_text("Exit screen"), "OK");
+        assert_eq!(dismiss_text("Press any key"), "Press any key");
     }
 }

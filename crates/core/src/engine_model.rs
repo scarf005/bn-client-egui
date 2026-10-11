@@ -5,12 +5,13 @@ use crate::colors::ColorMap;
 use crate::keys;
 use crate::markup::{self, Run};
 use crate::model::{
-    ActionEntry, Cell, CommandStatus, Failure, FailureKind, GameModel, Layer, Loading, LogLine,
-    Menu, MenuChoice, MenuField, Overmap, OvermapCell, Pos, Rgb,
+    ActionEntry, Cell, CommandStatus, Effect, Failure, FailureKind, GameModel, Layer, Loading,
+    LogLine, Menu, MenuChoice, MenuField, MenuPane, Mutation, Overmap, OvermapCell, OvermapTile,
+    Pos, Rgb, Shape,
 };
 use crate::protocol::{
-    self, Cell as WorldCell, Entity, Expect, Incoming, Known, LoadingNotice, Look, Operation,
-    Snapshot, Submit, WorldPos,
+    self, Cell as WorldCell, Entity, Expect, Incoming, Known, LoadingNotice, Look, ModTileset,
+    Operation, Snapshot, Submit, Traits, WorldPos,
 };
 use crate::replica::{Outcome, Replica};
 use crate::transport::{Transport, request};
@@ -34,8 +35,23 @@ enum Pending {
     Submit,
     Viewport,
     Interrupt,
+    /// A hello that only changes whether the engine sends tile ids.
+    Retile,
     Describe,
+    Choices,
 }
+
+/// The choices past the first page of the interaction with this boundary and schema.
+#[derive(Default)]
+struct Paged {
+    key: (String, String),
+    more: Vec<protocol::Choice>,
+    /// A page was asked for and has not arrived.
+    waiting: bool,
+}
+
+/// The engine sends at most this many choices per request.
+const PAGE: u64 = 200;
 
 /// Starts the engine again on the same profile.
 pub type Respawn = Box<dyn FnMut() -> std::io::Result<Box<dyn Transport>>>;
@@ -44,6 +60,13 @@ pub type Respawn = Box<dyn FnMut() -> std::io::Result<Box<dyn Transport>>>;
 const STALL: Duration = Duration::from_secs(120);
 
 pub struct EngineModel {
+    /// Whether the client draws tiles now, and what the engine was last told.
+    tiles: bool,
+    tiles_told: bool,
+    /// The engine's `USE_TILES` and `TILES` options from its hello.
+    display: Option<(bool, String)>,
+    /// The earliest time to tell the engine again after it refused.
+    tiles_retry: Duration,
     transport: Box<dyn Transport>,
     respawn: Option<Respawn>,
     waker: Option<crate::transport::Waker>,
@@ -76,6 +99,10 @@ pub struct EngineModel {
     inventory: Vec<String>,
     /// The engine's own names for the same rows; the native menus list items by these.
     ground_names: Vec<String>,
+    /// Pages of a long menu fetched after the first, for the interaction they belong to.
+    paged: Paged,
+    /// The tile each running explosion is drawn with, from its `explosion.started`.
+    explosion_tiles: HashMap<String, String>,
     inventory_names: Vec<String>,
     trace: Vec<(Instant, &'static str)>,
     received: u64,
@@ -132,6 +159,22 @@ fn top_look(c: &WorldCell) -> Option<&Look> {
             .map(|m| m.overlay.as_ref().unwrap_or(&m.terrain)))
 }
 
+/// One channel of a look's paint.
+fn paint(look: &Look, pick: impl Fn(&protocol::Tint) -> Option<&str>) -> Option<Rgb> {
+    let [r, g, b] = parse_hex(pick(look.tint.as_ref()?)?)?;
+    Some(Rgb(r, g, b))
+}
+
+/// `#rrggbb` to its channels.
+fn parse_hex(text: &str) -> Option<[u8; 3]> {
+    let digits = text.strip_prefix('#').filter(|d| d.len() == 6)?;
+    let channel = |i: usize| u8::from_str_radix(digits.get(i..i + 2)?, 16).ok();
+    Some([channel(0)?, channel(2)?, channel(4)?])
+}
+
+/// How many levels down open air is looked through.
+const MAX_DEPTH: u8 = 10;
+
 /// The game's per-tile seed for weighted sprite variants: the square's coordinates mixed into an integer.
 fn square_seed(p: &WorldPos) -> u32 {
     (p.x as u32).wrapping_add((p.y as u32).wrapping_mul(65536))
@@ -159,8 +202,97 @@ fn direction(dx: i32, dy: i32) -> Option<&'static str> {
 }
 
 impl EngineModel {
+    /// The fetched pages of this interaction, when they belong to it.
+    fn more_of(&self, i: &protocol::Interaction) -> &[protocol::Choice] {
+        let b = self.replica.boundary();
+        match b {
+            Some(b) if self.paged.key == (b.boundary_id.clone(), i.schema_id.clone()) => {
+                &self.paged.more
+            }
+            _ => &[],
+        }
+    }
+
+    /// A published square in view coordinates; none on another level than the avatar's.
+    fn view_of(&self, square: &Value) -> Option<Pos> {
+        let (ox, oy) = self.origin?;
+        let at = |k: &str| square[k].as_i64().map(|v| v as i32);
+        (at("z")? == self.avatar_pos()?.z).then(|| Pos {
+            x: at("x").unwrap_or_default() - ox,
+            y: at("y").unwrap_or_default() - oy,
+        })
+    }
+
+    fn effect_of(&self, fact: &crate::replica::Fact) -> Option<Effect> {
+        let d = &fact.data;
+        let squares = |key: &str| -> Vec<Pos> {
+            d[key]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|s| self.view_of(s))
+                .collect()
+        };
+        let color = |name: &Value| self.colors.resolve(name.as_str().unwrap_or("white")).0;
+        let shape = match fact.kind.as_str() {
+            "projectile.moved" => Shape::Projectile {
+                path: squares("path"),
+                glyph: d["look"]["glyph"].as_str()?.chars().next().unwrap_or('*'),
+                sprite: d["look"]["id"].as_str().map(str::to_string),
+                color: color(&d["look"]["color"]),
+            },
+            "explosion.started" => Shape::Burst {
+                at: self.view_of(&d["at"])?,
+                radius: d["radius"].as_u64().unwrap_or(0) as u32,
+                color: color(&d["color"]),
+                tile: d["tile"].as_str().unwrap_or("explosion").to_string(),
+            },
+            "explosion.blast" | "explosion.shrapnel" => Shape::Blast {
+                cells: squares("cells"),
+                shrapnel: fact.kind == "explosion.shrapnel",
+                tile: self
+                    .explosion_tiles
+                    .get(d["explosion"].as_str().unwrap_or_default())
+                    .cloned()
+                    .unwrap_or_else(|| "explosion".into()),
+            },
+            "combat_text.shown" => Shape::Text {
+                at: self.view_of(&d["at"])?,
+                segments: d["segments"]
+                    .as_array()?
+                    .iter()
+                    .map(|s| {
+                        (
+                            s["text"].as_str().unwrap_or_default().to_string(),
+                            color(&s["color"]),
+                        )
+                    })
+                    .collect(),
+                scroll: Pos {
+                    x: d["scroll"]["x"].as_i64().unwrap_or(0) as i32,
+                    y: d["scroll"]["y"].as_i64().unwrap_or(-1) as i32,
+                },
+                hp: d["kind"] == "hp",
+            },
+            _ => return None,
+        };
+        Some(Effect {
+            shape,
+            duration_ms: fact.duration_ms,
+        })
+    }
+
     pub fn new(transport: Box<dyn Transport>) -> Self {
+        Self::connect(transport, false)
+    }
+
+    /// Starts the session; `tiles` says the client draws tiles, so the engine sends tile ids too.
+    pub fn connect(transport: Box<dyn Transport>, tiles: bool) -> Self {
         let mut m = Self {
+            tiles,
+            tiles_told: tiles,
+            display: None,
+            tiles_retry: Duration::ZERO,
             transport,
             respawn: None,
             waker: None,
@@ -186,6 +318,8 @@ impl EngineModel {
             ground: vec![],
             inventory: vec![],
             ground_names: vec![],
+            paged: Paged::default(),
+            explosion_tiles: HashMap::new(),
             inventory_names: vec![],
             trace: vec![],
             received: 0,
@@ -201,10 +335,12 @@ impl EngineModel {
         m.call(
             "bn.hello",
             json!(
-                protocol::HelloParams::new("bn-client").with_viewport(protocol::Viewport {
-                    cols: VIEW.x as u32,
-                    rows: VIEW.y as u32,
-                })
+                protocol::HelloParams::new("bn-client")
+                    .with_viewport(protocol::Viewport {
+                        cols: VIEW.x as u32,
+                        rows: VIEW.y as u32,
+                    })
+                    .with_tiles(tiles)
             ),
             Pending::Hello,
         );
@@ -239,10 +375,10 @@ impl EngineModel {
         self
     }
 
-    /// Engine messages received plus CPU ticks the engine has used; live tests use it to tell progress
-    /// from a stall, since a loading engine is silent but busy.
+    /// How many engine messages have arrived so far; live tests fail after 120 s without one, however
+    /// busy the engine is: loading steps and activities send heartbeats.
     pub fn received(&self) -> u64 {
-        self.received + self.transport.engine_cpu_ticks()
+        self.received
     }
 
     /// Timestamped protocol milestones (`submit`, `received`, stage names, `events`) since the last call.
@@ -276,6 +412,7 @@ impl EngineModel {
     }
 
     fn handle(&mut self, msg: Incoming) {
+        profiling::scope!("model.handle");
         match msg {
             Incoming::Response { id, result } => self.response(id, result),
             Incoming::SnapshotPart(p) => {
@@ -306,7 +443,11 @@ impl EngineModel {
                                 && from.as_ref() == self.avatar_pos()
                                 && self.replica.route().is_empty();
                             if stuck {
-                                "done: no route there"
+                                let line = "You can't travel there.".to_string();
+                                if self.messages.last() != Some(&line) {
+                                    self.messages.push(line);
+                                }
+                                "done: You can't travel there."
                             } else {
                                 "done"
                             }
@@ -357,9 +498,13 @@ impl EngineModel {
                 self.connected = false;
                 self.busy = false;
                 self.messages.push("Engine connection closed.".into());
+                let message = match self.transport.exit_reason() {
+                    Some(reason) => format!("The engine stopped ({reason})."),
+                    None => "The engine stopped.".into(),
+                };
                 self.failure = Some(Failure {
                     kind: FailureKind::Exited,
-                    message: "The engine stopped.".into(),
+                    message,
                     stderr: self.transport.stderr_tail(),
                 });
             }
@@ -395,6 +540,14 @@ impl EngineModel {
             }
             return;
         }
+        if matches!(kind, Pending::Retile) {
+            // The engine refused (a command was running): ask again a moment later.
+            if result.is_err() {
+                self.tiles_told = !self.tiles;
+                self.tiles_retry = self.clock.now() + RESIZE_DEBOUNCE;
+            }
+            return;
+        }
         if matches!(kind, Pending::Interrupt) {
             // The engine had no activity running; say so once, not per key press.
             if result.is_err() {
@@ -416,6 +569,12 @@ impl EngineModel {
         };
         match kind {
             Pending::Hello => {
+                self.display = value["engine"]["display"].as_object().and_then(|d| {
+                    Some((
+                        d.get("tiles")?.as_bool()?,
+                        d.get("tileset")?.as_str()?.to_string(),
+                    ))
+                });
                 self.mark("hello");
                 self.subscribe();
             }
@@ -423,7 +582,15 @@ impl EngineModel {
                 Ok(s) => self.replica.begin(s),
                 Err(e) => self.messages.push(format!("Bad snapshot: {e}")),
             },
-            Pending::Viewport | Pending::Interrupt | Pending::Describe => {}
+            Pending::Viewport | Pending::Interrupt | Pending::Retile | Pending::Describe => {}
+            Pending::Choices => {
+                self.paged.waiting = false;
+                if let Ok(page) = serde_json::from_value::<protocol::ChoicesResult>(value)
+                    && self.paged.key.0 == page.boundary_id
+                {
+                    self.paged.more.extend(page.choices);
+                }
+            }
             Pending::Submit => {
                 self.mark("received");
                 self.command_id = value["command_id"].as_str().map(String::from);
@@ -447,6 +614,23 @@ impl EngineModel {
         if self.messages.last() != Some(&text) {
             self.messages.push(text);
         }
+    }
+
+    /// The action the game key runs. The engine names the keys of its active context, the player's rebinds
+    /// included; the client knows none. A digit with no binding may be a numpad key (terminals and windows do
+    /// not tell them apart).
+    fn action_for(&self, key: &str) -> Option<String> {
+        let bound_to = |key: &str| {
+            self.replica.boundary().and_then(|b| {
+                b.actions.iter().find(|a| {
+                    a.keys
+                        .as_ref()
+                        .is_some_and(|keys| keys.iter().any(|k| k == key))
+                })
+            })
+        };
+        let offered = bound_to(key).or_else(|| keys::numpad(key).and_then(|k| bound_to(&k)));
+        offered.map(|a| a.id.clone())
     }
 
     fn submit(&mut self, operation: Operation) -> bool {
@@ -594,6 +778,30 @@ impl EngineModel {
         }
     }
 
+    /// Tells the engine whether tile ids are wanted once it is idle: a hello says so, and a viewport
+    /// of the same size makes it publish the open screen again, now with or without them.
+    fn send_tiles(&mut self) {
+        if self.tiles == self.tiles_told
+            || self.busy
+            || self.replica.at().is_none()
+            || self.clock.now() < self.tiles_retry
+        {
+            return;
+        }
+        self.tiles_told = self.tiles;
+        self.call(
+            "bn.hello",
+            json!(protocol::HelloParams::new("bn-client").with_tiles(self.tiles)),
+            Pending::Retile,
+        );
+        let (cols, rows) = (self.declared.x as u32, self.declared.y as u32);
+        self.call(
+            "bn.viewport",
+            json!({"cols": cols, "rows": rows}),
+            Pending::Viewport,
+        );
+    }
+
     fn refresh_actions(&mut self) {
         let offered = self.replica.boundary().map_or(&[][..], |b| &b.actions);
         if !offered.is_empty() || !self.busy {
@@ -705,6 +913,7 @@ impl EngineModel {
             color,
             bg,
             desc,
+            id: look.id.clone().unwrap_or_default(),
             ..Cell::default()
         }
     }
@@ -724,6 +933,10 @@ impl EngineModel {
             mirrored: look.facing.as_deref() == Some("left"),
             creature: matches!(look.kind.as_str(), "monster" | "npc" | "avatar"),
             seed,
+            tint_bg: paint(look, |t| t.bg.as_deref()),
+            tint_fg: paint(look, |t| t.fg.as_deref()),
+            mutation: None,
+            tint_keys: look.tint_keys.clone(),
             glyph: glyph(look),
             color,
             bg,
@@ -731,13 +944,20 @@ impl EngineModel {
     }
 
     /// A character's overlays, which face as it does; an overlay without a sprite draws nothing.
-    fn overlays(&self, body: &Look, overlays: &[Look], seed: u32) -> Vec<Layer> {
+    fn overlays(&self, body: &Look, overlays: &[Look], traits: &Traits, seed: u32) -> Vec<Layer> {
+        let traits = std::sync::Arc::new(traits.clone());
         overlays
             .iter()
             .map(|overlay| Layer {
                 mirrored: body.facing.as_deref() == Some("left"),
                 creature: true,
                 glyph: '\0',
+                mutation: overlay.mutation.as_ref().map(|m| Mutation {
+                    id: m.id.clone(),
+                    types: m.types.clone(),
+                    flags: m.flags.clone(),
+                    traits: traits.clone(),
+                }),
                 ..self.layer(overlay, seed)
             })
             .collect()
@@ -755,14 +975,18 @@ impl EngineModel {
             return unknown;
         };
         let world = self.replica.cell(&p.dim, p.x, p.y, p.z);
-        let mut layers = world.map_or(vec![], |c| self.layers(c));
+        // Nothing published here but a square in sight below: open air, through which the game draws it.
+        let lower = (world.is_none()).then(|| self.below(&p)).flatten();
+        let mut layers = world
+            .or(lower.map(|(c, _)| c))
+            .map_or(vec![], |c| self.layers(c));
         if self.avatar_pos() == Some(&p)
             && let Some(avatar) = self.replica.avatar()
             && let Some(look) = &avatar.look
         {
             let seed = u32::from(avatar.name.bytes().next().unwrap_or(0));
             layers.push(self.layer(look, seed));
-            layers.extend(self.overlays(look, &avatar.overlays, seed));
+            layers.extend(self.overlays(look, &avatar.overlays, &avatar.traits, seed));
         }
         let entity = self
             .replica
@@ -772,8 +996,9 @@ impl EngineModel {
             let look = e.look.as_ref().expect("filtered on look");
             let desc = e.name.clone().unwrap_or_else(|| look_name(look));
             layers.push(self.layer(look, id_seed(&e.id)));
-            layers.extend(self.overlays(look, &e.overlays, id_seed(&e.id)));
+            layers.extend(self.overlays(look, &e.overlays, &e.traits, id_seed(&e.id)));
             layers.extend(self.attitude(e));
+            layers.extend(self.revival(world));
             return Cell {
                 layers,
                 remembered: false,
@@ -783,6 +1008,7 @@ impl EngineModel {
                 ..self.styled(look, desc)
             };
         }
+        layers.extend(self.revival(world));
         match world {
             Some(c) => match top_look(c) {
                 Some(l) => Cell {
@@ -798,7 +1024,12 @@ impl EngineModel {
                     ..Cell::default()
                 },
             },
-            None => unknown,
+            None => Cell {
+                layers,
+                depth: lower.map_or(0, |(_, depth)| depth),
+                light: lower.and_then(|(c, _)| c.light.as_ref()?.as_u64().map(|l| l as u8)),
+                ..unknown
+            },
         }
     }
 
@@ -826,8 +1057,9 @@ impl EngineModel {
             .into_iter()
             .flat_map(|l| {
                 let seeded = !matches!(l.kind.as_str(), "item" | "trap");
-                let stacked = l.stack.is_some_and(|n| n > 1);
-                // The native view highlights a pile right over its displayed item.
+                // A loaded cargo part is highlighted over the part, a pile over its displayed item.
+                let loaded = c.cargo && l.kind == "vehicle_part";
+                let stacked = loaded || l.stack.is_some_and(|n| n > 1);
                 let mark = stacked.then(|| self.marker("highlight_item"));
                 [Some(self.layer(l, if seeded { seed } else { 0 })), mark]
             })
@@ -843,6 +1075,25 @@ impl EngineModel {
         }
     }
 
+    /// The nearest square in sight under `p`, with how far down it is.
+    fn below(&self, p: &WorldPos) -> Option<(&WorldCell, u8)> {
+        (1..=MAX_DEPTH).find_map(|depth| {
+            let cell = self
+                .replica
+                .cell(&p.dim, p.x, p.y, p.z - i32::from(depth))?;
+            // A roof seen from above a vehicle has no terrain published, only the part.
+            (cell.known == Known::Visible && (cell.terrain.is_some() || cell.vehicle.is_some()))
+                .then_some((cell, depth))
+        })
+    }
+
+    /// The mark over a square holding a corpse that can rise: the last thing the native view draws.
+    fn revival(&self, world: Option<&WorldCell>) -> Option<Layer> {
+        world
+            .is_some_and(|c| c.reviving)
+            .then(|| self.marker("zombie_revival_indicator"))
+    }
+
     /// The overlay the native view puts over a monster or NPC for how it regards the avatar.
     fn attitude(&self, e: &Entity) -> Option<Layer> {
         let attitude = e.attitude.as_ref()?;
@@ -853,6 +1104,7 @@ impl EngineModel {
 
 impl GameModel for EngineModel {
     fn poll(&mut self) {
+        profiling::scope!("model.poll");
         let now = self.clock.now();
         while let Some(msg) = self.transport.recv() {
             self.received += 1;
@@ -891,16 +1143,21 @@ impl GameModel for EngineModel {
                 text: line.text,
                 count: line.count,
             };
-            // A repeat replaces the line it counts; ids are never reused, so search the tail only.
-            match self
+            // Ids only grow and are never reused. A line past the newest one is new; any other is a
+            // repeat, or a line a fresh snapshot carries again, and replaces its own line.
+            let id = line.id.parse::<u64>().ok();
+            let newest = self.native.last().and_then(|l| l.id.parse::<u64>().ok());
+            if id.is_some() && id > newest {
+                self.native.push(line);
+            } else if let Some(old) = self
                 .native
                 .iter_mut()
                 .rev()
-                .take(8)
                 .find(|l| !line.id.is_empty() && l.id == line.id)
             {
-                Some(old) => *old = line,
-                None => self.native.push(line),
+                *old = line;
+            } else if id.is_none() || newest.is_none() {
+                self.native.push(line);
             }
         }
         let at_main_menu = self.menu().is_some_and(|m| m.context == "MAIN_MENU");
@@ -910,6 +1167,7 @@ impl GameModel for EngineModel {
         }
         self.at_main_menu = at_main_menu;
         self.send_viewport();
+        self.send_tiles();
         self.refresh_view();
         self.refresh_items();
         self.refresh_actions();
@@ -919,6 +1177,14 @@ impl GameModel for EngineModel {
     fn set_waker(&mut self, waker: crate::transport::Waker) {
         self.transport.set_waker(waker.clone());
         self.waker = Some(waker);
+    }
+
+    fn display_default(&self) -> Option<(bool, String)> {
+        self.display.clone()
+    }
+
+    fn set_tiles(&mut self, tiles: bool) {
+        self.tiles = tiles;
     }
 
     fn failure(&self) -> Option<Failure> {
@@ -931,7 +1197,7 @@ impl GameModel for EngineModel {
         };
         match respawn() {
             Ok(transport) => {
-                let mut fresh = EngineModel::new(transport)
+                let mut fresh = EngineModel::connect(transport, self.tiles)
                     .with_clock(self.clock.clone())
                     .with_colors(self.colors.clone())
                     .with_stall(self.stall);
@@ -982,6 +1248,7 @@ impl GameModel for EngineModel {
     }
 
     fn cell(&self, at: Pos) -> Cell {
+        profiling::scope!("model.cell");
         let square = self.abs(at).map_or(0, |p| square_seed(&p));
         Cell {
             square,
@@ -991,6 +1258,12 @@ impl GameModel for EngineModel {
 
     fn season(&self) -> Option<String> {
         self.replica.environment()?.season.clone()
+    }
+
+    fn mod_tilesets(&self) -> &[ModTileset] {
+        self.replica
+            .environment()
+            .map_or(&[], |e| e.mod_tilesets.as_slice())
     }
 
     fn player(&self) -> Pos {
@@ -1071,6 +1344,28 @@ impl GameModel for EngineModel {
         }
     }
 
+    fn take_effects(&mut self) -> Vec<Effect> {
+        let mut effects = vec![];
+        for fact in self.replica.take_facts() {
+            let id = fact.data["explosion"]
+                .as_str()
+                .unwrap_or_default()
+                .to_string();
+            match fact.kind.as_str() {
+                "explosion.started" => {
+                    let tile = fact.data["tile"].as_str().unwrap_or("explosion");
+                    self.explosion_tiles.insert(id, tile.to_string());
+                }
+                "explosion.ended" => {
+                    self.explosion_tiles.remove(&id);
+                }
+                _ => {}
+            }
+            effects.extend(self.effect_of(&fact));
+        }
+        effects
+    }
+
     fn loading(&self) -> Option<Loading> {
         self.loading.clone()
     }
@@ -1096,9 +1391,9 @@ impl GameModel for EngineModel {
 
     fn travel(&mut self, at: Pos) -> bool {
         // Like Tiles, walking into a closed door next to you opens it; the engine plans no route to one.
-        let (me, desc) = (self.player(), self.cell(at).desc);
+        let (me, id) = (self.player(), self.cell(at).id);
         let step = (at.x - me.x, at.y - me.y);
-        if desc.contains("door") && desc.ends_with("_c") && step.0.abs().max(step.1.abs()) == 1 {
+        if id.contains("door") && id.ends_with("_c") && step.0.abs().max(step.1.abs()) == 1 {
             if let (false, Some(id)) = (self.busy, direction(step.0, step.1)) {
                 self.invoke(&[id.into()]);
             }
@@ -1138,21 +1433,12 @@ impl GameModel for EngineModel {
         !self.busy && self.invoke(&[id.into()])
     }
 
+    fn key_bound(&self, key: &str) -> bool {
+        self.action_for(key).is_some()
+    }
+
     fn press(&mut self, key: &str) -> bool {
-        // The engine names the keys of its active context, the player's rebinds included; the client
-        // knows none. A digit with no binding may be a numpad key (terminals and windows do not tell
-        // them apart).
-        let bound_to = |key: &str| {
-            self.replica.boundary().and_then(|b| {
-                b.actions.iter().find(|a| {
-                    a.keys
-                        .as_ref()
-                        .is_some_and(|keys| keys.iter().any(|k| k == key))
-                })
-            })
-        };
-        let offered = bound_to(key).or_else(|| keys::numpad(key).and_then(|k| bound_to(&k)));
-        if let Some(id) = offered.map(|a| a.id.clone()) {
+        if let Some(id) = self.action_for(key) {
             return self.invoke_action(&id);
         }
         // A "press any key" popup has no key to bind: whatever is pressed acknowledges it.
@@ -1173,7 +1459,9 @@ impl GameModel for EngineModel {
     }
 
     fn menu(&self) -> Option<Menu> {
-        let i = self.replica.boundary()?.interaction.as_ref()?;
+        profiling::scope!("model.menu");
+        let b = self.replica.boundary()?;
+        let i = b.interaction.as_ref()?;
         let text = |k: &str| {
             let v = i.field.as_ref()?.get(k)?.as_str();
             v.map(String::from)
@@ -1200,7 +1488,9 @@ impl GameModel for EngineModel {
                 .and_then(|p| p["id"].as_str())
         };
         // Without the engine's pane list, the rows that belong to no pane are the tabs of a paned menu.
-        let paned = i.choices.iter().any(|c| c.pane_id.is_some());
+        let more = self.more_of(i);
+        let all = || i.choices.iter().chain(more);
+        let paned = all().any(|c| c.pane_id.is_some());
         let tab = |c: &protocol::Choice| {
             c.pane_id.is_none()
                 && (pane_of(&c.label).is_some() || (pane_labels.is_empty() && paned))
@@ -1225,9 +1515,9 @@ impl GameModel for EngineModel {
             can_set_count: i.allow_set_count,
             title: i.title.clone(),
             message: i.message.clone(),
-            choices: i
-                .choices
-                .iter()
+            banner: i.banner.clone().unwrap_or_default(),
+            total: i.choice_total as usize,
+            choices: all()
                 .map(|c| MenuChoice {
                     id: c.id.clone(),
                     label: c.label.clone(),
@@ -1248,10 +1538,29 @@ impl GameModel for EngineModel {
                     editor: c.editor.clone(),
                 })
                 .collect(),
-            can_cancel: i.allow_cancel,
-            pane: i
-                .choices
+            panes: pane_labels
                 .iter()
+                .filter(|p| p["area_label"].as_str().is_some_and(|a| !a.is_empty()))
+                .map(|p| {
+                    let text = |k: &str| p[k].as_str().unwrap_or_default().to_string();
+                    MenuPane {
+                        id: text("id"),
+                        label: text("label"),
+                        role: text("role"),
+                        area: text("area_label"),
+                        storage: text("storage_kind"),
+                        filter: text("filter"),
+                        blocked: p["blocked_areas"]
+                            .as_array()
+                            .into_iter()
+                            .flatten()
+                            .filter_map(|a| a.as_str().map(String::from))
+                            .collect(),
+                    }
+                })
+                .collect(),
+            can_cancel: i.allow_cancel,
+            pane: all()
                 .find(|c| tab(c) && c.selected)
                 .and_then(|c| pane_of(&c.label).map(String::from)),
             screen: i.kind == "custom",
@@ -1296,6 +1605,22 @@ impl GameModel for EngineModel {
                 .iter()
                 .map(|n| (at(&n.pos), n.text.clone()))
                 .collect(),
+            path: wire.path.iter().map(at).collect(),
+            tiles: wire
+                .tiles
+                .iter()
+                .flat_map(|t| {
+                    t.cells
+                        .iter()
+                        .flatten()
+                        .map(|(id, rotation, subtile)| OvermapTile {
+                            id: id.clone(),
+                            rotation: *rotation,
+                            subtile: subtile.clone(),
+                            fallbacks: t.looks_like.get(id).cloned().unwrap_or_default(),
+                        })
+                })
+                .collect(),
         })
     }
 
@@ -1317,6 +1642,45 @@ impl GameModel for EngineModel {
         if self.overmap().is_some() && !self.busy {
             self.submit(Operation::Cancel);
         }
+    }
+
+    fn more_choices(&mut self) {
+        let Some(b) = self.replica.boundary() else {
+            return;
+        };
+        let Some(i) = b.interaction.as_ref() else {
+            return;
+        };
+        let key = (b.boundary_id.clone(), i.schema_id.clone());
+        if self.paged.key != key {
+            self.paged = Paged {
+                key,
+                ..Paged::default()
+            };
+        }
+        let loaded = i.choices.len() + self.paged.more.len();
+        if self.paged.waiting || loaded as u64 >= i.choice_total {
+            return;
+        }
+        let (epoch, boundary_id) = (
+            self.replica.at().map(|a| a.epoch.clone()),
+            b.boundary_id.clone(),
+        );
+        let Some(epoch) = epoch else {
+            return;
+        };
+        self.paged.waiting = true;
+        let params = protocol::ChoicesParams {
+            epoch,
+            boundary_id,
+            offset: loaded as u64,
+            limit: PAGE,
+        };
+        self.call(
+            "bn.interaction.choices",
+            serde_json::to_value(params).expect("choices params serialize"),
+            Pending::Choices,
+        );
     }
 
     fn focus(&self) -> Option<Pos> {

@@ -1,9 +1,12 @@
 use crate::a11y;
 use crate::display::Display;
+use crate::effects::Effects;
 use crate::text;
 use bn_client_core::{Failure, GameModel, Loading, Overmap, Pos, keys};
 use eframe::egui::{self, accesskit};
+use std::collections::VecDeque;
 
+mod aim;
 mod crafting;
 mod menu;
 mod palette;
@@ -14,8 +17,16 @@ mod sidebar;
 const SETTLE: std::time::Duration = std::time::Duration::from_millis(150);
 
 /// The sidebar's initial share of the window width, and its limits in points; independent of its content.
-const SIDEBAR_SHARE: f32 = 0.25;
-const SIDEBAR_WIDTH: (f32, f32) = (280.0, 480.0);
+const SIDEBAR_SHARE: f32 = 0.28;
+/// 430 pt holds the longest status line (R LEG ... Stm 10000/10000) on one line; a small window gives up at most 40%.
+const SIDEBAR_WIDTH: (f32, f32) = (430.0, 600.0);
+/// The most of the window width the sidebar's minimum may take.
+const SIDEBAR_MIN_SHARE: f32 = 0.4;
+/// The most of the window width the sidebar may be dragged to; a saved wider size shrinks to it.
+const SIDEBAR_MAX_SHARE: f32 = 0.4;
+
+/// After a popup closes, Space is held back until it has been quiet this long: the player is still dismissing.
+const POPUP_SPACE_HOLD: std::time::Duration = std::time::Duration::from_millis(500);
 
 /// Side length of one map cell in points.
 pub const CELL: f32 = 16.0;
@@ -27,6 +38,11 @@ fn rgb(c: bn_client_core::Rgb) -> egui::Color32 {
 /// Every dialog opens at the top centre, 12% down, so the same click lands on the same control.
 fn dialog_offset(ctx: &egui::Context) -> [f32; 2] {
     [0.0, ctx.content_rect().height() * 0.12]
+}
+
+/// The tallest a dialog's list grows: the room under the dialog's top, less its title, tabs and description.
+fn dialog_scroll_height(ctx: &egui::Context) -> f32 {
+    (ctx.content_rect().height() * 0.88 - 150.0).max(150.0)
 }
 
 /// Names the drag handle of the panel with this id for screen readers.
@@ -71,6 +87,10 @@ pub struct App<M: GameModel> {
     log_height: Option<f32>,
     /// Title of the menu that last took focus, so a menu is entered once, not on every frame.
     menu_title: Option<String>,
+    /// When the last popup closed, to hold Space back for a moment.
+    ack_closed: Option<std::time::Duration>,
+    /// The menu on screen last frame was a popup.
+    in_popup: bool,
     /// A menu opened and its first control has not taken focus yet (it may be disabled for a frame).
     focus_menu: bool,
     /// The menu just closed; the map takes focus back.
@@ -87,17 +107,35 @@ pub struct App<M: GameModel> {
     menu_focus: Option<String>,
     /// The cursor has been put on the player since the map first appeared.
     cursor_placed: bool,
+    /// The engine's text prompt as last seen (field id, value), and the text typed into it.
+    prompt: ((String, String), String),
+    /// The newest prompt text not yet sent, and whether Enter asked to submit it.
+    prompt_send: Option<(String, String, bool)>,
+    /// Shots, explosions and floating text now playing on the map.
+    effects: Effects,
+    /// The engine's look cursor was up at the last frame.
+    was_looking: bool,
     crafting: crafting::Crafting,
+    aim: aim::Aim,
     pickup: pickup::Pickup,
     /// The engine's selected row of the open menu, to keep it in view when the wheel moves it.
     menu_cursor: Option<String>,
-    /// A click that arrived while a command was in flight, sent when the engine is free again.
-    queued: Option<Queued>,
+    /// Input pressed while a command ran, in order; each goes out as soon as the one before it is done.
+    queued: VecDeque<Queued>,
+    /// The palette's Options entry went through the main menu; when it opens, its Options row is chosen.
+    open_options: Option<std::time::Duration>,
+    /// The loading step the list was last scrolled to; scrolling again every frame would repaint forever.
+    scrolled_to: Option<usize>,
 }
 
 enum Queued {
     Action(String),
+    Key(String),
 }
+
+/// How much input may wait for a running command. A held key repeats faster than the engine can step, and
+/// releasing it must stop the walk soon.
+const QUEUE: usize = 2;
 
 impl<M: GameModel> App<M> {
     pub fn new(model: M) -> Self {
@@ -120,9 +158,15 @@ impl<M: GameModel> App<M> {
             palette: None,
             log_height: None,
             menu_title: None,
+            ack_closed: None,
+            in_popup: false,
             focus_menu: false,
             refocus_map: false,
             cursor_placed: false,
+            prompt: Default::default(),
+            prompt_send: None,
+            effects: Effects::default(),
+            was_looking: false,
             menu_ids: Vec::new(),
             palette_ids: Vec::new(),
             menu_focus: None,
@@ -130,9 +174,12 @@ impl<M: GameModel> App<M> {
             command_live: a11y::Announcer::new(" "),
             status_live: a11y::Announcer::new(", "),
             crafting: Default::default(),
+            aim: Default::default(),
             pickup: Default::default(),
             menu_cursor: None,
-            queued: None,
+            queued: VecDeque::new(),
+            open_options: None,
+            scrolled_to: None,
         }
     }
 
@@ -169,6 +216,11 @@ impl<M: GameModel> App<M> {
         self
     }
 
+    /// How many map animations are playing now.
+    pub fn playing_effects(&self) -> usize {
+        self.effects.len()
+    }
+
     /// The map display: tiles or ASCII, and the tileset.
     pub fn display(&self) -> &Display {
         &self.display
@@ -200,11 +252,11 @@ impl<M: GameModel> App<M> {
         }
     }
 
-    fn loading(&self, ui: &mut egui::Ui, loading: &Loading) {
+    fn loading(&mut self, ui: &mut egui::Ui, loading: &Loading) {
         ui.vertical_centered(|ui| self.loading_content(ui, loading));
     }
 
-    fn loading_content(&self, ui: &mut egui::Ui, loading: &Loading) {
+    fn loading_content(&mut self, ui: &mut egui::Ui, loading: &Loading) {
         ui.heading(&loading.title);
         if let Some(step) = loading.entries.get(loading.index) {
             let status = format!(
@@ -237,7 +289,7 @@ impl<M: GameModel> App<M> {
                 } else {
                     text
                 });
-                if i == loading.index {
+                if i == loading.index && self.scrolled_to.replace(i) != Some(i) {
                     label.scroll_to_me(None);
                 }
             }
@@ -245,6 +297,7 @@ impl<M: GameModel> App<M> {
     }
 
     pub fn show(&mut self, ui: &mut egui::Ui) {
+        profiling::scope!("App::show");
         if !self.wired {
             let ctx = ui.ctx().clone();
             self.model
@@ -252,6 +305,9 @@ impl<M: GameModel> App<M> {
             self.wired = true;
         }
         self.model.poll();
+        self.display.follow_engine(self.model.display_default());
+        self.display.follow_mods(self.model.mod_tilesets());
+        self.model.set_tiles(self.display.tiles());
         a11y::name_window(ui.ctx(), "Cataclysm: Bright Nights client");
         self.pending_since = self
             .model
@@ -269,6 +325,7 @@ impl<M: GameModel> App<M> {
             self.loading(ui, &loading);
             return;
         }
+        self.scrolled_to = None;
         if self.model.live() {
             // Safety net only: incoming engine messages repaint through the waker.
             ui.ctx()
@@ -282,6 +339,7 @@ impl<M: GameModel> App<M> {
             (self.cursor_placed, self.destination, self.marker) = (false, None, None);
         }
         self.run_queued();
+        self.run_aim_steps();
         // Esc interrupts a running activity; with none running it goes to the game like any key
         // (leaves look mode, acknowledges a popup, else opens the main menu).
         let interrupted =
@@ -289,14 +347,18 @@ impl<M: GameModel> App<M> {
         self.walk(ui.ctx());
         self.palette_keys(ui.ctx());
         self.game_keys(ui.ctx(), interrupted);
-        if menu_forwards_keys(self.model.menu().as_ref()) {
-            // Arrow keys belong to the game, whichever widget was clicked last; Tab still moves focus.
+        let open = self.model.menu();
+        if menu_forwards_keys(open.as_ref()) && !self.aim.editing {
+            // Arrow keys belong to the game, whichever widget was clicked last; Tab still moves focus,
+            // except on a tabbed screen where it is the engine's tab key.
+            let tab = open.as_ref().is_some_and(tab_is_engines);
             let ctx = ui.ctx();
             if let Some(id) = ctx.memory(|m| m.focused()) {
                 ctx.memory_mut(|m| {
                     m.set_focus_lock_filter(
                         id,
                         egui::EventFilter {
+                            tab,
                             horizontal_arrows: true,
                             vertical_arrows: true,
                             ..Default::default()
@@ -311,21 +373,27 @@ impl<M: GameModel> App<M> {
             self.menu(ui.ctx());
             return;
         }
+        let room = ui.available_width();
+        let narrowest = SIDEBAR_WIDTH.0.min(room * SIDEBAR_MIN_SHARE);
+        // Never narrower than its minimum, and never more than the share that leaves the map most of the window.
+        let widest = (room * SIDEBAR_MAX_SHARE).clamp(narrowest, SIDEBAR_WIDTH.1);
         egui::Panel::right("sidebar")
-            .default_size(
-                (ui.available_width() * SIDEBAR_SHARE).clamp(SIDEBAR_WIDTH.0, SIDEBAR_WIDTH.1),
-            )
-            .size_range(SIDEBAR_WIDTH.0..=SIDEBAR_WIDTH.1)
+            .default_size((room * SIDEBAR_SHARE).clamp(narrowest, widest))
+            .size_range(narrowest..=widest)
             .show(ui, |ui| {
+                profiling::scope!("sidebar");
                 ui.set_min_width(ui.available_width());
                 self.sidebar_panel(ui)
             });
         label_resize_handle(ui.ctx(), "sidebar", "Resize sidebar");
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE.fill(egui::Color32::BLACK))
-            .show(ui, |ui| match self.model.overmap() {
-                Some(overmap) => self.overmap(ui, &overmap),
-                None => self.map(ui),
+            .show(ui, |ui| {
+                profiling::scope!("map");
+                match self.model.overmap() {
+                    Some(overmap) => self.overmap(ui, &overmap),
+                    None => self.map(ui),
+                }
             });
         self.palette(ui.ctx());
         self.menu(ui.ctx());
@@ -393,18 +461,22 @@ impl<M: GameModel> App<M> {
         // player's bindings, and the engine moves its own cursor. The exceptions are the toolkit's
         // accessibility keys: Tab and Shift+Tab move focus, and Space and Enter act on a focused widget.
         // Menus with a text field keep the keyboard for typing.
-        let focused = ctx.memory(|m| m.focused()).is_some();
+        // Only a focused control of the menu itself takes Space and Enter; with the focus left on the
+        // map, they are the engine's (they close a popup).
+        let focused = ctx
+            .memory(|m| m.focused())
+            .is_some_and(|id| self.menu_ids.contains(&id));
         let toolkit = |token: &str| match &menu {
             // A composed screen has no widgets: every key, Tab included, is the engine's.
             None => false,
             Some(m) if m.screen => false,
-            Some(_) => {
-                token == "TAB"
-                    || token == "BACKTAB"
+            Some(m) => {
+                // Tab switches a tabbed screen's tab, unless a text box has the keyboard.
+                (matches!(token, "TAB" | "BACKTAB") && !tab_is_engines(m))
                     || (focused && matches!(token, "SPACE" | "RETURN"))
             }
         };
-        let forwards = menu_forwards_keys(menu.as_ref());
+        let forwards = menu_forwards_keys(menu.as_ref()) && !self.aim.editing;
         let typed = if forwards { typed } else { vec![] };
         // Esc closes a menu through its cancel button, which also covers menus the engine binds no key to.
         let esc_cancels = menu
@@ -438,8 +510,27 @@ impl<M: GameModel> App<M> {
         if self.palette.is_some() {
             return;
         }
-        for key in typed.into_iter().chain(named) {
-            if self.model.press(&key) {
+        let mut keys = typed.into_iter().chain(named).collect::<Vec<_>>();
+        match menu.as_ref().filter(|m| m.acknowledges()) {
+            // A popup takes one key per frame; the rest of a burst would land on the game it covers.
+            Some(_) => keys.truncate(1),
+            None => {
+                let now = self.clock.now();
+                let held = self
+                    .ack_closed
+                    .is_some_and(|t| now.saturating_sub(t) < POPUP_SPACE_HOLD);
+                // Each Space held back extends the hold: only a pause lets a Space through.
+                if held && keys.iter().any(|k| k == "SPACE") {
+                    self.ack_closed = Some(now);
+                }
+                keys.retain(|k| !(held && k == "SPACE"));
+            }
+        }
+        for key in keys {
+            if !self.model.busy() {
+                self.keys_consumed |= self.model.press(&key);
+            } else if self.model.key_bound(&key) {
+                self.enqueue(Queued::Key(key));
                 self.keys_consumed = true;
             }
         }
@@ -469,15 +560,13 @@ impl<M: GameModel> App<M> {
             .map(|s| (s.label, self.status_live.update(&s.history).to_owned()))
             .filter(|_| self.status_live.changed());
         let text = news.map_or(text, |(label, stages)| format!("{label}: {stages}"));
-        ui.horizontal(|ui| {
-            let label = ui.label(text);
-            ui.ctx()
-                .accesskit_node_builder(label.id, |b| b.set_live(accesskit::Live::Polite));
-            // Stops a wait or other activity, like the native interrupt key.
-            if self.model.busy() && ui.button("Interrupt").clicked() {
-                self.model.interrupt();
-            }
-        });
+        let label = ui.label(text);
+        ui.ctx()
+            .accesskit_node_builder(label.id, |b| b.set_live(accesskit::Live::Polite));
+        // Stops a wait or other activity, like the native interrupt key.
+        if self.model.busy() && ui.button("Interrupt").clicked() {
+            self.model.interrupt();
+        }
     }
 
     /// The command in flight has lasted long enough to show; shorter ones never blink the controls.
@@ -582,11 +671,18 @@ impl<M: GameModel> App<M> {
                 .map_or_else(String::new, |t| format!(" {t}."));
             format!("Overmap ({}, {}, {}).{here}{what}{note}", at.0, at.1, at.2)
         };
-        let status_label = ui.label(status(om.cursor));
+        let route = match om.path.len() {
+            0 => String::new(),
+            n => format!(" Route of {n} squares; click the cursor to go."),
+        };
+        let status_label = ui.label(status(om.cursor) + &route);
         ui.ctx()
             .accesskit_node_builder(status_label.id, |b| b.set_live(accesskit::Live::Polite));
+        self.display.update(ui.ctx());
+        self.display.begin();
         let cell_px = self.display.cell(CELL);
         let font = egui::FontId::monospace(cell_px - 2.0);
+        let mut jump = None;
         ui.horizontal_top(|ui| {
             let (response, painter) = ui.allocate_painter(
                 egui::vec2(om.cols as f32 * cell_px, om.rows as f32 * cell_px),
@@ -615,7 +711,17 @@ impl<M: GameModel> App<M> {
                         response.rect.min + egui::vec2(col as f32, row as f32) * cell_px,
                         egui::Vec2::splat(cell_px),
                     );
-                    if let Some(bg) = cell.bg {
+                    // With a tileset the terrain is its sprite; what lies over it (the player, notes, hordes)
+                    // stays a glyph, so a square is drawn as the glyph alone when it differs from plain terrain.
+                    let sprite = om
+                        .tile(col, row)
+                        .is_some_and(|tile| self.display.paint_overmap(&painter, square, tile));
+                    let at = om.square(col, row);
+                    let overlay = at == om.player || om.note(at).is_some() || om.path.contains(&at);
+                    if sprite && !overlay {
+                        continue;
+                    }
+                    if let Some(bg) = cell.bg.filter(|_| !sprite) {
                         painter.rect_filled(square, 0.0, rgb(bg));
                     }
                     if !cell.glyph.trim().is_empty() {
@@ -628,6 +734,21 @@ impl<M: GameModel> App<M> {
                         );
                     }
                 }
+            }
+            for (i, step) in om.path.iter().enumerate() {
+                let alpha = if i + 1 == om.path.len() { 140 } else { 70 };
+                painter.rect_filled(
+                    egui::Rect::from_min_size(
+                        response.rect.min
+                            + egui::vec2(
+                                (step.0 - om.origin.0) as f32,
+                                (step.1 - om.origin.1) as f32,
+                            ) * cell_px,
+                        egui::Vec2::splat(cell_px),
+                    ),
+                    0.0,
+                    egui::Color32::from_rgba_unmultiplied(0, 200, 255, alpha),
+                );
             }
             let rect_of = |at: (i32, i32, i32)| {
                 egui::Rect::from_min_size(
@@ -684,9 +805,22 @@ impl<M: GameModel> App<M> {
                             _ => b.set_value(text),
                         });
                     }
+                    if !om.notes.is_empty() {
+                        ui.separator();
+                        ui.heading("Notes");
+                    }
+                    for (at, text) in &om.notes {
+                        let link = ui.link(format!("({}, {}) {text}", at.0, at.1));
+                        if link.clicked() {
+                            jump = Some(*at);
+                        }
+                    }
                 });
             });
         });
+        if let Some(at) = jump {
+            self.model.overmap_cursor_to(at);
+        }
     }
 
     fn map(&mut self, ui: &mut egui::Ui) {
@@ -701,6 +835,11 @@ impl<M: GameModel> App<M> {
             x: (room.x / cell_px) as i32,
             y: (room.y / cell_px) as i32,
         });
+        // Facts are always taken, so a long pause never replays them; reduced motion drops them.
+        let now = ui.input(|i| i.time);
+        let produced = self.model.take_effects();
+        self.effects
+            .add(now, produced, self.display.reduced_motion());
         let size = self.model.size();
         if size.x <= 0 || size.y <= 0 {
             ui.label("No map loaded");
@@ -717,9 +856,14 @@ impl<M: GameModel> App<M> {
             x: view.x + origin.x,
             y: view.y + origin.y,
         };
-        if let Some(focus) = self.model.focus() {
+        let looking = self.model.focus();
+        if let Some(focus) = looking {
             self.cursor = to_abs(focus);
+        } else if std::mem::take(&mut self.was_looking) {
+            // Native shows no cursor outside look mode: it goes back to the player.
+            self.cursor = to_abs(self.model.player());
         }
+        self.was_looking = looking.is_some();
         let player = self.model.player();
         if !std::mem::replace(&mut self.cursor_placed, true) {
             self.cursor = to_abs(player);
@@ -728,10 +872,10 @@ impl<M: GameModel> App<M> {
         let route = self.model.route();
         let mut status = format!(
             "Player at ({}, {}). Cursor ({}, {}): {}.",
-            player.x,
-            player.y,
-            cursor.x,
-            cursor.y,
+            to_abs(player).x,
+            to_abs(player).y,
+            to_abs(cursor).x,
+            to_abs(cursor).y,
             // The engine's mouse-view text when it has answered for this square.
             self.model
                 .hover_text(cursor)
@@ -836,15 +980,22 @@ impl<M: GameModel> App<M> {
             }
         }
         self.cursor = to_abs(cursor);
+        // A dialog on top owns the pointer; the tooltip would hang over it.
+        let tip = self.model.menu().is_none() && self.palette.is_none();
+        // The tooltip is about the square under the pointer; keyboard moves of the cursor leave it alone.
+        let under = response.hover_pos().map_or(cursor, cell_at);
         response.clone().on_hover_ui_at_pointer(|ui| {
+            if !tip {
+                return;
+            }
             // The engine's own mouse-view text when it has answered for this square.
-            if let Some(lines) = self.model.hover_text(cursor) {
+            if let Some(lines) = self.model.hover_text(under) {
                 for line in lines {
                     // A tooltip at the pointer gets almost no width to wrap in; one line never wraps.
                     ui.add(egui::Label::new(line).wrap_mode(egui::TextWrapMode::Extend));
                 }
             } else {
-                let desc = self.model.cell(cursor).desc;
+                let desc = self.model.cell(under).desc;
                 if desc != "unknown" {
                     ui.add(egui::Label::new(desc).wrap_mode(egui::TextWrapMode::Extend));
                 }
@@ -879,6 +1030,7 @@ impl<M: GameModel> App<M> {
         if tiles {
             painter.rect_filled(response.rect, 0.0, egui::Color32::BLACK);
         }
+        profiling::scope!("map cells");
         for y in 0..size.y {
             for x in 0..size.x {
                 let cell = self.model.cell(Pos { x, y });
@@ -949,7 +1101,18 @@ impl<M: GameModel> App<M> {
             egui::Stroke::new(1.0, egui::Color32::WHITE),
             egui::StrokeKind::Inside,
         );
+        let ascii = !self.display.tiles();
+        self.effects
+            .paint(&painter, now, cell_px, rect, &mut self.display, ascii);
+        if self.effects.active() {
+            ui.ctx().request_repaint();
+        }
     }
+}
+
+/// Whether Tab and Shift+Tab are the engine's: its screen has tabs and no text box takes the keyboard.
+fn tab_is_engines(menu: &bn_client_core::Menu) -> bool {
+    menu.field.is_none() && !menu.tabs().is_empty()
 }
 
 /// Whether the keys pressed go to the engine: with no menu open, or in a menu that has no text field

@@ -11,6 +11,8 @@ fn overmap(legend: &[&str], notes: &[((i32, i32, i32), &str)]) -> Overmap {
         player: (50, 50, 0),
         legend: legend.iter().map(|s| s.to_string()).collect(),
         notes: notes.iter().map(|(p, t)| (*p, t.to_string())).collect(),
+        path: vec![],
+        tiles: vec![],
     }
 }
 

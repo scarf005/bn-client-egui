@@ -5,6 +5,8 @@ use eframe::egui::{self, FontId, TextStyle};
 pub fn apply(ctx: &egui::Context) {
     ctx.all_styles_mut(|style| {
         style.animation_time = 0.0;
+        // Solid scroll bars always show that a list goes on, instead of fading in when hovered.
+        style.spacing.scroll = egui::style::ScrollStyle::solid();
         style.visuals = egui::Visuals::dark();
         style.visuals.window_corner_radius = egui::CornerRadius::ZERO;
         style.visuals.menu_corner_radius = egui::CornerRadius::ZERO;

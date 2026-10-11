@@ -874,6 +874,34 @@ mod overmap {
 }
 
 #[test]
+fn a_menu_with_more_choices_than_listed_asks_for_the_next_page_near_the_end() {
+    let (t, h) = session();
+    let t = t.on(
+        "bn.interaction.choices",
+        vec![json!({"jsonrpc":"2.0","id":3,"result":{"boundary_id":"b:13","total":3,"choices":[
+            {"id":"c:3","label":"glass jar","enabled":true,"description":"","denial":"","selectable":true,
+             "selected":false,"columns":[]}]}})],
+    );
+    let mut app = TuiApp::new(connected(t));
+    for name in ["events_41_walk", "events_42_message"] {
+        h.push(fixture(name));
+    }
+    let mut menu = menu_event(fixture("events_43_menu"), "c:1");
+    menu["params"]["events"][0]["changes"]["interaction"]["interaction"]["choice_total"] = json!(3);
+    h.push(menu);
+    app.model.poll();
+    let _ = render(&mut app);
+    app.model.poll();
+    let asked = h
+        .sent()
+        .into_iter()
+        .filter(|m| m["method"] == "bn.interaction.choices")
+        .count();
+    assert_eq!(asked, 1);
+    assert!(text(&render(&mut app)).contains("glass jar"));
+}
+
+#[test]
 fn a_composed_screen_shows_its_text_and_its_actions_take_the_keys() {
     let (mut app, h) = engine();
     for name in ["events_41_walk", "events_42_message"] {
@@ -894,4 +922,57 @@ fn a_composed_screen_shows_its_text_and_its_actions_take_the_keys() {
     );
     app.handle_key(key(KeyCode::Tab));
     assert_eq!(sent_actions(&h), [json!("NEXT_TAB")]);
+}
+
+mod overmap_route {
+    use super::*;
+
+    #[test]
+    fn the_route_and_the_notes_are_shown_and_a_note_row_moves_the_cursor() {
+        let (mut app, h) = engine();
+        h.push(common::overmap_event(100));
+        app.model.poll();
+        let screen = text(&render(&mut app));
+        assert!(screen.contains("Route of 2 squares"), "{screen}");
+        assert!(screen.contains("(99, 200) cache"), "{screen}");
+        // The note list sits at the foot of the sidebar; its one row is the note.
+        let row = screen
+            .lines()
+            .position(|l| l.contains("(99, 200) cache"))
+            .unwrap() as u16;
+        let col = screen
+            .lines()
+            .nth(row as usize)
+            .unwrap()
+            .find("(99, 200)")
+            .unwrap() as u16;
+        app.handle_mouse(MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: col,
+            row,
+            modifiers: KeyModifiers::NONE,
+        });
+        assert_eq!(
+            submits(&h).last().unwrap()["params"]["operation"],
+            json!({"kind":"set_target","pos":{"dim":"","x":99,"y":200,"z":0}})
+        );
+    }
+}
+
+#[test]
+fn enter_chooses_the_cursor_row_when_the_menu_binds_no_confirm_key() {
+    let (mut app, h) = engine_n(1);
+    for name in ["events_41_walk", "events_42_message"] {
+        h.push(fixture(name));
+    }
+    let mut menu = menu_event(fixture("events_43_menu"), "c:1");
+    menu["params"]["events"][0]["changes"]["interaction"]["actions"] =
+        json!([{"id":"DOWN","name":"Down","keys":["DOWN"]}]);
+    h.push(menu);
+    app.model.poll();
+    app.handle_key(key(KeyCode::Enter));
+    assert_eq!(
+        submits(&h)[0]["params"]["operation"],
+        json!({"kind":"choose","choice_id":"c:1"})
+    );
 }

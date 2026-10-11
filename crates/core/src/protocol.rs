@@ -29,6 +29,8 @@ pub struct At {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Look {
+    /// Absent in a cell layer, whose name already says it.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub kind: String,
     pub id: Option<String>,
     /// The player-facing name, when the engine sends one; otherwise only `id` identifies it.
@@ -54,6 +56,34 @@ pub struct Look {
     /// Items on the square when there are several, on the displayed item.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stack: Option<u32>,
+    /// Paint of a vehicle part, as `#rrggbb`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tint: Option<Tint>,
+    /// Set on the overlay of a mutation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mutation: Option<LookMutation>,
+    /// Set on the overlay of an item, a bionic or an effect: the ids a tileset's tints are keyed by.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tint_keys: Vec<String>,
+}
+
+/// What a tileset's `tint_pairs` are keyed by to tint the sprite of a mutation.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LookMutation {
+    pub id: String,
+    pub types: Vec<String>,
+    pub flags: Vec<String>,
+}
+
+/// The ids of a character's mutations by mutation type.
+pub type Traits = std::collections::BTreeMap<String, Vec<String>>;
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Tint {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bg: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fg: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -87,6 +117,12 @@ pub struct Cell {
     pub furniture: Option<Look>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub fields: Vec<FieldLook>,
+    /// A corpse here can rise.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub reviving: bool,
+    /// A cargo part of a vehicle here holds items.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub cargo: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub traps: Vec<Look>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -97,6 +133,42 @@ pub struct Cell {
     pub light: Option<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub memory: Option<Memory>,
+}
+
+impl Cell {
+    /// Puts back what the engine leaves out of a layer: the kind its name says and the default
+    /// `center` subtile of a shaped layer.
+    pub fn complete(&mut self) {
+        let shape = |look: &mut Look, kind: &str| {
+            if look.kind.is_empty() {
+                look.kind = kind.into();
+            }
+            look.subtile.get_or_insert_with(|| "center".into());
+        };
+        let layers = [
+            (self.terrain.as_mut(), "terrain"),
+            (self.furniture.as_mut(), "furniture"),
+            (self.vehicle.as_mut(), "vehicle_part"),
+        ];
+        layers.into_iter().for_each(|(look, kind)| {
+            look.into_iter().for_each(|look| shape(look, kind));
+        });
+        self.traps.iter_mut().for_each(|look| shape(look, "trap"));
+        self.fields
+            .iter_mut()
+            .for_each(|f| shape(&mut f.look, "field"));
+        for look in &mut self.items {
+            if look.kind.is_empty() {
+                look.kind = "item".into();
+            }
+        }
+        if let Some(memory) = &mut self.memory {
+            shape(&mut memory.terrain, "terrain");
+            if let Some(overlay) = &mut memory.overlay {
+                overlay.subtile.get_or_insert_with(|| "center".into());
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -111,6 +183,9 @@ pub struct Entity {
     /// Sprites drawn over a character, bottom first.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub overlays: Vec<Look>,
+    /// The ids of its mutations by mutation type, which tint the mutation overlays.
+    #[serde(default, skip_serializing_if = "Traits::is_empty")]
+    pub traits: Traits,
     /// `hostile`, `friendly`, `neutral` or `any`: how the creature regards the avatar.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub attitude: Option<String>,
@@ -143,6 +218,9 @@ pub struct Avatar {
     /// Sprites drawn over the avatar, bottom first.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub overlays: Vec<Look>,
+    /// The ids of its mutations by mutation type, which tint the mutation overlays.
+    #[serde(default, skip_serializing_if = "Traits::is_empty")]
+    pub traits: Traits,
     pub stats: Vec<Stat>,
     /// Carried items; optional on the wire (absent and empty both mean nothing carried).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -172,6 +250,20 @@ pub struct Environment {
     pub weather: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub season: Option<String>,
+    /// The files of game data that add sprites to tilesets, in the engine's load order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub mod_tilesets: Vec<ModTileset>,
+}
+
+/// A file of game data that adds sprites to the tilesets its `compatibility` names.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ModTileset {
+    pub path: String,
+    /// The folder the sheet files of the file are named from.
+    pub base: String,
+    /// Which `mod_tileset` of the file this is, counting from 1.
+    pub index: u32,
+    pub compatibility: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -257,6 +349,9 @@ pub struct Interaction {
     pub context: String,
     pub title: String,
     pub message: String,
+    /// Fixed-width lines drawn above the menu: the main menu's title art and version.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub banner: Option<Vec<String>>,
     pub allow_cancel: bool,
     pub allow_set_count: bool,
     pub choices: Vec<Choice>,
@@ -282,6 +377,18 @@ pub struct OvermapWire {
     pub cells: Vec<Vec<(String, u8, u8)>>,
     pub legend: Vec<String>,
     pub notes: Vec<OvermapNote>,
+    #[serde(default)]
+    pub path: Vec<WorldPos>,
+    #[serde(default)]
+    pub tiles: Option<OvermapTiles>,
+}
+
+/// Tile ids of the overmap squares, for a client that said it draws tiles.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OvermapTiles {
+    /// `[tile, rotation, subtile]` per square, row-major like the glyph cells.
+    pub cells: Vec<Vec<(String, u8, String)>>,
+    pub looks_like: std::collections::BTreeMap<String, Vec<String>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -296,6 +403,16 @@ pub struct Boundary {
     pub boundary_id: String,
     pub readiness: Readiness,
     pub actions: Vec<Action>,
+    pub interaction: Option<Interaction>,
+}
+
+/// A boundary in an event: `actions` is absent when it keeps the previous boundary's.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct BoundaryChange {
+    pub boundary_id: String,
+    pub readiness: Readiness,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub actions: Option<Vec<Action>>,
     pub interaction: Option<Interaction>,
 }
 
@@ -323,7 +440,7 @@ pub struct Changes {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub route: Option<Vec<WorldPos>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub interaction: Option<Boundary>,
+    pub interaction: Option<BoundaryChange>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -350,6 +467,16 @@ pub struct Event {
     pub changes: Changes,
 }
 
+/// One line of the native message log, as `message.logged` events and snapshots carry it.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct LoggedMessage {
+    pub id: String,
+    pub text: String,
+    pub kind: String,
+    pub color: String,
+    pub count: u32,
+}
+
 /// Result of `bn.subscribe`; `parts` snapshot-part notifications follow.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Snapshot {
@@ -369,6 +496,9 @@ pub struct Snapshot {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub route: Vec<WorldPos>,
     pub entities: Vec<Entity>,
+    /// The newest message log lines, oldest first; omitted when the log is empty.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub messages: Vec<LoggedMessage>,
     pub parts: u32,
 }
 
@@ -484,6 +614,9 @@ pub struct HelloParams {
     /// Map cells the client can show; the engine sizes its terrain window to them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub viewport: Option<Viewport>,
+    /// The client draws tiles, so the engine adds tile ids where it has them (the overmap).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub tiles: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -501,7 +634,12 @@ impl HelloParams {
                 version: env!("CARGO_PKG_VERSION").into(),
             },
             viewport: None,
+            tiles: false,
         }
+    }
+
+    pub fn with_tiles(self, tiles: bool) -> Self {
+        Self { tiles, ..self }
     }
 
     pub fn with_viewport(self, viewport: Viewport) -> Self {
