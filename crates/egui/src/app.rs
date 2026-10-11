@@ -1066,8 +1066,8 @@ impl<M: GameModel> App<M> {
                     y: (cursor.y + dy).clamp(0, size.y - 1),
                 };
             }
-            // A keyboard cursor gets the same native description a hovering pointer does, once it moves.
-            if self.model.focus().is_none() && (dx, dy) != (0, 0) {
+            // A keyboard cursor gets the same native description a hovering pointer does.
+            if self.model.focus().is_none() {
                 self.model.hover(cursor);
             }
             // Shift+F10, the keyboard's context-menu key, is the right click on the cursor square.
