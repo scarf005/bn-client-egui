@@ -170,7 +170,7 @@ impl<M: GameModel> TuiApp<M> {
                 spans.extend([
                     Span::raw("["),
                     lit("ON", on),
-                    Span::raw("/"),
+                    Span::raw("|"),
                     lit("OFF", !on),
                 ]);
                 spans.push(Span::raw("]"));

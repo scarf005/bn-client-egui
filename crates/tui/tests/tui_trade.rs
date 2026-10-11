@@ -224,7 +224,7 @@ fn each_pane_shows_its_page_and_the_category_state_is_lit() {
         text.contains("< Page 1/2 >") && text.contains("< Page 1/1 >"),
         "{text}"
     );
-    let (x, y) = find(&t, "ON/OFF");
+    let (x, y) = find(&t, "ON|OFF");
     let buf = t.backend().buffer();
     assert_eq!(buf[(x, y)].fg, Color::LightGreen);
     assert_eq!(buf[(x + 3, y)].fg, Color::DarkGray);
@@ -238,5 +238,5 @@ fn an_engine_without_category_mode_draws_no_state() {
         .unwrap()
         .remove("category_mode");
     let (mut app, _) = open(boundary);
-    assert!(!lines(&render(&mut app)).join("\n").contains("ON/OFF"));
+    assert!(!lines(&render(&mut app)).join("\n").contains("ON|OFF"));
 }

@@ -64,7 +64,7 @@ fn category_state(ui: &mut egui::Ui, on: bool) {
         ui.spacing_mut().item_spacing.x = 0.0;
         ui.label("[");
         ui.label(lit("ON", on));
-        ui.label("/");
+        ui.label("|");
         ui.label(lit("OFF", !on));
         ui.label("]");
     })
