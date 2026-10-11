@@ -133,6 +133,8 @@ pub struct App<M: GameModel> {
     held: Option<String>,
     /// The palette's Options entry went through the main menu; when it opens, its Options row is chosen.
     open_options: Option<std::time::Duration>,
+    /// The text prompt that already took the keyboard focus when it opened.
+    prompt_focused: Option<String>,
     /// The loading step the list was last scrolled to; scrolling again every frame would repaint forever.
     scrolled_to: Option<usize>,
 }
@@ -190,6 +192,7 @@ impl<M: GameModel> App<M> {
             queued: VecDeque::new(),
             held: None,
             open_options: None,
+            prompt_focused: None,
             scrolled_to: None,
         }
     }
@@ -1021,7 +1024,10 @@ impl<M: GameModel> App<M> {
         if response.secondary_clicked() && !self.model.context_click(clicked) {
             self.menu_cell = clicked;
         }
-        if self.refocus_map && self.model.menu().is_none() {
+        // With nothing focused, an arrow key would move egui's focus onto a toolbar widget and a later
+        // Space would press it, so the map holds the focus.
+        if (self.refocus_map || ui.memory(|m| m.focused()).is_none()) && self.model.menu().is_none()
+        {
             self.refocus_map = false;
             response.request_focus();
         }

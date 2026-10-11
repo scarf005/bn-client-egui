@@ -115,7 +115,7 @@ fn rejected_command_is_reported_and_blocks_the_walk_once() {
     m.step_toward(Pos { x: 30, y: 12 });
     h.push(fixture("command_rejected"));
     m.poll();
-    assert!(m.messages().last().unwrap().contains("stale_revision"));
+    assert!(m.messages().last().unwrap().contains("the screen changed"));
     assert!(
         !m.step_toward(Pos { x: 30, y: 12 }),
         "walk stops after a rejection"
@@ -566,7 +566,10 @@ fn interrupted_by(error: &str) -> (EngineModel, Vec<String>) {
 #[test]
 fn interrupted_command_shows_the_engine_error_reason() {
     let (_, messages) = interrupted_by("not_ready");
-    assert_eq!(messages.last().unwrap(), "Command interrupted: not_ready.");
+    assert_eq!(
+        messages.last().unwrap(),
+        "Command interrupted: the game is not ready."
+    );
 }
 
 #[test]
@@ -1894,4 +1897,15 @@ fn a_field_is_painted_with_the_tint_of_its_type_on_both_layers() {
         .unwrap();
     assert_eq!(field.tint_bg, Some(Rgb(0, 170, 0)));
     assert_eq!(field.tint_fg, Some(Rgb(0, 170, 0)));
+}
+
+#[test]
+fn a_rejected_command_is_logged_in_words_not_as_the_engines_error_name() {
+    let (t, h) = session();
+    let mut m = connected(t.on("bn.command.submit", walk_reply()));
+    assert!(m.invoke_action("RIGHT"));
+    h.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{
+        "epoch":"e7f3","command_id":"c:5","stage":"rejected","error":"validation_failed"}}));
+    m.poll();
+    assert_eq!(m.messages(), ["Command rejected: not possible here."]);
 }

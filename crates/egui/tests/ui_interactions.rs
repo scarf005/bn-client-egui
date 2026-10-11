@@ -887,6 +887,36 @@ fn space_closes_a_popup_while_the_focus_is_still_on_the_map() {
 }
 
 #[test]
+fn an_arrow_key_with_nothing_focused_leaves_the_toolbar_alone() {
+    let (mut h, _script) = harness();
+    h.run_steps(3);
+    h.key_press(egui::Key::ArrowLeft);
+    h.run_steps(3);
+    assert!(
+        !h.get_by_label("Reduced motion")
+            .accesskit_node()
+            .is_focused(),
+        "arrows walk; they do not move the toolkit focus"
+    );
+    assert!(h.get_by_label("Map").accesskit_node().is_focused());
+}
+
+#[test]
+fn an_arrow_key_on_a_popup_keeps_the_focus_on_its_button() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    script.push(show(41, json!([]), popup_with("First.")));
+    h.run_steps(4);
+    h.key_press(egui::Key::ArrowLeft);
+    h.run_steps(4);
+    let button = h
+        .get_all_by_role_and_label(egui::accesskit::Role::MenuItem, "Cancel popup")
+        .next()
+        .unwrap();
+    assert!(button.accesskit_node().is_focused());
+}
+
+#[test]
 fn a_popup_right_after_another_takes_the_focus_too() {
     let (mut h, script) = harness();
     h.run_steps(3);
@@ -1042,4 +1072,24 @@ fn the_filter_button_is_for_long_lists_not_for_a_two_row_question() {
         h.run_steps(4);
         assert_eq!(h.query_by_label("Filter").is_some(), shown, "{rows} rows");
     }
+}
+
+#[test]
+fn a_filter_prompt_that_follows_an_untitled_list_takes_the_typing_at_once() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    let filter = json!([{"id":"FILTER","name":"Filter","keys":["/"]}]);
+    script.push(show(41, filter.clone(), list_with(30)));
+    h.run_steps(4);
+    let mut prompt = text_prompt("");
+    prompt["title"] = "".into();
+    script.push(show(42, json!([]), prompt));
+    h.run_steps(4);
+    h.get_by_label("Filter:").type_text("zombie");
+    h.run_steps(3);
+    let sent = submits(&script);
+    assert!(
+        sent.iter().any(|s| s["kind"] == "fill"),
+        "typed text reaches the engine without a click first: {sent:?}"
+    );
 }

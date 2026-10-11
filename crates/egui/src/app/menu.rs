@@ -50,7 +50,11 @@ impl<M: GameModel> App<M> {
             return;
         }
         self.in_popup = menu.acknowledges();
-        a11y::trap_tab(ctx, self.trapped_by_menu());
+        a11y::trap_tab(
+            ctx,
+            self.trapped_by_menu(),
+            super::menu_forwards_keys(Some(&menu)),
+        );
         let mut ids = Vec::new();
         let mut action_ids = Vec::new();
         let mut focused = false;
@@ -142,10 +146,16 @@ impl<M: GameModel> App<M> {
                         } else if let Some(field) = &menu.field {
                             let response = self.text_prompt(ui, field);
                             ids.push(response.id);
-                            if entered {
+                            // A prompt takes the typing when it appears, even if the menu before it had
+                            // the same (empty) title.
+                            let new_prompt = self.prompt_focused.as_deref() != Some(&field.id);
+                            if entered || new_prompt {
                                 response.request_focus();
                                 focused = response.has_focus();
+                                self.prompt_focused = Some(field.id.clone());
                             }
+                        } else {
+                            self.prompt_focused = None;
                         }
                         // A run of rows refused for the same reason says it once.
                         let mut last_denial = "";

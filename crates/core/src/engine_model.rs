@@ -614,7 +614,7 @@ impl EngineModel {
                 "Travel rejected: that square is outside the map window the engine can resolve."
                     .to_string()
             }
-            _ => format!("Command {stage}: {}.", reason.unwrap_or(stage)),
+            _ => format!("Command {stage}: {}.", reason.map_or(stage, explain)),
         };
         if self.messages.last() != Some(&text) {
             self.messages.push(text);
