@@ -33,7 +33,7 @@ pub enum Op {
     /// A tileset sprite, or what stands in for it when the tileset has none.
     Tile {
         at: Pos,
-        layer: Layer,
+        layer: Box<Layer>,
         or: Box<Op>,
     },
 }
@@ -337,14 +337,14 @@ impl Effects {
                     };
                     out.push(Op::Tile {
                         at: *at,
-                        layer: Layer {
+                        layer: Box::new(Layer {
                             id: sprite
                                 .clone()
                                 .unwrap_or_else(|| "animation_bullet_normal".into()),
                             fallbacks: vec!["animation_bullet_normal".into()],
                             glyph: '\0',
                             ..Default::default()
-                        },
+                        }),
                         or: Box::new(Op::Glyph {
                             at: *at,
                             ch: *glyph,
@@ -374,7 +374,7 @@ impl Effects {
                                 let layer = explosion_layer(tile, *square, &cells);
                                 out.push(Op::Tile {
                                     at: *square,
-                                    layer,
+                                    layer: Box::new(layer),
                                     or: Box::new(blast_fallback(
                                         *square, &cells, *color, 1.0, ascii,
                                     )),
@@ -423,7 +423,7 @@ impl Effects {
                         } else {
                             Op::Tile {
                                 at: *at,
-                                layer: explosion_layer(tile, *at, cells),
+                                layer: Box::new(explosion_layer(tile, *at, cells)),
                                 or: Box::new(fallback),
                             }
                         });
