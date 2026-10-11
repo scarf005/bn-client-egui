@@ -461,6 +461,9 @@ pub struct Interaction {
     /// `good` or `bad` where the native screen colors the message line.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub message_tone: Option<String>,
+    /// Whether the native category-selection mode is on, where the screen has one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub category_mode: Option<bool>,
     /// Fixed-width lines drawn above the menu: the main menu's title art and version.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub banner: Option<Vec<String>>,

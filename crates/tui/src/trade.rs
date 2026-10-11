@@ -15,9 +15,10 @@ use unicode_width::UnicodeWidthStr;
 
 const DESCRIPTION_LINES: u16 = 4;
 /// The menu's actions in the order the last line lists them.
-const ACTIONS: [(&str, &str); 3] = [
+const ACTIONS: [(&str, &str); 4] = [
     ("CONFIRM", "Confirm trade"),
     ("AUTOBALANCE", "Autobalance"),
+    ("CATEGORY_SELECTION", "Category select"),
     ("EXAMINE", "Examine"),
 ];
 
@@ -155,7 +156,26 @@ impl<M: GameModel> TuiApp<M> {
                 format!("{key} "),
                 Style::new().fg(Color::LightGreen),
             ));
-            spans.push(Span::raw(format!("{name}  ")));
+            spans.push(Span::raw(format!("{name} ")));
+            if let (Some(on), "CATEGORY_SELECTION") = (menu.category_mode, id) {
+                // The native `[ON/OFF]`, the active state lit.
+                let lit = |text: &'static str, lit: bool| {
+                    let fg = if lit {
+                        Color::LightGreen
+                    } else {
+                        Color::DarkGray
+                    };
+                    Span::styled(text, Style::new().fg(fg))
+                };
+                spans.extend([
+                    Span::raw("["),
+                    lit("ON", on),
+                    Span::raw("/"),
+                    lit("OFF", !on),
+                ]);
+                spans.push(Span::raw("]"));
+            }
+            spans.push(Span::raw(" "));
         }
         if let Some(text) = &self.trade.count {
             spans.push(Span::styled(
@@ -186,9 +206,13 @@ impl<M: GameModel> TuiApp<M> {
             true => String::new(),
             false => format!("< Filter: {} >", pane.filter),
         };
-        let block = Block::bordered()
+        let mut block = Block::bordered()
             .title(format!("{}: {}", pane.label, pane.area))
             .title_bottom(filter);
+        if let Some((number, count)) = pane.page {
+            let page = Line::from(format!("< Page {number}/{count} >")).right_aligned();
+            block = block.title_bottom(page);
+        }
         let inner = block.inner(rect);
         f.render_widget(block, rect);
         let width = usize::from(inner.width);
@@ -230,9 +254,15 @@ impl<M: GameModel> TuiApp<M> {
                 true => "[x] ",
                 false => "[ ] ",
             };
-            let name_width = width.saturating_sub(right + 2 + mark.len());
+            let name_width = width.saturating_sub(right + 4 + mark.len());
+            // The native key column: the row's key in green, blank where the row has none.
+            let key = match row.hotkey.as_str() {
+                "" => Span::raw("  "),
+                k => Span::styled(format!("{k} "), Style::new().fg(Color::LightGreen)),
+            };
             let mut spans = vec![
                 Span::raw(if row.highlighted { "> " } else { "  " }),
+                key,
                 Span::raw(mark),
             ];
             let mut used = 0;

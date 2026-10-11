@@ -200,6 +200,8 @@ pub struct MenuPane {
     pub totals: Option<PaneTotals>,
     /// Actions of the areas this pane cannot put items in; the native picker draws them red.
     pub blocked: Vec<String>,
+    /// The native page indicator as (number, count) from 1; absent for a list that does not page.
+    pub page: Option<(u64, u64)>,
 }
 
 /// The weight and volume line of a pane header: `weight`/`volume` against an optional maximum.
@@ -245,6 +247,8 @@ pub struct Menu {
     pub message: String,
     /// `good` or `bad` where the native screen colors the message line; empty otherwise.
     pub message_tone: String,
+    /// Whether the native category-selection mode is on; absent where the screen has none.
+    pub category_mode: Option<bool>,
     /// Lines drawn above the menu in a fixed-width font, with colour tags.
     pub banner: Vec<String>,
     pub choices: Vec<MenuChoice>,

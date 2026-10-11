@@ -3,6 +3,7 @@
 //! for a marked stack, the key hints and the colored balance line, and the menu's own Confirm,
 //! Autobalance and Cancel.
 use super::aim::Step;
+use super::menu::list_row_style;
 use super::{App, a11y};
 use bn_client_core::{ActionEntry, GameModel, Menu, MenuChoice, MenuPane};
 use eframe::egui::{self, accesskit};
@@ -53,6 +54,41 @@ fn key_hints(actions: &[ActionEntry]) -> String {
     .join("  ")
 }
 
+/// The native `[ON/OFF]` of category select, the active state lit.
+fn category_state(ui: &mut egui::Ui, on: bool) {
+    let lit = |text: &str, lit: bool| {
+        let color = if lit { GREEN } else { egui::Color32::DARK_GRAY };
+        egui::RichText::new(text).color(color)
+    };
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 0.0;
+        ui.label("[");
+        ui.label(lit("ON", on));
+        ui.label("/");
+        ui.label(lit("OFF", !on));
+        ui.label("]");
+    })
+    .response
+    .widget_info(|| {
+        let state = if on { "ON" } else { "OFF" };
+        egui::WidgetInfo::labeled(
+            egui::WidgetType::Label,
+            true,
+            format!("Category select {state}"),
+        )
+    });
+}
+
+/// The native selection mark: all of the stack, some of it, or none.
+fn selection_mark(row: &MenuChoice) -> char {
+    match (row.selected_count, row.available_count) {
+        (Some(n), Some(total)) if n > 0 && n >= total => '+',
+        (Some(n), _) if n > 0 => '#',
+        _ if row.selected => '+',
+        _ => '-',
+    }
+}
+
 /// What a frame of the window asks the engine for.
 #[derive(Default)]
 struct Out {
@@ -85,7 +121,12 @@ impl<M: GameModel> App<M> {
             .default_width(1000.0)
             .max_width(ctx.content_rect().width() - 16.0)
             .show(ctx, |ui| {
-                ui.weak(key_hints(&self.model.actions()));
+                ui.horizontal(|ui| {
+                    ui.weak(key_hints(&self.model.actions()));
+                    if let Some(on) = menu.category_mode {
+                        category_state(ui, on);
+                    }
+                });
                 let message = bn_client_core::markup::plain(&menu.message);
                 match tone_color(&menu.message_tone) {
                     Some(color) => ui.colored_label(color, message),
@@ -197,13 +238,25 @@ impl<M: GameModel> App<M> {
                                 }
                                 ui.horizontal(|ui| {
                                     let label = bn_client_core::markup::plain(&row.label);
-                                    let mark = if row.selected { "[x]" } else { "[ ]" };
                                     let button = ui
                                         .scope(|ui| {
                                             ui.set_max_width(name_width);
                                             ui.style_mut().wrap_mode =
                                                 Some(egui::TextWrapMode::Truncate);
-                                            let text = format!("{mark} {label}");
+                                            list_row_style(ui);
+                                            // The native row: key, mark and name as plain text.
+                                            let key = match row.hotkey.as_str() {
+                                                "" => " ".to_string(),
+                                                k => format!("<color_light_green>{k}</color>"),
+                                            };
+                                            let text = self.rich(
+                                                ui,
+                                                &format!(
+                                                    "{key} {} {}",
+                                                    selection_mark(row),
+                                                    row.label
+                                                ),
+                                            );
                                             self.control(
                                                 ui,
                                                 text,
@@ -216,6 +269,7 @@ impl<M: GameModel> App<M> {
                                     out.ids.extend(button.enabled().then_some(button.id));
                                     ui.ctx().accesskit_node_builder(button.id, |b| {
                                         b.set_role(accesskit::Role::MenuItem);
+                                        b.set_label(label.clone());
                                         b.set_toggled(if row.selected {
                                             accesskit::Toggled::True
                                         } else {
@@ -288,6 +342,11 @@ impl<M: GameModel> App<M> {
                             }
                         });
                 });
+            if let Some((number, count)) = pane.page {
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
+                    ui.label(format!("< Page {number}/{count} >"));
+                });
+            }
         });
         focused
     }

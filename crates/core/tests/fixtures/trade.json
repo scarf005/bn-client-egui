@@ -163,6 +163,10 @@
               "volume_unit": "L",
               "over_weight": false,
               "over_volume": false
+            },
+            "page": {
+              "number": 1,
+              "count": 2
             }
           },
           {
@@ -182,11 +186,16 @@
               "volume_unit": "L",
               "over_weight": false,
               "over_volume": true
+            },
+            "page": {
+              "number": 1,
+              "count": 1
             }
           }
         ]
       },
-      "message_tone": "good"
+      "message_tone": "good",
+      "category_mode": false
     }
   }
 }

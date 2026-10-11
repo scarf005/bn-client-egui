@@ -447,7 +447,7 @@ fn list_frame(ctx: &egui::Context) -> egui::Frame {
 }
 
 /// Rows of a native list have no button frame; the cursor row is a blue bar.
-fn list_row_style(ui: &mut egui::Ui) {
+pub(super) fn list_row_style(ui: &mut egui::Ui) {
     let visuals = ui.visuals_mut();
     visuals.widgets.inactive.weak_bg_fill = egui::Color32::TRANSPARENT;
     visuals.widgets.inactive.bg_stroke = egui::Stroke::NONE;

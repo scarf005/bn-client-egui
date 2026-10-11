@@ -1512,6 +1512,7 @@ impl GameModel for EngineModel {
             title: i.title.clone(),
             message: i.message.clone(),
             message_tone: i.message_tone.clone().unwrap_or_default(),
+            category_mode: i.category_mode,
             banner: i.banner.clone().unwrap_or_default(),
             total: i.choice_total as usize,
             choices: all()
@@ -1565,6 +1566,9 @@ impl GameModel for EngineModel {
                                 over_volume: b("over_volume"),
                             }
                         }),
+                        page: p["page"]["number"]
+                            .as_u64()
+                            .zip(p["page"]["count"].as_u64()),
                         blocked: p["blocked_areas"]
                             .as_array()
                             .into_iter()

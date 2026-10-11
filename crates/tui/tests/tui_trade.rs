@@ -199,3 +199,44 @@ fn row_hotkeys_are_light_green_before_the_labels_with_blank_padding() {
     let (tx, _) = find(&t, "[x] tin can");
     assert_eq!(tx, x + 2);
 }
+
+#[test]
+fn trade_rows_show_the_engines_key_in_light_green_and_pad_rows_without_one() {
+    let mut boundary = trade();
+    boundary["interaction"]["choices"][1]["hotkey"] = "b".into();
+    let (mut app, _) = open(boundary);
+    let t = render(&mut app);
+    let (x, y) = find(&t, "b [ ] lighter");
+    assert_eq!(t.backend().buffer()[(x, y)].fg, Color::LightGreen);
+    // Both panes pad a row without a key to the same column: key, space, mark.
+    let (tx, ty) = find(&t, "[x] tin can");
+    assert_eq!(t.backend().buffer()[(tx - 2, ty)].symbol(), " ");
+}
+
+#[test]
+fn each_pane_shows_its_page_and_the_category_state_is_lit() {
+    let mut boundary = trade();
+    boundary["interaction"]["category_mode"] = true.into();
+    let (mut app, _) = open(boundary);
+    let t = render(&mut app);
+    let text = lines(&t).join("\n");
+    assert!(
+        text.contains("< Page 1/2 >") && text.contains("< Page 1/1 >"),
+        "{text}"
+    );
+    let (x, y) = find(&t, "ON/OFF");
+    let buf = t.backend().buffer();
+    assert_eq!(buf[(x, y)].fg, Color::LightGreen);
+    assert_eq!(buf[(x + 3, y)].fg, Color::DarkGray);
+}
+
+#[test]
+fn an_engine_without_category_mode_draws_no_state() {
+    let mut boundary = trade();
+    boundary["interaction"]
+        .as_object_mut()
+        .unwrap()
+        .remove("category_mode");
+    let (mut app, _) = open(boundary);
+    assert!(!lines(&render(&mut app)).join("\n").contains("ON/OFF"));
+}

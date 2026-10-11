@@ -11,12 +11,17 @@ use serde_json::{Value, json};
 type H<'a> = Harness<'a, App<EngineModel>>;
 
 fn harness<'a>() -> (H<'a>, ScriptHandle) {
+    harness_with(|_| {})
+}
+
+fn harness_with<'a>(edit: impl FnOnce(&mut Value)) -> (H<'a>, ScriptHandle) {
     let text = std::fs::read_to_string(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../core/tests/fixtures/trade.json"
     ))
     .unwrap();
-    let trade = serde_json::from_str::<Value>(&text).unwrap()["trade"].clone();
+    let mut trade = serde_json::from_str::<Value>(&text).unwrap()["trade"].clone();
+    edit(&mut trade);
     let (t, script) = session();
     let t = t.on("bn.command.submit", vec![fixture("submit_result")]);
     let clock = Clock::manual();
@@ -52,8 +57,8 @@ fn both_parties_show_their_rows_prices_and_the_balance_line() {
     h.get_by_label("Inventory: Lena");
     h.get_by_label("Inventory: You");
     h.get_by_label("Credit $1.50 | Balance acceptable: yes");
-    h.get_by_label("[x] tin can (3)");
-    h.get_by_label("[ ] lighter");
+    h.get_by_label("tin can (3)");
+    h.get_by_label("lighter");
     h.get_by_label("$0.50");
     h.get_by_label("$1.00");
 }
@@ -147,7 +152,7 @@ fn a_marked_stack_takes_a_count() {
 #[test]
 fn clicking_a_row_chooses_it() {
     let (mut h, script) = harness();
-    h.get_by_label("[ ] lighter").click();
+    h.get_by_label("lighter").click();
     h.run_steps(3);
     assert_eq!(
         operations(&script),
@@ -178,4 +183,34 @@ fn a_count_beyond_the_stack_is_not_sent() {
     h.key_press(egui::Key::Enter);
     h.run_steps(3);
     assert!(operations(&script).is_empty());
+}
+
+#[test]
+fn rows_are_plain_menu_items_named_by_the_item_label() {
+    let (h, _) = harness_with(|t| t["interaction"]["choices"][1]["hotkey"] = "b".into());
+    let row = h.get_by_label("lighter");
+    assert_eq!(row.accesskit_node().role(), egui::accesskit::Role::MenuItem);
+    assert!(h.query_by_label("[ ] lighter").is_none());
+}
+
+#[test]
+fn the_page_indicator_and_category_mode_are_the_engines() {
+    let (h, _) = harness();
+    h.get_by_label("< Page 1/2 >");
+    h.get_by_label("< Page 1/1 >");
+    h.get_by_label("Category select OFF");
+    let (h, _) = harness_with(|t| t["interaction"]["category_mode"] = true.into());
+    h.get_by_label("Category select ON");
+}
+
+#[test]
+fn an_engine_without_category_mode_shows_no_state() {
+    let (h, _) = harness_with(|t| {
+        t["interaction"]
+            .as_object_mut()
+            .unwrap()
+            .remove("category_mode");
+    });
+    assert!(h.query_by_label("Category select OFF").is_none());
+    assert!(h.query_by_label("Category select ON").is_none());
 }
