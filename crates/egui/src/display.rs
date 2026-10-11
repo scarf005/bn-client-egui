@@ -6,6 +6,7 @@ use bn_client_core::protocol::ModTileset;
 use bn_client_core::{Cell, Layer, OvermapTile};
 use eframe::egui::{self, Color32, Mesh, Rect, Shape, TextureHandle, TextureId, TextureOptions};
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::collections::VecDeque;
@@ -785,7 +786,8 @@ impl Display {
         }
         let mut drawn = 0;
         for layer in &cell.layers {
-            let paints = layer_paints(&atlas.tileset, layer);
+            let (layer, paints) = resolve_layer(&atlas.tileset, layer);
+            let layer = layer.as_ref();
             let chosen = atlas.tileset.choose(&query(layer, season));
             let sprites = chosen.iter().flat_map(|c| {
                 [(c.bg, paints.0), (c.fg, paints.1)]
@@ -813,18 +815,35 @@ impl Display {
     }
 }
 
-/// The paint of a layer's background and foreground: a mutation's from the tileset, else the part's own.
-fn layer_paints(tileset: &Tileset, layer: &Layer) -> Paints {
+/// The layer as the game draws it with this tileset, and its paint for the background and the foreground: a
+/// mutation's, an item's, a bionic's or an effect's from the tileset, else the part's own. A hair style
+/// goes by the sprite of the hair color where the tileset paints no hair.
+fn resolve_layer<'a>(tileset: &Tileset, layer: &'a Layer) -> (Cow<'a, Layer>, Paints) {
     if let Some(m) = &layer.mutation {
-        return tileset.mutation_paints(&PaintQuery {
+        let q = PaintQuery {
             id: &m.id,
             types: &m.types,
             flags: &m.flags,
             traits: &m.traits,
-        });
+        };
+        let male = layer.id.starts_with("overlay_male_");
+        return match tileset.colored_hair(&q, male) {
+            Some([id, plain]) => {
+                let shown = Layer {
+                    id,
+                    fallbacks: vec![plain],
+                    ..layer.clone()
+                };
+                (Cow::Owned(shown), (None, None))
+            }
+            None => (Cow::Borrowed(layer), tileset.mutation_paints(&q)),
+        };
+    }
+    if !layer.tint_keys.is_empty() {
+        return (Cow::Borrowed(layer), tileset.key_paints(&layer.tint_keys));
     }
     let of = |rgb: Option<bn_client_core::Rgb>| rgb.map(|c| Paint::of([c.0, c.1, c.2]));
-    (of(layer.tint_bg), of(layer.tint_fg))
+    (Cow::Borrowed(layer), (of(layer.tint_bg), of(layer.tint_fg)))
 }
 
 fn query<'a>(layer: &'a Layer, season: Option<&'a str>) -> Query<'a> {
