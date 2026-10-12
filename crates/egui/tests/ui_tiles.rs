@@ -301,14 +301,18 @@ fn dark_and_bright_only_squares_draw_the_lowlight_overlay_instead_of_their_terra
     let root = game_root("ui-light");
     let run = |light: u8| {
         let (t, handle) = ScriptedTransport::new();
-        let t = t.on("bn.hello", vec![fixture("hello_result")]).on(
-            "bn.subscribe",
+        let snapshot = || {
             vec![
                 fixture("subscribe_result"),
                 fixture("snapshot_part_0"),
                 fixture("snapshot_part_1"),
-            ],
-        );
+            ]
+        };
+        // The second answers the subscription that follows telling the engine the client draws tiles.
+        let t = t
+            .on("bn.hello", vec![fixture("hello_result")])
+            .on("bn.subscribe", snapshot())
+            .on("bn.subscribe", snapshot());
         let mut h = harness_with(&root, root.join(format!("l{light}.json")), t);
         settle(&mut h);
         handle.push(lit_cell(41, 5, light));
