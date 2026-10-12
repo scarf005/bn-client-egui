@@ -137,3 +137,95 @@ fn the_window_follows_what_the_engine_granted() {
     feed(&h, &mut m, 1, 4);
     assert_eq!(credits(&h), [4]);
 }
+
+fn invalid_params() -> Value {
+    json!({"jsonrpc": "2.0", "error": {"code": -32602, "message": "unknown member"}})
+}
+
+fn hello_calls(h: &ScriptHandle) -> Vec<Value> {
+    h.sent()
+        .into_iter()
+        .filter(|x| x["method"] == "bn.hello")
+        .map(|x| x["params"]["delivery"].clone())
+        .collect()
+}
+
+fn granted(max_hz: Option<u16>) -> Value {
+    let mut hello = fixture("hello_result");
+    hello["result"]["delivery"] = json!({"credits": 8, "held_frames": 256, "held_bytes": 1048576});
+    if let Some(hz) = max_hz {
+        hello["result"]["delivery"]["max_hz"] = json!(hz);
+    }
+    hello
+}
+
+#[test]
+fn an_engine_that_rejects_only_the_frame_rate_gets_credits_without_it() {
+    let (t, h) = ScriptedTransport::new();
+    let t = t
+        .on("bn.hello", vec![invalid_params()])
+        .on("bn.hello", vec![granted(None)])
+        .on("bn.subscribe", subscribe_reply());
+    let mut m = connected(t);
+    assert_eq!(
+        hello_calls(&h),
+        [
+            json!({"credits": 256, "max_hz": 60}),
+            json!({"credits": 256})
+        ]
+    );
+    assert!(m.failure().is_none() && m.live());
+    feed(&h, &mut m, 1, 4);
+    assert_eq!(credits(&h), [4], "credits stay on");
+}
+
+#[test]
+fn an_engine_that_rejects_delivery_gets_a_hello_without_it_and_no_credits() {
+    let (t, h) = ScriptedTransport::new();
+    let t = t
+        .on("bn.hello", vec![invalid_params()])
+        .on("bn.hello", vec![invalid_params()])
+        .on("bn.hello", vec![fixture("hello_result")])
+        .on("bn.subscribe", subscribe_reply());
+    let mut m = connected(t);
+    assert_eq!(
+        hello_calls(&h),
+        [
+            json!({"credits": 256, "max_hz": 60}),
+            json!({"credits": 256}),
+            Value::Null
+        ]
+    );
+    assert!(m.messages().is_empty(), "{:?}", m.messages());
+    feed(&h, &mut m, 1, 200);
+    assert_eq!(credits(&h), Vec::<u64>::new());
+}
+
+#[test]
+fn the_tiles_hello_uses_what_the_engine_accepted() {
+    let (t, h) = ScriptedTransport::new();
+    let t = t
+        .on("bn.hello", vec![invalid_params()])
+        .on("bn.hello", vec![invalid_params()])
+        .on("bn.hello", vec![fixture("hello_result")])
+        .on("bn.hello", vec![fixture("hello_result")])
+        .on("bn.subscribe", subscribe_reply());
+    let mut m = connected(t);
+    m.set_tiles(true);
+    m.poll();
+    assert_eq!(hello_calls(&h).last(), Some(&Value::Null));
+    assert_eq!(hello_calls(&h).len(), 4);
+}
+
+#[test]
+fn a_hello_without_delivery_that_still_fails_is_reported() {
+    let (t, h) = ScriptedTransport::new();
+    let t = t
+        .on("bn.hello", vec![invalid_params()])
+        .on("bn.hello", vec![invalid_params()])
+        .on("bn.hello", vec![invalid_params()]);
+    let mut m = EngineModel::new(Box::new(t));
+    m.poll();
+    assert_eq!(hello_calls(&h).len(), 3, "no fourth try");
+    assert!(!m.messages().is_empty());
+}

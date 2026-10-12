@@ -934,11 +934,11 @@ impl HelloParams {
     }
 
     /// Asks for credits and a frame rate cap, kept within the 1 to 240 the engine accepts.
-    pub fn with_delivery(self, credits: u16, max_hz: u16) -> Self {
+    pub fn with_delivery(self, credits: u16, max_hz: Option<u16>) -> Self {
         Self {
             delivery: Some(DeliveryRequest {
                 credits,
-                max_hz: Some(max_hz.clamp(1, 240)),
+                max_hz: max_hz.map(|hz| hz.clamp(1, 240)),
             }),
             ..self
         }

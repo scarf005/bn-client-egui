@@ -26,6 +26,15 @@ const VIEW: Pos = Pos { x: 40, y: 25 };
 const MAX_VIEWPORT: i32 = 512;
 const RESIZE_DEBOUNCE: std::time::Duration = std::time::Duration::from_millis(250);
 
+/// What a hello asks of delivery. An engine that does not know a member answers with invalid params, and
+/// the hello is asked again with less.
+#[derive(Clone, Copy, PartialEq)]
+enum Ask {
+    Credits,
+    Rate,
+    Nothing,
+}
+
 #[derive(Clone, Copy)]
 enum Pending {
     Hello,
@@ -59,6 +68,8 @@ pub type Respawn = Box<dyn FnMut() -> std::io::Result<Box<dyn Transport>>>;
 /// Without a message for this long while a request is outstanding, the engine counts as stalled.
 /// The frame rate a client asks the engine to publish at while an activity runs, unless it knows better.
 pub const DEFAULT_MAX_HZ: u16 = 60;
+/// JSON-RPC code of a request whose params the engine does not accept.
+const INVALID_PARAMS: i64 = -32602;
 const STALL: Duration = Duration::from_secs(120);
 
 pub struct EngineModel {
@@ -67,6 +78,8 @@ pub struct EngineModel {
     tiles_told: bool,
     /// The most frames per second the client shows, asked of the engine in every hello.
     max_hz: u16,
+    /// The delivery the engine last accepted, or the next to try.
+    ask: Ask,
     /// The ids of the tints the client's tileset has, and what the engine was last told.
     tint_ids: Vec<String>,
     tints_told: Vec<String>,
@@ -326,6 +339,7 @@ impl EngineModel {
     pub fn connect_with(transport: Box<dyn Transport>, tiles: bool, max_hz: u16) -> Self {
         let mut m = Self {
             max_hz,
+            ask: Ask::Rate,
             tiles,
             tiles_told: tiles,
             tint_ids: vec![],
@@ -374,20 +388,28 @@ impl EngineModel {
             at_main_menu: false,
             hovered: None,
         };
-        m.call(
-            "bn.hello",
-            json!(
-                protocol::HelloParams::new("bn-client")
-                    .with_viewport(protocol::Viewport {
-                        cols: VIEW.x as u32,
-                        rows: VIEW.y as u32,
-                    })
-                    .with_tiles(tiles)
-                    .with_delivery(crate::transport::CREDIT_WINDOW, m.max_hz)
-            ),
-            Pending::Hello,
-        );
+        m.hello();
         m
+    }
+
+    /// Opens the session with the delivery asked for now.
+    fn hello(&mut self) {
+        let params = protocol::HelloParams::new("bn-client")
+            .with_viewport(protocol::Viewport {
+                cols: VIEW.x as u32,
+                rows: VIEW.y as u32,
+            })
+            .with_tiles(self.tiles);
+        self.call("bn.hello", json!(self.with_ask(params)), Pending::Hello);
+    }
+
+    fn with_ask(&self, params: protocol::HelloParams) -> protocol::HelloParams {
+        let credits = crate::transport::CREDIT_WINDOW;
+        match self.ask {
+            Ask::Rate => params.with_delivery(credits, Some(self.max_hz)),
+            Ask::Credits => params.with_delivery(credits, None),
+            Ask::Nothing => params,
+        }
     }
 
     /// Times the resize debounce with `clock`, so tests can advance it instead of sleeping.
@@ -617,6 +639,18 @@ impl EngineModel {
             if let Some(n) = result.ok().and_then(|v| serde_json::from_value(v).ok()) {
                 self.command_notice(n);
             }
+            return;
+        }
+        if matches!(kind, Pending::Hello)
+            && let Err(e) = &result
+            && e.code == INVALID_PARAMS
+            && self.ask != Ask::Nothing
+        {
+            self.ask = match self.ask {
+                Ask::Rate => Ask::Credits,
+                _ => Ask::Nothing,
+            };
+            self.hello();
             return;
         }
         let value = match result {
@@ -897,16 +931,10 @@ impl EngineModel {
         }
         self.tiles_told = self.tiles;
         self.tints_told = self.tint_ids.clone();
-        self.call(
-            "bn.hello",
-            json!(
-                protocol::HelloParams::new("bn-client")
-                    .with_tiles(self.tiles)
-                    .with_tint_ids(self.tint_ids.clone())
-                    .with_delivery(crate::transport::CREDIT_WINDOW, self.max_hz)
-            ),
-            Pending::Retile,
-        );
+        let params = protocol::HelloParams::new("bn-client")
+            .with_tiles(self.tiles)
+            .with_tint_ids(self.tint_ids.clone());
+        self.call("bn.hello", json!(self.with_ask(params)), Pending::Retile);
         let (cols, rows) = (self.declared.x as u32, self.declared.y as u32);
         self.call(
             "bn.viewport",
