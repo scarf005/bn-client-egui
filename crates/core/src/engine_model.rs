@@ -21,8 +21,6 @@ use std::time::{Duration, Instant};
 
 /// The map window asked for until the UI reports its own size.
 const VIEW: Pos = Pos { x: 40, y: 25 };
-/// The window re-centres when the avatar gets this close to its edge (engines that report no view).
-const MARGIN: i32 = 3;
 /// A resized panel is sent to the engine once it has stayed this size for this long.
 /// The engine takes up to this many cells on a side.
 const MAX_VIEWPORT: i32 = 512;
@@ -747,25 +745,15 @@ impl EngineModel {
         };
         let (ax, ay) = (a.x, a.y);
         let size = self.shown();
-        if let Some(v) = self.replica.view() {
-            // The engine's window is centred on the avatar; show the middle of it, so every shown
-            // square is one a click can select.
-            self.origin = Some((
-                v.min.x + (v.max.x - v.min.x + 1 - size.x) / 2,
-                v.min.y + (v.max.y - v.min.y + 1 - size.y) / 2,
-            ));
-            return;
-        }
-        let centred = (ax - size.x / 2, ay - size.y / 2);
-        self.origin = match self.origin {
-            Some((ox, oy))
-                if (MARGIN..size.x - MARGIN).contains(&(ax - ox))
-                    && (MARGIN..size.y - MARGIN).contains(&(ay - oy)) =>
-            {
-                Some((ox, oy))
-            }
-            _ => Some(centred),
-        };
+        // Like Tiles, the centre square is `size / 2`: the engine's window is centred on the view point
+        // (the avatar, or the look cursor that pans it), so every shown square is one a click can select.
+        let (cx, cy) = self.replica.view().map_or((ax, ay), |v| {
+            (
+                v.min.x + (v.max.x - v.min.x + 1) / 2,
+                v.min.y + (v.max.y - v.min.y + 1) / 2,
+            )
+        });
+        self.origin = Some((cx - size.x / 2, cy - size.y / 2));
     }
 
     /// Tells the engine the new map size once the panel has stopped changing.
