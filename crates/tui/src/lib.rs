@@ -744,9 +744,17 @@ impl<M: GameModel> TuiApp<M> {
         .areas(f.area());
         let [map, side] =
             Layout::horizontal([Constraint::Min(10), Constraint::Length(SIDE_WIDTH)]).areas(main);
-        let [actions, items] =
-            Layout::vertical([Constraint::Min(3), Constraint::Length(12)]).areas(side);
+        let rows = self.model.sidebar();
+        let [vitals, actions, items] = Layout::vertical([
+            Constraint::Max(rows.len() as u16 + 2),
+            Constraint::Min(3),
+            Constraint::Length(12),
+        ])
+        .areas(side);
         self.draw_map(f, map);
+        if !rows.is_empty() {
+            Self::draw_status(f, vitals, &rows);
+        }
         match self.model.target_panel() {
             Some(panel) => self.draw_target_panel(f, actions, &panel),
             None => self.draw_actions(f, actions),
@@ -953,6 +961,24 @@ impl<M: GameModel> TuiApp<M> {
             })
             .collect::<Vec<_>>();
         f.render_widget(Paragraph::new(lines), cells);
+    }
+
+    /// The engine's sidebar rows, each span in its native colour.
+    fn draw_status(f: &mut Frame, area: Rect, rows: &[bn_client_core::sidebar::Line]) {
+        let lines = rows.iter().map(|row| {
+            let spans = row.iter().filter(|s| !s.text.is_empty());
+            let spans = spans.flat_map(|s| {
+                [
+                    Span::raw(" "),
+                    Span::styled(s.text.as_str(), Style::new().fg(color(s.color))),
+                ]
+            });
+            Line::from(spans.skip(1).collect::<Vec<_>>())
+        });
+        f.render_widget(
+            Paragraph::new(lines.collect::<Vec<_>>()).block(Block::bordered().title("Status")),
+            area,
+        );
     }
 
     fn draw_actions(&mut self, f: &mut Frame, area: Rect) {
