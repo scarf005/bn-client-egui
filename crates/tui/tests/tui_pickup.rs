@@ -60,7 +60,11 @@ fn open(boundary: Value) -> (TuiApp<EngineModel>, ScriptHandle) {
 }
 
 fn render(app: &mut TuiApp<EngineModel>) -> Terminal<TestBackend> {
-    let mut t = Terminal::new(TestBackend::new(80, 30)).unwrap();
+    render_wide(app, 80)
+}
+
+fn render_wide(app: &mut TuiApp<EngineModel>, width: u16) -> Terminal<TestBackend> {
+    let mut t = Terminal::new(TestBackend::new(width, 30)).unwrap();
     t.draw(|f| app.draw(f)).unwrap();
     t
 }
@@ -233,11 +237,11 @@ fn an_over_capacity_header_is_red_and_a_row_keeps_its_stolen_mark_and_color() {
 }
 
 #[test]
-fn the_right_pickup_position_puts_the_window_at_the_right_edge() {
+fn the_right_pickup_position_docks_the_window_left_of_the_sidebar() {
     let (mut app, _) = open(with_pane("right", false));
-    let dump = lines(&render(&mut app));
+    let dump = lines(&render_wide(&mut app, 120));
     let chars = dump[1].chars().collect::<Vec<_>>();
-    assert_eq!(chars[80 - 44], 'a', "{}", dump[1]);
+    assert_eq!(chars[120 - 36 - 44], 'a', "{}", dump[1]);
     let (mut app, _) = open(with_pane("left", false));
     assert!(lines(&render(&mut app))[1].starts_with('a'));
 }

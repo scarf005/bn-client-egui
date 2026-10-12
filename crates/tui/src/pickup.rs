@@ -4,7 +4,7 @@
 //! the client only types a count (digits, then Enter, the mark key or a row key applies it).
 
 use super::trade::{column, selection_mark};
-use super::{TuiApp, color};
+use super::{SIDE_WIDTH, TuiApp, color};
 use bn_client_core::{GameModel, Menu, MenuChoice};
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::Frame;
@@ -120,11 +120,11 @@ impl<M: GameModel> TuiApp<M> {
             .clamp(44, screen.width.max(44))
             .min(screen.width);
         let list_height = (shown + 3).min(screen.height);
-        // PICKUP_POSITION: the list sits against the right edge, otherwise at the left.
+        // PICKUP_POSITION: the list is docked against the sidebar at the right, otherwise at the left.
         let placement = menu.panes.first().map_or("", |p| p.placement.as_str());
         let window = Rect {
             x: if placement == "right" {
-                screen.width - width
+                screen.width.saturating_sub(SIDE_WIDTH + width)
             } else {
                 0
             },
