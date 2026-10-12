@@ -26,6 +26,7 @@ fn texts(avatar: &Avatar) -> Vec<String> {
         .map(|l| {
             l.iter()
                 .map(|s| s.text.as_str())
+                .filter(|t| !t.is_empty())
                 .collect::<Vec<_>>()
                 .join(" ")
         })
@@ -42,13 +43,21 @@ fn limbs_sit_beside_needs_and_stats_in_the_native_order() {
 }
 
 #[test]
-fn spans_use_the_native_colour_and_an_unfelt_need_prints_nothing() {
+fn spans_use_the_native_colour_and_an_unfelt_need_keeps_its_place_but_prints_nothing() {
     let a = avatar();
     let rows = lines(&a, &ColorMap::default());
     assert_eq!(rows[0][2].color, ColorMap::default().resolve("light_red").0);
     assert_ne!(rows[0][2].color, Rgb(0, 0, 0));
-    // Thirst is empty in the example, so its row holds no empty span.
-    assert!(rows.iter().flatten().all(|s| !s.text.is_empty()));
+    // A need that is not felt leaves an empty span: the morale face beside it keeps its index.
+    let face_at = |a: &Avatar| {
+        let rows = lines(a, &ColorMap::default());
+        rows.iter()
+            .find_map(|r| r.iter().position(|s| s.text == ":)"))
+    };
+    let mut hungry = a.clone();
+    hungry.sidebar.as_mut().unwrap().hunger.text = "Hungry".into();
+    assert_eq!(face_at(&a), face_at(&hungry));
+    assert!(face_at(&a).is_some());
 }
 
 #[test]
