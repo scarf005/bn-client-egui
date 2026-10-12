@@ -1393,6 +1393,35 @@ fn any_key_acknowledges_a_press_any_key_popup_and_only_that() {
 }
 
 #[test]
+fn any_key_continues_a_terminal_prompt_but_does_not_answer_its_security_query() {
+    let terminal = |ids: &[&str]| {
+        let choices: Vec<_> = ids
+            .iter()
+            .map(|id| {
+                json!({"id":id,"label":id,"description":"","denial":"","enabled":true,"selectable":true,
+                    "selected":false,"columns":[],"group":"terminal"})
+            })
+            .collect();
+        let context = if ids == ["continue"] {
+            "COMPUTER_TERMINAL"
+        } else {
+            "YESNOQUIT"
+        };
+        json!({"schema_id":"s:term","kind":"choices","context":context,"title":"Evac shelter computer",
+            "message":"Login successful.  Press any key…","allow_cancel":false,"choices":choices,
+            "choice_total":ids.len(),"allow_set_count":false})
+    };
+    for (ids, sent) in [(&["continue"][..], 1), (&["yes", "no", "quit"][..], 0)] {
+        let (t, h) = session();
+        let mut m = connected(t.on("bn.command.submit", walk_reply()));
+        h.push(show(41, json!([]), terminal(ids)));
+        m.poll();
+        assert_eq!(m.press("w"), sent == 1, "{ids:?}");
+        assert_eq!(submits(&h).len(), sent, "{ids:?}");
+    }
+}
+
+#[test]
 fn the_selected_tab_picks_the_pane_and_a_target_interaction_is_a_cursor_not_a_menu() {
     let (t, h) = session();
     let mut m = connected(t);
