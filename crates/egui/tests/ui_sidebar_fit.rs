@@ -130,3 +130,22 @@ fn a_span_that_prints_nothing_keeps_the_others_in_their_columns() {
     h.run_steps(3);
     assert_eq!(start_of(&h, "R LEG", "Str"), with);
 }
+
+#[test]
+fn a_wide_row_below_the_table_never_widens_the_table() {
+    let width = |extra: bool| {
+        let mut lines = vec![leg(); 6];
+        if extra {
+            lines.push(["Weather:", "a long forecast of rain"].map(span).to_vec());
+        }
+        let h = Harness::builder()
+            .with_size(egui::vec2(600.0, 400.0))
+            .build_ui(move |ui| bn_client_egui::sidebar::show(ui, &lines));
+        h.get_all_by_label_contains("R LEG")
+            .next()
+            .unwrap()
+            .rect()
+            .width()
+    };
+    assert_eq!(width(true), width(false));
+}

@@ -3,8 +3,12 @@
 use bn_client_core::sidebar::{Line, Span};
 use eframe::egui::{self, Color32, FontId, TextFormat, text::LayoutJob};
 
-/// The least width in characters of the span at each index of a row: the widest thing the classic panel
-/// puts there, so a number gaining a digit never moves what follows it.
+/// The rows at the top that form the classic panel's table (a limb beside a need and a stat each): they share
+/// their columns. Every row below is its own.
+const TABLE_ROWS: usize = 6;
+
+/// The least width in characters of the span at each index of a table row: the widest thing the classic
+/// panel puts there, so a number gaining a digit never moves what follows it.
 const MIN_COLUMNS: [usize; 5] = [5, 7, 7, 8, 15];
 
 /// The indent of a line continued after a break, in characters.
@@ -25,20 +29,26 @@ pub fn show(ui: &mut egui::Ui, lines: &[Line]) {
         .x;
     // Columns only widen, so a value that once needed more room keeps it.
     let key = egui::Id::new("sidebar_columns");
-    let mut columns: Vec<usize> = ui.data(|d| d.get_temp(key)).unwrap_or_default();
-    for line in lines {
+    let mut groups: Vec<Vec<usize>> = ui.data(|d| d.get_temp(key)).unwrap_or_default();
+    let group_of = |row: usize| row.saturating_sub(TABLE_ROWS - 1);
+    for (row, line) in lines.iter().enumerate() {
+        let group = group_of(row);
+        groups.resize(groups.len().max(group + 1), vec![]);
+        let columns = &mut groups[group];
         columns.resize(columns.len().max(line.len()), 0);
         for (i, span) in line.iter().enumerate() {
-            let floor = MIN_COLUMNS.get(i).copied().unwrap_or(0);
-            columns[i] = columns[i].max(floor).max(span.text.chars().count());
+            let floor = MIN_COLUMNS.get(i).filter(|_| group == 0).copied();
+            columns[i] = columns[i]
+                .max(floor.unwrap_or(0))
+                .max(span.text.chars().count());
         }
     }
-    ui.data_mut(|d| d.insert_temp(key, columns.clone()));
-    let grid = Grid {
-        columns: &columns,
-        char_width,
-    };
-    for line in lines {
+    ui.data_mut(|d| d.insert_temp(key, groups.clone()));
+    for (row, line) in lines.iter().enumerate() {
+        let grid = Grid {
+            columns: &groups[group_of(row)],
+            char_width,
+        };
         let job = fitted(line, width, &grid);
         ui.add(egui::Label::new(job).wrap_mode(egui::TextWrapMode::Extend));
     }
