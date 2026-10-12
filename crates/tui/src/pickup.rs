@@ -27,6 +27,14 @@ pub(super) struct Pickup {
     count: Option<String>,
 }
 
+/// `text` in the game color `name`, as markup.
+fn tinted(name: &str, text: &str) -> String {
+    match name {
+        "" => text.to_string(),
+        name => format!("<color_{name}>{text}</color>"),
+    }
+}
+
 /// The key of the `index`th row: the engine's when it publishes one, else the native sequence.
 fn row_key(menu: &Menu, actions: &[bn_client_core::ActionEntry], index: usize) -> Option<String> {
     let entries = menu.entries();
@@ -112,8 +120,14 @@ impl<M: GameModel> TuiApp<M> {
             .clamp(44, screen.width.max(44))
             .min(screen.width);
         let list_height = (shown + 3).min(screen.height);
+        // PICKUP_POSITION: the list sits against the right edge, otherwise at the left.
+        let placement = menu.panes.first().map_or("", |p| p.placement.as_str());
         let window = Rect {
-            x: 0,
+            x: if placement == "right" {
+                screen.width - width
+            } else {
+                0
+            },
             y: 0,
             width,
             height: list_height,
@@ -125,21 +139,41 @@ impl<M: GameModel> TuiApp<M> {
         };
         f.render_widget(Clear, window);
         f.render_widget(Clear, details);
-        let message = bn_client_core::markup::plain(&menu.message);
-        let mut lines = message.lines();
-        let mut head = lines.next().unwrap_or_default().to_string();
-        if let Some(filter) = lines.next() {
-            head = format!("{head}  {filter}");
-        }
+        // The native header: predicted against capacity, red where over, then the filter in effect.
+        let pane = menu.panes.first();
+        let head = match pane.and_then(|p| p.totals.as_ref()) {
+            Some(t) => {
+                let tone = |over| if over { "c_red" } else { "c_white" };
+                let carry = format!(
+                    "PICK Wgt {}/{}  Vol {}/{}",
+                    tinted(tone(t.over_weight), &t.weight),
+                    t.weight_max,
+                    tinted(tone(t.over_volume), &t.volume),
+                    t.volume_max
+                );
+                match pane.map(|p| p.filter.as_str()).filter(|f| !f.is_empty()) {
+                    Some(filter) => format!("{carry}  Filter: {filter}"),
+                    None => carry,
+                }
+            }
+            None => bn_client_core::markup::plain(&menu.message).replace('\n', "  "),
+        };
         let head_line = match &self.pickup.count {
             Some(text) => format!("{head}  Count: {text}_"),
             None => head,
         };
+        let mut head_spans = Vec::new();
+        let mut head_used = 0;
+        for run in self.model.styled(&head_line) {
+            let text = super::aim::fit(&run.text, usize::from(width).saturating_sub(head_used));
+            head_used += text.width();
+            let style = run
+                .color
+                .map_or(Style::new().fg(Color::White), |c| Style::new().fg(color(c)));
+            head_spans.push(Span::styled(text, style));
+        }
         f.render_widget(
-            Paragraph::new(Line::styled(
-                super::aim::fit(&head_line, width.into()),
-                Style::new().fg(Color::White),
-            )),
+            Paragraph::new(Line::from(head_spans)),
             Rect {
                 height: 1,
                 ..window
@@ -190,7 +224,12 @@ impl<M: GameModel> TuiApp<M> {
             let name_width = usize::from(width.saturating_sub(NAME_AT));
             let mut spans = vec![Span::styled(key, hilite), child, mark, Span::raw("  ")];
             let mut used = 0;
-            for run in self.model.styled(&row.label) {
+            // The row as the native list prints it: its markup (count, symbol, stolen mark) in the item's color.
+            let name = match column(row, "Name markup") {
+                "" => tinted(column(row, "Row color"), &row.label),
+                markup => tinted(column(row, "Row color"), markup),
+            };
+            for run in self.model.styled(&name) {
                 let text = super::aim::fit(&run.text, name_width.saturating_sub(used));
                 used += text.width();
                 let style = run

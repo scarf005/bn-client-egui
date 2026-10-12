@@ -194,6 +194,8 @@ pub struct MenuPane {
     /// The line under the pane's title, such as a trade pane's free capacity; empty when none.
     pub description: String,
     pub filter: String,
+    /// Where the native pickup list sits (`PICKUP_POSITION`: `left`, `right`, `overlapping` or `cursor`); empty otherwise.
+    pub placement: String,
     /// The native sort name, such as `name`; empty when the engine sent none.
     pub sort: String,
     /// The header totals the native pane prints; absent from engines that predate them.

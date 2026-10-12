@@ -53,8 +53,14 @@ impl<M: GameModel> App<M> {
         egui::Window::new(&title)
             .id(a11y::dialog_id(&title))
             .title_bar(false)
-            // The native list sits at the left edge of the screen.
-            .anchor(egui::Align2::LEFT_TOP, [0.0, 0.0])
+            // PICKUP_POSITION: the native list sits against the right edge, otherwise at the left.
+            .anchor(
+                match menu.panes.first().map(|p| p.placement.as_str()) {
+                    Some("right") => egui::Align2::RIGHT_TOP,
+                    _ => egui::Align2::LEFT_TOP,
+                },
+                [0.0, 0.0],
+            )
             .collapsible(false)
             .resizable(false)
             .default_width(560.0)

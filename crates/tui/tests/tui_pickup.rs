@@ -187,3 +187,57 @@ fn enter_confirms_through_the_engines_own_key() {
         [json!({"kind":"action","action_id":"CONFIRM"})]
     );
 }
+
+/// The pickup fixture with the pane the engine publishes: over-capacity totals and the list position.
+fn with_pane(position: &str, over_weight: bool) -> Value {
+    let mut b = pickup();
+    let rows = b["interaction"]["choices"].as_array_mut().unwrap();
+    rows[0]["columns"] = json!([
+        {"label": "Name markup", "value": "<color_light_red>!</color> 2 lighter"},
+        {"label": "Row color", "value": "c_light_green"}
+    ]);
+    b["interaction"]["compat"] = json!({"panes": [{
+        "id": "p", "label": "Pick up", "role": "pickup", "area_id": position,
+        "area_label": "Pick up", "area_description": "", "filter": "", "storage_kind": "",
+        "totals": {"weight": "50.0", "weight_max": "45.0", "weight_unit": "kg",
+            "volume": "0.30", "volume_max": "2.00", "volume_unit": "L",
+            "over_weight": over_weight, "over_volume": false}
+    }]});
+    b
+}
+
+#[test]
+fn an_over_capacity_header_is_red_and_a_row_keeps_its_stolen_mark_and_color() {
+    let (mut app, _) = open(with_pane("left", true));
+    let t = render(&mut app);
+    let dump = lines(&t);
+    assert!(
+        dump[0].starts_with("PICK Wgt 50.0/45.0  Vol 0.30/2.00"),
+        "{}",
+        dump[0]
+    );
+    let buf = t.backend().buffer();
+    let weight = buf[(10, 0)].fg;
+    assert_ne!(
+        weight,
+        buf[(30, 0)].fg,
+        "weight over capacity is red, volume is not"
+    );
+    assert_ne!(weight, Color::White);
+    assert_ne!(
+        buf[(6, 1)].fg,
+        buf[(8, 1)].fg,
+        "stolen mark and item color differ"
+    );
+    assert_ne!(buf[(8, 1)].fg, Color::Reset, "item color");
+}
+
+#[test]
+fn the_right_pickup_position_puts_the_window_at_the_right_edge() {
+    let (mut app, _) = open(with_pane("right", false));
+    let dump = lines(&render(&mut app));
+    let chars = dump[1].chars().collect::<Vec<_>>();
+    assert_eq!(chars[80 - 44], 'a', "{}", dump[1]);
+    let (mut app, _) = open(with_pane("left", false));
+    assert!(lines(&render(&mut app))[1].starts_with('a'));
+}
