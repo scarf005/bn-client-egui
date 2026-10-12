@@ -286,6 +286,50 @@ fn status_line_keeps_executing_until_the_boundary_is_reached_then_goes_back_to_r
     assert!(!h.state().model.busy());
 }
 
+fn spinners(h: &H) -> usize {
+    h.query_all_by_role(accesskit::Role::ProgressIndicator)
+        .count()
+}
+
+#[test]
+fn a_spinner_runs_in_the_top_bar_while_a_command_executes_and_is_gone_when_it_completes() {
+    let (mut h, script) = harness();
+    open_menu(&mut h, &script);
+    assert_eq!(spinners(&h), 0, "nothing runs yet");
+    click_choice(&mut h);
+    script.push(notice("executing", None));
+    h.run_steps(5);
+    assert_eq!(spinners(&h), 1, "the command is executing");
+    script.push(notice("completed", None));
+    h.run_steps(3);
+    assert_eq!(spinners(&h), 0, "the command is over");
+}
+
+#[test]
+fn reduced_motion_shows_a_still_mark_in_place_of_the_spinner() {
+    let (t, script) = session();
+    let t = t.on("bn.command.submit", vec![fixture("submit_result")]);
+    let clock = Clock::manual();
+    let path = std::env::temp_dir().join(format!("bn-spinner-{}.json", std::process::id()));
+    std::fs::write(
+        &path,
+        r#"{"tiles":false,"tileset":null,"reduced_motion":true}"#,
+    )
+    .unwrap();
+    let model = EngineModel::new(Box::new(t)).with_clock(clock.clone());
+    let app = App::new(model).with_clock(clock).with_settings(path);
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(1100.0, 800.0))
+        .build_ui_state(|ui, app: &mut App<EngineModel>| app.show(ui), app);
+    open_menu(&mut h, &script);
+    click_choice(&mut h);
+    script.push(notice("executing", None));
+    h.run_steps(5);
+    assert_eq!(spinners(&h), 0, "nothing spins");
+    h.get_by_label("…");
+    h.get_by_label("combat knife: executing");
+}
+
 #[test]
 fn map_click_marks_the_cell_before_the_route_arrives() {
     let (mut h, script) = harness();
