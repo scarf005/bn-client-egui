@@ -2399,3 +2399,77 @@ fn a_list_of_named_panes_starts_each_pane_under_its_heading() {
         [Some("Zones"), None, Some("Options"), Some("Actions")]
     );
 }
+
+fn snake_boundary(id: &str, refresh: bool) -> Value {
+    let mut boundary = crafting("favorites");
+    boundary["boundary_id"] = json!(id);
+    boundary["actions"] = json!([{"id": "UP", "name": "Up", "keys": ["w"]}]);
+    let i = &mut boundary["interaction"];
+    i["kind"] = json!("custom");
+    i["context"] = json!("SNAKE");
+    i["choices"] = json!([]);
+    i["choice_total"] = json!(0);
+    if refresh {
+        i["refresh_ms"] = json!(100);
+    }
+    boundary
+}
+
+fn stale_boundary() -> Value {
+    json!({"jsonrpc":"2.0","id":null,"error":{"code":1000,"message":"stale","data":{"kind":"stale_boundary"}}})
+}
+
+#[test]
+fn a_key_rejected_stale_on_a_timed_screen_is_sent_once_to_the_next_boundary() {
+    let (t, h) = session();
+    let mut m = connected(
+        t.on("bn.command.submit", vec![stale_boundary()])
+            .on("bn.command.submit", vec![stale_boundary()]),
+    );
+    h.push(change(
+        41,
+        json!({"interaction": snake_boundary("b:20", true)}),
+    ));
+    m.poll();
+    assert!(m.press("w"));
+    m.poll();
+    assert_eq!(submits(&h).len(), 1, "the new boundary has not arrived");
+    h.push(change(
+        42,
+        json!({"interaction": snake_boundary("b:21", true)}),
+    ));
+    m.poll();
+    let sent = submits(&h);
+    assert_eq!(sent.len(), 2);
+    assert_eq!(
+        sent[1]["params"]["operation"],
+        json!({"kind":"action","action_id":"UP"})
+    );
+    assert_eq!(sent[1]["params"]["expect"]["boundary_id"], "b:21");
+    h.push(change(
+        43,
+        json!({"interaction": snake_boundary("b:22", true)}),
+    ));
+    m.poll();
+    assert_eq!(submits(&h).len(), 2, "a resend is not repeated");
+}
+
+#[test]
+fn a_key_rejected_stale_on_a_screen_without_refresh_is_not_resent() {
+    let (t, h) = session();
+    let mut m = connected(t.on("bn.command.submit", vec![stale_boundary()]));
+    h.push(change(
+        41,
+        json!({"interaction": snake_boundary("b:20", false)}),
+    ));
+    m.poll();
+    assert!(m.press("w"));
+    m.poll();
+    h.push(change(
+        42,
+        json!({"interaction": snake_boundary("b:21", false)}),
+    ));
+    m.poll();
+    assert_eq!(submits(&h).len(), 1);
+    assert!(m.messages().last().unwrap().contains("stale_boundary"));
+}

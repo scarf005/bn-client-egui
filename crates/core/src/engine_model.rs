@@ -87,6 +87,10 @@ pub struct EngineModel {
     busy: bool,
     command_id: Option<String>,
     rejected: bool,
+    /// The command in flight and the boundary it was sent against; a resend is not recorded.
+    sent: Option<(Operation, String)>,
+    /// A command a timed screen's redraw made stale: it goes once to the next boundary.
+    resend: Option<(Operation, String)>,
     /// The command in flight was a walking step; only its failure stops the walk.
     walking: bool,
     origin: Option<(i32, i32)>,
@@ -332,6 +336,8 @@ impl EngineModel {
             busy: false,
             command_id: None,
             rejected: false,
+            sent: None,
+            resend: None,
             walking: false,
             origin: None,
             wanted: VIEW,
@@ -520,7 +526,9 @@ impl EngineModel {
             if n.stage != "completed" && !swap {
                 self.rejected = self.walking;
                 let reason = n.error.as_ref().map(error_kind);
-                self.report_failure(&n.stage, reason.as_deref());
+                if !self.stale_resend(reason.as_deref()) {
+                    self.report_failure(&n.stage, reason.as_deref());
+                }
             }
         }
     }
@@ -538,6 +546,7 @@ impl EngineModel {
         {
             self.busy = false;
             let kind = e.data.as_ref().map_or(e.message.clone(), error_kind);
+            self.stale_resend(Some(&kind));
             if let Some(s) = &mut self.status {
                 s.set_stage(format!("rejected: {}", explain(&kind)), true);
             }
@@ -633,6 +642,41 @@ impl EngineModel {
         }
     }
 
+    /// Keeps a command rejected as `stale_boundary` for the next boundary: a timed screen redraws on its
+    /// own, so a key sent as a tick lands is rejected though the player did nothing wrong.
+    fn stale_resend(&mut self, reason: Option<&str>) -> bool {
+        let timed = self
+            .replica
+            .boundary()
+            .and_then(|b| b.interaction.as_ref())
+            .is_some_and(|i| i.refresh_ms.is_some());
+        let sent = self.sent.take();
+        let keep = reason == Some("stale_boundary") && timed && sent.is_some();
+        if keep {
+            self.resend = sent;
+        }
+        keep
+    }
+
+    /// Sends the kept command once the engine has published a newer boundary of a timed screen; a screen
+    /// that no longer redraws on its own drops it.
+    fn send_resend(&mut self) {
+        let Some((_, stale)) = &self.resend else {
+            return;
+        };
+        let Some(b) = self.replica.boundary().filter(|b| &b.boundary_id != stale) else {
+            return;
+        };
+        let timed = b
+            .interaction
+            .as_ref()
+            .is_some_and(|i| i.refresh_ms.is_some());
+        if let Some((operation, _)) = self.resend.take().filter(|_| timed) {
+            self.submit(operation);
+            self.sent = None;
+        }
+    }
+
     /// Logs a failed command; a repeat of the last line (a click held on an unreachable square) adds none.
     fn report_failure(&mut self, stage: &str, reason: Option<&str>) {
         let travel = self.status.as_ref().is_some_and(|s| s.label == "Travel");
@@ -679,6 +723,7 @@ impl EngineModel {
             operation,
         };
         self.status = Some(self.describe(&submit.operation));
+        self.sent = Some((submit.operation.clone(), b.boundary_id.clone()));
         self.busy = true;
         self.rejected = false;
         self.walking = false;
@@ -1400,6 +1445,7 @@ impl GameModel for EngineModel {
             self.native.clear();
         }
         self.at_main_menu = at_main_menu;
+        self.send_resend();
         self.send_viewport();
         self.send_tiles();
         self.refresh_view();
