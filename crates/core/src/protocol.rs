@@ -479,6 +479,90 @@ pub struct Interaction {
     pub target: Option<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub overmap: Option<OvermapWire>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vehicle: Option<Vehicle>,
+}
+
+/// The native vehicle interaction window: the grid around the cursor, the parts on the cursor
+/// square, the stat lines, and in a task list the preview of the highlighted part.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Vehicle {
+    pub name: String,
+    pub owner: String,
+    pub owned: bool,
+    /// `main`, `install`, `repair`, `remove`, `mend`, `refill` or `select`.
+    pub mode: String,
+    pub cursor: VehicleCursor,
+    /// The cursor square cannot take a part.
+    pub blocked: bool,
+    pub cells: Vec<VehicleCell>,
+    pub parts: Vec<VehiclePart>,
+    /// The native stat lines in reading order; an empty line is a blank slot.
+    pub stats: Vec<String>,
+    #[serde(default)]
+    pub tabs: Option<VehicleTabs>,
+    #[serde(default)]
+    pub detail: Option<VehicleDetail>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VehicleCursor {
+    pub x: i32,
+    pub y: i32,
+}
+
+/// A square of the grid, relative to the cursor in screen cells (x right, y down).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VehicleCell {
+    pub dx: i32,
+    pub dy: i32,
+    pub glyph: String,
+    /// A game color name such as `light_gray`.
+    pub color: String,
+}
+
+/// One part on the cursor square as the native part list prints it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VehiclePart {
+    pub name: String,
+    pub open: String,
+    pub close: String,
+    pub health: u8,
+    pub broken: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VehicleTabs {
+    pub labels: Vec<String>,
+    pub selected: usize,
+    pub filter: String,
+}
+
+/// What the native detail pane shows for the highlighted part.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VehicleDetail {
+    pub name: String,
+    pub description: String,
+    #[serde(default)]
+    pub time: Option<String>,
+    pub stats: Vec<VehicleStat>,
+    pub requirements: Vec<VehicleRequirement>,
+    /// Every requirement is met, so choosing the part starts the task.
+    pub can_do: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VehicleStat {
+    pub label: String,
+    pub value: String,
+}
+
+/// `kind` is `skill`, `component`, `tool` or `extra`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VehicleRequirement {
+    pub kind: String,
+    pub text: String,
+    pub met: bool,
 }
 
 /// The native overmap window as drawn: `[glyph, foreground, background]` per cell, row-major,

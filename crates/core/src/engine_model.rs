@@ -1606,6 +1606,7 @@ impl GameModel for EngineModel {
                 .find(|c| tab(c) && c.selected)
                 .and_then(|c| pane_of(&c.label).map(String::from)),
             screen: i.kind == "custom",
+            vehicle: i.vehicle.clone(),
             focus: i
                 .compat
                 .as_ref()
