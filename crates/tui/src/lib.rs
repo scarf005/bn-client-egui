@@ -950,7 +950,9 @@ impl<M: GameModel> TuiApp<M> {
                     .columns
                     .iter()
                     .filter(|(label, value)| {
-                        !label.ends_with(" color") && label != "source" && !value.is_empty()
+                        !label.ends_with(" color")
+                            && !["source", "Category", "Name markup"].contains(&label.as_str())
+                            && !value.is_empty()
                     })
                     .map(|(label, value)| {
                         let value = match tint(label) {
@@ -978,7 +980,18 @@ impl<M: GameModel> TuiApp<M> {
                     ("", false) => String::new(),
                     (k, _) => format!("{k} "),
                 };
-                let text = format!("{}{value}{columns}{hint}{denial}", c.label);
+                // An inventory row is drawn in its item's color, charges and all.
+                let name = match c.columns.iter().find(|(l, _)| l == "Row color") {
+                    Some((_, color)) if c.enabled => {
+                        let markup = c.columns.iter().find(|(l, _)| l == "Name markup");
+                        format!(
+                            "<color_{color}>{}</color>",
+                            markup.map_or(c.label.as_str(), |(_, m)| m.as_str())
+                        )
+                    }
+                    _ => c.label.clone(),
+                };
+                let text = format!("{name}{value}{columns}{hint}{denial}");
                 // The cursor row is drawn whole in one colour, so it loses the markup.
                 let spans = match i == selected {
                     true => vec![Span::raw(plain(&text))],

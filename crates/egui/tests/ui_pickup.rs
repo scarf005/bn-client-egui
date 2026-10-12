@@ -56,8 +56,8 @@ fn operations(script: &ScriptHandle) -> Vec<Value> {
 #[test]
 fn the_list_shows_marks_the_predicted_carry_header_and_the_cursor_rows_description() {
     let (h, _) = harness();
-    h.get_by_label("[ ] lighter (17/25)");
-    h.get_by_label("[x] tin can");
+    h.get_by_label("lighter (17/25)");
+    h.get_by_label("tin can");
     h.get_by_label("PICK Wgt 0.2/45.0  Vol 0.30/0.00");
     // The native cursor row is the tin can: its description is shown, not the first row's.
     h.get_by_label_contains("A battered tin can.");
@@ -70,7 +70,7 @@ fn the_list_shows_marks_the_predicted_carry_header_and_the_cursor_rows_descripti
 #[test]
 fn clicking_a_row_toggles_its_mark_through_the_engine() {
     let (mut h, script) = harness();
-    h.get_by_label("[x] tin can").click();
+    h.get_by_label("tin can").click();
     h.run_steps(3);
     assert_eq!(
         operations(&script),
@@ -79,14 +79,9 @@ fn clicking_a_row_toggles_its_mark_through_the_engine() {
 }
 
 #[test]
-fn confirm_is_the_menus_own_button_and_runs_the_confirm_action() {
-    let (mut h, script) = harness();
-    h.get_by_label("Confirm").click();
-    h.run_steps(3);
-    assert_eq!(
-        operations(&script),
-        [json!({"kind":"action","action_id":"CONFIRM"})]
-    );
+fn the_native_list_has_no_confirm_button_because_enter_confirms() {
+    let (h, _) = harness();
+    assert!(h.query_by_label("Confirm").is_none());
 }
 
 #[test]
@@ -127,19 +122,17 @@ fn an_unmarked_row_has_no_count_box() {
 }
 
 #[test]
-fn the_rows_and_confirm_do_not_move_with_the_length_of_the_hovered_description() {
+fn the_rows_do_not_move_with_the_length_of_the_hovered_description() {
     let mut menu = pickup();
     let long = "A long description that wraps over many lines of the dialog. ".repeat(12);
     menu["interaction"]["choices"][0]["description"] = long.into();
     let (mut h, _) = harness_with(menu);
-    let confirm = h.get_by_label("Confirm").rect();
-    let can = h.get_by_label("[x] tin can").rect();
-    for row in ["[ ] lighter (17/25)", "[x] tin can"] {
+    let can = h.get_by_label("tin can").rect();
+    for row in ["lighter (17/25)", "tin can"] {
         let at = h.get_by_label(row).rect().center();
         h.hover_at(at);
         h.run_steps(3);
-        assert_eq!(h.get_by_label("Confirm").rect(), confirm, "{row}");
-        assert_eq!(h.get_by_label("[x] tin can").rect(), can, "{row}");
+        assert_eq!(h.get_by_label("tin can").rect(), can, "{row}");
     }
 }
 
