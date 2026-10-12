@@ -1864,6 +1864,39 @@ fn pickup_rows_carry_the_native_highlight_marks_and_counts() {
 }
 
 #[test]
+fn the_vehicle_window_reaches_the_menu_with_its_detail_and_the_native_cursor_row() {
+    let text = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/pickup.json"
+    ))
+    .unwrap();
+    let mut boundary = serde_json::from_str::<Value>(&text).unwrap()["pickup"].clone();
+    boundary["interaction"]["context"] = json!("VEH_INTERACT");
+    boundary["interaction"]["compat"]["focus"] = json!({"choice_id": "pickup:b"});
+    boundary["interaction"]["vehicle"] = json!({
+        "name": "Bicycle", "owner": "Ada", "owned": true, "mode": "remove",
+        "cursor": {"x": 0, "y": 0}, "blocked": false,
+        "cells": [{"dx": 0, "dy": 0, "glyph": "o", "color": "light_gray"}],
+        "parts": [{"name": "frame", "open": "[", "close": "]", "health": 80, "broken": false}],
+        "stats": ["Mass: 16 kg"],
+        "detail": {"name": "frame", "description": "", "time": "5 minutes", "stats": [],
+            "requirements": [{"kind": "tool", "text": "wrench", "met": false}], "can_do": false}
+    });
+    let (t, h) = session();
+    let mut m = connected(t);
+    h.push(change(41, json!({"interaction": boundary})));
+    m.poll();
+    let menu = m.menu().unwrap();
+    let vehicle = menu.vehicle.expect("the window carries the vehicle");
+    assert_eq!(vehicle.mode, "remove");
+    assert_eq!(vehicle.parts[0].open, "[");
+    let detail = vehicle.detail.expect("the preview of the cursor part");
+    assert!(!detail.can_do);
+    assert_eq!(detail.requirements[0].text, "wrench");
+    assert_eq!(menu.focus.as_deref(), Some("pickup:b"));
+}
+
+#[test]
 fn menu_rows_carry_the_engines_hotkey_and_empty_when_absent() {
     let text = std::fs::read_to_string(concat!(
         env!("CARGO_MANIFEST_DIR"),

@@ -69,6 +69,11 @@ impl<M: GameModel> App<M> {
             self.focus_menu = entered && !focused;
             return;
         }
+        if let (true, Some(vehicle)) = (menu.context == "VEH_INTERACT", &menu.vehicle) {
+            let focused = self.vehicle(ctx, &menu, vehicle, entered);
+            self.focus_menu = entered && !focused;
+            return;
+        }
         if menu.context == "PICKUP" {
             let focused = self.pickup(ctx, &menu, entered);
             self.focus_menu = entered && !focused;
