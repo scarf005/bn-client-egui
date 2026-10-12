@@ -213,6 +213,33 @@ fn the_highlight_is_the_engines_cursor() {
 }
 
 #[test]
+fn a_menu_shows_the_side_panel_text_of_the_row_under_the_cursor() {
+    let (mut app, h) = engine();
+    for name in ["events_41_walk", "events_42_message"] {
+        h.push(fixture(name));
+    }
+    let mut menu = fixture("events_43_menu");
+    let mut gate = row("entry:0", "north gate", true, None);
+    gate["description"] = "Distance: 3 <color_c_cyan>(12,4,0)</color>\nsecond panel line".into();
+    let mut other = row("entry:1", "south gate", false, None);
+    other["description"] = "Distance: 9".into();
+    menu["params"]["events"][0]["changes"]["interaction"]["interaction"]["choices"] =
+        json!([gate, other]);
+    h.push(menu_event(menu, "entry:0"));
+    app.model.poll();
+    let s = text(&render(&mut app));
+    assert!(
+        s.contains("Distance: 3 (12,4,0)"),
+        "markup is not printed:\n{s}"
+    );
+    assert!(s.contains("second panel line"), "{s}");
+    assert!(
+        !s.contains("Distance: 9"),
+        "only the cursor row's panel shows:\n{s}"
+    );
+}
+
+#[test]
 fn escape_closes_the_menu_through_the_engines_cancel_action() {
     let (mut app, h) = engine();
     open_menu(&mut app, &h);
