@@ -94,8 +94,10 @@ fn hovering_a_map_square_asks_for_its_native_description_and_the_status_line_sho
     let want = app.model.origin().x + app.model.player().x + 2;
     assert_eq!(asked[0]["params"]["pos"]["x"], want);
     app.model.poll();
-    assert!(text(&render(&mut app)).contains("Wall / A zombie is here."));
-    // Staying on the square asks nothing more.
+    let t = render(&mut app);
+    assert!(text(&t).contains("Wall / A zombie is here."));
+    // Staying on the square asks nothing more. The view follows the avatar, so it sits where it now is.
+    let (x, y) = avatar(&t);
     app.handle_mouse(mouse(MouseEventKind::Moved, x + 2, y));
     assert_eq!(
         h.sent()
