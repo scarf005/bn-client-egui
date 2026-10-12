@@ -1638,6 +1638,14 @@ impl GameModel for EngineModel {
                 })
                 .collect(),
             can_cancel: i.allow_cancel,
+            pane_tabs: pane_labels
+                .iter()
+                .filter(|p| matches!(p["role"].as_str(), Some("current" | "inactive")))
+                .map(|p| {
+                    let text = |k: &str| p[k].as_str().unwrap_or_default().to_string();
+                    (text("id"), text("label"), p["role"] == "current")
+                })
+                .collect(),
             pane: all()
                 .find(|c| tab(c) && c.selected)
                 .and_then(|c| pane_of(&c.label).map(String::from)),

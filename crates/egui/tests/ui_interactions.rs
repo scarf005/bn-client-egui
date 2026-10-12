@@ -264,7 +264,7 @@ fn a_description_and_columns_of_the_selected_entry_are_shown() {
     script.push(show(
         41,
         json!([]),
-        json!({"schema_id":"s:info","kind":"choices","context":"PLAYER_INFO",
+        json!({"schema_id":"s:info","kind":"choices","context":"INFO_LIST",
             "title":"Character information","message":"","allow_cancel":true,
             "choices":[strength],"choice_total":1,"allow_set_count":false}),
     ));
@@ -337,7 +337,7 @@ fn tabbed(sequence: u32, selected: &str) -> Value {
         sequence,
         json!([{"id":"NEXT_TAB","name":"Next tab","keys":["TAB"]},
                {"id":"PREV_TAB","name":"Previous tab","keys":["BACKTAB"]}]),
-        json!({"schema_id":"s:tabs","kind":"choices","context":"PLAYER_INFO","title":"Info",
+        json!({"schema_id":"s:tabs","kind":"choices","context":"INFO_TABS","title":"Info",
             "message":"","allow_cancel":true,"choices":choices,"choice_total":5,
             "allow_set_count":false,"compat":{"focus":{},"panes":panes}}),
     )

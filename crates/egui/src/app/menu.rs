@@ -59,6 +59,11 @@ impl<M: GameModel> App<M> {
             self.focus_menu = entered && !focused;
             return;
         }
+        if super::character::CONTEXTS.contains(&menu.context.as_str()) {
+            let focused = self.character(ctx, &menu, entered);
+            self.focus_menu = entered && !focused;
+            return;
+        }
         if menu.context == "INVENTORY" {
             let focused = self.inventory(ctx, &menu, entered);
             self.focus_menu = entered && !focused;

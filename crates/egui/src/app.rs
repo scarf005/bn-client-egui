@@ -7,6 +7,7 @@ use eframe::egui::{self, accesskit};
 use std::collections::VecDeque;
 
 mod aim;
+mod character;
 mod construction;
 mod crafting;
 mod inventory;
