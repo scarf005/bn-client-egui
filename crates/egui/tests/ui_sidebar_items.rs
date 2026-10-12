@@ -54,6 +54,7 @@ fn wheel(h: &mut H, at: egui::Pos2, dy: f32) {
 fn the_wheel_over_the_inventory_scrolls_to_items_below_the_fold() {
     let mut h = crowded();
     let log_top = h.get_by_label("Message log").rect().min.y;
+    let ground = h.get_by_label("Ground").rect();
     let first = drop_rect(&h, 0);
     assert!(
         drop_rect(&h, 59).min.y > log_top,
@@ -64,6 +65,11 @@ fn the_wheel_over_the_inventory_scrolls_to_items_below_the_fold() {
     assert!(
         last.max.y <= log_top,
         "the last item scrolled above the log: {last:?} vs {log_top}"
+    );
+    assert_eq!(
+        h.get_by_label("Ground").rect(),
+        ground,
+        "only the list moved, not the headings above it"
     );
 }
 

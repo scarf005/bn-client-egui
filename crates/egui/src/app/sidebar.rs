@@ -12,6 +12,8 @@ const LOG_RANGE: (f32, f32) = (0.1, 0.8);
 
 /// The side of the square an item's sprite or glyph is drawn in beside its row.
 const ICON: f32 = 24.0;
+/// The least height an item list keeps, whatever room the window has left.
+const MIN_LIST: f32 = 4.0 * ICON;
 
 #[derive(Clone, Copy, PartialEq)]
 enum Column {
@@ -102,46 +104,61 @@ impl<M: GameModel> App<M> {
                     ui.dnd_drop_zone::<Dragged, _>(egui::Frame::NONE, |ui| {
                         ui.set_min_size(egui::vec2(ui.available_width(), 0.0));
                         ui.heading(title);
-                        for (index, (name, label, cell)) in rows.into_iter().enumerate() {
-                            ui.horizontal(|ui| {
-                                if let Some(cell) = cell {
-                                    let (rect, _) = ui.allocate_exact_size(
-                                        egui::Vec2::splat(ICON),
-                                        egui::Sense::hover(),
-                                    );
-                                    let painter = ui.painter_at(rect);
-                                    let sprite = tiles
-                                        && self.display.paint_icon(
-                                            &painter,
-                                            rect,
-                                            cell,
-                                            season.as_deref(),
-                                        );
-                                    if !sprite {
-                                        glyph_icon(&painter, rect, &cell);
-                                    }
-                                }
-                                let grip = ui.add(egui::Label::new(label).sense(egui::Sense::DRAG));
-                                grip.dnd_set_drag_payload(Dragged {
-                                    from: column,
-                                    index,
-                                });
-                                let button = ui.button(verb);
-                                ui.ctx().accesskit_node_builder(button.id, |b| {
-                                    b.set_label(format!("{verb} {}", markup::plain(name)))
-                                });
-                                if button.clicked() {
-                                    moved = Some(Dragged {
-                                        from: column,
-                                        index,
+                        // A long list scrolls inside the room the window has left, so the status above it
+                        // stays in view; the ground takes at most two fifths of it for itself.
+                        let room =
+                            (ui.clip_rect().max.y - ui.next_widget_position().y).max(MIN_LIST);
+                        let room = match column {
+                            Column::Ground => room * 0.4,
+                            Column::Inventory => room,
+                        };
+                        egui::ScrollArea::vertical()
+                            .id_salt(title)
+                            .max_height(room)
+                            .auto_shrink([false, true])
+                            .show(ui, |ui| {
+                                for (index, (name, label, cell)) in rows.into_iter().enumerate() {
+                                    ui.horizontal(|ui| {
+                                        if let Some(cell) = cell {
+                                            let (rect, _) = ui.allocate_exact_size(
+                                                egui::Vec2::splat(ICON),
+                                                egui::Sense::hover(),
+                                            );
+                                            let painter = ui.painter_at(rect);
+                                            let sprite = tiles
+                                                && self.display.paint_icon(
+                                                    &painter,
+                                                    rect,
+                                                    cell,
+                                                    season.as_deref(),
+                                                );
+                                            if !sprite {
+                                                glyph_icon(&painter, rect, &cell);
+                                            }
+                                        }
+                                        let grip = ui
+                                            .add(egui::Label::new(label).sense(egui::Sense::DRAG));
+                                        grip.dnd_set_drag_payload(Dragged {
+                                            from: column,
+                                            index,
+                                        });
+                                        let button = ui.button(verb);
+                                        ui.ctx().accesskit_node_builder(button.id, |b| {
+                                            b.set_label(format!("{verb} {}", markup::plain(name)))
+                                        });
+                                        if button.clicked() {
+                                            moved = Some(Dragged {
+                                                from: column,
+                                                index,
+                                            });
+                                        }
+                                        // Tabbing to a row below the fold brings it into view.
+                                        if button.gained_focus() {
+                                            button.scroll_to_me(None);
+                                        }
                                     });
                                 }
-                                // Tabbing to a row below the fold brings it into view.
-                                if button.gained_focus() {
-                                    button.scroll_to_me(None);
-                                }
                             });
-                        }
                     })
                 })
                 .inner;
