@@ -550,7 +550,7 @@ impl<M: GameModel> TuiApp<M> {
 
     /// A left click on a row or tab of the open menu chooses it, as the engine's own choose does.
     fn menu_click(&mut self, ev: MouseEvent) -> bool {
-        let Some(menu) = self.model.menu() else {
+        let Some(menu) = self.model.menu().or_else(|| self.model.target_panel()) else {
             return false;
         };
         if menu.screen
@@ -570,7 +570,10 @@ impl<M: GameModel> TuiApp<M> {
                 .find(|(_, from, to)| (*from..*to).contains(&(ev.column - hits.bar.x)))
                 .map(|(id, ..)| id.clone())
         } else if within(hits.list) {
-            hits.rows.get(usize::from(ev.row - hits.list.y)).cloned()
+            hits.rows
+                .get(usize::from(ev.row - hits.list.y))
+                .filter(|id| !id.is_empty())
+                .cloned()
         } else {
             None
         };
@@ -701,7 +704,10 @@ impl<M: GameModel> TuiApp<M> {
         let [actions, items] =
             Layout::vertical([Constraint::Min(3), Constraint::Length(12)]).areas(side);
         self.draw_map(f, map);
-        self.draw_actions(f, actions);
+        match self.model.target_panel() {
+            Some(panel) => self.draw_target_panel(f, actions, &panel),
+            None => self.draw_actions(f, actions),
+        }
         self.draw_items(f, items);
         f.render_widget(Paragraph::new(self.status_line()), status);
         // The game's own lines in their colours with repeat counts, then the client's command results.
@@ -912,6 +918,54 @@ impl<M: GameModel> TuiApp<M> {
         );
     }
 
+    /// The panes of a target screen in the side column, one heading per pane; a click on an action row
+    /// chooses it.
+    fn draw_target_panel(&mut self, f: &mut Frame, area: Rect, panel: &Menu) {
+        let block = Block::bordered().title(plain(&panel.title));
+        let inner = block.inner(area);
+        let mut previous = None;
+        let (mut lines, mut ids) = (vec![], vec![]);
+        for row in panel.entries() {
+            if let Some(heading) = panel.heading(previous, row) {
+                lines.push(Line::styled(
+                    heading.to_string(),
+                    Style::new().add_modifier(Modifier::BOLD),
+                ));
+                ids.push(String::new());
+            }
+            previous = Some(row);
+            let values = row
+                .columns
+                .iter()
+                .filter(|(_, value)| !value.is_empty())
+                .map(|(label, value)| format!("{label} {value}"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let text = match (row.hotkey.is_empty(), values.is_empty()) {
+                (false, _) => format!("{} {}", row.hotkey, plain(&row.label)),
+                (true, true) => format!("{} {}", plain(&row.label), plain(&row.description)),
+                (true, false) => format!(
+                    "{} {} ({values})",
+                    plain(&row.label),
+                    plain(&row.description)
+                ),
+            };
+            let style = match (row.selected, row.enabled) {
+                (true, _) => Style::new().add_modifier(Modifier::REVERSED),
+                (false, true) => Style::new(),
+                (false, false) => Style::new().fg(Color::DarkGray),
+            };
+            lines.push(Line::styled(text.trim_end().to_string(), style));
+            ids.push(row.id.clone());
+        }
+        f.render_widget(Paragraph::new(lines).block(block), area);
+        self.menu_hits = MenuHits {
+            list: inner,
+            rows: ids,
+            ..Default::default()
+        };
+    }
+
     fn draw_items(&mut self, f: &mut Frame, area: Rect) {
         let section = |title: &str, items: &[String]| {
             let head = Line::styled(title.to_string(), Style::new().add_modifier(Modifier::BOLD));
@@ -1033,6 +1087,25 @@ impl<M: GameModel> TuiApp<M> {
                 (key, spans, style)
             })
             .collect::<Vec<_>>();
+        // A list of named panes starts each under its heading; `ids` keeps a click on a row mapped to it.
+        let (mut sections, mut ids, mut cursor) = (vec![], vec![], selected);
+        for (i, (row, entry)) in rows.into_iter().zip(&entries).enumerate() {
+            if let Some(heading) = menu.heading(i.checked_sub(1).map(|p| entries[p]), entry) {
+                let bold = Style::new().add_modifier(Modifier::BOLD);
+                sections.push((
+                    String::new(),
+                    vec![Span::styled(heading.to_string(), bold)],
+                    bold,
+                ));
+                ids.push(String::new());
+            }
+            if i == selected {
+                cursor = sections.len();
+            }
+            sections.push(row);
+            ids.push(entry.id.clone());
+        }
+        let (rows, selected) = (sections, cursor);
         let tabs = menu
             .tabs()
             .iter()
@@ -1068,11 +1141,7 @@ impl<M: GameModel> TuiApp<M> {
         let mut from = 0;
         self.menu_hits = MenuHits {
             list: layout.list,
-            rows: entries
-                .iter()
-                .skip(layout.offset)
-                .map(|c| c.id.clone())
-                .collect(),
+            rows: ids.into_iter().skip(layout.offset).collect(),
             bar: layout.bar,
             tabs: tab_ids
                 .into_iter()

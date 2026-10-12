@@ -2281,3 +2281,91 @@ fn the_player_square_stays_at_the_native_centre_after_steps_in_every_direction()
         }
     }
 }
+
+fn paned(kind: &str, context: &str, panes: Value, rows: &[(&str, &str, bool)]) -> Value {
+    let choices = rows
+        .iter()
+        .map(|(id, pane, selectable)| {
+            json!({"id":id,"label":id,"description":"","denial":"","hotkey":"","pane_id":pane,
+            "enabled":true,"selectable":selectable,"selected":false,"columns":[]})
+        })
+        .collect::<Vec<_>>();
+    json!({"schema_id":"s:p","kind":kind,"context":context,"title":"Screen","message":"",
+        "allow_cancel":true,"choices":choices,"choice_total":choices.len(),"allow_set_count":false,
+        "compat":{"panes":panes},
+        "target":{"source":{"dim":"","x":2,"y":4,"z":0},"current":{"dim":"","x":3,"y":4,"z":0},
+            "range":0,"distance_metric":"square","status":"editmap","candidates":[]}})
+}
+
+#[test]
+fn a_target_screen_with_rows_is_a_panel_and_choosing_its_action_row_is_sent() {
+    let (t, h) = session();
+    let mut m = connected(t.on("bn.command.submit", walk_reply()));
+    let panes = json!([{"id":"tile","label":"Tile","role":"current"},
+        {"id":"actions","label":"Actions","role":"controls"}]);
+    let rows = [
+        ("tile:terrain", "tile", false),
+        ("action:EDIT_TERRAIN", "actions", true),
+    ];
+    h.push(show(
+        41,
+        json!([]),
+        paned("target", "EDITMAP", panes.clone(), &rows),
+    ));
+    m.poll();
+    assert!(m.menu().is_none(), "the cursor stays on the map");
+    let panel = m
+        .target_panel()
+        .expect("the editor lists its tile and actions");
+    let groups = panel
+        .choices
+        .iter()
+        .map(|c| c.group.as_deref())
+        .collect::<Vec<_>>();
+    assert_eq!(groups, [Some("tile"), Some("actions")]);
+    m.choose("tile:terrain");
+    assert!(operations(&h).is_empty(), "a tile row is not selectable");
+    m.choose("action:EDIT_TERRAIN");
+    assert_eq!(
+        operations(&h),
+        [json!({"kind":"choose","choice_id":"action:EDIT_TERRAIN"})]
+    );
+    h.push(show(42, json!([]), paned("target", "LOOK", json!([]), &[])));
+    m.poll();
+    assert!(
+        m.target_panel().is_none(),
+        "a plain look cursor has no rows"
+    );
+}
+
+#[test]
+fn a_list_of_named_panes_starts_each_pane_under_its_heading() {
+    let (t, h) = session();
+    let mut m = connected(t);
+    let panes = json!([{"id":"zones","label":"Zones","role":"current"},
+        {"id":"options","label":"Options","role":"inactive"},
+        {"id":"actions","label":"Actions","role":"controls"}]);
+    let rows = [
+        ("zone:0", "zones", true),
+        ("zone:1", "zones", true),
+        ("option:0", "options", false),
+        ("action:ADD_ZONE", "actions", true),
+    ];
+    h.push(show(
+        41,
+        json!([]),
+        paned("choices", "ZONES_MANAGER", panes, &rows),
+    ));
+    m.poll();
+    let menu = m.menu().unwrap();
+    let rows = menu.entries();
+    let headings = rows
+        .iter()
+        .enumerate()
+        .map(|(i, c)| menu.heading(i.checked_sub(1).map(|p| rows[p]), c))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        headings,
+        [Some("Zones"), None, Some("Options"), Some("Actions")]
+    );
+}

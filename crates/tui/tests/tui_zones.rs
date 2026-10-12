@@ -4,6 +4,7 @@ use bn_client_core::transport::ScriptHandle;
 use bn_client_core::{EngineModel, GameModel};
 use bn_client_tui::TuiApp;
 use common::{connected, fixture, session};
+use crossterm::event::{KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
 use serde_json::{Value, json};
@@ -23,6 +24,28 @@ fn text(app: &mut TuiApp<EngineModel>) -> String {
         .map(|row| row.iter().map(|c| c.symbol()).collect::<String>())
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+fn mouse(column: u16, row: u16) -> MouseEvent {
+    MouseEvent {
+        kind: MouseEventKind::Down(MouseButton::Left),
+        column,
+        row,
+        modifiers: KeyModifiers::NONE,
+    }
+}
+
+/// The ids of the rows chosen so far.
+fn chosen(h: &ScriptHandle) -> Vec<String> {
+    h.sent()
+        .iter()
+        .filter(|m| m["method"] == "bn.command.submit")
+        .filter_map(|m| {
+            m["params"]["operation"]["choice_id"]
+                .as_str()
+                .map(String::from)
+        })
+        .collect()
 }
 
 fn row(id: &str, pane: &str, label: &str, description: &str, hotkey: &str) -> Value {
@@ -116,5 +139,80 @@ fn a_zone_manager_key_row_shows_its_hotkey_once() {
     assert!(
         shown.contains("Confirm  [RETURN]"),
         "a row without a key keeps the action's\n{shown}"
+    );
+}
+
+fn with_panes(mut interaction: Value, panes: Value) -> Value {
+    interaction["compat"]["panes"] = panes;
+    interaction
+}
+
+#[test]
+fn the_map_editors_tile_and_actions_panes_are_drawn_under_headings_and_an_action_row_is_clickable()
+{
+    let (mut app, h) = engine();
+    text(&mut app);
+    let mut terrain = row("tile:terrain", "tile", "Terrain", "grass", "");
+    terrain["selectable"] = false.into();
+    let editor = screen(
+        "target",
+        "EDITMAP",
+        "Map editor",
+        "",
+        vec![
+            terrain,
+            row("action:EDIT_TERRAIN", "actions", "Edit terrain", "", "e"),
+        ],
+    );
+    let panes = json!([{"id":"tile","label":"Tile","role":"current"},
+        {"id":"actions","label":"Actions","role":"controls"}]);
+    show(&mut app, &h, with_panes(editor, panes), json!([]));
+    let shown = text(&mut app);
+    let lines = shown.lines().collect::<Vec<_>>();
+    let at = |needle: &str| lines.iter().position(|l| l.contains(needle)).unwrap();
+    assert!(
+        at("Tile") < at("Terrain grass") && at("Terrain grass") < at("Actions"),
+        "{shown}"
+    );
+    assert!(at("Actions") < at("e Edit terrain"), "{shown}");
+    let (x, y) = (
+        lines[at("e Edit terrain")].find("e Edit terrain").unwrap() as u16,
+        at("e Edit terrain") as u16,
+    );
+    app.handle_mouse(mouse(x, at("Terrain grass") as u16));
+    assert!(chosen(&h).is_empty(), "a tile row is not an action");
+    app.handle_mouse(mouse(x, y));
+    assert_eq!(chosen(&h), ["action:EDIT_TERRAIN"]);
+}
+
+#[test]
+fn the_zone_manager_lists_its_zones_options_and_actions_under_headings() {
+    let (mut app, h) = engine();
+    text(&mut app);
+    let manager = screen(
+        "choices",
+        "ZONES_MANAGER",
+        "Zones",
+        "",
+        vec![
+            row("zone:0", "zones", "stockpile", "", ""),
+            row("action:ADD_ZONE", "actions", "Add zone", "", "a"),
+        ],
+    );
+    let panes = json!([{"id":"zones","label":"Zones","role":"current"},
+        {"id":"options","label":"Options","role":"inactive"},
+        {"id":"actions","label":"Actions","role":"controls"}]);
+    show(&mut app, &h, with_panes(manager, panes), json!([]));
+    let shown = text(&mut app);
+    let lines = shown.lines().collect::<Vec<_>>();
+    let at = |needle: &str| lines.iter().rposition(|l| l.contains(needle)).unwrap();
+    assert!(at("stockpile") == at("│  Zones") + 1, "{shown}");
+    assert!(at("│  a Add zone") == at("│  Actions") + 1, "{shown}");
+    let y = at("│  a Add zone") as u16;
+    app.handle_mouse(mouse(lines[y as usize].find("Add zone").unwrap() as u16, y));
+    assert_eq!(
+        chosen(&h),
+        ["action:ADD_ZONE"],
+        "a click maps to its row past a heading"
     );
 }

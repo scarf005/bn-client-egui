@@ -268,6 +268,8 @@ pub struct Menu {
     pub pane_tabs: Vec<(String, String, bool)>,
     /// The row the engine's own cursor is on, which its navigation keys move.
     pub focus: Option<String>,
+    /// Every pane the engine names, as `(id, label)` in its order.
+    pub sections: Vec<(String, String)>,
     /// The engine's composed screen of a view it has no structured interaction for: only text to
     /// show, driven by the keys of the view's actions.
     pub screen: bool,
@@ -287,6 +289,17 @@ impl Menu {
             .iter()
             .filter(|c| !c.tab && (self.pane.is_none() || c.group == self.pane))
             .collect()
+    }
+
+    /// The heading `row` starts a section under, when the menu lists several named panes in one list and
+    /// `row` is the first of its pane after `previous`.
+    pub fn heading(&self, previous: Option<&MenuChoice>, row: &MenuChoice) -> Option<&str> {
+        let group = row.group.as_deref().filter(|_| self.pane.is_none())?;
+        let changed = previous.is_none_or(|p| p.group.as_deref() != Some(group));
+        let named = self.sections.iter().find(|(id, _)| id == group);
+        named
+            .filter(|_| changed && self.sections.len() > 1)
+            .map(|(_, label)| label.as_str())
     }
 
     /// A computer terminal: its text is the message and its answers carry the pane `terminal`.
@@ -558,6 +571,11 @@ pub trait GameModel {
         None
     }
     fn menu(&self) -> Option<Menu> {
+        None
+    }
+    /// The panes of a target screen (the map editor's tile and actions), drawn beside the map it moves a
+    /// cursor on; none when the screen lists nothing.
+    fn target_panel(&self) -> Option<Menu> {
         None
     }
     /// Where the engine's own cursor is (look mode), in view coordinates; none when it has no cursor.

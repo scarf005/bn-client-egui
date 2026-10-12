@@ -202,7 +202,14 @@ impl<M: GameModel> App<M> {
                         // A run of rows refused for the same reason says it once.
                         let any_hotkey = menu.choices.iter().any(|c| !c.hotkey.is_empty());
                         let mut last_denial = "";
-                        for (i, choice) in menu.entries().into_iter().enumerate() {
+                        let entries = menu.entries();
+                        for (i, choice) in entries.iter().copied().enumerate() {
+                            // A list of named panes starts each under its heading, as the native screen separates them.
+                            if let Some(heading) =
+                                menu.heading(i.checked_sub(1).map(|p| entries[p]), choice)
+                            {
+                                ui.add(egui::Label::new(egui::RichText::new(heading).strong()));
+                            }
                             let said = std::mem::replace(&mut last_denial, &choice.denial)
                                 == choice.denial;
                             if let Some(row) = &choice.editor {
@@ -492,7 +499,7 @@ pub(super) fn list_row_style(ui: &mut egui::Ui) {
 
 /// An entry's labelled values as markup after its label; a `<name> color` column colours the value of
 /// `<name>`, and a column named like the entry itself is just its value.
-fn column_text(entry: &str, columns: &[(String, String)]) -> String {
+pub(super) fn column_text(entry: &str, columns: &[(String, String)]) -> String {
     let tint = |name: &str| {
         columns
             .iter()

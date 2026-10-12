@@ -16,6 +16,7 @@ mod palette;
 mod pickup;
 mod sidebar;
 mod spells;
+mod target;
 mod terminal;
 mod trade;
 mod vehicle;
@@ -431,6 +432,7 @@ impl<M: GameModel> App<M> {
             });
         self.palette(ui.ctx());
         self.menu(ui.ctx());
+        self.target_panel(ui.ctx());
     }
 
     /// Typed characters and special keys are game keys; the first one that runs an action wins.
