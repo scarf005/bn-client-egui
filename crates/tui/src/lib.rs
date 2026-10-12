@@ -579,8 +579,8 @@ impl<M: GameModel> TuiApp<M> {
                 }
             }
             MouseEventKind::Down(MouseButton::Left) => {
-                self.cursor = Some(self.absolute(view));
                 if !self.model.aim(view, true) {
+                    self.cursor = Some(self.absolute(view));
                     self.go_to(view);
                 }
             }
