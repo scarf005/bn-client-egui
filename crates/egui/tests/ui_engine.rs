@@ -609,6 +609,55 @@ fn a_key_prompt_fills_its_field_with_the_next_key_and_a_function_key_by_its_name
     );
 }
 
+/// A list menu whose second row is disabled, with a hotkey on each; `field` is the prompt it also shows.
+fn hotkey_menu(h: &mut H, script: &ScriptHandle, field: Option<serde_json::Value>) {
+    h.run_steps(3);
+    for name in ["events_41_walk", "events_42_message"] {
+        script.push(fixture(name));
+    }
+    let mut menu = fixture("events_43_menu");
+    let interaction = &mut menu["params"]["events"][0]["changes"]["interaction"]["interaction"];
+    let row = |id: &str, label: &str, hotkey: &str, enabled: bool| {
+        json!({"id":id,"label":label,"description":"","denial":"","enabled":enabled,
+            "selectable":enabled,"selected":false,"columns":[],"hotkey":hotkey})
+    };
+    interaction["choices"] = json!([
+        row("first", "First row", "4", true),
+        row("second", "Second row", "b", false)
+    ]);
+    if let Some(field) = field {
+        interaction["field"] = field;
+    }
+    script.push(menu);
+    h.run_steps(3);
+}
+
+#[test]
+fn a_typed_hotkey_chooses_its_row_but_not_a_disabled_one() {
+    let (mut h, script) = harness();
+    hotkey_menu(&mut h, &script, None);
+    h.event(egui::Event::Text("b".into()));
+    h.run_steps(3);
+    assert!(operations(&script).is_empty(), "disabled row");
+    h.event(egui::Event::Text("4".into()));
+    h.run_steps(3);
+    assert_eq!(
+        operations(&script),
+        [json!({"kind":"choose","choice_id":"first"})]
+    );
+}
+
+#[test]
+fn a_hotkey_typed_into_a_filter_box_stays_text() {
+    let (mut h, script) = harness();
+    let field = json!({"id":"field:value","label":"Filter","description":"","value":"",
+        "type":"text","max_length":-1,"printable":true});
+    hotkey_menu(&mut h, &script, Some(field));
+    h.get_by_label("Filter").type_text("4");
+    h.run_steps(3);
+    assert!(operations(&script).iter().all(|o| o["kind"] != "choose"));
+}
+
 #[test]
 fn a_bare_text_prompt_is_a_field_that_enter_submits() {
     let (mut h, script) = harness();
