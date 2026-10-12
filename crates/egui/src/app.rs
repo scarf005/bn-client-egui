@@ -8,6 +8,7 @@ use std::collections::VecDeque;
 
 mod aim;
 mod crafting;
+mod inventory;
 mod menu;
 mod palette;
 mod pickup;
@@ -126,6 +127,7 @@ pub struct App<M: GameModel> {
     crafting: crafting::Crafting,
     aim: aim::Aim,
     pickup: pickup::Pickup,
+    inventory: inventory::Inventory,
     trade: trade::Trade,
     /// The engine's selected row of the open menu, to keep it in view when the wheel moves it.
     menu_cursor: Option<String>,
@@ -190,6 +192,7 @@ impl<M: GameModel> App<M> {
             crafting: Default::default(),
             aim: Default::default(),
             pickup: Default::default(),
+            inventory: Default::default(),
             trade: Default::default(),
             menu_cursor: None,
             queued: VecDeque::new(),

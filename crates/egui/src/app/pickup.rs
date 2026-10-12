@@ -1,14 +1,33 @@
-//! The native pickup list: one row per stack with its mark, the count box of a marked stack, the
-//! predicted carry header, the cursor row's description, and the menu's own Confirm.
+//! The native pickup list: `PICK Wgt/Vol` header, one row per stack as its letter, nesting slash, mark
+//! and name in the item's color, the cursor bar, the count box of a marked stack, the key hints under
+//! the list, and the cursor row's item description. Letters mark rows; Enter confirms, Escape cancels.
+use super::inventory::{column, key_hints, selection_mark, tinted, typed_hotkey};
+use super::menu::{list_frame, list_row_style};
 use super::{App, a11y};
-use bn_client_core::{GameModel, Menu};
+use bn_client_core::{GameModel, Menu, MenuChoice};
 use eframe::egui::{self, accesskit};
-use std::collections::HashMap;
 
 #[derive(Default)]
 pub struct Pickup {
-    /// The count box of each marked stack: what the engine last chose, and the text being typed.
-    counts: HashMap<String, (Option<u64>, String)>,
+    /// The row the cursor was last on, so the list scrolls only when it moves.
+    cursor: Option<String>,
+}
+
+/// The native nesting slash of a row: gray under an unmarked parent, yellow under a marked one that
+/// still has an unmarked child, light blue when all its children are marked; none for a plain row.
+fn nesting(rows: &[&MenuChoice], row: &MenuChoice) -> Option<&'static str> {
+    let parent_id = column(row, "Nesting").strip_prefix("child of ")?;
+    let parent = rows.iter().find(|r| r.id == parent_id);
+    let mark = format!("child of {parent_id}");
+    let all = rows
+        .iter()
+        .filter(|r| column(r, "Nesting") == mark)
+        .all(|r| r.selected);
+    Some(match parent {
+        Some(p) if p.selected && all => "c_light_blue",
+        Some(p) if p.selected => "c_yellow",
+        _ => "c_dark_gray",
+    })
 }
 
 impl<M: GameModel> App<M> {
@@ -21,38 +40,74 @@ impl<M: GameModel> App<M> {
         );
         let mut ids = Vec::new();
         let mut focused = false;
-        let mut chosen = None;
+        let mut chosen = typed_hotkey(ctx, &self.model, &menu.choices);
         let mut count = None;
         let mut confirm = false;
-        let mut cancel = self.palette.is_none()
+        let any = menu.choices.iter().any(|c| c.selected);
+        let cancel = self.palette.is_none()
             && ctx.input(|i| i.key_pressed(egui::Key::Escape))
             && menu.can_cancel;
         let rows = menu.choices.iter().filter(|c| !c.tab).collect::<Vec<_>>();
-        let any = rows.iter().any(|r| r.selected);
         let title = bn_client_core::markup::plain(&menu.title);
+        let mut hovered = None;
         egui::Window::new(&title)
             .id(a11y::dialog_id(&title))
+            .title_bar(false)
             .anchor(egui::Align2::CENTER_TOP, super::dialog_offset(ctx))
             .collapsible(false)
+            .resizable(false)
             .default_width(560.0)
+            .frame(list_frame(ctx))
             .show(ctx, |ui| {
-                if !menu.message.is_empty() {
-                    ui.label(self.rich(ui, &menu.message));
+                // The native header: predicted against capacity, red where over, then the filter.
+                let header = match menu.panes.first().and_then(|p| p.totals.as_ref()) {
+                    Some(t) => {
+                        let tone = |over| if over { "c_red" } else { "c_white" };
+                        format!(
+                            "PICK Wgt {}/{}  Vol {}/{}",
+                            tinted(tone(t.over_weight), &t.weight),
+                            t.weight_max,
+                            tinted(tone(t.over_volume), &t.volume),
+                            t.volume_max
+                        )
+                    }
+                    None => menu.message.clone(),
+                };
+                ui.label(self.rich(ui, &tinted("c_white", &header)));
+                if let Some(filter) = menu
+                    .panes
+                    .first()
+                    .map(|p| &p.filter)
+                    .filter(|f| !f.is_empty())
+                {
+                    ui.label(self.rich(ui, &format!("Filter: {filter}")));
                 }
-                let mut described = None;
                 egui::ScrollArea::vertical()
                     .max_height(ctx.content_rect().height() * 0.45)
                     .show(ui, |ui| {
                         for (i, row) in rows.iter().enumerate() {
                             ui.horizontal(|ui| {
-                                let mark = if row.selected { "[x]" } else { "[ ]" };
-                                let label = markup_plain(&row.label);
-                                let text = format!("{mark} {label}");
+                                list_row_style(ui);
+                                ui.spacing_mut().item_spacing.x = 0.0;
+                                let color = column(row, "Row color");
+                                let key = match row.hotkey.as_str() {
+                                    "" => " ".to_string(),
+                                    k => tinted(color, k),
+                                };
+                                let slash = nesting(&rows, row)
+                                    .map_or(" ".to_string(), |c| tinted(c, "\\"));
+                                let mark = match selection_mark(row) {
+                                    '-' => "- ".to_string(),
+                                    m => tinted("c_light_blue", &format!("{m} ")),
+                                };
+                                let name = tinted(color, &row.label);
+                                let text = self.rich(ui, &format!("{key}{slash}{mark}{name}"));
                                 let button =
                                     self.control(ui, text, &row.id, row.enabled, row.highlighted);
                                 ids.extend(button.enabled().then_some(button.id));
                                 ui.ctx().accesskit_node_builder(button.id, |b| {
                                     b.set_role(accesskit::Role::MenuItem);
+                                    b.set_label(bn_client_core::markup::plain(&row.label));
                                     b.set_toggled(if row.selected {
                                         accesskit::Toggled::True
                                     } else {
@@ -63,10 +118,15 @@ impl<M: GameModel> App<M> {
                                     button.request_focus();
                                     focused = button.has_focus();
                                 }
-                                if button.hovered() || (row.highlighted && described.is_none()) {
-                                    described = Some(&row.description);
+                                if row.highlighted && self.pickup.cursor.as_deref() != Some(&row.id)
+                                {
+                                    button.scroll_to_me(None);
+                                    self.pickup.cursor = Some(row.id.clone());
                                 }
-                                // Enter on a focused row is the native confirm key; Space or a click marks.
+                                if button.hovered() {
+                                    hovered = Some(*row);
+                                }
+                                // Enter on a focused row is the native confirm key; a click marks.
                                 if button.clicked() {
                                     if ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                                         confirm = any;
@@ -74,68 +134,38 @@ impl<M: GameModel> App<M> {
                                         chosen = Some(row.id.clone());
                                     }
                                 }
-                                let available = row.available_count.filter(|n| *n > 1);
-                                if let (true, Some(available)) = (row.selected, available) {
-                                    let (seen, text) = self
-                                        .pickup
-                                        .counts
-                                        .entry(row.id.clone())
-                                        .or_insert((None, String::new()));
-                                    if *seen != row.selected_count {
-                                        *seen = row.selected_count;
-                                        *text = row
-                                            .selected_count
-                                            .map_or(String::new(), |n| n.to_string());
-                                    }
-                                    let edit = egui::TextEdit::singleline(text).desired_width(40.0);
-                                    let response = ui.add(edit);
-                                    let name = format!("Count of {label}");
-                                    ui.ctx()
-                                        .accesskit_node_builder(response.id, |b| b.set_label(name));
-                                    ids.push(response.id);
-                                    ui.label(format!("/ {available}"));
-                                    let enter = ui.input(|i| i.key_pressed(egui::Key::Enter));
-                                    if response.lost_focus() && enter {
-                                        // A count beyond the stack would only be refused by the engine.
-                                        count = text
-                                            .trim()
-                                            .parse::<u64>()
-                                            .ok()
-                                            .filter(|n| (1..=available).contains(n))
-                                            .map(|n| (row.id.clone(), n));
-                                    }
+                                if let Some(c) = self.count_box(ui, row, &mut ids) {
+                                    count = Some(c);
                                 }
                                 if !row.enabled && !row.denial.is_empty() {
-                                    ui.label(self.rich(ui, &row.denial));
+                                    ui.label(self.rich(ui, &tinted("c_red", &row.denial)));
                                 }
                             });
                         }
                     });
-                // Always the same height, so the rows and buttons do not move as the hovered row changes.
-                ui.separator();
-                let height = ctx.content_rect().height() * 0.3;
-                egui::ScrollArea::vertical()
-                    .id_salt("pickup_description")
-                    .max_height(height)
-                    .show(ui, |ui| {
-                        ui.set_min_height(height);
-                        ui.set_min_width(ui.available_width());
-                        if let Some(description) = described {
-                            ui.label(self.rich(ui, description));
-                        }
-                    });
-                ui.separator();
-                ui.horizontal(|ui| {
-                    let button = self.control(ui, "Confirm", "CONFIRM", any, false);
-                    ids.extend(button.enabled().then_some(button.id));
-                    confirm |= button.clicked();
-                    if menu.can_cancel {
-                        let button =
-                            ui.add_enabled(!self.model.busy(), egui::Button::new("Cancel"));
-                        ids.extend(button.enabled().then_some(button.id));
-                        cancel |= button.clicked();
-                    }
-                });
+                let actions = self.model.actions();
+                for hints in [
+                    &[
+                        ("LEFT", "Unmark"),
+                        ("HELP_KEYBINDINGS", "Help"),
+                        ("RIGHT", "Mark"),
+                    ],
+                    &[
+                        ("PREV_TAB", "Prev"),
+                        ("SELECT_ALL", "All"),
+                        ("NEXT_TAB", "Next"),
+                    ],
+                ] {
+                    ui.label(self.rich(ui, &tinted("c_light_gray", &key_hints(&actions, hints))));
+                }
+                let shown = hovered.or_else(|| rows.iter().copied().find(|r| r.highlighted));
+                self.item_info(
+                    ui,
+                    &shown
+                        .map(|r| tinted(column(r, "Row color"), &r.label))
+                        .unwrap_or_default(),
+                    shown.map(|r| r.description.as_str()),
+                );
             });
         self.menu_ids = ids;
         a11y::dialog(ctx, &title, &menu.message);
@@ -153,8 +183,4 @@ impl<M: GameModel> App<M> {
         }
         focused
     }
-}
-
-fn markup_plain(text: &str) -> String {
-    bn_client_core::markup::plain(text)
 }
