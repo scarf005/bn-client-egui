@@ -973,8 +973,18 @@ impl<M: GameModel> TuiApp<M> {
     fn draw_items(&mut self, f: &mut Frame, area: Rect) {
         let section = |title: &str, items: &[String]| {
             let head = Line::styled(title.to_string(), Style::new().add_modifier(Modifier::BOLD));
+            let row = |item: &String| {
+                let runs = self.model.styled(item).into_iter();
+                Line::from(
+                    runs.map(|run| match run.color {
+                        Some(c) => Span::styled(run.text, Style::new().fg(color(c))),
+                        None => Span::raw(run.text),
+                    })
+                    .collect::<Vec<_>>(),
+                )
+            };
             std::iter::once(head)
-                .chain(items.iter().map(|i| Line::raw(i.clone())))
+                .chain(items.iter().map(row))
                 .collect::<Vec<_>>()
         };
         let mut lines = section("Ground", self.model.ground());
