@@ -275,6 +275,23 @@ pub struct Menu {
     pub screen: bool,
     /// The vehicle interaction window, when this menu is one.
     pub vehicle: Option<Vehicle>,
+    /// The window of a screen the engine draws itself, such as a software mini-game.
+    pub canvas: Option<Canvas>,
+}
+
+/// A run of cells of one window row that share their colors; no background for curses color 0.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CanvasRun {
+    pub text: String,
+    pub color: Rgb,
+    pub bg: Option<Rgb>,
+}
+
+/// A native window as drawn, one list of runs per row.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Canvas {
+    pub cols: usize,
+    pub rows: Vec<Vec<CanvasRun>>,
 }
 
 impl Menu {

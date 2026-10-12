@@ -5,13 +5,13 @@ use crate::colors::ColorMap;
 use crate::keys;
 use crate::markup::{self, Run};
 use crate::model::{
-    ActionEntry, Cell, CommandStatus, Effect, Failure, FailureKind, GameModel, Layer, Loading,
-    LogLine, Menu, MenuChoice, MenuField, MenuPane, Mutation, Overmap, OvermapCell, OvermapTile,
-    PaneTotals, Pos, Rgb, Shape,
+    ActionEntry, Canvas, CanvasRun, Cell, CommandStatus, Effect, Failure, FailureKind, GameModel,
+    Layer, Loading, LogLine, Menu, MenuChoice, MenuField, MenuPane, Mutation, Overmap, OvermapCell,
+    OvermapTile, PaneTotals, Pos, Rgb, Shape,
 };
 use crate::protocol::{
-    self, Cell as WorldCell, Entity, Expect, Incoming, Known, LoadingNotice, Look, ModTileset,
-    Operation, Snapshot, Submit, Traits, WorldPos,
+    self, CanvasWire, Cell as WorldCell, Entity, Expect, Incoming, Known, LoadingNotice, Look,
+    ModTileset, Operation, Snapshot, Submit, Traits, WorldPos,
 };
 use crate::replica::{Outcome, Replica};
 use crate::transport::{Transport, request};
@@ -205,6 +205,26 @@ fn direction(dx: i32, dy: i32) -> Option<&'static str> {
 }
 
 impl EngineModel {
+    /// The engine's window with its curses colors resolved.
+    fn canvas(&self, wire: &CanvasWire) -> Canvas {
+        Canvas {
+            cols: wire.cols,
+            rows: wire
+                .rows
+                .iter()
+                .map(|row| {
+                    row.iter()
+                        .map(|(text, fg, bg)| CanvasRun {
+                            text: text.clone(),
+                            color: self.colors.index(*fg),
+                            bg: (*bg != 0).then(|| self.colors.index(*bg)),
+                        })
+                        .collect()
+                })
+                .collect(),
+        }
+    }
+
     /// The fetched pages of this interaction, when they belong to it.
     fn more_of(&self, i: &protocol::Interaction) -> &[protocol::Choice] {
         let b = self.replica.boundary();
@@ -1273,6 +1293,7 @@ impl EngineModel {
                 .and_then(|c| pane_of(&c.label).map(String::from)),
             screen: i.kind == "custom",
             vehicle: i.vehicle.clone(),
+            canvas: i.canvas.as_ref().map(|wire| self.canvas(wire)),
             focus: i
                 .compat
                 .as_ref()

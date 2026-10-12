@@ -467,8 +467,42 @@ impl<M: GameModel> App<M> {
         ui.spacing_mut().item_spacing.y = 4.0;
     }
 
+    /// The engine's own window, a row of colored cells at a time, in a fixed-width font.
+    fn canvas(&self, ui: &mut egui::Ui, canvas: &bn_client_core::Canvas) {
+        let font = egui::FontId::monospace(14.0);
+        let paint = |c: bn_client_core::Rgb| egui::Color32::from_rgb(c.0, c.1, c.2);
+        ui.spacing_mut().item_spacing.y = 0.0;
+        for row in &canvas.rows {
+            let mut job = egui::text::LayoutJob::default();
+            for run in row {
+                job.append(
+                    &run.text,
+                    0.0,
+                    egui::TextFormat {
+                        color: paint(run.color),
+                        background: run.bg.map_or(egui::Color32::TRANSPARENT, paint),
+                        font_id: font.clone(),
+                        ..Default::default()
+                    },
+                );
+            }
+            // An empty row keeps its height.
+            if row.is_empty() {
+                job.append(
+                    " ",
+                    0.0,
+                    egui::TextFormat::simple(font.clone(), egui::Color32::BLACK),
+                );
+            }
+            ui.add(egui::Label::new(job).wrap_mode(egui::TextWrapMode::Extend));
+        }
+        ui.spacing_mut().item_spacing.y = 4.0;
+    }
+
     fn menu_message(&self, ui: &mut egui::Ui, menu: &bn_client_core::Menu) {
-        if menu.screen {
+        if let Some(canvas) = &menu.canvas {
+            self.canvas(ui, canvas);
+        } else if menu.screen {
             // A composed screen: columns line up only in a fixed-width font.
             ui.add(
                 egui::Label::new(egui::RichText::new(&menu.message).monospace())
