@@ -138,6 +138,8 @@ impl<M: GameModel> App<M> {
             // Rows fill the list, so the window is as wide as it may get from its first frame; growing
             // into it later would move its centred position.
             .default_width(max_width + frame.total_margin().sum().x)
+            // The window offers its content the whole height a list may take, not half of what is free.
+            .default_height(super::dialog_scroll_height(ctx))
             .frame(frame)
             .show(ctx, |ui| {
                 ui.set_min_width(520.0);
