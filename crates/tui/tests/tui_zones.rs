@@ -273,3 +273,34 @@ fn hovering_the_cursor_square_while_picking_a_zone_point_does_not_confirm_it_but
         "a click on the cursor takes the point"
     );
 }
+
+#[test]
+fn the_engines_cursor_is_lit_on_the_map_while_picking_a_zone_point() {
+    let (mut app, h) = engine();
+    text(&mut app);
+    let look = screen(
+        "target",
+        "LOOK",
+        "Look Around",
+        "Select first point.",
+        vec![],
+    );
+    show(&mut app, &h, look, json!([]));
+    let mut t = Terminal::new(TestBackend::new(120, 40)).unwrap();
+    t.draw(|f| app.draw(f)).unwrap();
+    let buf = t.backend().buffer();
+    let lit = (0..buf.area.height)
+        .flat_map(|y| (0..buf.area.width).map(move |x| (x, y)))
+        .filter(|&pos| {
+            buf[pos]
+                .modifier
+                .contains(ratatui::style::Modifier::REVERSED)
+        })
+        .collect::<Vec<_>>();
+    let avatar = (0..buf.area.height)
+        .flat_map(|y| (0..buf.area.width).map(move |x| (x, y)))
+        .find(|&pos| buf[pos].symbol() == "@")
+        .expect("the avatar");
+    // The cursor is at world (3, 4), three squares west of the avatar.
+    assert_eq!(lit, [(avatar.0 - 3, avatar.1)]);
+}
