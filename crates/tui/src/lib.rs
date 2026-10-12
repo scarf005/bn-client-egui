@@ -1,6 +1,7 @@
 //! Terminal client over the same `GameModel` as the egui client.
 
 mod aim;
+mod canvas;
 mod crafting;
 mod pickup;
 mod settings;
@@ -719,6 +720,9 @@ impl<M: GameModel> TuiApp<M> {
                 "NPC_TRADE" => self.draw_trade(f, &menu),
                 "PICKUP" => self.draw_pickup(f, &menu),
                 _ if menu.terminal() || menu.description() => self.draw_terminal(f, &menu),
+                _ if menu.canvas.is_some() => {
+                    menu.canvas.iter().for_each(|c| canvas::draw_canvas(f, c))
+                }
                 _ => self.draw_menu(f, &menu),
             }
         }

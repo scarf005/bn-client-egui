@@ -553,6 +553,48 @@ fn a_menus_rebound_keys_move_and_confirm_through_the_engine_and_focus_follows_it
     );
 }
 
+fn mini_game(sequence: u32, body: &str) -> Value {
+    show(
+        sequence,
+        json!([{"id":"UP","name":"Up","keys":["UP"]},{"id":"QUIT","name":"Quit","keys":["q"]}]),
+        json!({"schema_id":"s:snake","kind":"custom","context":"SNAKE","title":"S N A K E",
+            "message":"","allow_cancel":false,"allow_set_count":false,"choices":[],
+            "choice_total":0,"refresh_ms":100,
+            "canvas":{"cols":20,"rows":[[["Score: 0",15,0]],[[body,15,0],["*",9,0]],[]]}}),
+    )
+}
+
+#[test]
+fn a_mini_game_window_is_drawn_whole_and_each_redraw_replaces_it() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    script.push(mini_game(41, "ab"));
+    h.run_steps(4);
+    h.get_by_label_contains("Score: 0");
+    h.get_by_label_contains("ab*");
+    script.push(mini_game(42, "cd"));
+    h.run_steps(4);
+    h.get_by_label_contains("cd*");
+    assert!(
+        h.query_by_label_contains("ab*").is_none(),
+        "the old frame is gone"
+    );
+}
+
+#[test]
+fn a_mini_game_key_is_the_engines_action() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    script.push(mini_game(41, "ab"));
+    h.run_steps(4);
+    h.key_press(egui::Key::ArrowUp);
+    h.run_steps(2);
+    assert_eq!(
+        submits(&script),
+        [json!({"kind":"action","action_id":"UP"})]
+    );
+}
+
 fn screen(sequence: u32) -> Value {
     show(
         sequence,

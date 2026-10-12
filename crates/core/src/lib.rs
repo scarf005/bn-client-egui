@@ -15,7 +15,7 @@ pub mod watchdog;
 pub use clock::Clock;
 pub use engine_model::EngineModel;
 pub use model::{
-    ActionEntry, Cell, CommandStatus, Effect, Failure, FailureKind, FakeModel, GameModel, Layer,
-    Loading, LogLine, Menu, MenuChoice, MenuPane, Mutation, Overmap, OvermapCell, OvermapTile,
-    PaneTotals, Pos, Rgb, Shape, action_hint,
+    ActionEntry, Canvas, CanvasRun, Cell, CommandStatus, Effect, Failure, FailureKind, FakeModel,
+    GameModel, Layer, Loading, LogLine, Menu, MenuChoice, MenuPane, Mutation, Overmap, OvermapCell,
+    OvermapTile, PaneTotals, Pos, Rgb, Shape, action_hint,
 };

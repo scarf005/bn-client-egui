@@ -2082,6 +2082,36 @@ fn a_menu_banner_is_published_line_by_line() {
     );
 }
 
+#[test]
+fn a_mini_game_window_is_published_as_colored_runs_and_redrawn_by_each_event() {
+    let game = |body: &str| {
+        let mut menu = crafting("favorites");
+        let i = &mut menu["interaction"];
+        i["kind"] = json!("custom");
+        i["context"] = json!("SNAKE");
+        i["choices"] = json!([]);
+        i["choice_total"] = json!(0);
+        i["refresh_ms"] = json!(100);
+        i["canvas"] = json!({"cols": 80, "rows": [[[body, 15, 0], ["*", 9, 4]], []]});
+        menu
+    };
+    let (t, h) = session();
+    let mut m = connected(t);
+    h.push(change(41, json!({"interaction": game("##")})));
+    m.poll();
+    let canvas = m.menu().unwrap().canvas.unwrap();
+    assert_eq!(canvas.cols, 80);
+    assert_eq!(canvas.rows.len(), 2);
+    assert_eq!(canvas.rows[0][0].text, "##");
+    assert_ne!(canvas.rows[0][0].color, canvas.rows[0][1].color);
+    assert_eq!(canvas.rows[0][0].bg, None);
+    assert!(canvas.rows[0][1].bg.is_some());
+    assert!(canvas.rows[1].is_empty());
+    h.push(change(42, json!({"interaction": game("###")})));
+    m.poll();
+    assert_eq!(m.menu().unwrap().canvas.unwrap().rows[0][0].text, "###");
+}
+
 fn subscribe_with_log(lines: &[(&str, &str, u32)]) -> Vec<serde_json::Value> {
     let mut reply = subscribe_reply();
     reply[0]["result"]["messages"] = lines

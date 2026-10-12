@@ -490,6 +490,20 @@ pub struct Interaction {
     pub overmap: Option<OvermapWire>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub vehicle: Option<Vehicle>,
+    /// A window the engine draws itself, such as a software mini-game.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub canvas: Option<CanvasWire>,
+    /// Where the engine redraws the screen on its own, the interval in milliseconds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub refresh_ms: Option<u64>,
+}
+
+/// A native window as drawn: per row, `[text, foreground, background]` runs of cells that share
+/// their colors, with curses color indexes. Blank cells that end a row are left out.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CanvasWire {
+    pub cols: usize,
+    pub rows: Vec<Vec<(String, u8, u8)>>,
 }
 
 /// The native vehicle interaction window: the grid around the cursor, the parts on the cursor
