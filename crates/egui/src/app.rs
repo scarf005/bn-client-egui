@@ -1043,7 +1043,7 @@ impl<M: GameModel> App<M> {
             cursor = cell_at(p);
             // The engine's own cursor follows the mouse while it is looking or aiming; otherwise the
             // native mouse view describes the square.
-            if !self.model.aim(cursor) {
+            if !self.model.aim(cursor, false) {
                 self.model.hover(cursor);
             }
         }
@@ -1052,7 +1052,7 @@ impl<M: GameModel> App<M> {
         let clicked = response.interact_pointer_pos().map_or(cursor, cell_at);
         if response.clicked() {
             // A click while the engine owns the cursor moves or confirms it; otherwise it travels.
-            if !self.model.aim(clicked) {
+            if !self.model.aim(clicked, true) {
                 self.go_to(clicked);
             }
             ui.ctx().request_repaint();

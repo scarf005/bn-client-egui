@@ -2018,7 +2018,7 @@ impl GameModel for EngineModel {
         true
     }
 
-    fn aim(&mut self, at: Pos) -> bool {
+    fn aim(&mut self, at: Pos, click: bool) -> bool {
         let Some(here) = self.focus() else {
             return false;
         };
@@ -2026,9 +2026,11 @@ impl GameModel for EngineModel {
             return true;
         }
         match (here == at, self.abs(at)) {
-            // The cursor is already there: the second click confirms it, as Enter does.
+            // The cursor is already there: a click confirms it, as Enter does; a hover leaves it.
             (true, _) => {
-                self.invoke(&["CONFIRM".into()]);
+                if click {
+                    self.invoke(&["CONFIRM".into()]);
+                }
             }
             (false, Some(pos)) => {
                 self.submit(Operation::SetTarget {

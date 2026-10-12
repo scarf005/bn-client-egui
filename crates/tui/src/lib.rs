@@ -574,13 +574,13 @@ impl<M: GameModel> TuiApp<M> {
         match ev.kind {
             MouseEventKind::Moved => {
                 self.hovered = Some(self.absolute(view));
-                if !self.model.aim(view) {
+                if !self.model.aim(view, false) {
                     self.model.hover(view);
                 }
             }
             MouseEventKind::Down(MouseButton::Left) => {
                 self.cursor = Some(self.absolute(view));
-                if !self.model.aim(view) {
+                if !self.model.aim(view, true) {
                     self.go_to(view);
                 }
             }

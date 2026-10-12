@@ -623,8 +623,9 @@ pub trait GameModel {
     fn context_click(&mut self, _at: Pos) -> bool {
         false
     }
-    /// The engine's cursor (look mode, aiming) moves to view square `at`, or confirms it when already there.
-    fn aim(&mut self, _at: Pos) -> bool {
+    /// The engine's cursor (look mode, aiming) moves to view square `at`; a `click` on the square it is
+    /// already on confirms it, a hover never does.
+    fn aim(&mut self, _at: Pos, _click: bool) -> bool {
         false
     }
     /// Whether the open menu scrolls by the mouse wheel in the engine, as a native list does.
