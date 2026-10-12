@@ -1052,6 +1052,8 @@ impl<M: GameModel> TuiApp<M> {
                             None => value.clone(),
                         };
                         match label.is_empty() || *label == c.label {
+                            // A value that only repeats the row's own text adds nothing.
+                            true if plain(&value) == plain(&c.label) => String::new(),
                             true => format!("  {value}"),
                             false => format!("  {label}: {value}"),
                         }
