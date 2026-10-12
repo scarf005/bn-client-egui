@@ -2002,7 +2002,7 @@ fn menu_rows_carry_the_engines_hotkey_and_empty_when_absent() {
     assert_eq!(keys, ["e", ""]);
 }
 
-/// The pickup fixture with a hotkey on each row, `edit` applied to its interaction.
+/// The pickup fixture with a hotkey on each row, `edit` applied to its boundary.
 fn hotkeyed(
     edit: impl FnOnce(&mut Value),
 ) -> (EngineModel, bn_client_core::transport::ScriptHandle) {
@@ -2014,7 +2014,7 @@ fn hotkeyed(
     let mut boundary = serde_json::from_str::<Value>(&text).unwrap()["pickup"].clone();
     boundary["interaction"]["choices"][0]["hotkey"] = json!("e");
     boundary["interaction"]["choices"][1]["hotkey"] = json!("4");
-    edit(&mut boundary["interaction"]);
+    edit(&mut boundary);
     let (t, h) = session();
     let mut m = connected(t.on("bn.command.submit", walk_reply()));
     h.push(change(41, json!({"interaction": boundary})));
@@ -2023,8 +2023,10 @@ fn hotkeyed(
 }
 
 #[test]
-fn a_typed_hotkey_chooses_the_row_that_shows_it() {
-    let (mut m, h) = hotkeyed(|_| {});
+fn a_typed_hotkey_chooses_the_row_that_shows_it_even_when_the_digit_is_a_numpad_binding() {
+    // The digit is also the numpad key of a menu action, as in every native list.
+    let (mut m, h) =
+        hotkeyed(|b| b["actions"] = json!([{"id":"LEFT","name":"Left","keys":["NUMPAD_4"]}]));
     assert!(m.press("4"));
     assert_eq!(
         submits(&h)[0]["params"]["operation"],
@@ -2034,7 +2036,7 @@ fn a_typed_hotkey_chooses_the_row_that_shows_it() {
 
 #[test]
 fn a_hotkey_no_row_shows_or_a_disabled_row_does_not_choose() {
-    let (mut m, h) = hotkeyed(|i| i["choices"][1]["enabled"] = json!(false));
+    let (mut m, h) = hotkeyed(|b| b["interaction"]["choices"][1]["enabled"] = json!(false));
     assert!(!m.press("4"), "disabled row");
     assert!(!m.press("z"), "no row has it");
     assert!(submits(&h).is_empty());
@@ -2042,8 +2044,8 @@ fn a_hotkey_no_row_shows_or_a_disabled_row_does_not_choose() {
 
 #[test]
 fn a_hotkey_typed_into_a_text_prompt_is_not_a_choice() {
-    let (mut m, h) = hotkeyed(|i| {
-        i["field"] =
+    let (mut m, h) = hotkeyed(|b| {
+        b["interaction"]["field"] =
             json!({"id":"filter","label":"Filter","description":"","value":"","type":"text"})
     });
     assert!(!m.press("e"));
