@@ -1886,6 +1886,54 @@ fn menu_rows_carry_the_engines_hotkey_and_empty_when_absent() {
     assert_eq!(keys, ["e", ""]);
 }
 
+/// The pickup fixture with a hotkey on each row, `edit` applied to its interaction.
+fn hotkeyed(
+    edit: impl FnOnce(&mut Value),
+) -> (EngineModel, bn_client_core::transport::ScriptHandle) {
+    let text = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/pickup.json"
+    ))
+    .unwrap();
+    let mut boundary = serde_json::from_str::<Value>(&text).unwrap()["pickup"].clone();
+    boundary["interaction"]["choices"][0]["hotkey"] = json!("e");
+    boundary["interaction"]["choices"][1]["hotkey"] = json!("4");
+    edit(&mut boundary["interaction"]);
+    let (t, h) = session();
+    let mut m = connected(t.on("bn.command.submit", walk_reply()));
+    h.push(change(41, json!({"interaction": boundary})));
+    m.poll();
+    (m, h)
+}
+
+#[test]
+fn a_typed_hotkey_chooses_the_row_that_shows_it() {
+    let (mut m, h) = hotkeyed(|_| {});
+    assert!(m.press("4"));
+    assert_eq!(
+        submits(&h)[0]["params"]["operation"],
+        json!({"kind":"choose","choice_id":"pickup:b"})
+    );
+}
+
+#[test]
+fn a_hotkey_no_row_shows_or_a_disabled_row_does_not_choose() {
+    let (mut m, h) = hotkeyed(|i| i["choices"][1]["enabled"] = json!(false));
+    assert!(!m.press("4"), "disabled row");
+    assert!(!m.press("z"), "no row has it");
+    assert!(submits(&h).is_empty());
+}
+
+#[test]
+fn a_hotkey_typed_into_a_text_prompt_is_not_a_choice() {
+    let (mut m, h) = hotkeyed(|i| {
+        i["field"] =
+            json!({"id":"filter","label":"Filter","description":"","value":"","type":"text"})
+    });
+    assert!(!m.press("e"));
+    assert!(submits(&h).is_empty());
+}
+
 #[test]
 fn a_client_line_repeating_the_newest_one_is_not_added_again() {
     let (t, _h) = session();

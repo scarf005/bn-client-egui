@@ -265,3 +265,22 @@ fn typing_a_filter_keeps_the_edit_when_the_engine_answers_with_fewer_rows() {
         "{sent:?}"
     );
 }
+
+#[test]
+fn a_typed_hotkey_chooses_its_row_but_not_a_disabled_one() {
+    let mut rows = vec![
+        row("first", "First row", None),
+        row("second", "Second row", None),
+    ];
+    rows[0]["hotkey"] = "4".into();
+    rows[1]["hotkey"] = "b".into();
+    rows[1]["enabled"] = false.into();
+    let (mut app, h) = open(None, rows);
+    app.handle_key(key(KeyCode::Char('b')));
+    assert!(operations(&h).is_empty(), "disabled row");
+    app.handle_key(key(KeyCode::Char('4')));
+    assert_eq!(
+        operations(&h),
+        [json!({"kind":"choose","choice_id":"first"})]
+    );
+}

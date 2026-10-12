@@ -1488,6 +1488,14 @@ impl GameModel for EngineModel {
         if let Some(id) = self.action_for(key) {
             return self.invoke_action(&id);
         }
+        // As in a native list, a key the menu binds to no action selects the enabled row showing it.
+        if let Some(row) = self
+            .menu()
+            .filter(|m| m.field.is_none())
+            .and_then(|m| m.choices.into_iter().find(|c| c.enabled && c.hotkey == key))
+        {
+            return !self.busy && self.submit(Operation::Choose { choice_id: row.id });
+        }
         // A "press any key" popup has no key to bind: whatever is pressed acknowledges it.
         let any_key = self
             .replica
