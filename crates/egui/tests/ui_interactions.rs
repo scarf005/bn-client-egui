@@ -276,6 +276,27 @@ fn a_description_and_columns_of_the_selected_entry_are_shown() {
 }
 
 #[test]
+fn a_multi_line_side_panel_of_the_selected_entry_is_shown_and_the_others_are_not() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    let mut gate = choice("entry:0", "north gate");
+    gate["selected"] = true.into();
+    gate["description"] = "Distance: 3\nsecond panel line".into();
+    let mut other = choice("entry:1", "south gate");
+    other["description"] = "Distance: 9".into();
+    script.push(show(
+        41,
+        json!([]),
+        json!({"schema_id":"s:gates","kind":"choices","context":"UILIST","title":"Choose Translocator Gate",
+            "message":"","allow_cancel":true,"choices":[gate, other],
+            "choice_total":2,"allow_set_count":false}),
+    ));
+    h.run_steps(3);
+    h.get_by_label("Distance: 3\nsecond panel line");
+    assert!(h.query_by_label("Distance: 9").is_none());
+}
+
+#[test]
 fn a_value_that_repeats_the_entry_text_is_not_printed_twice() {
     let (mut h, script) = harness();
     h.run_steps(3);
