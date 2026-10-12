@@ -167,7 +167,8 @@ impl Replica {
                             .as_u64()
                             .map_or(1, |n| n.clamp(1, 1 << 31) as u32),
                     }),
-                    "sound.heard" => self.log.push(text.to_string()),
+                    // A sound the engine also wrote to the message log is already shown there.
+                    "sound.heard" if data["logged"] != true => self.log.push(text.to_string()),
                     _ => {}
                 }
             }
