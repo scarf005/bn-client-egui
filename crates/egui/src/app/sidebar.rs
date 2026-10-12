@@ -133,7 +133,7 @@ impl<M: GameModel> App<M> {
                                                     season.as_deref(),
                                                 );
                                             if !sprite {
-                                                glyph_icon(&painter, rect, &cell);
+                                                glyph_icon(&painter, rect, cell);
                                             }
                                         }
                                         let grip = ui
