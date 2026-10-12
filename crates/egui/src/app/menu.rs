@@ -39,6 +39,11 @@ impl<M: GameModel> App<M> {
             self.focus_menu = entered && !focused;
             return;
         }
+        if menu.context == "CONSTRUCTION" {
+            let focused = self.construction(ctx, &menu, entered);
+            self.focus_menu = entered && !focused;
+            return;
+        }
         if menu.context == "ADVANCED_INVENTORY" {
             let focused = self.aim(ctx, &menu, entered);
             self.focus_menu = entered && !focused;
@@ -51,6 +56,11 @@ impl<M: GameModel> App<M> {
         }
         if super::character::CONTEXTS.contains(&menu.context.as_str()) {
             let focused = self.character(ctx, &menu, entered);
+            self.focus_menu = entered && !focused;
+            return;
+        }
+        if menu.context == "INVENTORY" {
+            let focused = self.inventory(ctx, &menu, entered);
             self.focus_menu = entered && !focused;
             return;
         }
@@ -448,7 +458,7 @@ impl<M: GameModel> App<M> {
 }
 
 /// The native list's window: black, with its thin pink border.
-fn list_frame(ctx: &egui::Context) -> egui::Frame {
+pub(super) fn list_frame(ctx: &egui::Context) -> egui::Frame {
     egui::Frame::window(&ctx.global_style())
         .fill(egui::Color32::BLACK)
         .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(139, 58, 98)))
@@ -460,7 +470,7 @@ pub(super) fn list_row_style(ui: &mut egui::Ui) {
     let visuals = ui.visuals_mut();
     visuals.widgets.inactive.weak_bg_fill = egui::Color32::TRANSPARENT;
     visuals.widgets.inactive.bg_stroke = egui::Stroke::NONE;
-    visuals.selection.bg_fill = egui::Color32::from_rgb(10, 10, 220);
+    visuals.selection.bg_fill = super::inventory::BAR;
     visuals.selection.stroke = egui::Stroke::new(1.0, egui::Color32::WHITE);
 }
 

@@ -99,10 +99,11 @@ fn second_step_waits_for_the_first_command_to_finish() {
     m.poll();
     assert_eq!(
         m.player(),
-        Pos { x: 21, y: 12 },
-        "view stays put until the avatar nears the edge"
+        Pos { x: 20, y: 12 },
+        "the view follows the avatar"
     );
-    assert_eq!(m.cell(Pos { x: 21, y: 12 }).glyph, '.');
+    assert_eq!(m.origin(), Pos { x: -16, y: -8 });
+    assert_eq!(m.cell(Pos { x: 20, y: 12 }).glyph, '.');
     m.step_toward(Pos { x: 30, y: 12 });
     let sent = submits(&h);
     assert_eq!(sent.len(), 2);
@@ -208,12 +209,13 @@ fn resync_mid_command_rebuilds_the_mirror_and_keeps_the_command_outcome() {
     h.push(fixture("events_41_walk"));
     h.push(fixture("events_42_message"));
     m.poll();
-    assert_ne!(m.player(), fresh.player(), "the stream moved the avatar");
+    assert_ne!(m.origin(), fresh.origin(), "the stream moved the avatar");
     // The engine resyncs and, in the same publication, reports how the command ended.
     h.push(fixture("resync"));
     h.push(fixture("command_completed"));
     m.poll();
     assert_eq!(h.sent_methods().last().unwrap(), "bn.subscribe");
+    assert_eq!(m.origin(), fresh.origin());
     assert_eq!(m.player(), fresh.player());
     assert_eq!(m.size(), fresh.size());
     for at in [Pos { x: 21, y: 11 }, Pos { x: 23, y: 12 }] {
@@ -1884,6 +1886,54 @@ fn menu_rows_carry_the_engines_hotkey_and_empty_when_absent() {
     assert_eq!(keys, ["e", ""]);
 }
 
+/// The pickup fixture with a hotkey on each row, `edit` applied to its interaction.
+fn hotkeyed(
+    edit: impl FnOnce(&mut Value),
+) -> (EngineModel, bn_client_core::transport::ScriptHandle) {
+    let text = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/pickup.json"
+    ))
+    .unwrap();
+    let mut boundary = serde_json::from_str::<Value>(&text).unwrap()["pickup"].clone();
+    boundary["interaction"]["choices"][0]["hotkey"] = json!("e");
+    boundary["interaction"]["choices"][1]["hotkey"] = json!("4");
+    edit(&mut boundary["interaction"]);
+    let (t, h) = session();
+    let mut m = connected(t.on("bn.command.submit", walk_reply()));
+    h.push(change(41, json!({"interaction": boundary})));
+    m.poll();
+    (m, h)
+}
+
+#[test]
+fn a_typed_hotkey_chooses_the_row_that_shows_it() {
+    let (mut m, h) = hotkeyed(|_| {});
+    assert!(m.press("4"));
+    assert_eq!(
+        submits(&h)[0]["params"]["operation"],
+        json!({"kind":"choose","choice_id":"pickup:b"})
+    );
+}
+
+#[test]
+fn a_hotkey_no_row_shows_or_a_disabled_row_does_not_choose() {
+    let (mut m, h) = hotkeyed(|i| i["choices"][1]["enabled"] = json!(false));
+    assert!(!m.press("4"), "disabled row");
+    assert!(!m.press("z"), "no row has it");
+    assert!(submits(&h).is_empty());
+}
+
+#[test]
+fn a_hotkey_typed_into_a_text_prompt_is_not_a_choice() {
+    let (mut m, h) = hotkeyed(|i| {
+        i["field"] =
+            json!({"id":"filter","label":"Filter","description":"","value":"","type":"text"})
+    });
+    assert!(!m.press("e"));
+    assert!(submits(&h).is_empty());
+}
+
 #[test]
 fn a_client_line_repeating_the_newest_one_is_not_added_again() {
     let (t, _h) = session();
@@ -2081,4 +2131,66 @@ fn a_rejected_command_is_logged_in_words_not_as_the_engines_error_name() {
         "epoch":"e7f3","command_id":"c:5","stage":"rejected","error":"validation_failed"}}));
     m.poll();
     assert_eq!(m.messages(), ["Command rejected: not possible here."]);
+}
+
+/// The walk fixture moved to `to`, with the engine's window of `window` squares around `to` when it has one.
+fn step_event(n: i32, from: (i32, i32), to: (i32, i32), window: Option<(i32, i32)>) -> Value {
+    let at = |x: i32, y: i32| json!({"dim": "", "x": x, "y": y, "z": 0});
+    let mut message = fixture("events_41_walk");
+    let event = &mut message["params"]["events"][0];
+    event["sequence"] = (41 + n).to_string().into();
+    event["revision"] = (32 + n).to_string().into();
+    event["data"]["from"] = at(from.0, from.1);
+    event["data"]["to"] = at(to.0, to.1);
+    event["changes"]["avatar"]["at"] = at(to.0, to.1);
+    if let Some((w, h)) = window {
+        let (x, y) = (to.0 - w / 2, to.1 - h / 2);
+        event["changes"]["view"] = json!({"min": at(x, y), "max": at(x + w - 1, y + h - 1)});
+    }
+    message
+}
+
+#[test]
+fn the_player_square_stays_at_the_native_centre_after_steps_in_every_direction() {
+    // Without the engine's window, with ones of the same size, larger, odd-sized and smaller.
+    for window in [
+        None,
+        Some((40, 25)),
+        Some((61, 33)),
+        Some((50, 30)),
+        Some((30, 20)),
+    ] {
+        let (t, h) = session();
+        let mut m = connected(t);
+        let mut at = (3, 4);
+        let mut n = -1;
+        for (dx, dy) in [
+            (1, 0),
+            (-1, 0),
+            (0, 1),
+            (0, -1),
+            (1, 1),
+            (-1, -1),
+            (1, -1),
+            (-1, 1),
+        ] {
+            for _ in 0..10 {
+                n += 1;
+                let from = at;
+                at = (at.0 + dx, at.1 + dy);
+                h.push(step_event(n, from, at, window));
+                m.poll();
+                let want = Pos {
+                    x: m.size().x / 2,
+                    y: m.size().y / 2,
+                };
+                assert_eq!(m.player(), want, "{window:?} step {n} toward {dx},{dy}");
+                assert_eq!(
+                    (m.origin().x + m.player().x, m.origin().y + m.player().y),
+                    at,
+                    "{window:?} step {n}: the view is on the avatar"
+                );
+            }
+        }
+    }
 }

@@ -394,6 +394,13 @@
         "keys": [
           "="
         ]
+      },
+      {
+        "id": "NEXT_TAB",
+        "name": "Switch tabs",
+        "keys": [
+          "TAB"
+        ]
       }
     ],
     "interaction": {
@@ -403,7 +410,7 @@
       "title": " BIONICS ",
       "message": "Bionic Power: 12/100kJ\nActivating  [e] Examine\nAvailable Fuel: Gasoline: 40/200\nHead: 0/18\nEyes: 1/4",
       "allow_cancel": true,
-      "choice_total": 4,
+      "choice_total": 2,
       "choices": [
         {
           "id": "bionic:flash",
@@ -468,26 +475,6 @@
               "value": "c_light_green"
             }
           ]
-        },
-        {
-          "id": "bionic-tab:active",
-          "label": "ACTIVE (2)",
-          "enabled": true,
-          "description": "",
-          "denial": "",
-          "selectable": true,
-          "selected": true,
-          "columns": []
-        },
-        {
-          "id": "bionic-tab:passive",
-          "label": "PASSIVE (1)",
-          "enabled": true,
-          "description": "",
-          "denial": "",
-          "selectable": true,
-          "selected": false,
-          "columns": []
         }
       ],
       "compat": {

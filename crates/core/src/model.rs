@@ -261,6 +261,9 @@ pub struct Menu {
     pub field: Option<MenuField>,
     /// The pane of the selected tab, when the menu has tabs.
     pub pane: Option<String>,
+    /// Panes the engine lists by name with one of them current, though it lists only that one's rows:
+    /// `(id, label, current)`. Another one is reached with the engine's `NEXT_TAB` action.
+    pub pane_tabs: Vec<(String, String, bool)>,
     /// The row the engine's own cursor is on, which its navigation keys move.
     pub focus: Option<String>,
     /// The engine's composed screen of a view it has no structured interaction for: only text to

@@ -159,7 +159,7 @@ impl<M: GameModel> App<M> {
                 ui.set_width((ctx.content_rect().width() * 0.8).clamp(560.0, 900.0));
                 match menu.context.as_str() {
                     "PLAYER_INFO" => self.sheet(ui, menu, entered, &mut out),
-                    "BIONICS" => self.bionics(ui, menu, entered, &mut out),
+                    "BIONICS" => self.bionics(ui, menu, &mut out),
                     _ => self.mutations(ui, menu, &mut out),
                 }
             });
@@ -191,6 +191,21 @@ impl<M: GameModel> App<M> {
                 }
                 if button.clicked() {
                     out.chosen = Some(tab.id.clone());
+                }
+            }
+        });
+    }
+
+    /// The panes the engine lists one at a time (bionics: active and passive) as tabs; any other
+    /// than the current one is the engine's `NEXT_TAB`.
+    fn pane_strip(&self, ui: &mut egui::Ui, menu: &Menu, out: &mut Out) {
+        ui.horizontal_wrapped(|ui| {
+            for (id, label, current) in &menu.pane_tabs {
+                let button = self.control(ui, label.clone(), id, true, *current);
+                a11y::tab(ui.ctx(), button.id, *current);
+                out.ids.extend(button.enabled().then_some(button.id));
+                if button.clicked() && !current {
+                    out.action = Some("NEXT_TAB".to_string());
                 }
             }
         });
@@ -366,7 +381,7 @@ impl<M: GameModel> App<M> {
     }
 
     /// The bionics list: power and fuel above, the active or passive tab's rows, the native actions below.
-    fn bionics(&mut self, ui: &mut egui::Ui, menu: &Menu, entered: bool, out: &mut Out) {
+    fn bionics(&mut self, ui: &mut egui::Ui, menu: &Menu, out: &mut Out) {
         // The first line is the power, the second the key help the buttons replace; the rest are the
         // fuel and the body part slots (`Head: 0/18`), which share one line.
         let (slots, lines): (Vec<_>, Vec<_>) = menu
@@ -382,7 +397,7 @@ impl<M: GameModel> App<M> {
         if !slots.is_empty() {
             ui.weak(slots.join("   "));
         }
-        self.tab_strip(ui, menu, entered, out);
+        self.pane_strip(ui, menu, out);
         let rows = menu.entries();
         let spec = Spec {
             key: "Manual (shortcut)",

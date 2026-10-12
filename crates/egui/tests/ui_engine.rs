@@ -39,8 +39,9 @@ fn engine_map_renders_and_a_click_submits_a_travel_through_the_protocol() {
     h.run_steps(3);
     assert_eq!(script.sent_methods()[..2], ["bn.hello", "bn.subscribe"]);
     let origin = h.get_by_label("Map").rect().min;
-    // The avatar is at view (20, 12); click two cells east of it.
-    let pos = origin + egui::vec2(22.5 * CELL, 12.5 * CELL);
+    // The avatar is at the middle of the view; click two cells east of it.
+    let me = h.state().model.player();
+    let pos = origin + egui::vec2((me.x as f32 + 2.5) * CELL, (me.y as f32 + 0.5) * CELL);
     h.hover_at(pos);
     h.run_steps(2);
     for pressed in [true, false] {
@@ -74,10 +75,11 @@ fn planned_route_is_announced_and_cleared_by_an_empty_route() {
     script.push(event("41", json!([at(4), at(5)])));
     h.run_steps(3);
     assert_eq!(h.state().model.route().len(), 2);
+    let end = h.state().model.route()[1];
     let map = h.get_by_label("Map");
     let description = map.accesskit_node().description().unwrap_or_default();
     assert!(
-        description.contains("Route of 2 squares to (22, 12)"),
+        description.contains(&format!("Route of 2 squares to ({}, {})", end.x, end.y)),
         "{description}"
     );
     script.push(event("42", json!([])));
@@ -282,6 +284,50 @@ fn status_line_keeps_executing_until_the_boundary_is_reached_then_goes_back_to_r
     h.run_steps(2);
     h.get_by_label("Ready");
     assert!(!h.state().model.busy());
+}
+
+fn spinners(h: &H) -> usize {
+    h.query_all_by_role(accesskit::Role::ProgressIndicator)
+        .count()
+}
+
+#[test]
+fn a_spinner_runs_in_the_top_bar_while_a_command_executes_and_is_gone_when_it_completes() {
+    let (mut h, script) = harness();
+    open_menu(&mut h, &script);
+    assert_eq!(spinners(&h), 0, "nothing runs yet");
+    click_choice(&mut h);
+    script.push(notice("executing", None));
+    h.run_steps(5);
+    assert_eq!(spinners(&h), 1, "the command is executing");
+    script.push(notice("completed", None));
+    h.run_steps(3);
+    assert_eq!(spinners(&h), 0, "the command is over");
+}
+
+#[test]
+fn reduced_motion_shows_a_still_mark_in_place_of_the_spinner() {
+    let (t, script) = session();
+    let t = t.on("bn.command.submit", vec![fixture("submit_result")]);
+    let clock = Clock::manual();
+    let path = std::env::temp_dir().join(format!("bn-spinner-{}.json", std::process::id()));
+    std::fs::write(
+        &path,
+        r#"{"tiles":false,"tileset":null,"reduced_motion":true}"#,
+    )
+    .unwrap();
+    let model = EngineModel::new(Box::new(t)).with_clock(clock.clone());
+    let app = App::new(model).with_clock(clock).with_settings(path);
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(1100.0, 800.0))
+        .build_ui_state(|ui, app: &mut App<EngineModel>| app.show(ui), app);
+    open_menu(&mut h, &script);
+    click_choice(&mut h);
+    script.push(notice("executing", None));
+    h.run_steps(5);
+    assert_eq!(spinners(&h), 0, "nothing spins");
+    h.get_by_label("…");
+    h.get_by_label("combat knife: executing");
 }
 
 #[test]
@@ -607,6 +653,55 @@ fn a_key_prompt_fills_its_field_with_the_next_key_and_a_function_key_by_its_name
         operations(&script),
         [json!({"kind":"fill","field_id":"field:key","value":"z","submit":true})]
     );
+}
+
+/// A list menu whose second row is disabled, with a hotkey on each; `field` is the prompt it also shows.
+fn hotkey_menu(h: &mut H, script: &ScriptHandle, field: Option<serde_json::Value>) {
+    h.run_steps(3);
+    for name in ["events_41_walk", "events_42_message"] {
+        script.push(fixture(name));
+    }
+    let mut menu = fixture("events_43_menu");
+    let interaction = &mut menu["params"]["events"][0]["changes"]["interaction"]["interaction"];
+    let row = |id: &str, label: &str, hotkey: &str, enabled: bool| {
+        json!({"id":id,"label":label,"description":"","denial":"","enabled":enabled,
+            "selectable":enabled,"selected":false,"columns":[],"hotkey":hotkey})
+    };
+    interaction["choices"] = json!([
+        row("first", "First row", "4", true),
+        row("second", "Second row", "b", false)
+    ]);
+    if let Some(field) = field {
+        interaction["field"] = field;
+    }
+    script.push(menu);
+    h.run_steps(3);
+}
+
+#[test]
+fn a_typed_hotkey_chooses_its_row_but_not_a_disabled_one() {
+    let (mut h, script) = harness();
+    hotkey_menu(&mut h, &script, None);
+    h.event(egui::Event::Text("b".into()));
+    h.run_steps(3);
+    assert!(operations(&script).is_empty(), "disabled row");
+    h.event(egui::Event::Text("4".into()));
+    h.run_steps(3);
+    assert_eq!(
+        operations(&script),
+        [json!({"kind":"choose","choice_id":"first"})]
+    );
+}
+
+#[test]
+fn a_hotkey_typed_into_a_filter_box_stays_text() {
+    let (mut h, script) = harness();
+    let field = json!({"id":"field:value","label":"Filter","description":"","value":"",
+        "type":"text","max_length":-1,"printable":true});
+    hotkey_menu(&mut h, &script, Some(field));
+    h.get_by_label("Filter").type_text("4");
+    h.run_steps(3);
+    assert!(operations(&script).iter().all(|o| o["kind"] != "choose"));
 }
 
 #[test]

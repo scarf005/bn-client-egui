@@ -165,7 +165,7 @@ fn clicking_the_other_bionics_tab_chooses_it() {
     h.run_steps(3);
     assert_eq!(
         operations(&script),
-        [json!({"kind":"choose","choice_id":"bionic-tab:passive"})]
+        [json!({"kind":"action","action_id":"NEXT_TAB"})]
     );
 }
 
