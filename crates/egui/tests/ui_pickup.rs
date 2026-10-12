@@ -177,7 +177,7 @@ fn a_stolen_row_keeps_its_mark_and_the_right_position_anchors_the_list_at_the_ri
         "area_label": "Pick up", "area_description": "", "filter": "", "storage_kind": ""
     }]});
     let (h, _) = harness_with(b);
-    assert!(h.get_by_label("lighter (17/25)").rect().min.x > 400.0);
+    assert!(h.get_by_label("lighter (17/25)").rect().min.x > 50.0);
 }
 
 /// The pickup fixture with the pane's `PICKUP_POSITION`.

@@ -134,6 +134,8 @@ pub struct App<M: GameModel> {
     construction: construction::Construction,
     aim: aim::Aim,
     pickup: pickup::Pickup,
+    /// The left edge of the sidebar as last drawn: what the pickup list at the right docks against.
+    sidebar_left: Option<f32>,
     inventory: inventory::Inventory,
     trade: trade::Trade,
     /// The engine's selected row of the open menu, to keep it in view when the wheel moves it.
@@ -200,6 +202,7 @@ impl<M: GameModel> App<M> {
             construction: Default::default(),
             aim: Default::default(),
             pickup: Default::default(),
+            sidebar_left: None,
             inventory: Default::default(),
             trade: Default::default(),
             menu_cursor: None,
@@ -412,7 +415,7 @@ impl<M: GameModel> App<M> {
         let narrowest = SIDEBAR_WIDTH.0.min(room * SIDEBAR_MIN_SHARE);
         // Never narrower than its minimum, and never more than the share that leaves the map most of the window.
         let widest = (room * SIDEBAR_MAX_SHARE).clamp(narrowest, SIDEBAR_WIDTH.1);
-        egui::Panel::right("sidebar")
+        let sidebar = egui::Panel::right("sidebar")
             .default_size((room * SIDEBAR_SHARE).clamp(narrowest, widest))
             .size_range(narrowest..=widest)
             .show(ui, |ui| {
@@ -420,6 +423,7 @@ impl<M: GameModel> App<M> {
                 ui.set_min_width(ui.available_width());
                 self.sidebar_panel(ui)
             });
+        self.sidebar_left = Some(sidebar.response.rect.left());
         label_resize_handle(ui.ctx(), "sidebar", "Resize sidebar");
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE.fill(egui::Color32::BLACK))

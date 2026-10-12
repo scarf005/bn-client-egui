@@ -50,17 +50,23 @@ impl<M: GameModel> App<M> {
         let rows = menu.choices.iter().filter(|c| !c.tab).collect::<Vec<_>>();
         let title = bn_client_core::markup::plain(&menu.title);
         let mut hovered = None;
+        let placement = menu.panes.first().map(|p| p.placement.as_str());
         egui::Window::new(&title)
             .id(a11y::dialog_id(&title))
             .title_bar(false)
-            // PICKUP_POSITION: the native list sits against the right edge, otherwise at the left.
-            .anchor(
-                match menu.panes.first().map(|p| p.placement.as_str()) {
-                    Some("right") => egui::Align2::RIGHT_TOP,
-                    _ => egui::Align2::LEFT_TOP,
+            // PICKUP_POSITION: the native list is docked against the sidebar's left edge at the right, and
+            // at the left of the window otherwise.
+            .pivot(match placement {
+                Some("right") => egui::Align2::RIGHT_TOP,
+                _ => egui::Align2::LEFT_TOP,
+            })
+            .fixed_pos(egui::pos2(
+                match placement {
+                    Some("right") => self.sidebar_left.unwrap_or(ctx.content_rect().right()),
+                    _ => ctx.content_rect().left(),
                 },
-                [0.0, 0.0],
-            )
+                ctx.content_rect().top(),
+            ))
             .collapsible(false)
             .resizable(false)
             .default_width(560.0)
