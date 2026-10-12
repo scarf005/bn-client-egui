@@ -401,7 +401,7 @@
       "kind": "choices",
       "context": "BIONICS",
       "title": " BIONICS ",
-      "message": "Bionic Power: 12/100kJ\nActivating  [e] Examine\nAvailable Fuel: Gasoline: 40/200",
+      "message": "Bionic Power: 12/100kJ\nActivating  [e] Examine\nAvailable Fuel: Gasoline: 40/200\nHead: 0/18\nEyes: 1/4",
       "allow_cancel": true,
       "choice_total": 4,
       "choices": [

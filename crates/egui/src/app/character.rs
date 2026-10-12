@@ -42,6 +42,14 @@ fn column<'a>(row: &'a MenuChoice, label: &str) -> &'a str {
     found.map_or("", |(_, v)| v.as_str())
 }
 
+/// A row's value under the column `name`; the first column also takes the value the engine labels with the row's own name.
+fn cell<'a>(row: &'a MenuChoice, index: usize, name: &str) -> &'a str {
+    match column(row, name) {
+        "" if index == 0 => column(row, &row.label),
+        found => found,
+    }
+}
+
 fn colored(text: &str, color: &str) -> String {
     match color {
         "" => text.to_string(),
@@ -80,7 +88,7 @@ fn row_markup(row: &MenuChoice, spec: &Spec, widths: &[usize]) -> String {
     };
     let mut line = format!("{key}{}", pad(&colored(&name(row), label_color), widths[0]));
     for (index, name) in spec.columns.iter().enumerate() {
-        let value = colored(column(row, name), value_color(row, spec, index));
+        let value = colored(cell(row, index, name), value_color(row, spec, index));
         line += &format!("  {}", pad(&value, widths[index + 1]));
     }
     line.trim_end().to_string()
@@ -105,11 +113,20 @@ fn widths(rows: &[&MenuChoice], spec: &Spec) -> Vec<usize> {
         .max()
         .unwrap_or(0);
     std::iter::once(label)
-        .chain(spec.columns.iter().map(|name| {
-            let longest = rows.iter().map(|r| width(column(r, name))).max();
+        .chain(spec.columns.iter().enumerate().map(|(index, name)| {
+            let longest = rows.iter().map(|r| width(cell(r, index, name))).max();
             longest.unwrap_or(0).max(width(name))
         }))
         .collect()
+}
+
+/// A body part's used and total bionic slots, such as `Head: 0/18`.
+fn is_slots(line: &str) -> bool {
+    let count = |n: &str| n.parse::<u32>().is_ok();
+    line.rsplit_once(": ")
+        .filter(|(name, _)| !name.contains(": "))
+        .and_then(|(_, n)| n.split_once('/'))
+        .is_some_and(|(used, total)| count(used) && count(total))
 }
 
 fn tab_rows(menu: &Menu) -> Vec<&MenuChoice> {
@@ -138,14 +155,13 @@ impl<M: GameModel> App<M> {
             .anchor(egui::Align2::CENTER_TOP, super::dialog_offset(ctx))
             .collapsible(false)
             .resizable(false)
-            .fixed_size(egui::vec2(
-                (ctx.content_rect().width() * 0.8).clamp(560.0, 900.0),
-                0.0,
-            ))
-            .show(ctx, |ui| match menu.context.as_str() {
-                "PLAYER_INFO" => self.sheet(ui, menu, entered, &mut out),
-                "BIONICS" => self.bionics(ui, menu, entered, &mut out),
-                _ => self.mutations(ui, menu, &mut out),
+            .show(ctx, |ui| {
+                ui.set_width((ctx.content_rect().width() * 0.8).clamp(560.0, 900.0));
+                match menu.context.as_str() {
+                    "PLAYER_INFO" => self.sheet(ui, menu, entered, &mut out),
+                    "BIONICS" => self.bionics(ui, menu, entered, &mut out),
+                    _ => self.mutations(ui, menu, &mut out),
+                }
             });
         self.menu_ids = std::mem::take(&mut out.ids);
         a11y::dialog(ctx, &title, &markup::plain(&menu.message));
@@ -184,19 +200,21 @@ impl<M: GameModel> App<M> {
     fn table(&self, ui: &mut egui::Ui, rows: &[&MenuChoice], spec: &Spec, out: &mut Out) {
         let widths = widths(rows, spec);
         let font = egui::TextStyle::Monospace.resolve(ui.style());
-        let key = if rows.iter().any(|r| !column(r, spec.key).is_empty()) {
-            "  "
-        } else {
-            ""
-        };
-        let names = spec
-            .columns
-            .iter()
-            .zip(&widths[1..])
-            .fold(pad("", widths[0]), |line, (name, width)| {
-                format!("{line}  {}", pad(name, *width))
-            });
-        ui.weak(egui::RichText::new(format!("{key}{names}")).font(font.clone()));
+        if !rows.is_empty() {
+            let key = if rows.iter().any(|r| !column(r, spec.key).is_empty()) {
+                "  "
+            } else {
+                ""
+            };
+            let names = spec
+                .columns
+                .iter()
+                .zip(&widths[1..])
+                .fold(pad("", widths[0]), |line, (name, width)| {
+                    format!("{line}  {}", pad(name, *width))
+                });
+            ui.weak(egui::RichText::new(format!("{key}{names}")).font(font.clone()));
+        }
         for row in rows {
             if is_header(row) {
                 ui.add_space(4.0);
@@ -349,10 +367,20 @@ impl<M: GameModel> App<M> {
 
     /// The bionics list: power and fuel above, the active or passive tab's rows, the native actions below.
     fn bionics(&mut self, ui: &mut egui::Ui, menu: &Menu, entered: bool, out: &mut Out) {
-        // The first line is the power, the second the key help the buttons replace, then fuel and slots.
-        let lines = menu.message.lines().enumerate();
-        for (_, line) in lines.filter(|(i, l)| *i != 1 && !l.is_empty()) {
+        // The first line is the power, the second the key help the buttons replace; the rest are the
+        // fuel and the body part slots (`Head: 0/18`), which share one line.
+        let (slots, lines): (Vec<_>, Vec<_>) = menu
+            .message
+            .lines()
+            .enumerate()
+            .filter(|(i, l)| *i != 1 && !l.is_empty())
+            .map(|(_, l)| l)
+            .partition(|l| is_slots(l));
+        for line in lines {
             ui.label(self.rich(ui, line));
+        }
+        if !slots.is_empty() {
+            ui.weak(slots.join("   "));
         }
         self.tab_strip(ui, menu, entered, out);
         let rows = menu.entries();
@@ -478,6 +506,17 @@ mod tests {
     }
 
     #[test]
+    fn height_and_age_show_the_value_the_engine_labels_with_their_name() {
+        let height = row("Height:", &[("Height:", "175 cm")]);
+        let spec = Spec {
+            key: "",
+            columns: &["Current", "Base"],
+            tint: Tint::FirstColumn,
+        };
+        assert_eq!(row_markup(&height, &spec, &[7, 6, 4]), "Height:  175 cm");
+    }
+
+    #[test]
     fn a_named_color_column_tints_only_its_value() {
         let part = row(
             "TORSO",
@@ -494,6 +533,13 @@ mod tests {
         };
         assert_eq!(value_color(&part, &spec, 0), "");
         assert_eq!(value_color(&part, &spec, 1), "c_red");
+    }
+
+    #[test]
+    fn a_slot_line_is_a_body_part_with_two_counts() {
+        assert!(is_slots("Head: 0/18"));
+        assert!(!is_slots("Bionic Power: 12/100kJ"));
+        assert!(!is_slots("Available Fuel: Gasoline: 40/200 "));
     }
 
     #[test]

@@ -140,6 +140,7 @@ fn bionics_show_power_and_the_tabs_without_the_key_help_line() {
     h.get_by_label("Bionic Power: 12/100kJ");
     h.get_by_label("Available Fuel: Gasoline: 40/200");
     assert!(h.query_by_label_contains("Activating  [e]").is_none());
+    h.get_by_label("Head: 0/18   Eyes: 1/4");
     h.get_by_label("ACTIVE (2)");
     h.get_by_label("PASSIVE (1)");
     h.get_by_label_contains("Flashlight");
