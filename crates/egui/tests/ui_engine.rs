@@ -39,8 +39,9 @@ fn engine_map_renders_and_a_click_submits_a_travel_through_the_protocol() {
     h.run_steps(3);
     assert_eq!(script.sent_methods()[..2], ["bn.hello", "bn.subscribe"]);
     let origin = h.get_by_label("Map").rect().min;
-    // The avatar is at view (20, 12); click two cells east of it.
-    let pos = origin + egui::vec2(22.5 * CELL, 12.5 * CELL);
+    // The avatar is at the middle of the view; click two cells east of it.
+    let me = h.state().model.player();
+    let pos = origin + egui::vec2((me.x as f32 + 2.5) * CELL, (me.y as f32 + 0.5) * CELL);
     h.hover_at(pos);
     h.run_steps(2);
     for pressed in [true, false] {
@@ -74,10 +75,11 @@ fn planned_route_is_announced_and_cleared_by_an_empty_route() {
     script.push(event("41", json!([at(4), at(5)])));
     h.run_steps(3);
     assert_eq!(h.state().model.route().len(), 2);
+    let end = h.state().model.route()[1];
     let map = h.get_by_label("Map");
     let description = map.accesskit_node().description().unwrap_or_default();
     assert!(
-        description.contains("Route of 2 squares to (22, 12)"),
+        description.contains(&format!("Route of 2 squares to ({}, {})", end.x, end.y)),
         "{description}"
     );
     script.push(event("42", json!([])));
