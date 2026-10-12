@@ -401,7 +401,16 @@ impl<M: GameModel> App<M> {
                             ui.set_min_height(DESCRIPTION_HEIGHT);
                             ui.set_min_width(ui.available_width());
                             if let Some(description) = described.filter(|d| is_prose(d)) {
-                                ui.label(self.rich(ui, description));
+                                // As in the native text window, a line of two dashes is a rule.
+                                let lines = description.lines().collect::<Vec<_>>();
+                                for (i, part) in lines.split(|line| *line == "--").enumerate() {
+                                    if i > 0 {
+                                        ui.separator();
+                                    }
+                                    if !part.is_empty() {
+                                        ui.label(self.rich(ui, &part.join("\n")));
+                                    }
+                                }
                             }
                         });
                 }
