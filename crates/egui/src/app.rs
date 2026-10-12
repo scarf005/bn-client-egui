@@ -16,6 +16,7 @@ mod palette;
 mod pickup;
 mod sidebar;
 mod spells;
+mod terminal;
 mod trade;
 mod vehicle;
 

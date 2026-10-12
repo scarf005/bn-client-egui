@@ -287,6 +287,18 @@ impl Menu {
             .collect()
     }
 
+    /// A computer terminal: its text is the message and its answers carry the pane `terminal`.
+    pub fn terminal(&self) -> bool {
+        self.choices
+            .iter()
+            .any(|c| c.group.as_deref() == Some("terminal"))
+    }
+
+    /// The extended description of a square: scrollable text with the targets it describes as rows.
+    pub fn description(&self) -> bool {
+        self.context == "EXTENDED_DESCRIPTION"
+    }
+
     /// The only way out is the engine's own acknowledge row, so a separate Cancel would duplicate it.
     pub fn acknowledges(&self) -> bool {
         self.choices.iter().any(|c| c.id == "acknowledge")
