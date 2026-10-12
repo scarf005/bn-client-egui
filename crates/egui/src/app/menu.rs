@@ -467,9 +467,26 @@ impl<M: GameModel> App<M> {
         ui.spacing_mut().item_spacing.y = 4.0;
     }
 
-    /// The engine's own window, a row of colored cells at a time, in a fixed-width font.
+    /// The engine's own window, a row of colored cells at a time, in a fixed-width font as large as
+    /// lets the whole grid fit the window, so every cell keeps its column and row at any size.
     fn canvas(&self, ui: &mut egui::Ui, canvas: &bn_client_core::Canvas) {
-        let font = egui::FontId::monospace(14.0);
+        // The room is the screen less the dialog's title and margins; it does not depend on the
+        // dialog's own size, which follows the canvas.
+        let screen = ui.ctx().content_rect().size();
+        let room = egui::vec2(screen.x * 0.9, screen.y - 160.0);
+        let unit = 100.0;
+        let cell = ui
+            .painter()
+            .layout_no_wrap(
+                "0".into(),
+                egui::FontId::monospace(unit),
+                egui::Color32::WHITE,
+            )
+            .size()
+            / unit;
+        let fit = (room.x / (canvas.cols.max(1) as f32 * cell.x))
+            .min(room.y / (canvas.rows.len().max(1) as f32 * cell.y));
+        let font = egui::FontId::monospace(fit.clamp(10.0, 40.0));
         let paint = |c: bn_client_core::Rgb| egui::Color32::from_rgb(c.0, c.1, c.2);
         ui.spacing_mut().item_spacing.y = 0.0;
         for row in &canvas.rows {

@@ -1267,3 +1267,20 @@ fn a_filter_prompt_that_follows_an_untitled_list_takes_the_typing_at_once() {
         "typed text reaches the engine without a click first: {sent:?}"
     );
 }
+
+#[test]
+fn a_mini_game_window_is_sized_to_the_window_and_keeps_its_grid() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    script.push(mini_game(41, "ab"));
+    h.run_steps(4);
+    let big = h.get_by_label_contains("Score: 0").rect();
+    h.set_size(egui::vec2(240.0, 300.0));
+    h.run_steps(4);
+    let small = h.get_by_label_contains("Score: 0").rect();
+    assert!(big.height() > 16.0, "larger than the old fixed 14 px font");
+    assert!(big.height() > small.height(), "{big:?} vs {small:?}");
+    // The widest row spans the grid: 20 columns fit the room the window leaves.
+    let row = h.get_by_label_contains("ab*").rect();
+    assert!(row.width() <= 240.0 * 0.9 + 1.0, "{row:?}");
+}
