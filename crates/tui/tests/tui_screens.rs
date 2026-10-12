@@ -303,3 +303,27 @@ fn escape_leaves_the_action_rows_before_it_closes_the_menu() {
     );
     assert!(text(&render(&mut app)).contains("> first thing"));
 }
+
+#[test]
+fn a_column_repeating_the_rows_own_text_is_not_shown_twice() {
+    let (mut app, h) = engine();
+    render(&mut app);
+    open(&mut app, &h, "A_SCREEN", false);
+    let mut menu = fixture("events_43_menu");
+    menu["params"]["events"][0]["sequence"] = "44".into();
+    menu["params"]["events"][0]["revision"] = "34".into();
+    let change = &mut menu["params"]["events"][0]["changes"]["interaction"]["interaction"];
+    change["choices"][0]["label"] = "pen (100/100)".into();
+    change["choices"][0]["columns"] = json!([
+        {"label":"","value":"<color_c_white>pen</color> (100/100)"},
+        {"label":"ACTION","value":"Write on an item"}
+    ]);
+    h.push(menu);
+    app.model.poll();
+    let shown = text(&render(&mut app));
+    assert_eq!(shown.matches("pen (100/100)").count(), 1, "{shown}");
+    assert!(
+        shown.contains("pen (100/100)  ACTION: Write on an item"),
+        "{shown}"
+    );
+}
