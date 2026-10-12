@@ -45,8 +45,11 @@ fn operations(h: &ScriptHandle) -> Vec<Value> {
         .collect()
 }
 
+/// The view square at `view`, given as if the avatar stood at (20, 12); it is really at the view's centre.
 fn square(h: &mut H, view: (f32, f32)) -> egui::Pos2 {
-    h.get_by_label("Map").rect().min + egui::vec2(view.0 * CELL, view.1 * CELL)
+    let me = h.state().model.player();
+    let (dx, dy) = (me.x as f32 - 20.0, me.y as f32 - 12.0);
+    h.get_by_label("Map").rect().min + egui::vec2((view.0 + dx) * CELL, (view.1 + dy) * CELL)
 }
 
 fn click(h: &mut H, pos: egui::Pos2, button: egui::PointerButton) {
@@ -237,13 +240,14 @@ fn while_looking_the_mouse_moves_the_engines_cursor_and_a_second_click_confirms_
         json!([{"id":"CONFIRM","name":"Confirm"}]),
         Some(target),
     );
-    // Hovering another square sends the engine's own set_target, as MOUSE_MOVE does natively.
+    // Hovering another square sends the engine's own set_target, as MOUSE_MOVE does natively. The avatar
+    // walked to x 4 and the view followed, so two squares east of the centre is x 6.
     let away = square(&mut h, (22.5, 12.5));
     h.hover_at(away);
     h.run_steps(3);
     assert_eq!(
         operations(&script),
-        [json!({"kind":"set_target","pos":{"dim":"","x":5,"y":4,"z":0}})]
+        [json!({"kind":"set_target","pos":{"dim":"","x":6,"y":4,"z":0}})]
     );
     // On the cursor's own square a click confirms (SELECT) instead of travelling.
     script.push(

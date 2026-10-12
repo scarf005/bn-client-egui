@@ -618,8 +618,16 @@ impl<M: GameModel> App<M> {
         ui.ctx()
             .accesskit_node_builder(label.id, |b| b.set_live(accesskit::Live::Polite));
         // Stops a wait or other activity, like the native interrupt key.
-        if self.model.busy() && ui.button("Interrupt").clicked() {
-            self.model.interrupt();
+        if self.model.busy() {
+            // Still, the activity is told by the status text above; only the motion goes.
+            if self.display.reduced_motion() {
+                ui.label("…");
+            } else {
+                ui.spinner();
+            }
+            if ui.button("Interrupt").clicked() {
+                self.model.interrupt();
+            }
         }
     }
 
