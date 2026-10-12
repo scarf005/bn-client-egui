@@ -7,6 +7,7 @@ use eframe::egui::{self, accesskit};
 use std::collections::VecDeque;
 
 mod aim;
+mod construction;
 mod crafting;
 mod menu;
 mod palette;
@@ -124,6 +125,7 @@ pub struct App<M: GameModel> {
     /// The engine's look cursor was up at the last frame.
     was_looking: bool,
     crafting: crafting::Crafting,
+    construction: construction::Construction,
     aim: aim::Aim,
     pickup: pickup::Pickup,
     trade: trade::Trade,
@@ -188,6 +190,7 @@ impl<M: GameModel> App<M> {
             command_live: a11y::Announcer::new(" "),
             status_live: a11y::Announcer::new(", "),
             crafting: Default::default(),
+            construction: Default::default(),
             aim: Default::default(),
             pickup: Default::default(),
             trade: Default::default(),
