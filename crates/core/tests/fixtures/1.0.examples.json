@@ -2807,6 +2807,7 @@
             "data": {
               "text": "a loud explosion",
               "volume": 74,
+              "logged": true,
               "marker": {
                 "dim": "",
                 "x": 70,
@@ -2822,7 +2823,8 @@
             "command": "command:14",
             "data": {
               "text": "Tick.",
-              "volume": 52
+              "volume": 52,
+              "logged": false
             }
           }
         ]

@@ -2516,3 +2516,51 @@ fn a_key_rejected_stale_on_a_screen_without_refresh_is_not_resent() {
     assert_eq!(submits(&h).len(), 1);
     assert!(m.messages().last().unwrap().contains("stale_boundary"));
 }
+
+fn heard(sequence: u32, text: &str, logged: Option<bool>) -> serde_json::Value {
+    let mut data = serde_json::json!({"text": text, "volume": 52});
+    if let Some(logged) = logged {
+        data["logged"] = logged.into();
+    }
+    serde_json::json!({"jsonrpc": "2.0", "method": "bn.events", "params": {"epoch": "e7f3", "events": [{
+        "sequence": sequence.to_string(), "revision": "32", "type": "sound.heard", "data": data}]}})
+}
+
+#[test]
+fn a_heard_sound_the_engine_logged_is_not_repeated_as_a_command_line() {
+    let (t, h) = session();
+    let mut m = connected(t);
+    h.push(fixture("events_41_walk"));
+    h.push(heard(42, "Zoe saying \"Look out!\"", Some(true)));
+    h.push(logged(
+        43,
+        "7",
+        "From the northwest you hear Zoe saying \"Look out!\".",
+        1,
+    ));
+    m.poll();
+    assert_eq!(m.native_log().len(), 1);
+    assert!(m.messages().is_empty(), "{:?}", m.messages());
+}
+
+#[test]
+fn a_heard_sound_the_engine_did_not_log_stays_a_command_line() {
+    let (t, h) = session();
+    let mut m = connected(t);
+    h.push(fixture("events_41_walk"));
+    h.push(heard(42, "Tick.", Some(false)));
+    h.push(heard(43, "Tock.", None));
+    m.poll();
+    assert_eq!(m.messages(), ["Tick.", "Tock."]);
+}
+
+#[test]
+fn a_logged_sound_is_judged_by_its_flag_not_by_matching_native_text() {
+    let (t, h) = session();
+    let mut m = connected(t);
+    h.push(fixture("events_41_walk"));
+    h.push(heard(42, "Tick.", Some(false)));
+    h.push(logged(43, "7", "Tick. Tick. You open the door.", 1));
+    m.poll();
+    assert_eq!(m.messages(), ["Tick."]);
+}
