@@ -155,7 +155,7 @@ mod switching {
     }
 
     #[test]
-    fn switching_tiles_on_sends_a_hello_and_a_same_size_viewport_once_idle() {
+    fn switching_tiles_on_sends_a_hello_a_same_size_viewport_and_a_new_subscription_once_idle() {
         let (t, h) = session();
         let mut m = connected(t);
         m.set_tiles(false);
@@ -170,8 +170,12 @@ mod switching {
             sent[1].get("viewport").is_none(),
             "only the preference changes"
         );
+        // A repeated hello ends the engine's stream, so the snapshot after the viewport restarts it.
         let methods = h.sent_methods();
-        assert_eq!(&methods[methods.len() - 2..], ["bn.hello", "bn.viewport"]);
+        assert_eq!(
+            &methods[methods.len() - 3..],
+            ["bn.hello", "bn.viewport", "bn.subscribe"]
+        );
         m.poll();
         assert_eq!(hellos(&h).len(), 2, "told once");
         m.set_tiles(false);

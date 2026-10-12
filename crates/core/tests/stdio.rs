@@ -35,6 +35,11 @@ fn spawn_script(
     spawn(&engine).unwrap()
 }
 
+/// The arguments from `--client` on: an ambient `BN_ROOT` adds a leading `--basepath`.
+fn without_basepath(args: &str) -> &str {
+    &args[args.find("--client").expect("--client is always passed")..]
+}
+
 #[test]
 fn stdio_transport_passes_private_dirs_and_speaks_line_delimited_json() {
     let dir = std::env::temp_dir().join(format!("bn-stdio-test-{}", std::process::id()));
@@ -49,7 +54,7 @@ fn stdio_transport_passes_private_dirs_and_speaks_line_delimited_json() {
     else {
         panic!("expected the hello response")
     };
-    let args = v["args"].as_str().unwrap();
+    let args = without_basepath(v["args"].as_str().unwrap());
     assert!(args.starts_with("--client mcp --userdir "), "{args}");
     assert!(
         args.contains("bn-client-") && args.contains("--configdir"),
@@ -101,7 +106,7 @@ fn args_of(profile: Option<&Profile>) -> String {
     };
     drop(t);
     std::fs::remove_dir_all(dir).unwrap();
-    v["args"].as_str().unwrap().to_string()
+    without_basepath(v["args"].as_str().unwrap()).to_string()
 }
 
 #[test]

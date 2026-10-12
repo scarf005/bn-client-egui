@@ -920,7 +920,8 @@ impl EngineModel {
     }
 
     /// Tells the engine whether tile ids are wanted once it is idle: a hello says so, and a viewport
-    /// of the same size makes it publish the open screen again, now with or without them.
+    /// of the same size makes it publish the open screen again, now with or without them. A repeated
+    /// hello ends the stream, so a new subscription follows to receive that screen.
     fn send_tiles(&mut self) {
         if (self.tiles == self.tiles_told && self.tint_ids == self.tints_told)
             || self.busy
@@ -941,6 +942,7 @@ impl EngineModel {
             json!({"cols": cols, "rows": rows}),
             Pending::Viewport,
         );
+        self.subscribe();
     }
 
     fn refresh_actions(&mut self) {

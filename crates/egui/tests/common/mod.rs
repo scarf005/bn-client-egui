@@ -18,11 +18,13 @@ pub fn subscribe_reply() -> Vec<Value> {
         .to_vec()
 }
 
-/// Answers hello and subscribe with the fixture session; extra replies can be chained.
+/// Answers hello and subscribe with the fixture session; extra replies can be chained. A second subscribe
+/// is answered too: the client subscribes again after telling the engine it draws tiles.
 pub fn session() -> (ScriptedTransport, ScriptHandle) {
     let (t, h) = ScriptedTransport::new();
     (
         t.on("bn.hello", vec![fixture("hello_result")])
+            .on("bn.subscribe", subscribe_reply())
             .on("bn.subscribe", subscribe_reply()),
         h,
     )
