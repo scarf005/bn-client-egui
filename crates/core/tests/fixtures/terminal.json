@@ -1,0 +1,54 @@
+{
+ "query": {
+  "boundary_id": "b:51",
+  "readiness": {
+   "phase": "playing",
+   "game_ready": true,
+   "accepts_interaction_commands": true,
+   "accepts_registered_actions": true
+  },
+  "actions": [
+   {"id": "NO", "name": "No", "keys": ["n"]}
+  ],
+  "interaction": {
+   "schema_id": "s:terminal-query",
+   "kind": "choices",
+   "context": "YESNOQUIT",
+   "title": "Locked Terminal",
+   "message": "Logging into Locked Terminal…\n<color_red>Access denied.</color>\nBypass security? Y, N, Q",
+   "allow_cancel": true,
+   "allow_set_count": false,
+   "choice_total": 3,
+   "choices": [
+    {"id": "yes", "label": "Yes", "description": "", "denial": "", "pane_id": "terminal", "enabled": true, "selectable": true, "selected": false, "columns": []},
+    {"id": "no", "label": "No", "description": "", "denial": "", "pane_id": "terminal", "enabled": true, "selectable": true, "selected": false, "columns": []},
+    {"id": "quit", "label": "Quit", "description": "", "denial": "", "pane_id": "terminal", "enabled": true, "selectable": true, "selected": false, "columns": []}
+   ]
+  }
+ },
+ "description": {
+  "boundary_id": "b:52",
+  "readiness": {
+   "phase": "playing",
+   "game_ready": true,
+   "accepts_interaction_commands": true,
+   "accepts_registered_actions": true
+  },
+  "actions": [],
+  "interaction": {
+   "schema_id": "s:description",
+   "kind": "choices",
+   "context": "EXTENDED_DESCRIPTION",
+   "title": "Description",
+   "message": "--\n<color_light_gray>This is a </color><color_light_green>dirt</color><color_light_gray>.</color>\n--\nLoose soil.",
+   "allow_cancel": true,
+   "allow_set_count": false,
+   "choice_total": 3,
+   "choices": [
+    {"id": "describe:creature", "label": "Describe creatures", "description": "", "denial": "", "enabled": true, "selectable": true, "selected": false, "columns": []},
+    {"id": "describe:furniture", "label": "Describe furniture", "description": "", "denial": "", "enabled": true, "selectable": true, "selected": false, "columns": []},
+    {"id": "describe:terrain", "label": "Describe terrain", "description": "", "denial": "", "enabled": true, "selectable": true, "selected": true, "columns": []}
+   ]
+  }
+ }
+}
