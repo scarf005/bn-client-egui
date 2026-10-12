@@ -1219,10 +1219,14 @@ impl<M: GameModel> TuiApp<M> {
             .collect::<Vec<_>>();
         let head = (header.len() as u16).min(area.height.saturating_sub(2) / 2);
         let bar = u16::from(!popup.tabs.is_empty());
+        // The native text window draws a line of two dashes as a rule across the window.
         let footer = popup
             .footer
             .iter()
-            .flat_map(|l| wrap(l, usize::from(width) - 2))
+            .flat_map(|l| match l.as_str() {
+                "--" => vec!["─".repeat(usize::from(width) - 2)],
+                _ => wrap(l, usize::from(width) - 2),
+            })
             .collect::<Vec<_>>();
         let foot = (footer.len() as u16).min(area.height.saturating_sub(2) / 3);
         let want = head + bar + popup.rows.len() as u16 + foot + 2;
