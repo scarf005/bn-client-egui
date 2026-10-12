@@ -1135,6 +1135,35 @@ impl EngineModel {
     }
 }
 
+/// What a target screen other than a shot says: the step of a zone's area (`message`), and for the
+/// map editor the rows of the square under its cursor and the keys of its edit actions.
+fn target_note(i: &protocol::Interaction) -> Option<String> {
+    i.target.as_ref().filter(|_| i.overmap.is_none())?;
+    let rows = |pane: &str| {
+        i.choices
+            .iter()
+            .filter(|c| c.pane_id.as_deref() == Some(pane))
+            .collect::<Vec<_>>()
+    };
+    let tile = rows("tile")
+        .iter()
+        .map(|c| format!("{} {}", c.label, markup::plain(&c.description)))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let keys = rows("actions")
+        .iter()
+        .filter(|c| !c.hotkey.as_deref().unwrap_or_default().is_empty())
+        .map(|c| format!("{} {}", c.hotkey.as_deref().unwrap_or_default(), c.label))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let note = [markup::plain(&i.message), tile, keys]
+        .into_iter()
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join(". ");
+    (!note.is_empty()).then(|| format!("{}: {note}", markup::plain(&i.title)))
+}
+
 impl GameModel for EngineModel {
     fn poll(&mut self) {
         profiling::scope!("model.poll");
@@ -1791,7 +1820,10 @@ impl GameModel for EngineModel {
 
     fn aiming(&self) -> Option<String> {
         let i = self.replica.boundary()?.interaction.as_ref()?;
-        let t = i.target.as_ref().filter(|_| i.context == "TARGET")?;
+        if i.context != "TARGET" {
+            return target_note(i);
+        }
+        let t = i.target.as_ref()?;
         let at = |k: &str| serde_json::from_value::<WorldPos>(t[k].clone()).ok();
         let (from, to, range) = (at("source")?, at("current")?, t["range"].as_i64()?);
         let (dx, dy) = (f64::from(to.x - from.x), f64::from(to.y - from.y));

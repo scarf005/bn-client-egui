@@ -743,7 +743,13 @@ impl<M: GameModel> TuiApp<M> {
             .and_then(|at| self.model.hover_text(self.view(at)))
             .map(|lines| format!(" | {}", lines.join(" / ")))
             .unwrap_or_default();
-        let command = format!("{command}{hover}");
+        // What a target screen of the engine says: a zone's area step, the map editor's square and keys.
+        let note = self
+            .model
+            .aiming()
+            .map(|note| format!(" | {note}"))
+            .unwrap_or_default();
+        let command = format!("{command}{hover}{note}");
         let Some(at) = self.cursor else {
             return command;
         };
@@ -982,6 +988,7 @@ impl<M: GameModel> TuiApp<M> {
                 };
                 // The key the game binds to an action row, as the native screens print their keys.
                 let hint = bn_client_core::action_hint(&actions, &c.id)
+                    .filter(|_| c.hotkey.is_empty())
                     .map(|key| format!("  [{key}]"))
                     .unwrap_or_default();
                 let key = match (c.hotkey.as_str(), any_hotkey) {

@@ -793,6 +793,46 @@ fn the_status_line_gives_absolute_coordinates_that_do_not_change_when_the_view_s
     h.get_by_label_contains("Player at (3, 4).");
 }
 
+/// The look cursor of a zone's area, or the map editor, as the engine publishes it.
+fn target_screen(context: &str, title: &str, message: &str, choices: Value) -> Value {
+    json!({"schema_id":"s:z","kind":"target","context":context,"title":title,"message":message,
+        "allow_cancel":true,"choices":choices,"choice_total":0,"allow_set_count":false,
+        "target":{"source":{"dim":"","x":3,"y":4,"z":0},"current":{"dim":"","x":4,"y":4,"z":0},
+            "range":0,"distance_metric":"square","status":"zone_first","candidates":[]}})
+}
+
+#[test]
+fn the_status_line_tells_the_step_of_a_zones_area_beside_the_cursor() {
+    let (mut h, script) = harness();
+    h.run_steps(5);
+    script.push(show(
+        41,
+        json!([]),
+        target_screen("LOOK", "Look Around", "Select first point.", json!([])),
+    ));
+    h.run_steps(4);
+    h.get_by_label_contains("Look Around: Select first point.");
+}
+
+#[test]
+fn the_status_line_lists_the_map_editors_square_and_its_keys() {
+    let (mut h, script) = harness();
+    h.run_steps(5);
+    let mut terrain = choice("tile:terrain", "Terrain");
+    terrain["pane_id"] = "tile".into();
+    terrain["description"] = "grass".into();
+    let mut edit = choice("action:EDIT_TERRAIN", "Edit terrain");
+    edit["pane_id"] = "actions".into();
+    edit["hotkey"] = "e".into();
+    script.push(show(
+        41,
+        json!([]),
+        target_screen("EDITMAP", "Map editor", "", json!([terrain, edit])),
+    ));
+    h.run_steps(4);
+    h.get_by_label_contains("Map editor: Terrain grass. e Edit terrain");
+}
+
 #[test]
 fn the_cell_tooltip_does_not_hang_over_a_dialog() {
     let (mut h, script) = harness();

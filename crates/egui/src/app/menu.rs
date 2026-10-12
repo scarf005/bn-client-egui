@@ -239,6 +239,7 @@ impl<M: GameModel> App<M> {
                                             )
                                         })
                                         .flatten()
+                                        .filter(|_| choice.hotkey.is_empty())
                                         .map(|k| format!("  <color_dark_gray>[{k}]</color>"));
                                     // The native key column: the row's key in green, blank where a row has none.
                                     let key = match (choice.hotkey.as_str(), any_hotkey) {

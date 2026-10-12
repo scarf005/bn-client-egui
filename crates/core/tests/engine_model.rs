@@ -1480,6 +1480,60 @@ fn aiming_reports_the_cursor_distance_against_the_range_and_the_shot_status_only
 }
 
 #[test]
+fn a_target_screen_that_is_not_a_shot_says_its_zone_step_or_the_map_editors_square_and_keys() {
+    let row = |id: &str, pane: &str, label: &str, description: &str, hotkey: &str| {
+        json!({"id":id,"label":label,"description":description,"denial":"","hotkey":hotkey,
+            "pane_id":pane,"enabled":true,"selectable":hotkey.is_empty() == false,"selected":false,
+            "columns":[]})
+    };
+    let screen = |context: &str, title: &str, message: &str, status: &str, choices: Value| {
+        json!({"schema_id":"s:n","kind":"target","context":context,"title":title,"message":message,
+            "allow_cancel":true,"choices":choices,"choice_total":0,"allow_set_count":false,
+            "target":{"source":{"dim":"","x":2,"y":4,"z":0},"current":{"dim":"","x":3,"y":4,"z":0},
+                "range":0,"distance_metric":"square","status":status,"candidates":[]}})
+    };
+    let (t, h) = session();
+    let mut m = connected(t);
+    let editor = json!([
+        row("tile:terrain", "tile", "Terrain", "grass", ""),
+        row("tile:trap", "tile", "Trap", "bear trap", ""),
+        row("action:EDIT_TERRAIN", "actions", "Edit terrain", "", "e"),
+        row("action:LEVEL_UP", "actions", "Up", "", ""),
+    ]);
+    for (sequence, (screen, want)) in (41..).zip([
+        (
+            screen(
+                "LOOK",
+                "Look Around",
+                "Select first point.",
+                "zone_first",
+                json!([]),
+            ),
+            Some("Look Around: Select first point."),
+        ),
+        (
+            screen(
+                "LOOK",
+                "Look Around",
+                "Moving zone.",
+                "zone_move",
+                json!([]),
+            ),
+            Some("Look Around: Moving zone."),
+        ),
+        (screen("LOOK", "Look Around", "", "look", json!([])), None),
+        (
+            screen("EDITMAP", "Map editor", "", "editmap", editor),
+            Some("Map editor: Terrain grass, Trap bear trap. e Edit terrain"),
+        ),
+    ]) {
+        h.push(show(sequence, json!([]), screen));
+        m.poll();
+        assert_eq!(m.aiming().as_deref(), want, "{want:?}");
+    }
+}
+
+#[test]
 fn fill_sets_an_editable_row_or_the_key_field_and_ignores_anything_else() {
     let (t, h) = session();
     let mut m = connected(t.on("bn.command.submit", walk_reply()));
