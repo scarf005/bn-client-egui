@@ -4,7 +4,7 @@ use bn_client_core::transport::ScriptHandle;
 use bn_client_core::{EngineModel, GameModel};
 use bn_client_tui::TuiApp;
 use common::{connected, fixture, session};
-use crossterm::event::{KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
 use serde_json::{Value, json};
@@ -307,4 +307,50 @@ fn the_engines_cursor_is_lit_on_the_map_while_picking_a_zone_point() {
         .expect("the avatar");
     // The cursor is at world (3, 4), one square west of the avatar.
     assert_eq!(lit, [(avatar.0 - 1, avatar.1)]);
+}
+
+#[test]
+fn enter_confirms_a_zone_point_after_a_click_moved_the_engines_cursor() {
+    let (mut app, h) = engine();
+    text(&mut app);
+    let look = screen(
+        "target",
+        "LOOK",
+        "Look Around",
+        "Select first point.",
+        vec![],
+    );
+    show(
+        &mut app,
+        &h,
+        look,
+        json!([{"id":"CONFIRM","name":"Confirm","keys":["RETURN"]}]),
+    );
+    let shown = text(&mut app);
+    let (row, at) = shown
+        .lines()
+        .enumerate()
+        .find_map(|(y, l)| {
+            l.chars()
+                .position(|c| c == '@')
+                .map(|x| (y as u16, x as u16))
+        })
+        .expect("the avatar");
+    app.handle_mouse(mouse(at + 2, row));
+    h.push(
+        json!({"jsonrpc":"2.0","method":"bn.command","params":{"epoch":"e7f3",
+        "command_id":"c:5","stage":"completed"}}),
+    );
+    app.model.poll();
+    app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    assert_eq!(
+        invoked(&h),
+        ["CONFIRM"],
+        "the engine owns the cursor, not the client's look mode"
+    );
+    let shown = text(&mut app);
+    assert!(
+        !shown.contains("Look ("),
+        "no client look note over the engine's\n{shown}"
+    );
 }
