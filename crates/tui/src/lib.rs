@@ -973,8 +973,18 @@ impl<M: GameModel> TuiApp<M> {
     fn draw_items(&mut self, f: &mut Frame, area: Rect) {
         let section = |title: &str, items: &[String]| {
             let head = Line::styled(title.to_string(), Style::new().add_modifier(Modifier::BOLD));
+            let row = |item: &String| {
+                let runs = self.model.styled(item).into_iter();
+                Line::from(
+                    runs.map(|run| match run.color {
+                        Some(c) => Span::styled(run.text, Style::new().fg(color(c))),
+                        None => Span::raw(run.text),
+                    })
+                    .collect::<Vec<_>>(),
+                )
+            };
             std::iter::once(head)
-                .chain(items.iter().map(|i| Line::raw(i.clone())))
+                .chain(items.iter().map(row))
                 .collect::<Vec<_>>()
         };
         let mut lines = section("Ground", self.model.ground());
@@ -1042,6 +1052,8 @@ impl<M: GameModel> TuiApp<M> {
                             None => value.clone(),
                         };
                         match label.is_empty() || *label == c.label {
+                            // A value that only repeats the row's own text adds nothing.
+                            true if plain(&value) == plain(&c.label) => String::new(),
                             true => format!("  {value}"),
                             false => format!("  {label}: {value}"),
                         }
@@ -1207,10 +1219,14 @@ impl<M: GameModel> TuiApp<M> {
             .collect::<Vec<_>>();
         let head = (header.len() as u16).min(area.height.saturating_sub(2) / 2);
         let bar = u16::from(!popup.tabs.is_empty());
+        // The native text window draws a line of two dashes as a rule across the window.
         let footer = popup
             .footer
             .iter()
-            .flat_map(|l| wrap(l, usize::from(width) - 2))
+            .flat_map(|l| match l.as_str() {
+                "--" => vec!["─".repeat(usize::from(width) - 2)],
+                _ => wrap(l, usize::from(width) - 2),
+            })
             .collect::<Vec<_>>();
         let foot = (footer.len() as u16).min(area.height.saturating_sub(2) / 3);
         let want = head + bar + popup.rows.len() as u16 + foot + 2;

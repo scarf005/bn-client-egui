@@ -43,6 +43,11 @@ impl<M: GameModel> App<M> {
                     .show(ui, |ui| {
                         ui.set_min_width(ui.available_width());
                         for line in menu.message.lines() {
+                            // The native text window draws a line of two dashes as a rule.
+                            if line == "--" {
+                                ui.separator();
+                                continue;
+                            }
                             let runs = self.model.styled(line);
                             let job = crate::text::job(&runs, &font);
                             ui.add(egui::Label::new(job).wrap_mode(egui::TextWrapMode::Wrap));

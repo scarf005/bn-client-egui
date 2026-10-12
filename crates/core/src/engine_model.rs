@@ -696,17 +696,35 @@ impl EngineModel {
     /// included; the client knows none. A digit with no binding may be a numpad key (terminals and windows do
     /// not tell them apart).
     fn action_for(&self, key: &str) -> Option<String> {
-        let bound_to = |key: &str| {
-            self.replica.boundary().and_then(|b| {
-                b.actions.iter().find(|a| {
-                    a.keys
-                        .as_ref()
-                        .is_some_and(|keys| keys.iter().any(|k| k == key))
-                })
-            })
-        };
-        let offered = bound_to(key).or_else(|| keys::numpad(key).and_then(|k| bound_to(&k)));
-        offered.map(|a| a.id.clone())
+        self.bound_action(key).or_else(|| {
+            self.row_for(key)
+                .is_none()
+                .then(|| self.numpad_action(key))
+                .flatten()
+        })
+    }
+
+    fn bound_action(&self, key: &str) -> Option<String> {
+        let b = self.replica.boundary()?;
+        let bound = b.actions.iter().find(|a| {
+            a.keys
+                .as_ref()
+                .is_some_and(|keys| keys.iter().any(|k| k == key))
+        });
+        bound.map(|a| a.id.clone())
+    }
+
+    /// The action of the numpad key a typed digit may have come from; a menu row showing the digit as its
+    /// hotkey wins, as in a native list.
+    fn numpad_action(&self, key: &str) -> Option<String> {
+        keys::numpad(key).and_then(|k| self.bound_action(&k))
+    }
+
+    /// The enabled row of a menu without a text field that shows `key` as its hotkey.
+    fn row_for(&self, key: &str) -> Option<MenuChoice> {
+        self.menu()
+            .filter(|m| m.field.is_none())
+            .and_then(|m| m.choices.into_iter().find(|c| c.enabled && c.hotkey == key))
     }
 
     fn submit(&mut self, operation: Operation) -> bool {
@@ -1736,28 +1754,23 @@ impl GameModel for EngineModel {
             return self.invoke_action(&id);
         }
         // As in a native list, a key the menu binds to no action selects the enabled row showing it.
-        if let Some(row) = self
-            .menu()
-            .filter(|m| m.field.is_none())
-            .and_then(|m| m.choices.into_iter().find(|c| c.enabled && c.hotkey == key))
-        {
+        if let Some(row) = self.row_for(key) {
             return !self.busy && self.submit(Operation::Choose { choice_id: row.id });
         }
-        // A "press any key" popup has no key to bind: whatever is pressed acknowledges it.
+        // A "press any key" popup or terminal prompt has no key to bind: whatever is pressed continues it.
         let any_key = self
             .replica
             .boundary()
             .and_then(|b| b.interaction.as_ref())
-            .is_some_and(|i| {
-                i.choices
-                    .iter()
-                    .any(|c| c.id == "acknowledge" && c.description == "ANY_INPUT")
-            });
-        any_key
-            && !self.busy
-            && self.submit(Operation::Choose {
-                choice_id: "acknowledge".into(),
+            .and_then(|i| {
+                let popup =
+                    |c: &protocol::Choice| c.id == "acknowledge" && c.description == "ANY_INPUT";
+                let terminal =
+                    |c: &protocol::Choice| i.context == "COMPUTER_TERMINAL" && c.id == "continue";
+                i.choices.iter().find(|c| popup(c) || terminal(c))
             })
+            .map(|c| c.id.clone());
+        any_key.is_some_and(|choice_id| !self.busy && self.submit(Operation::Choose { choice_id }))
     }
 
     fn menu(&self) -> Option<Menu> {

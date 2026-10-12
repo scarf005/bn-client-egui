@@ -124,3 +124,23 @@ fn typing_in_a_text_prompt_fills_the_field_and_enter_submits_it() {
         "{fills:?}"
     );
 }
+
+#[test]
+fn a_long_described_list_keeps_its_load_more_row_and_description_inside_the_window() {
+    let (mut h, script) = harness(vec![]);
+    let menu = menu_event(|i| {
+        let rows = (0..60)
+            .map(|n| {
+                json!({"id":format!("c:{n}"),"label":format!("row {n}"),"enabled":true,
+                    "description":"Volume: 0.025 L\nThis is a row.","denial":"","selectable":true,
+                    "selected":n == 0,"columns":[]})
+            })
+            .collect::<Vec<_>>();
+        i["choices"] = json!(rows);
+        i["choice_total"] = json!(100);
+    });
+    open(&mut h, &script, menu);
+    let more = h.get_by_label("Load more (60 of 100)").rect();
+    // The description under the button has the room too: its 96 px height must fit under it.
+    assert!(more.max.y + 96.0 <= 800.0, "{more:?}");
+}

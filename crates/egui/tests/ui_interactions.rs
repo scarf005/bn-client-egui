@@ -1284,3 +1284,26 @@ fn a_mini_game_window_is_sized_to_the_window_and_keeps_its_grid() {
     let row = h.get_by_label_contains("ab*").rect();
     assert!(row.width() <= 240.0 * 0.9 + 1.0, "{row:?}");
 }
+
+#[test]
+fn a_mini_game_window_of_24_rows_is_not_clipped_by_the_dialog() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    let rows = (0..24)
+        .map(|n| json!([[format!("row{n:02}"), 15, 0]]))
+        .collect::<Vec<_>>();
+    script.push(show(
+        41,
+        json!([]),
+        json!({"schema_id":"s:snake","kind":"custom","context":"SNAKE","title":"S N A K E",
+            "message":"","allow_cancel":false,"allow_set_count":false,"choices":[],
+            "choice_total":0,"canvas":{"cols":80,"rows":rows}}),
+    ));
+    h.run_steps(4);
+    let last = h.get_by_label_contains("row23").rect();
+    let window = h
+        .ctx
+        .memory(|m| m.area_rect(egui::Id::new(("dialog", "S N A K E"))))
+        .unwrap();
+    assert!(window.max.y >= last.max.y, "{window:?} under {last:?}");
+}

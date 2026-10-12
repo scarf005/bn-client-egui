@@ -169,8 +169,12 @@ impl<M: GameModel> App<M> {
             .show(ui, |ui| {
                 ui.set_min_height(height);
                 ui.set_min_width(ui.available_width());
-                if let Some(description) = description {
-                    ui.label(self.rich(ui, description));
+                for line in description.iter().flat_map(|d| d.lines()) {
+                    // As in the native item window, a line of two dashes is a rule.
+                    match line {
+                        "--" => ui.separator(),
+                        _ => ui.label(self.rich(ui, line)),
+                    };
                 }
             });
     }

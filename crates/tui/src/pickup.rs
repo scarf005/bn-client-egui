@@ -286,19 +286,34 @@ impl<M: GameModel> TuiApp<M> {
         let title = focus.map_or(String::new(), |r| {
             format!("< {} >", bn_client_core::markup::plain(&r.label))
         });
+        // Each line of the description is its own row; a line of two dashes is the native rule.
         let text = focus
-            .map(|r| self.model.styled(&r.description))
-            .unwrap_or_default()
-            .into_iter()
-            .map(|run| {
-                let style = run
-                    .color
-                    .map_or(Style::new(), |c| Style::new().fg(color(c)));
-                Span::styled(run.text, style)
+            .map(|r| {
+                r.description
+                    .lines()
+                    .map(|line| match line {
+                        "--" => Line::styled(
+                            "─".repeat(usize::from(details.width.saturating_sub(2))),
+                            Style::new().fg(Color::Gray),
+                        ),
+                        _ => Line::from(
+                            self.model
+                                .styled(line)
+                                .into_iter()
+                                .map(|run| {
+                                    let style = run
+                                        .color
+                                        .map_or(Style::new(), |c| Style::new().fg(color(c)));
+                                    Span::styled(run.text, style)
+                                })
+                                .collect::<Vec<_>>(),
+                        ),
+                    })
+                    .collect::<Vec<_>>()
             })
-            .collect::<Vec<_>>();
+            .unwrap_or_default();
         f.render_widget(
-            Paragraph::new(Line::from(text))
+            Paragraph::new(text)
                 .wrap(Wrap { trim: true })
                 .block(Block::bordered().title(title)),
             details,
