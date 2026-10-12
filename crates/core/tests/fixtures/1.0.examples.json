@@ -480,7 +480,7 @@
               "slot": "wielded",
               "durability": {
                 "symbol": "||",
-                "color": "light_green"
+                "color": "c_light_green"
               }
             },
             {
