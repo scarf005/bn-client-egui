@@ -102,6 +102,8 @@ pub struct EngineModel {
     native: Vec<LogLine>,
     ground: Vec<String>,
     inventory: Vec<String>,
+    ground_cells: Vec<Cell>,
+    inventory_cells: Vec<Cell>,
     /// The engine's own names for the same rows; the native menus list items by these.
     ground_names: Vec<String>,
     /// Pages of a long menu fetched after the first, for the interaction they belong to.
@@ -322,6 +324,8 @@ impl EngineModel {
             native: vec![],
             ground: vec![],
             inventory: vec![],
+            ground_cells: vec![],
+            inventory_cells: vec![],
             ground_names: vec![],
             paged: Paged::default(),
             explosion_tiles: HashMap::new(),
@@ -832,10 +836,11 @@ impl EngineModel {
 
     fn refresh_items(&mut self) {
         let avatar = self.replica.avatar();
+        let row = |look: &Look, line: String, name: String| (line, name, self.item_cell(look));
         let ground = match avatar.and_then(|a| a.ground.as_ref()) {
             Some(stacks) => stacks
                 .iter()
-                .map(|i| (item_line(i), i.name.clone()))
+                .map(|i| row(&i.look, item_line(i), i.name.clone()))
                 .collect(),
             None => self
                 .avatar_pos()
@@ -843,7 +848,7 @@ impl EngineModel {
                 .map_or(vec![], |c| {
                     c.items
                         .iter()
-                        .map(|l| (look_name(l), look_name(l)))
+                        .map(|l| row(l, look_name(l), look_name(l)))
                         .collect()
                 }),
         };
@@ -851,11 +856,19 @@ impl EngineModel {
             a.inventory
                 .iter()
                 .flatten()
-                .map(|i| (item_line(i), i.name.clone()))
+                .map(|i| row(&i.look, item_line(i), i.name.clone()))
                 .collect()
         });
-        (self.ground, self.ground_names) = ground.into_iter().unzip();
-        (self.inventory, self.inventory_names) = carried.into_iter().unzip();
+        (self.ground, self.ground_names, self.ground_cells) = unzip3(ground);
+        (self.inventory, self.inventory_names, self.inventory_cells) = unzip3(carried);
+    }
+
+    /// How a list row draws its item: the same layers a map square gets for it.
+    fn item_cell(&self, look: &Look) -> Cell {
+        Cell {
+            layers: vec![self.layer(look, 0)],
+            ..self.styled(look, look_name(look))
+        }
     }
 
     /// Marks the chore's item in the native menu it opened, then confirms; ends it when the menu is gone.
@@ -884,8 +897,27 @@ impl EngineModel {
     }
 }
 
-/// An item the way the native lists name it, with how many and where it is kept.
+fn unzip3<A, B, C>(rows: Vec<(A, B, C)>) -> (Vec<A>, Vec<B>, Vec<C>) {
+    let (mut a, mut b, mut c) = (vec![], vec![], vec![]);
+    for (x, y, z) in rows {
+        a.push(x);
+        b.push(y);
+        c.push(z);
+    }
+    (a, b, c)
+}
+
+/// An item the way the native lists name it, with how many and where it is kept; its condition marker keeps its native colour as markup.
 fn item_line(item: &protocol::InventoryItem) -> String {
+    let name = match &item.durability {
+        Some(d) if item.name.starts_with(&d.symbol) => format!(
+            "<color_{}>{}</color>{}",
+            d.color,
+            d.symbol,
+            &item.name[d.symbol.len()..]
+        ),
+        _ => item.name.clone(),
+    };
     let count = item
         .count
         .filter(|n| *n > 1)
@@ -895,7 +927,7 @@ fn item_line(item: &protocol::InventoryItem) -> String {
         .as_deref()
         .filter(|s| *s != "carried")
         .map_or(String::new(), |s| format!(" ({s})"));
-    format!("{}{count}{slot}", item.name)
+    format!("{name}{count}{slot}")
 }
 
 /// Engine command errors in words a player can act on.
@@ -1319,6 +1351,14 @@ impl GameModel for EngineModel {
 
     fn inventory(&self) -> &[String] {
         &self.inventory
+    }
+
+    fn ground_cells(&self) -> &[Cell] {
+        &self.ground_cells
+    }
+
+    fn inventory_cells(&self) -> &[Cell] {
+        &self.inventory_cells
     }
 
     fn pick_up(&mut self, index: usize) {

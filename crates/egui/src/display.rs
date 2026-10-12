@@ -708,6 +708,21 @@ impl Display {
         any
     }
 
+    /// Draws a list row's item into `rect` as `paint` draws a map square, without counting it in what the map
+    /// paint reports.
+    pub fn paint_icon(
+        &mut self,
+        painter: &egui::Painter,
+        rect: Rect,
+        cell: &Cell,
+        season: Option<&str>,
+    ) -> bool {
+        let counts = (self.drawn, self.hidden, self.dimmed);
+        let painted = self.paint(painter, rect, cell, season);
+        (self.drawn, self.hidden, self.dimmed) = counts;
+        painted
+    }
+
     /// Draws a cell's layers into `rect`, bottom first, the way the game's tile view does: sprites where
     /// the tileset has them and the glyph of the thing where it has none. A square nothing is known about is only the hidden
     /// backdrop; false when even that has no sprite.

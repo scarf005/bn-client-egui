@@ -603,6 +603,14 @@ pub trait GameModel {
     fn step_toward(&mut self, target: Pos) -> bool;
     fn ground(&self) -> &[String];
     fn inventory(&self) -> &[String];
+    /// How each row of `ground` is drawn (sprite layers, else glyph and colour); empty for a model without looks.
+    fn ground_cells(&self) -> &[Cell] {
+        &[]
+    }
+    /// The same for the rows of `inventory`.
+    fn inventory_cells(&self) -> &[Cell] {
+        &[]
+    }
     fn pick_up(&mut self, index: usize);
     fn drop_item(&mut self, index: usize);
     /// Client-side lines: command results and errors.

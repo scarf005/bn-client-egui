@@ -1,5 +1,6 @@
 #![recursion_limit = "512"]
 mod common;
+use bn_client_core::colors::ColorMap;
 use bn_client_core::transport::ScriptedTransport;
 use bn_client_core::{EngineModel, GameModel, Pos, Rgb};
 use common::{connected, fixture, session, subscribe_reply};
@@ -1170,6 +1171,42 @@ fn panels_list_display_names_with_counts_and_where_items_are_kept() {
         ["combat knife (wielded)", "fur scarf (worn)", "hammer x2"]
     );
     assert_eq!(m.ground(), ["light disposable battery (12/25) x3"]);
+}
+
+#[test]
+fn a_condition_marker_keeps_its_native_colour_and_every_row_has_its_own_look() {
+    let (t, h) = session();
+    let mut m = connected(t);
+    let mut worn = item("||\u{a0}bra", 1, Some("worn"));
+    worn["durability"] = json!({"symbol": "||", "color": "light_green"});
+    worn["look"] =
+        json!({"kind": "item", "id": "bra", "tile": "bra_tile", "glyph": "[", "color": "pink"});
+    h.push(avatar_event(
+        json!([worn, item("hammer", 2, Some("carried"))]),
+        json!([item("rock", 1, None)]),
+    ));
+    m.poll();
+    let runs = m.styled(&m.inventory()[0]);
+    assert_eq!(
+        runs.iter()
+            .map(|r| (r.text.as_str(), r.color))
+            .collect::<Vec<_>>(),
+        [
+            ("||", Some(ColorMap::default().resolve("light_green").0)),
+            ("\u{a0}bra (worn)", None)
+        ]
+    );
+    assert_eq!(
+        m.styled(&m.inventory()[1]).len(),
+        1,
+        "no marker, no colour run"
+    );
+    let cells = m.inventory_cells();
+    assert_eq!(cells.len(), 2);
+    assert_eq!(cells[0].layers[0].id, "bra_tile");
+    assert_eq!(cells[0].glyph, '[');
+    assert_eq!(cells[0].color, ColorMap::default().resolve("pink").0);
+    assert_eq!(m.ground_cells().len(), 1);
 }
 
 #[test]
