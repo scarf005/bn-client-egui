@@ -21,7 +21,13 @@ pub struct Inventory {
 pub(super) const BAR: egui::Color32 = egui::Color32::from_rgb(10, 10, 220);
 
 /// The cells of a row the engine publishes around its own: not shown as cells.
-const META: [&str; 4] = ["source", "Category", "Row color", "Key color"];
+const META: [&str; 5] = [
+    "source",
+    "Category",
+    "Name markup",
+    "Row color",
+    "Key color",
+];
 
 /// The value of the labelled column of a row; empty when it has none.
 pub(super) fn column<'a>(row: &'a MenuChoice, label: &str) -> &'a str {
@@ -205,7 +211,9 @@ impl<M: GameModel> App<M> {
             .anchor(egui::Align2::CENTER_TOP, super::dialog_offset(ctx))
             .collapsible(false)
             .resizable(false)
-            .default_width((ctx.content_rect().width() * 0.9).min(1200.0))
+            .default_width(
+                (lists.len().max(1) as f32 * 420.0).min(ctx.content_rect().width() * 0.9),
+            )
             .frame(frame)
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
@@ -297,13 +305,21 @@ impl<M: GameModel> App<M> {
                 egui::Grid::new(("inventory_table", index))
                     .spacing([10.0, 0.0])
                     .show(ui, |ui| {
+                        // A cell no row of the list fills is not shown, as in the native column.
+                        let shown_cell = |at: usize| {
+                            rows.iter()
+                                .any(|r| cells(r).get(at).is_some_and(|(_, v)| !v.is_empty()))
+                        };
                         let mut category = None;
                         for (i, row) in rows.iter().enumerate() {
                             let shown = column(row, "Category");
                             if category != Some(shown) && !shown.is_empty() {
                                 if category.is_none() {
                                     ui.label(self.rich(ui, &tinted("c_magenta", shown)));
-                                    for (title, _) in cells(row).iter().skip(1) {
+                                    for (at, (title, _)) in cells(row).iter().enumerate().skip(1) {
+                                        if !shown_cell(at) {
+                                            continue;
+                                        }
                                         let title = tinted("c_magenta", title);
                                         ui.label(self.rich(ui, &title));
                                     }
@@ -336,6 +352,12 @@ impl<M: GameModel> App<M> {
                             let button = ui
                                 .horizontal(|ui| {
                                     list_row_style(ui);
+                                    // The native row keeps the name's own colors, such as green charges, unless
+                                    // it is refused.
+                                    let name = match (row.enabled, column(row, "Name markup")) {
+                                        (true, m) if !m.is_empty() => m,
+                                        _ => name,
+                                    };
                                     let text = self
                                         .rich(ui, &format!("{key} {mark}{}", tinted(tone, name)));
                                     let button = self.control(
@@ -377,7 +399,10 @@ impl<M: GameModel> App<M> {
                             if button.hovered() {
                                 *described = Some(*row);
                             }
-                            for (_, value) in own.iter().skip(1) {
+                            for (at, (_, value)) in own.iter().enumerate().skip(1) {
+                                if !shown_cell(at) {
+                                    continue;
+                                }
                                 ui.with_layout(
                                     egui::Layout::right_to_left(egui::Align::Center),
                                     |ui| {

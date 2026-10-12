@@ -53,7 +53,8 @@ impl<M: GameModel> App<M> {
         egui::Window::new(&title)
             .id(a11y::dialog_id(&title))
             .title_bar(false)
-            .anchor(egui::Align2::CENTER_TOP, super::dialog_offset(ctx))
+            // The native list sits at the left edge of the screen.
+            .anchor(egui::Align2::LEFT_TOP, [0.0, 0.0])
             .collapsible(false)
             .resizable(false)
             .default_width(560.0)
@@ -100,7 +101,10 @@ impl<M: GameModel> App<M> {
                                     '-' => "- ".to_string(),
                                     m => tinted("c_light_blue", &format!("{m} ")),
                                 };
-                                let name = tinted(color, &row.label);
+                                let name = match column(row, "Name markup") {
+                                    "" => tinted(color, &row.label),
+                                    markup => tinted(color, markup),
+                                };
                                 let text = self.rich(ui, &format!("{key}{slash}{mark}{name}"));
                                 let button =
                                     self.control(ui, text, &row.id, row.enabled, row.highlighted);
