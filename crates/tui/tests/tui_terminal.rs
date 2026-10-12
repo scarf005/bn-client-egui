@@ -4,7 +4,7 @@ use bn_client_core::transport::ScriptHandle;
 use bn_client_core::{EngineModel, GameModel};
 use bn_client_tui::TuiApp;
 use common::{fixture, session};
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
 use ratatui::style::Color;
@@ -102,4 +102,47 @@ fn the_description_text_scrolls_with_the_arrow_keys_and_stops_at_its_end() {
     // Scrolling is the client's: nothing went to the engine.
     assert!(h.sent().iter().all(|m| m["method"] != "bn.command.submit"));
     assert!(text[11].contains("Describe terrain"));
+}
+
+fn click(app: &mut TuiApp<EngineModel>, column: u16, row: u16) {
+    app.handle_mouse(MouseEvent {
+        kind: MouseEventKind::Down(MouseButton::Left),
+        column,
+        row,
+        modifiers: KeyModifiers::NONE,
+    });
+}
+
+#[test]
+fn clicking_a_terminal_answer_chooses_it_and_a_click_elsewhere_does_nothing() {
+    let b = boundary("query");
+    let no = b["interaction"]["choices"][1]["id"].clone();
+    let (mut app, h) = open(b);
+    let text = lines(&render(&mut app, 12));
+    let at = text[11].find("No").unwrap() as u16;
+    click(&mut app, at, 10);
+    click(&mut app, 59, 11);
+    assert!(
+        operations(&h).is_empty(),
+        "text and the gap after the answers are not answers"
+    );
+    click(&mut app, at, 11);
+    assert_eq!(operations(&h), [json!({"kind":"choose","choice_id":no})]);
+}
+
+#[test]
+fn clicking_a_target_of_the_extended_description_chooses_it() {
+    let b = boundary("description");
+    let furniture = b["interaction"]["choices"][1]["id"].clone();
+    let (mut app, h) = open(b);
+    let text = lines(&render(&mut app, 12));
+    click(
+        &mut app,
+        text[11].find("Describe furniture").unwrap() as u16 + 2,
+        11,
+    );
+    assert_eq!(
+        operations(&h),
+        [json!({"kind":"choose","choice_id":furniture})]
+    );
 }

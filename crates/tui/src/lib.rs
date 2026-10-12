@@ -488,6 +488,15 @@ impl<M: GameModel> TuiApp<M> {
             self.pickup_click(ev.column, ev.row);
             return;
         }
+        if ev.kind == MouseEventKind::Down(MouseButton::Left)
+            && self
+                .model
+                .menu()
+                .is_some_and(|m| m.terminal() || m.description())
+        {
+            self.terminal_click(ev.column, ev.row);
+            return;
+        }
         if ev.kind == MouseEventKind::Down(MouseButton::Left) && self.menu_click(ev) {
             return;
         }
