@@ -293,7 +293,7 @@ impl<M: GameModel> TuiApp<M> {
                     .lines()
                     .map(|line| match line {
                         "--" => Line::styled(
-                            "─".repeat(details.width.into()),
+                            "─".repeat(usize::from(details.width.saturating_sub(2))),
                             Style::new().fg(Color::Gray),
                         ),
                         _ => Line::from(

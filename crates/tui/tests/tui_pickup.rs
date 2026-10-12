@@ -257,4 +257,7 @@ fn the_info_window_keeps_the_line_breaks_of_the_item_description() {
         "{}",
         dump.join("\n")
     );
+    // The rule is one row of the window's width, not wrapped onto a second one.
+    let rules = dump.iter().filter(|l| l.starts_with("│──")).count();
+    assert_eq!(rules, 1, "{}", dump.join("\n"));
 }
