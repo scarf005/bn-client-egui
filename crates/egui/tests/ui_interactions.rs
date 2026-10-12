@@ -799,7 +799,8 @@ fn the_cell_tooltip_does_not_hang_over_a_dialog() {
     h.run_steps(5);
     let map = h.get_by_label("Map").rect();
     // The avatar's own square is tin_can in the fixture, as is a ground row; the tooltip is one more.
-    let over = map.min + egui::vec2(20.5 * CELL, 12.5 * CELL);
+    let me = h.state().model.player();
+    let over = map.min + egui::vec2(me.x as f32 + 0.5, me.y as f32 + 0.5) * CELL;
     let named = |h: &H| h.query_all_by_label("tin_can").count();
     let rows = named(&h);
     h.hover_at(over);
