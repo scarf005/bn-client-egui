@@ -20,6 +20,12 @@ fn boundary(name: &str) -> Value {
 }
 
 fn harness<'a>(name: &str) -> (H<'a>, ScriptHandle) {
+    harness_edited(name, |_| {})
+}
+
+fn harness_edited<'a>(name: &str, edit: impl FnOnce(&mut Value)) -> (H<'a>, ScriptHandle) {
+    let mut boundary = boundary(name);
+    edit(&mut boundary);
     let (t, script) = session();
     let t = t.on("bn.command.submit", vec![fixture("submit_result")]);
     let clock = Clock::manual();
@@ -34,7 +40,7 @@ fn harness<'a>(name: &str) -> (H<'a>, ScriptHandle) {
     script.push(
         json!({"jsonrpc":"2.0","method":"bn.events","params":{"epoch":"e7f3","events":[{
         "sequence": "41", "revision": "32", "type": "interaction.changed",
-        "changes": {"interaction": boundary(name)}}]}}),
+        "changes": {"interaction": boundary}}]}}),
     );
     h.run_steps(4);
     (h, script)
@@ -78,6 +84,16 @@ fn the_extended_description_shows_its_text_and_targets_with_the_current_one_lit(
     h.get_by_label_contains("This is a dirt.");
     h.get_by_label_contains("Loose soil.");
     h.get_by_label("Describe creatures");
+}
+
+#[test]
+fn a_line_of_two_dashes_is_the_rule_between_description_parts_not_text() {
+    let (h, _) = harness_edited("description", |b| {
+        b["interaction"]["message"] = json!("This is a dirt.\n--\nLoose soil.")
+    });
+    h.get_by_label_contains("This is a dirt.");
+    h.get_by_label_contains("Loose soil.");
+    assert!(h.query_by_label("--").is_none());
 }
 
 #[test]
