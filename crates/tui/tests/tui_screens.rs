@@ -327,3 +327,29 @@ fn a_column_repeating_the_rows_own_text_is_not_shown_twice() {
         "{shown}"
     );
 }
+
+#[test]
+fn a_description_line_of_two_dashes_is_a_rule_across_the_window() {
+    let (mut app, h) = engine();
+    render(&mut app);
+    open(&mut app, &h, "A_SCREEN", false);
+    let mut menu = fixture("events_43_menu");
+    menu["params"]["events"][0]["sequence"] = "44".into();
+    menu["params"]["events"][0]["revision"] = "34".into();
+    let change = &mut menu["params"]["events"][0]["changes"]["interaction"]["interaction"];
+    change["choices"][0]["description"] = "Origin: here\n--\nMaterial: Iron".into();
+    h.push(menu);
+    app.model.poll();
+    let all = rows(&render(&mut app));
+    assert!(!all.iter().any(|l| l.contains("--")), "{}", all.join("\n"));
+    assert!(
+        all.iter().any(|l| l.contains("Origin: here")),
+        "{}",
+        all.join("\n")
+    );
+    assert!(
+        all.iter().any(|l| l.contains("──────")),
+        "{}",
+        all.join("\n")
+    );
+}
