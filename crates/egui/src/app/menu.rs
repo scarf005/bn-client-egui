@@ -481,10 +481,13 @@ impl<M: GameModel> App<M> {
     /// The engine's own window, a row of colored cells at a time, in a fixed-width font as large as
     /// lets the whole grid fit the window, so every cell keeps its column and row at any size.
     fn canvas(&self, ui: &mut egui::Ui, canvas: &bn_client_core::Canvas) {
-        // The room is the screen less the dialog's title and margins; it does not depend on the
-        // dialog's own size, which follows the canvas.
-        let screen = ui.ctx().content_rect().size();
-        let room = egui::vec2(screen.x * 0.9, screen.y - 160.0);
+        // The room is what the dialog offers its list; it does not depend on the dialog's own size,
+        // which follows the canvas.
+        // A row's height rounds up to a whole pixel, which a row of slack each pays for.
+        let room = egui::vec2(
+            ui.ctx().content_rect().width() * 0.9,
+            ui.available_height() - canvas.rows.len() as f32,
+        );
         let unit = 100.0;
         let cell = ui
             .painter()
