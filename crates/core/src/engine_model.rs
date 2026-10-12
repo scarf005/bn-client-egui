@@ -1697,21 +1697,20 @@ impl GameModel for EngineModel {
         {
             return !self.busy && self.submit(Operation::Choose { choice_id: row.id });
         }
-        // A "press any key" popup has no key to bind: whatever is pressed acknowledges it.
+        // A "press any key" popup or terminal prompt has no key to bind: whatever is pressed continues it.
         let any_key = self
             .replica
             .boundary()
             .and_then(|b| b.interaction.as_ref())
-            .is_some_and(|i| {
-                i.choices
-                    .iter()
-                    .any(|c| c.id == "acknowledge" && c.description == "ANY_INPUT")
-            });
-        any_key
-            && !self.busy
-            && self.submit(Operation::Choose {
-                choice_id: "acknowledge".into(),
+            .and_then(|i| {
+                let popup =
+                    |c: &protocol::Choice| c.id == "acknowledge" && c.description == "ANY_INPUT";
+                let terminal =
+                    |c: &protocol::Choice| i.context == "COMPUTER_TERMINAL" && c.id == "continue";
+                i.choices.iter().find(|c| popup(c) || terminal(c))
             })
+            .map(|c| c.id.clone());
+        any_key.is_some_and(|choice_id| !self.busy && self.submit(Operation::Choose { choice_id }))
     }
 
     fn menu(&self) -> Option<Menu> {
