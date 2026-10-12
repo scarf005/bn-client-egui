@@ -130,6 +130,8 @@ fn by_def(def: &str, v: &Value) -> Result<Value, String> {
     match def {
         "hello_params" => round_trip::<HelloParams>(v),
         "viewport" => round_trip::<Viewport>(v),
+        "credit_params" => round_trip::<CreditParams>(v),
+        "credit_result" => round_trip::<CreditResult>(v),
         "hello_result" => round_trip::<Hello>(v),
         "empty_params" => round_trip::<std::collections::BTreeMap<String, Value>>(v),
         "subscribe_result" => round_trip::<Snapshot>(v),
@@ -214,6 +216,9 @@ fn contract_invalid_examples_the_types_can_reject_are_rejected() {
     for name in [
         "travel with a bubble coordinate",
         "travel without a position",
+        "hello delivery without credits",
+        "hello delivery with zero credits",
+        "credit request beyond the window",
     ] {
         assert!(rejected.contains(&name.to_string()), "{name}: {rejected:?}");
     }

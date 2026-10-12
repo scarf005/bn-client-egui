@@ -772,6 +772,46 @@ pub struct Hello {
     pub epoch: String,
     pub engine: Value,
     pub limits: Value,
+    /// Present when the client opted in to credit delivery.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delivery: Option<DeliveryGrant>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DeliveryGrant {
+    pub credits: u16,
+    pub held_frames: u64,
+    pub held_bytes: u64,
+}
+
+/// A count of pushed frames: a window of 1 to 256.
+fn frame_window<'de, D: serde::Deserializer<'de>>(d: D) -> Result<u16, D::Error> {
+    let n = u16::deserialize(d)?;
+    match (1..=256).contains(&n) {
+        true => Ok(n),
+        false => Err(serde::de::Error::custom("expected 1 to 256 frames")),
+    }
+}
+
+/// Opts in to credit delivery; the clients do not send it yet.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DeliveryRequest {
+    #[serde(deserialize_with = "frame_window")]
+    pub credits: u16,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CreditParams {
+    #[serde(deserialize_with = "frame_window")]
+    pub frames: u16,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CreditResult {
+    pub credits: u16,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -842,6 +882,8 @@ pub struct HelloParams {
     /// The ids of the tints the client's tileset has; the engine publishes `tint_keys` among them.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tint_ids: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delivery: Option<DeliveryRequest>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -861,6 +903,7 @@ impl HelloParams {
             viewport: None,
             tiles: false,
             tint_ids: vec![],
+            delivery: None,
         }
     }
 

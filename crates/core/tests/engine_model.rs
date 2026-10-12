@@ -198,6 +198,18 @@ fn epoch_mismatch_and_resync_resubscribe() {
 }
 
 #[test]
+fn backpressure_resync_resubscribes() {
+    let (t, h) = session();
+    let mut m = connected(t.on("bn.subscribe", subscribe_reply()));
+    let mut notice = fixture("resync");
+    notice["params"]["reason"] = json!("backpressure");
+    h.push(notice);
+    m.poll();
+    assert_eq!(h.sent_methods().last().unwrap(), "bn.subscribe");
+    assert_eq!(h.sent_methods().len(), 3);
+}
+
+#[test]
 fn resync_mid_command_rebuilds_the_mirror_and_keeps_the_command_outcome() {
     let (t, h) = session();
     let fresh = connected(session().0);
