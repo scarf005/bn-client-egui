@@ -270,6 +270,27 @@ fn while_looking_the_mouse_moves_the_engines_cursor_and_a_second_click_confirms_
 }
 
 #[test]
+fn hovering_the_engines_cursor_square_does_not_confirm_it() {
+    let (mut h, script) = harness();
+    let target = json!({"current":{"dim":"","x":3,"y":4,"z":0}});
+    open_menu(
+        &mut h,
+        &script,
+        json!([]),
+        json!([{"id":"CONFIRM","name":"Confirm"}]),
+        Some(target),
+    );
+    let here = {
+        let origin = h.get_by_label("Map").rect().min;
+        let view = h.state().model.focus().expect("the engine cursor");
+        origin + egui::vec2(view.x as f32 + 0.5, view.y as f32 + 0.5) * CELL
+    };
+    h.hover_at(here);
+    h.run_steps(3);
+    assert_eq!(operations(&script), Vec::<Value>::new());
+}
+
+#[test]
 fn a_click_goes_to_the_square_it_landed_on_even_when_the_pointer_just_arrived() {
     let (mut h, script) = harness();
     h.run_steps(3);

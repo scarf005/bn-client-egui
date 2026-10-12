@@ -216,3 +216,60 @@ fn the_zone_manager_lists_its_zones_options_and_actions_under_headings() {
         "a click maps to its row past a heading"
     );
 }
+
+/// The ids of the actions invoked so far.
+fn invoked(h: &ScriptHandle) -> Vec<String> {
+    h.sent()
+        .iter()
+        .filter(|m| m["method"] == "bn.command.submit")
+        .filter_map(|m| {
+            m["params"]["operation"]["action_id"]
+                .as_str()
+                .map(String::from)
+        })
+        .collect()
+}
+
+#[test]
+fn hovering_the_cursor_square_while_picking_a_zone_point_does_not_confirm_it_but_a_click_does() {
+    let (mut app, h) = engine();
+    text(&mut app);
+    let look = screen(
+        "target",
+        "LOOK",
+        "Look Around",
+        "Select first point.",
+        vec![],
+    );
+    show(
+        &mut app,
+        &h,
+        look,
+        json!([{"id":"CONFIRM","name":"Confirm","keys":["RETURN"]}]),
+    );
+    // The cursor is at world (3, 4), three squares west of the avatar the map draws as `@`.
+    let shown = text(&mut app);
+    let (row, at) = shown
+        .lines()
+        .enumerate()
+        .find_map(|(y, l)| l.find('@').map(|x| (y as u16, x as u16)))
+        .expect("the avatar");
+    let on_cursor = |kind| MouseEvent {
+        kind,
+        column: at - 3,
+        row,
+        modifiers: KeyModifiers::NONE,
+    };
+    app.handle_mouse(on_cursor(MouseEventKind::Moved));
+    assert_eq!(
+        invoked(&h),
+        Vec::<String>::new(),
+        "a hover only moves the cursor"
+    );
+    app.handle_mouse(on_cursor(MouseEventKind::Down(MouseButton::Left)));
+    assert_eq!(
+        invoked(&h),
+        ["CONFIRM"],
+        "a click on the cursor takes the point"
+    );
+}
