@@ -1003,3 +1003,51 @@ fn enter_chooses_the_cursor_row_when_the_menu_binds_no_confirm_key() {
         json!({"kind":"choose","choice_id":"c:1"})
     );
 }
+
+#[test]
+fn item_lists_beside_the_map_show_colour_tags_as_colour_not_text() {
+    struct Tagged(FakeModel, Vec<String>);
+    impl GameModel for Tagged {
+        fn size(&self) -> Pos {
+            self.0.size()
+        }
+        fn cell(&self, at: Pos) -> bn_client_core::Cell {
+            self.0.cell(at)
+        }
+        fn player(&self) -> Pos {
+            self.0.player()
+        }
+        fn step_toward(&mut self, t: Pos) -> bool {
+            self.0.step_toward(t)
+        }
+        fn ground(&self) -> &[String] {
+            &self.1
+        }
+        fn inventory(&self) -> &[String] {
+            &self.1
+        }
+        fn pick_up(&mut self, _: usize) {}
+        fn drop_item(&mut self, _: usize) {}
+        fn messages(&self) -> &[String] {
+            self.0.messages()
+        }
+        fn say(&mut self, t: String) {
+            self.0.say(t)
+        }
+    }
+    let mut app = TuiApp::new(Tagged(
+        FakeModel::default(),
+        vec!["<color_c_light_green>||</color> socks".into()],
+    ));
+    let t = render(&mut app);
+    let s = text(&t);
+    assert!(s.contains("|| socks") && !s.contains("<color"), "{s}");
+    let b = t.backend().buffer();
+    let at = s
+        .lines()
+        .enumerate()
+        .find_map(|(y, l)| l.find("||").map(|x| (x, y)))
+        .unwrap();
+    let x = s.lines().nth(at.1).unwrap()[..at.0].chars().count() as u16;
+    assert_ne!(b[(x, at.1 as u16)].fg, Color::Reset, "tinted");
+}

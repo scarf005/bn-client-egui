@@ -241,3 +241,20 @@ fn the_right_pickup_position_puts_the_window_at_the_right_edge() {
     let (mut app, _) = open(with_pane("left", false));
     assert!(lines(&render(&mut app))[1].starts_with('a'));
 }
+
+#[test]
+fn the_info_window_keeps_the_line_breaks_of_the_item_description() {
+    let mut b = pickup();
+    b["interaction"]["choices"][1]["description"] =
+        "Origin: 'Bright Nights'\n--\nMaterial: Iron".into();
+    let (mut app, _) = open(b);
+    let dump = lines(&render(&mut app));
+    let row = |needle: &str| dump.iter().position(|l| l.contains(needle));
+    let (origin, iron) = (row("Origin: 'Bright Nights'"), row("Material: Iron"));
+    assert!(origin.is_some() && iron > origin, "{}", dump.join("\n"));
+    assert!(
+        !dump.iter().any(|l| l.contains("--Material")),
+        "{}",
+        dump.join("\n")
+    );
+}
