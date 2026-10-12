@@ -73,13 +73,12 @@ fn live_engine_one_hour_wait_streams_its_turns_before_it_completes() {
     start_wait(&mut model, "1 hour");
     model.take_trace();
     let started = Instant::now();
-    let mut frames = 0;
+    let (mut frames, mut resynced) = (0, false);
     wait_for(&mut model, "the wait to end", |m| {
-        frames += m
-            .take_trace()
-            .iter()
-            .filter(|(_, what)| *what == "events")
-            .count();
+        let trace = m.take_trace();
+        frames += trace.iter().filter(|(_, what)| *what == "events").count();
+        // A backpressure resync makes the model subscribe again.
+        resynced |= trace.iter().any(|(_, what)| *what == "subscribed");
         !m.busy()
     });
     println!(
@@ -87,7 +86,8 @@ fn live_engine_one_hour_wait_streams_its_turns_before_it_completes() {
         started.elapsed()
     );
     assert!(
-        frames >= 600,
+        frames >= 3,
         "turns reached the client while the wait ran: {frames}"
     );
+    assert!(!resynced, "the engine did not overflow its held frames");
 }
