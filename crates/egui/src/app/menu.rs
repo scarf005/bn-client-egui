@@ -173,7 +173,16 @@ impl<M: GameModel> App<M> {
                 } else {
                     egui::ScrollArea::vertical()
                 };
-                area.max_height(super::dialog_scroll_height(ctx))
+                // What sits under the list takes room from it, so the window never outgrows the screen.
+                let row = ui.spacing().interact_size.y + ui.spacing().item_spacing.y;
+                let filter = self.model.actions().iter().any(|a| a.id == "FILTER")
+                    && menu.field.is_none()
+                    && menu.total > FILTER_MIN_ROWS;
+                let paged = menu.total > menu.choices.len();
+                let info = menu.choices.iter().any(|c| is_prose(&c.description));
+                let footer = row * (usize::from(filter) + usize::from(paged)) as f32
+                    + if info { DESCRIPTION_HEIGHT + row } else { 0.0 };
+                area.max_height(super::dialog_scroll_height(ctx) - footer)
                     .scroll_source(egui::scroll_area::ScrollSource {
                         mouse_wheel: !engine_scroll,
                         ..Default::default()
