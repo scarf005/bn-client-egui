@@ -7,7 +7,9 @@ use eframe::egui::{self, accesskit};
 use std::collections::VecDeque;
 
 mod aim;
+mod construction;
 mod crafting;
+mod inventory;
 mod menu;
 mod palette;
 mod pickup;
@@ -125,8 +127,10 @@ pub struct App<M: GameModel> {
     /// The engine's look cursor was up at the last frame.
     was_looking: bool,
     crafting: crafting::Crafting,
+    construction: construction::Construction,
     aim: aim::Aim,
     pickup: pickup::Pickup,
+    inventory: inventory::Inventory,
     trade: trade::Trade,
     /// The engine's selected row of the open menu, to keep it in view when the wheel moves it.
     menu_cursor: Option<String>,
@@ -189,8 +193,10 @@ impl<M: GameModel> App<M> {
             command_live: a11y::Announcer::new(" "),
             status_live: a11y::Announcer::new(", "),
             crafting: Default::default(),
+            construction: Default::default(),
             aim: Default::default(),
             pickup: Default::default(),
+            inventory: Default::default(),
             trade: Default::default(),
             menu_cursor: None,
             queued: VecDeque::new(),
@@ -616,8 +622,16 @@ impl<M: GameModel> App<M> {
         ui.ctx()
             .accesskit_node_builder(label.id, |b| b.set_live(accesskit::Live::Polite));
         // Stops a wait or other activity, like the native interrupt key.
-        if self.model.busy() && ui.button("Interrupt").clicked() {
-            self.model.interrupt();
+        if self.model.busy() {
+            // Still, the activity is told by the status text above; only the motion goes.
+            if self.display.reduced_motion() {
+                ui.label("…");
+            } else {
+                ui.spinner();
+            }
+            if ui.button("Interrupt").clicked() {
+                self.model.interrupt();
+            }
         }
     }
 

@@ -3,16 +3,61 @@
 use bn_client_core::sidebar::{Line, Span};
 use eframe::egui::{self, Color32, FontId, TextFormat, text::LayoutJob};
 
-/// One label per sidebar line, each span in its native colour; a screen reader reads the line as one text.
+/// The rows at the top that form the classic panel's table (a limb beside a need and a stat each): they share
+/// their columns. Every row below is its own.
+const TABLE_ROWS: usize = 6;
+
+/// The least width in characters of the span at each index of a table row: the widest thing the classic
+/// panel puts there, so a number gaining a digit never moves what follows it.
+const MIN_COLUMNS: [usize; 5] = [5, 7, 7, 8, 15];
+
+/// The indent of a line continued after a break, in characters.
+const INDENT: usize = 2;
+
+/// One label per sidebar line, each span in its native colour and at a fixed column, so a value changing
+/// never moves another one; a screen reader reads the line as one text.
 /// A line too wide for the panel loses its padding first, then breaks between spans, never inside one,
 /// so a label stays with its value.
 pub fn show(ui: &mut egui::Ui, lines: &[Line]) {
     ui.heading("Status");
     let width = ui.available_width();
-    for line in lines {
-        let job = fitted(ui, line, width);
+    let font = FontId::monospace(14.0);
+    let char_width = ui
+        .painter()
+        .layout_no_wrap("0".into(), font, Color32::WHITE)
+        .size()
+        .x;
+    // Columns only widen, so a value that once needed more room keeps it.
+    let key = egui::Id::new("sidebar_columns");
+    let mut groups: Vec<Vec<usize>> = ui.data(|d| d.get_temp(key)).unwrap_or_default();
+    let group_of = |row: usize| row.saturating_sub(TABLE_ROWS - 1);
+    for (row, line) in lines.iter().enumerate() {
+        let group = group_of(row);
+        groups.resize(groups.len().max(group + 1), vec![]);
+        let columns = &mut groups[group];
+        columns.resize(columns.len().max(line.len()), 0);
+        for (i, span) in line.iter().enumerate() {
+            let floor = MIN_COLUMNS.get(i).filter(|_| group == 0).copied();
+            columns[i] = columns[i]
+                .max(floor.unwrap_or(0))
+                .max(span.text.chars().count());
+        }
+    }
+    ui.data_mut(|d| d.insert_temp(key, groups.clone()));
+    for (row, line) in lines.iter().enumerate() {
+        let grid = Grid {
+            columns: &groups[group_of(row)],
+            char_width,
+        };
+        let job = fitted(line, width, &grid);
         ui.add(egui::Label::new(job).wrap_mode(egui::TextWrapMode::Extend));
     }
+}
+
+/// Where the spans of a row sit: every index has a column of fixed character width.
+struct Grid<'a> {
+    columns: &'a [usize],
+    char_width: f32,
 }
 
 fn format_of(span: &Span) -> TextFormat {
@@ -23,36 +68,56 @@ fn format_of(span: &Span) -> TextFormat {
     }
 }
 
-/// The spans on one run of lines: `gap` between spans, `\n` plus an indent where a break is needed.
-fn job_of(spans: &[&Span], gap: &str, breaks: &[usize]) -> LayoutJob {
+/// The spans on one row: `gap` between spans and each at the start of its column. A run that
+/// breaks (`breaks` holds the span indices that start one) continues on a new line, indented, with the
+/// columns counted from the indent.
+fn job_of(spans: &[&Span], gap: &str, breaks: &[usize], grid: &Grid) -> LayoutJob {
     let mut job = LayoutJob::default();
+    // Characters on the current line, the start of the next column, whether the line has a span yet.
+    let (mut at, mut column, mut has) = (0, 0, false);
     for (i, span) in spans.iter().enumerate() {
-        let lead = match (i, breaks.contains(&i)) {
-            (0, _) => "",
-            (_, true) => "\n  ",
-            _ => gap,
-        };
-        job.append(&format!("{lead}{}", span.text), 0.0, format_of(span));
+        if breaks.contains(&i) {
+            job.append("\n  ", 0.0, format_of(span));
+            (at, column, has) = (INDENT, INDENT, false);
+        }
+        let start = column;
+        column += grid.columns.get(i).copied().unwrap_or(0) + gap.len();
+        if span.text.is_empty() {
+            continue;
+        }
+        let lead = if has { gap } else { "" };
+        let pad = start.saturating_sub(at + lead.len());
+        job.append(
+            &format!("{lead}{}", span.text),
+            pad as f32 * grid.char_width,
+            format_of(span),
+        );
+        at += pad + lead.len() + span.text.chars().count();
+        has = true;
     }
     job
 }
 
-fn fitted(ui: &egui::Ui, line: &Line, width: f32) -> LayoutJob {
+fn fitted(line: &Line, width: f32, grid: &Grid) -> LayoutJob {
     let spans = line.iter().collect::<Vec<_>>();
-    let wide = |job: LayoutJob| ui.painter().layout_job(job).size().x > width;
+    let room = (width / grid.char_width) as usize;
+    let column = |i: usize| grid.columns.get(i).copied().unwrap_or(0);
+    // Whether the gap fits is decided by the row's columns, not by how long its values are right now.
+    let last = spans.iter().rposition(|s| !s.text.is_empty()).unwrap_or(0);
     for gap in ["  ", " "] {
-        if !wide(job_of(&spans, gap, &[])) {
-            return job_of(&spans, gap, &[]);
+        if (0..=last).map(column).sum::<usize>() + last * gap.len() <= room {
+            return job_of(&spans, gap, &[], grid);
         }
     }
     // Greedy: start a new line at the first span that no longer fits the current one.
     let mut breaks = vec![];
-    let mut start = 0;
-    for end in 1..=spans.len() {
-        if end - start > 1 && wide(job_of(&spans[start..end], " ", &[])) {
-            breaks.push(end - 1);
-            start = end - 1;
+    let mut used = 0;
+    for i in 0..=last {
+        if used > 0 && used + 1 + column(i) > room {
+            breaks.push(i);
+            used = INDENT;
         }
+        used += column(i) + usize::from(used > 0);
     }
-    job_of(&spans, " ", &breaks)
+    job_of(&spans, " ", &breaks, grid)
 }

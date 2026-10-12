@@ -11,16 +11,12 @@ pub struct Span {
     pub color: Rgb,
 }
 
-/// One sidebar row; its spans read left to right.
+/// One sidebar row; its spans read left to right. A span that prints nothing (a need that is not
+/// felt) stays as an empty one, so every other span keeps its place in the row.
 pub type Line = Vec<Span>;
 
-/// A line of spans, minus the empty ones (a need that is not felt prints nothing).
 fn line(spans: Vec<Option<Span>>) -> Line {
-    spans
-        .into_iter()
-        .flatten()
-        .filter(|s| !s.text.is_empty())
-        .collect()
+    spans.into_iter().flatten().collect()
 }
 
 pub fn lines(avatar: &Avatar, colors: &ColorMap) -> Vec<Line> {
@@ -118,6 +114,6 @@ pub fn lines(avatar: &Avatar, colors: &ColorMap) -> Vec<Line> {
         plain(&side.weapon),
         side.style.as_ref().and_then(said),
     ]));
-    rows.retain(|r| !r.is_empty());
+    rows.retain(|r| r.iter().any(|s| !s.text.is_empty()));
     rows
 }

@@ -21,8 +21,6 @@ use std::time::{Duration, Instant};
 
 /// The map window asked for until the UI reports its own size.
 const VIEW: Pos = Pos { x: 40, y: 25 };
-/// The window re-centres when the avatar gets this close to its edge (engines that report no view).
-const MARGIN: i32 = 3;
 /// A resized panel is sent to the engine once it has stayed this size for this long.
 /// The engine takes up to this many cells on a side.
 const MAX_VIEWPORT: i32 = 512;
@@ -102,6 +100,8 @@ pub struct EngineModel {
     native: Vec<LogLine>,
     ground: Vec<String>,
     inventory: Vec<String>,
+    ground_cells: Vec<Cell>,
+    inventory_cells: Vec<Cell>,
     /// The engine's own names for the same rows; the native menus list items by these.
     ground_names: Vec<String>,
     /// Pages of a long menu fetched after the first, for the interaction they belong to.
@@ -322,6 +322,8 @@ impl EngineModel {
             native: vec![],
             ground: vec![],
             inventory: vec![],
+            ground_cells: vec![],
+            inventory_cells: vec![],
             ground_names: vec![],
             paged: Paged::default(),
             explosion_tiles: HashMap::new(),
@@ -747,25 +749,15 @@ impl EngineModel {
         };
         let (ax, ay) = (a.x, a.y);
         let size = self.shown();
-        if let Some(v) = self.replica.view() {
-            // The engine's window is centred on the avatar; show the middle of it, so every shown
-            // square is one a click can select.
-            self.origin = Some((
-                v.min.x + (v.max.x - v.min.x + 1 - size.x) / 2,
-                v.min.y + (v.max.y - v.min.y + 1 - size.y) / 2,
-            ));
-            return;
-        }
-        let centred = (ax - size.x / 2, ay - size.y / 2);
-        self.origin = match self.origin {
-            Some((ox, oy))
-                if (MARGIN..size.x - MARGIN).contains(&(ax - ox))
-                    && (MARGIN..size.y - MARGIN).contains(&(ay - oy)) =>
-            {
-                Some((ox, oy))
-            }
-            _ => Some(centred),
-        };
+        // Like Tiles, the centre square is `size / 2`: the engine's window is centred on the view point
+        // (the avatar, or the look cursor that pans it), so every shown square is one a click can select.
+        let (cx, cy) = self.replica.view().map_or((ax, ay), |v| {
+            (
+                v.min.x + (v.max.x - v.min.x + 1) / 2,
+                v.min.y + (v.max.y - v.min.y + 1) / 2,
+            )
+        });
+        self.origin = Some((cx - size.x / 2, cy - size.y / 2));
     }
 
     /// Tells the engine the new map size once the panel has stopped changing.
@@ -832,10 +824,11 @@ impl EngineModel {
 
     fn refresh_items(&mut self) {
         let avatar = self.replica.avatar();
+        let row = |look: &Look, line: String, name: String| (line, name, self.item_cell(look));
         let ground = match avatar.and_then(|a| a.ground.as_ref()) {
             Some(stacks) => stacks
                 .iter()
-                .map(|i| (item_line(i), i.name.clone()))
+                .map(|i| row(&i.look, item_line(i), i.name.clone()))
                 .collect(),
             None => self
                 .avatar_pos()
@@ -843,7 +836,7 @@ impl EngineModel {
                 .map_or(vec![], |c| {
                     c.items
                         .iter()
-                        .map(|l| (look_name(l), look_name(l)))
+                        .map(|l| row(l, look_name(l), look_name(l)))
                         .collect()
                 }),
         };
@@ -851,11 +844,19 @@ impl EngineModel {
             a.inventory
                 .iter()
                 .flatten()
-                .map(|i| (item_line(i), i.name.clone()))
+                .map(|i| row(&i.look, item_line(i), i.name.clone()))
                 .collect()
         });
-        (self.ground, self.ground_names) = ground.into_iter().unzip();
-        (self.inventory, self.inventory_names) = carried.into_iter().unzip();
+        (self.ground, self.ground_names, self.ground_cells) = unzip3(ground);
+        (self.inventory, self.inventory_names, self.inventory_cells) = unzip3(carried);
+    }
+
+    /// How a list row draws its item: the same layers a map square gets for it.
+    fn item_cell(&self, look: &Look) -> Cell {
+        Cell {
+            layers: vec![self.layer(look, 0)],
+            ..self.styled(look, look_name(look))
+        }
     }
 
     /// Marks the chore's item in the native menu it opened, then confirms; ends it when the menu is gone.
@@ -884,8 +885,27 @@ impl EngineModel {
     }
 }
 
-/// An item the way the native lists name it, with how many and where it is kept.
+fn unzip3<A, B, C>(rows: Vec<(A, B, C)>) -> (Vec<A>, Vec<B>, Vec<C>) {
+    let (mut a, mut b, mut c) = (vec![], vec![], vec![]);
+    for (x, y, z) in rows {
+        a.push(x);
+        b.push(y);
+        c.push(z);
+    }
+    (a, b, c)
+}
+
+/// An item the way the native lists name it, with how many and where it is kept; its condition marker keeps its native colour as markup.
 fn item_line(item: &protocol::InventoryItem) -> String {
+    let name = match &item.durability {
+        Some(d) if item.name.starts_with(&d.symbol) => format!(
+            "<color_{}>{}</color>{}",
+            d.color,
+            d.symbol,
+            &item.name[d.symbol.len()..]
+        ),
+        _ => item.name.clone(),
+    };
     let count = item
         .count
         .filter(|n| *n > 1)
@@ -895,7 +915,7 @@ fn item_line(item: &protocol::InventoryItem) -> String {
         .as_deref()
         .filter(|s| *s != "carried")
         .map_or(String::new(), |s| format!(" ({s})"));
-    format!("{}{count}{slot}", item.name)
+    format!("{name}{count}{slot}")
 }
 
 /// Engine command errors in words a player can act on.
@@ -1321,6 +1341,14 @@ impl GameModel for EngineModel {
         &self.inventory
     }
 
+    fn ground_cells(&self) -> &[Cell] {
+        &self.ground_cells
+    }
+
+    fn inventory_cells(&self) -> &[Cell] {
+        &self.inventory_cells
+    }
+
     fn pick_up(&mut self, index: usize) {
         let name = self.ground_names.get(index).cloned();
         if let (false, Some(name)) = (self.busy, name) {
@@ -1459,6 +1487,14 @@ impl GameModel for EngineModel {
     fn press(&mut self, key: &str) -> bool {
         if let Some(id) = self.action_for(key) {
             return self.invoke_action(&id);
+        }
+        // As in a native list, a key the menu binds to no action selects the enabled row showing it.
+        if let Some(row) = self
+            .menu()
+            .filter(|m| m.field.is_none())
+            .and_then(|m| m.choices.into_iter().find(|c| c.enabled && c.hotkey == key))
+        {
+            return !self.busy && self.submit(Operation::Choose { choice_id: row.id });
         }
         // A "press any key" popup has no key to bind: whatever is pressed acknowledges it.
         let any_key = self

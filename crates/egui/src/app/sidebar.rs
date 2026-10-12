@@ -2,13 +2,18 @@
 
 use super::App;
 use crate::a11y;
-use bn_client_core::{GameModel, LogLine, markup};
+use bn_client_core::{Cell, GameModel, LogLine, markup};
 use eframe::egui::{self, accesskit};
 
 /// The message log's share of the sidebar height.
 const LOG_SHARE: f32 = 0.4;
 /// The log's height limits as shares of the sidebar height.
 const LOG_RANGE: (f32, f32) = (0.1, 0.8);
+
+/// The side of the square an item's sprite or glyph is drawn in beside its row.
+const ICON: f32 = 24.0;
+/// The least height an item list keeps, whatever room the window has left.
+const MIN_LIST: f32 = 4.0 * ICON;
 
 #[derive(Clone, Copy, PartialEq)]
 enum Column {
@@ -67,11 +72,28 @@ impl<M: GameModel> App<M> {
 
     fn items(&mut self, ui: &mut egui::Ui) {
         let mut moved = None;
+        let season = self.model.season();
         for column in [Column::Ground, Column::Inventory] {
-            let (title, verb, items) = match column {
-                Column::Ground => ("Ground", "Pick up", self.model.ground()),
-                Column::Inventory => ("Inventory", "Drop", self.model.inventory()),
+            let (title, verb, items, cells) = match column {
+                Column::Ground => (
+                    "Ground",
+                    "Pick up",
+                    self.model.ground(),
+                    self.model.ground_cells(),
+                ),
+                Column::Inventory => (
+                    "Inventory",
+                    "Drop",
+                    self.model.inventory(),
+                    self.model.inventory_cells(),
+                ),
             };
+            let rows = items
+                .iter()
+                .enumerate()
+                .map(|(i, name)| (name, self.rich(ui, name), cells.get(i)))
+                .collect::<Vec<_>>();
+            let tiles = self.display.tiles();
             // The heading is part of the drop zone, so dropping on it works too.
             // Only a drag in progress gives the zone a fill; idle zones are bare.
             let (_, dropped) = ui
@@ -82,27 +104,61 @@ impl<M: GameModel> App<M> {
                     ui.dnd_drop_zone::<Dragged, _>(egui::Frame::NONE, |ui| {
                         ui.set_min_size(egui::vec2(ui.available_width(), 0.0));
                         ui.heading(title);
-                        for (index, name) in items.iter().enumerate() {
-                            ui.horizontal(|ui| {
-                                let grip = ui.add(
-                                    egui::Label::new(self.rich(ui, name)).sense(egui::Sense::DRAG),
-                                );
-                                grip.dnd_set_drag_payload(Dragged {
-                                    from: column,
-                                    index,
-                                });
-                                let button = ui.button(verb);
-                                ui.ctx().accesskit_node_builder(button.id, |b| {
-                                    b.set_label(format!("{verb} {}", markup::plain(name)))
-                                });
-                                if button.clicked() {
-                                    moved = Some(Dragged {
-                                        from: column,
-                                        index,
+                        // A long list scrolls inside the room the window has left, so the status above it
+                        // stays in view; the ground takes at most two fifths of it for itself.
+                        let room =
+                            (ui.clip_rect().max.y - ui.next_widget_position().y).max(MIN_LIST);
+                        let room = match column {
+                            Column::Ground => room * 0.4,
+                            Column::Inventory => room,
+                        };
+                        egui::ScrollArea::vertical()
+                            .id_salt(title)
+                            .max_height(room)
+                            .auto_shrink([false, true])
+                            .show(ui, |ui| {
+                                for (index, (name, label, cell)) in rows.into_iter().enumerate() {
+                                    ui.horizontal(|ui| {
+                                        if let Some(cell) = cell {
+                                            let (rect, _) = ui.allocate_exact_size(
+                                                egui::Vec2::splat(ICON),
+                                                egui::Sense::hover(),
+                                            );
+                                            let painter = ui.painter_at(rect);
+                                            let sprite = tiles
+                                                && self.display.paint_icon(
+                                                    &painter,
+                                                    rect,
+                                                    cell,
+                                                    season.as_deref(),
+                                                );
+                                            if !sprite {
+                                                glyph_icon(&painter, rect, cell);
+                                            }
+                                        }
+                                        let grip = ui
+                                            .add(egui::Label::new(label).sense(egui::Sense::DRAG));
+                                        grip.dnd_set_drag_payload(Dragged {
+                                            from: column,
+                                            index,
+                                        });
+                                        let button = ui.button(verb);
+                                        ui.ctx().accesskit_node_builder(button.id, |b| {
+                                            b.set_label(format!("{verb} {}", markup::plain(name)))
+                                        });
+                                        if button.clicked() {
+                                            moved = Some(Dragged {
+                                                from: column,
+                                                index,
+                                            });
+                                        }
+                                        // Tabbing to a row below the fold brings it into view.
+                                        if button.gained_focus() {
+                                            button.scroll_to_me(None);
+                                        }
                                     });
                                 }
                             });
-                        }
                     })
                 })
                 .inner;
@@ -135,6 +191,20 @@ impl<M: GameModel> App<M> {
             [&native_live, &command_live],
         );
     }
+}
+
+/// The item as its glyph in its colour, for ASCII or an item the tileset has no sprite for.
+fn glyph_icon(painter: &egui::Painter, rect: egui::Rect, cell: &Cell) {
+    if let Some(bg) = cell.bg {
+        painter.rect_filled(rect, 0.0, super::rgb(bg));
+    }
+    painter.text(
+        rect.center(),
+        egui::Align2::CENTER_CENTER,
+        cell.glyph,
+        egui::FontId::monospace(ICON - 4.0),
+        super::rgb(cell.color),
+    );
 }
 
 /// The message log panel: the game's own lines in their native colours, then the client's command

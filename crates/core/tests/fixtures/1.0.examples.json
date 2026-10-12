@@ -476,8 +476,12 @@
                 "glyph": "/",
                 "color": "brown"
               },
-              "name": "stick",
-              "slot": "wielded"
+              "name": "|| stick",
+              "slot": "wielded",
+              "durability": {
+                "symbol": "||",
+                "color": "c_light_green"
+              }
             },
             {
               "look": {
@@ -706,6 +710,55 @@
               }
             ],
             "available_count": 3
+          }
+        ]
+      }
+    },
+    {
+      "name": "construction menu rows with tabs and requirements",
+      "def": "choices_result",
+      "value": {
+        "boundary_id": "boundary:91",
+        "total": 3,
+        "choices": [
+          {
+            "id": "tab:ALL",
+            "label": "All",
+            "description": "",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "tab:WALLS",
+            "label": "Walls",
+            "description": "",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": true,
+            "columns": []
+          },
+          {
+            "id": "construction:4f2a",
+            "label": "Build Wooden Wall",
+            "description": "Wooden Wall\n\nStage/Variant #1: wooden wall\nMove cost: 0\nBash str: 12 - 40\nResult: A wall made of wood.\nRequired skills: fabrication (1)\nRequires: floor\nTime to complete: 1 h 30 m\nTools required:\n  hammer\nComponents required:\n  2x4 (10)\n  nail (20)",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": true,
+            "columns": [
+              {
+                "label": "Favorite",
+                "value": "no"
+              },
+              {
+                "label": "Buildable",
+                "value": "yes"
+              }
+            ]
           }
         ]
       }
@@ -1105,6 +1158,115 @@
       }
     },
     {
+      "name": "world cells result",
+      "def": "world_cells_result",
+      "value": {
+        "at": {
+          "epoch": "epoch:e7f3",
+          "sequence": "40",
+          "revision": "31"
+        },
+        "cells": [
+          {
+            "at": {
+              "dim": "",
+              "x": 3,
+              "y": 4,
+              "z": 0
+            },
+            "known": "visible",
+            "terrain": {
+              "kind": "terrain",
+              "id": "t_dirt",
+              "glyph": ".",
+              "color": "brown",
+              "looks_like": [
+                "t_grass"
+              ],
+              "subtile": "center",
+              "rotation": 0
+            },
+            "items": [
+              {
+                "kind": "item",
+                "id": "rock",
+                "glyph": "*",
+                "color": "light_gray"
+              },
+              {
+                "kind": "item",
+                "id": "corpse",
+                "glyph": "%",
+                "color": "light_gray",
+                "tile": "corpse_mon_zombie",
+                "looks_like": [
+                  "corpse"
+                ],
+                "stack": 3
+              }
+            ],
+            "light": 1,
+            "memory": {
+              "terrain": {
+                "kind": "terrain",
+                "id": "t_dirt",
+                "glyph": ".",
+                "color": "brown",
+                "subtile": "center",
+                "rotation": 0
+              }
+            },
+            "vehicle": {
+              "kind": "vehicle_part",
+              "id": "door",
+              "glyph": "+",
+              "color": "light_cyan",
+              "tile": "vp_door",
+              "looks_like": [
+                "vp_frame"
+              ],
+              "subtile": "open",
+              "rotation": 3,
+              "tint": {
+                "fg": "#445566"
+              }
+            },
+            "reviving": true
+          },
+          {
+            "at": {
+              "dim": "",
+              "x": 2,
+              "y": 4,
+              "z": 0
+            },
+            "known": "remembered",
+            "memory": {
+              "terrain": {
+                "kind": "terrain",
+                "id": "t_grass",
+                "glyph": "\"",
+                "color": "green",
+                "looks_like": [
+                  "t_dirt"
+                ],
+                "subtile": "edge",
+                "rotation": 1
+              }
+            }
+          }
+        ],
+        "forgotten": [
+          {
+            "dim": "",
+            "x": 4,
+            "y": 4,
+            "z": 0
+          }
+        ]
+      }
+    },
+    {
       "name": "submit travel click",
       "def": "submit_params",
       "value": {
@@ -1343,6 +1505,114 @@
           "minimum": 0,
           "maximum": 60
         }
+      }
+    },
+    {
+      "name": "character sheet speed row",
+      "def": "choice",
+      "value": {
+        "id": "character-speed-1",
+        "label": "Current Speed:",
+        "description": "",
+        "denial": "",
+        "pane_id": "speed",
+        "enabled": true,
+        "selectable": false,
+        "selected": false,
+        "columns": [
+          {
+            "label": "Value",
+            "value": "98"
+          },
+          {
+            "label": "Color",
+            "value": "c_red"
+          }
+        ]
+      }
+    },
+    {
+      "name": "bionic row with power, state, fuel and color",
+      "def": "choice",
+      "value": {
+        "id": "bionic-1",
+        "label": "Flashlight, 0.50 kJ act",
+        "description": "",
+        "denial": "",
+        "pane_id": "active",
+        "enabled": true,
+        "selectable": true,
+        "selected": false,
+        "columns": [
+          {
+            "label": "Manual (shortcut)",
+            "value": "a"
+          },
+          {
+            "label": "Power",
+            "value": "0.50 kJ act, OFF"
+          },
+          {
+            "label": "State",
+            "value": "Off"
+          },
+          {
+            "label": "Fuel",
+            "value": ""
+          },
+          {
+            "label": "Color",
+            "value": "c_light_red"
+          }
+        ]
+      }
+    },
+    {
+      "name": "mutation row with kind, cost and color",
+      "def": "choice",
+      "value": {
+        "id": "mutation:night_vision",
+        "label": "Night vision",
+        "description": "",
+        "denial": "",
+        "pane_id": "passive",
+        "enabled": true,
+        "selectable": true,
+        "selected": false,
+        "columns": [
+          {
+            "label": "Kind",
+            "value": "Passive"
+          },
+          {
+            "label": "Key",
+            "value": "a"
+          },
+          {
+            "label": "State",
+            "value": ""
+          },
+          {
+            "label": "Sprite",
+            "value": "Shown"
+          },
+          {
+            "label": "Innate",
+            "value": "Yes"
+          },
+          {
+            "label": "Cost",
+            "value": "0"
+          },
+          {
+            "label": "Cooldown",
+            "value": "0"
+          },
+          {
+            "label": "Color",
+            "value": "c_cyan"
+          }
+        ]
       }
     },
     {
@@ -1965,9 +2235,155 @@
           "over_volume": false
         }
       }
+    },
+    {
+      "name": "inventory selector header with hint and carried totals",
+      "def": "pane",
+      "value": {
+        "id": "pane-inventory",
+        "label": "Inventory",
+        "role": "inventory",
+        "area_id": "",
+        "area_label": "Inventory",
+        "area_description": "Item hotkeys assigned: 3/52",
+        "filter": "",
+        "storage_kind": "",
+        "totals": {
+          "weight": "3.8",
+          "weight_max": "45.0",
+          "weight_unit": "kg",
+          "volume": "1.20",
+          "volume_max": "15.00",
+          "volume_unit": "L",
+          "over_weight": false,
+          "over_volume": false
+        }
+      }
+    },
+    {
+      "name": "vehicle install list with the highlighted part's requirements",
+      "def": "vehicle",
+      "value": {
+        "name": "Bicycle",
+        "owner": "Ada",
+        "owned": true,
+        "mode": "install",
+        "cursor": {
+          "x": 0,
+          "y": 1
+        },
+        "blocked": false,
+        "cells": [
+          {
+            "dx": 0,
+            "dy": 0,
+            "glyph": "o",
+            "color": "light_gray"
+          },
+          {
+            "dx": 0,
+            "dy": -1,
+            "glyph": "H",
+            "color": "light_gray"
+          }
+        ],
+        "parts": [
+          {
+            "name": "frame",
+            "open": "[",
+            "close": "]",
+            "health": 62,
+            "broken": false
+          }
+        ],
+        "stats": [
+          "Safe/Top Speed:  12/ 24 km/h",
+          "",
+          "Mass:    16 kg"
+        ],
+        "tabs": {
+          "labels": [
+            "All",
+            "Cargo",
+            "Light",
+            "Util",
+            "Hull",
+            "Internal",
+            "Other",
+            "Filter"
+          ],
+          "selected": 0,
+          "filter": ""
+        },
+        "detail": {
+          "name": "wooden board",
+          "description": "A board mounted on the frame.",
+          "time": "30 minutes",
+          "stats": [
+            {
+              "label": "Durability",
+              "value": "120"
+            }
+          ],
+          "requirements": [
+            {
+              "kind": "skill",
+              "text": "mechanics 1",
+              "met": true
+            },
+            {
+              "kind": "component",
+              "text": "2x plank",
+              "met": true
+            },
+            {
+              "kind": "tool",
+              "text": "hammer OR rock",
+              "met": false
+            },
+            {
+              "kind": "extra",
+              "text": "1 tool with lifting 1 OR strength 10",
+              "met": true
+            }
+          ],
+          "can_do": false
+        }
+      }
     }
   ],
   "invalid": [
+    {
+      "name": "vehicle requirement without its met state",
+      "def": "vehicle",
+      "why": "every requirement row says whether it is met",
+      "value": {
+        "name": "Bicycle",
+        "owner": "Ada",
+        "owned": true,
+        "mode": "remove",
+        "cursor": {
+          "x": 0,
+          "y": 0
+        },
+        "blocked": false,
+        "cells": [],
+        "parts": [],
+        "stats": [],
+        "detail": {
+          "name": "frame",
+          "description": "",
+          "stats": [],
+          "requirements": [
+            {
+              "kind": "tool",
+              "text": "wrench"
+            }
+          ],
+          "can_do": true
+        }
+      }
+    },
     {
       "name": "loading done with progress members",
       "def": "loading_notification",
