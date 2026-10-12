@@ -913,7 +913,11 @@ impl<M: GameModel> TuiApp<M> {
         self.map_cells = cells;
         self.map_first = Pos { x: x0, y: y0 };
         let route = self.model.route();
-        let cursor = self.cursor.map(|c| self.view(c));
+        // The engine's own cursor (look, aiming, a zone's area) when it owns one, else the client's.
+        let cursor = self
+            .model
+            .focus()
+            .or_else(|| self.cursor.map(|c| self.view(c)));
         let lines = (y0..y0 + h)
             .map(|y| {
                 let mut spans = vec![];

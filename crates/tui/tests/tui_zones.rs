@@ -247,16 +247,20 @@ fn hovering_the_cursor_square_while_picking_a_zone_point_does_not_confirm_it_but
         look,
         json!([{"id":"CONFIRM","name":"Confirm","keys":["RETURN"]}]),
     );
-    // The cursor is at world (3, 4), three squares west of the avatar the map draws as `@`.
+    // The cursor is at world (3, 4), one square west of the avatar the map draws as `@`.
     let shown = text(&mut app);
     let (row, at) = shown
         .lines()
         .enumerate()
-        .find_map(|(y, l)| l.find('@').map(|x| (y as u16, x as u16)))
+        .find_map(|(y, l)| {
+            l.chars()
+                .position(|c| c == '@')
+                .map(|x| (y as u16, x as u16))
+        })
         .expect("the avatar");
     let on_cursor = |kind| MouseEvent {
         kind,
-        column: at - 3,
+        column: at - 1,
         row,
         modifiers: KeyModifiers::NONE,
     };
@@ -301,6 +305,6 @@ fn the_engines_cursor_is_lit_on_the_map_while_picking_a_zone_point() {
         .flat_map(|y| (0..buf.area.width).map(move |x| (x, y)))
         .find(|&pos| buf[pos].symbol() == "@")
         .expect("the avatar");
-    // The cursor is at world (3, 4), three squares west of the avatar.
-    assert_eq!(lit, [(avatar.0 - 3, avatar.1)]);
+    // The cursor is at world (3, 4), one square west of the avatar.
+    assert_eq!(lit, [(avatar.0 - 1, avatar.1)]);
 }
