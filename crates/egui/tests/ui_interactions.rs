@@ -297,6 +297,26 @@ fn a_multi_line_side_panel_of_the_selected_entry_is_shown_and_the_others_are_not
 }
 
 #[test]
+fn a_line_of_two_dashes_in_an_entry_description_is_a_rule_not_text() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    let mut style = choice("entry:0", "Force unarmed");
+    style["selected"] = true.into();
+    style["description"] = "Not a martial art.\n--\nYou can arm block.".into();
+    script.push(show(
+        41,
+        json!([]),
+        json!({"schema_id":"s:styles","kind":"choices","context":"UILIST","title":"",
+            "message":"Select a style.","allow_cancel":true,"choices":[style],
+            "choice_total":1,"allow_set_count":false}),
+    ));
+    h.run_steps(3);
+    h.get_by_label("Not a martial art.");
+    h.get_by_label("You can arm block.");
+    assert!(h.query_by_label("--").is_none());
+}
+
+#[test]
 fn a_value_that_repeats_the_entry_text_is_not_printed_twice() {
     let (mut h, script) = harness();
     h.run_steps(3);
