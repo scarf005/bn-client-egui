@@ -353,3 +353,73 @@ fn a_description_line_of_two_dashes_is_a_rule_across_the_window() {
         all.join("\n")
     );
 }
+
+/// Opens a `UILIST` whose highlighted row describes itself in `lines` numbered lines.
+fn open_described(app: &mut TuiApp<EngineModel>, h: &ScriptHandle, lines: usize) {
+    for name in ["events_41_walk", "events_42_message"] {
+        h.push(fixture(name));
+    }
+    let mut menu = fixture("events_43_menu");
+    let change = &mut menu["params"]["events"][0]["changes"]["interaction"];
+    let description = (1..=lines)
+        .map(|n| format!("detail line {n}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    change["interaction"]["compat"] = json!({"focus":{"choice_id":"item:0"}});
+    change["interaction"]["choices"] = json!([
+        {"id":"item:0","label":"first thing","description":description,"denial":"","enabled":true,
+         "selectable":true,"selected":true,"columns":[]},
+        {"id":"item:1","label":"second thing","description":"","denial":"","enabled":true,
+         "selectable":true,"selected":false,"columns":[]}
+    ]);
+    change["interaction"]["context"] = "UILIST".into();
+    h.push(menu);
+    app.model.poll();
+}
+
+#[test]
+fn a_long_description_that_fits_the_screen_is_shown_whole_beside_the_rows() {
+    let (mut app, h) = engine();
+    render(&mut app);
+    open_described(&mut app, &h, 30);
+    let shown = text(&render(&mut app));
+    assert!(shown.contains("detail line 30"), "{shown}");
+    assert!(
+        shown.contains("first thing") && shown.contains("second thing"),
+        "{shown}"
+    );
+}
+
+#[test]
+fn alt_page_keys_scroll_a_description_taller_than_the_screen_and_stop_at_its_ends() {
+    use crossterm::event::{KeyCode, KeyEvent};
+    let (mut app, h) = engine();
+    render(&mut app);
+    open_described(&mut app, &h, 80);
+    let shown = text(&render(&mut app));
+    assert!(
+        shown.contains("detail line 1\n") || shown.contains("detail line 1 "),
+        "{shown}"
+    );
+    assert!(!shown.contains("detail line 80"), "{shown}");
+    assert!(
+        shown.contains("first thing"),
+        "the rows stay listed\n{shown}"
+    );
+    let page = |code| KeyEvent::new(code, KeyModifiers::ALT);
+    for _ in 0..10 {
+        app.handle_key(page(KeyCode::PageDown));
+    }
+    let shown = text(&render(&mut app));
+    assert!(shown.contains("detail line 80"), "{shown}");
+    assert!(!shown.contains("detail line 1 "), "{shown}");
+    assert!(
+        operations(&h).is_empty(),
+        "the engine got none of the scroll keys"
+    );
+    for _ in 0..10 {
+        app.handle_key(page(KeyCode::PageUp));
+    }
+    let shown = text(&render(&mut app));
+    assert!(shown.contains("detail line 1 "), "{shown}");
+}
