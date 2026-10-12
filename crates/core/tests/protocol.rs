@@ -156,7 +156,7 @@ fn by_def(def: &str, v: &Value) -> Result<Value, String> {
         "environment" => round_trip::<protocol::Environment>(v),
         "entity" => round_trip::<protocol::Entity>(v),
         "look" => round_trip::<protocol::Look>(v),
-        "field" | "cell" | "pane" => Ok(v.clone()),
+        "field" | "cell" | "pane" | "vehicle" => Ok(v.clone()),
         other => Err(format!("no type for {other}")),
     }
 }
