@@ -14,6 +14,7 @@ mod menu;
 mod palette;
 mod pickup;
 mod sidebar;
+mod spells;
 mod trade;
 
 /// A command must outlast this before the controls show it; keeps short commands from blinking the UI.

@@ -54,6 +54,11 @@ impl<M: GameModel> App<M> {
             self.focus_menu = entered && !focused;
             return;
         }
+        if menu.context == "SPELL_SELECT" {
+            let focused = self.spells(ctx, &menu, entered);
+            self.focus_menu = entered && !focused;
+            return;
+        }
         if menu.context == "INVENTORY" {
             let focused = self.inventory(ctx, &menu, entered);
             self.focus_menu = entered && !focused;

@@ -1,0 +1,138 @@
+{
+ "spells": {
+  "boundary_id": "b:31",
+  "readiness": {
+   "phase": "playing",
+   "game_ready": true,
+   "accepts_interaction_commands": true,
+   "accepts_registered_actions": true
+  },
+  "actions": [
+   {
+    "id": "CONFIRM",
+    "name": "Confirm Choice",
+    "keys": [
+     "RETURN"
+    ]
+   }
+  ],
+  "interaction": {
+   "schema_id": "s:spells",
+   "kind": "choices",
+   "context": "SPELL_SELECT",
+   "title": "Choose a Spell",
+   "message": "",
+   "allow_cancel": true,
+   "allow_set_count": false,
+   "choice_total": 5,
+   "choices": [
+    {
+     "id": "action:key:42",
+     "label": "Toggle favorite",
+     "description": "",
+     "denial": "",
+     "enabled": true,
+     "selectable": true,
+     "selected": false,
+     "columns": []
+    },
+    {
+     "id": "action:key:33",
+     "label": "Toggle casting distractions",
+     "description": "",
+     "denial": "",
+     "enabled": true,
+     "selectable": true,
+     "selected": false,
+     "columns": []
+    },
+    {
+     "id": "action:key:64",
+     "label": "Assign spell hotkey",
+     "description": "",
+     "denial": "",
+     "enabled": true,
+     "selectable": true,
+     "selected": false,
+     "columns": []
+    },
+    {
+     "id": "entry:0",
+     "label": "Magic Missile",
+     "description": "<color_yellow>Mage</color>\n<color_light_gray>A missile of force.</color>\n<color_light_gray>Spell Level: 3</color>\n<color_light_gray>12.0 % Failure Chance</color>\n<color_light_gray>Casting Cost: 15 mana</color>\n<color_light_gray>Range: 5</color>",
+     "denial": "",
+     "hotkey": "a",
+     "enabled": true,
+     "selectable": true,
+     "selected": false,
+     "highlighted": false,
+     "columns": [
+      {
+       "label": "Spell Level",
+       "value": "3"
+      },
+      {
+       "label": "Failure Chance",
+       "value": "12.0 % Failure Chance"
+      },
+      {
+       "label": "Casting Cost",
+       "value": "15 mana"
+      },
+      {
+       "label": "Casting Time",
+       "value": "1 second"
+      },
+      {
+       "label": "Range",
+       "value": "5"
+      },
+      {
+       "label": "Favorite",
+       "value": "*"
+      }
+     ]
+    },
+    {
+     "id": "entry:1",
+     "label": "Stone Skin",
+     "description": "<color_yellow>Druid</color>\n<color_light_gray>Hardens the skin.</color>\n<color_light_gray>Spell Level: 1</color>\n<color_red>Not Enough Energy</color>",
+     "denial": "",
+     "hotkey": "b",
+     "enabled": false,
+     "selectable": true,
+     "selected": true,
+     "highlighted": true,
+     "columns": [
+      {
+       "label": "Spell Level",
+       "value": "1"
+      },
+      {
+       "label": "Failure Chance",
+       "value": "40.0 % Failure Chance"
+      },
+      {
+       "label": "Casting Cost",
+       "value": "80 mana"
+      },
+      {
+       "label": "Casting Time",
+       "value": "5 seconds"
+      },
+      {
+       "label": "Range",
+       "value": "self"
+      }
+     ]
+    }
+   ],
+   "compat": {
+    "focus": {
+     "choice_id": "entry:1"
+    },
+    "panes": []
+   }
+  }
+ }
+}
