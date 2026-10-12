@@ -57,12 +57,16 @@ const PAGE: u64 = 200;
 pub type Respawn = Box<dyn FnMut() -> std::io::Result<Box<dyn Transport>>>;
 
 /// Without a message for this long while a request is outstanding, the engine counts as stalled.
+/// The frame rate a client asks the engine to publish at while an activity runs, unless it knows better.
+pub const DEFAULT_MAX_HZ: u16 = 60;
 const STALL: Duration = Duration::from_secs(120);
 
 pub struct EngineModel {
     /// Whether the client draws tiles now, and what the engine was last told.
     tiles: bool,
     tiles_told: bool,
+    /// The most frames per second the client shows, asked of the engine in every hello.
+    max_hz: u16,
     /// The ids of the tints the client's tileset has, and what the engine was last told.
     tint_ids: Vec<String>,
     tints_told: Vec<String>,
@@ -315,7 +319,13 @@ impl EngineModel {
 
     /// Starts the session; `tiles` says the client draws tiles, so the engine sends tile ids too.
     pub fn connect(transport: Box<dyn Transport>, tiles: bool) -> Self {
+        Self::connect_with(transport, tiles, DEFAULT_MAX_HZ)
+    }
+
+    /// Like `connect`, with the most frames per second the client can show while an activity runs.
+    pub fn connect_with(transport: Box<dyn Transport>, tiles: bool, max_hz: u16) -> Self {
         let mut m = Self {
+            max_hz,
             tiles,
             tiles_told: tiles,
             tint_ids: vec![],
@@ -373,7 +383,7 @@ impl EngineModel {
                         rows: VIEW.y as u32,
                     })
                     .with_tiles(tiles)
-                    .with_delivery(crate::transport::CREDIT_WINDOW)
+                    .with_delivery(crate::transport::CREDIT_WINDOW, m.max_hz)
             ),
             Pending::Hello,
         );
@@ -893,7 +903,7 @@ impl EngineModel {
                 protocol::HelloParams::new("bn-client")
                     .with_tiles(self.tiles)
                     .with_tint_ids(self.tint_ids.clone())
-                    .with_delivery(crate::transport::CREDIT_WINDOW)
+                    .with_delivery(crate::transport::CREDIT_WINDOW, self.max_hz)
             ),
             Pending::Retile,
         );

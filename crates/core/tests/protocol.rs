@@ -218,6 +218,9 @@ fn contract_invalid_examples_the_types_can_reject_are_rejected() {
         "travel without a position",
         "hello delivery without credits",
         "hello delivery with zero credits",
+        "hello frame rate of zero",
+        "hello frame rate beyond a display",
+        "hello frame rate without credits",
         "credit request beyond the window",
     ] {
         assert!(rejected.contains(&name.to_string()), "{name}: {rejected:?}");

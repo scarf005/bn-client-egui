@@ -14,6 +14,9 @@ enum Msg {
     Wake,
 }
 
+/// The frames per second worth redrawing a terminal at; the loop redraws on every engine frame it wakes for.
+const MAX_HZ: u16 = 30;
+
 fn run(model: impl GameModel) -> std::io::Result<()> {
     let (tx, rx) = mpsc::channel();
     let mut app = TuiApp::new(model);
@@ -81,7 +84,7 @@ fn main() -> std::io::Result<()> {
         eprintln!("{e}");
         std::process::exit(1);
     });
-    let opened = open_engine(&engine, &cli.launch.profile, false).unwrap_or_else(|e| {
+    let opened = open_engine(&engine, &cli.launch.profile, false, MAX_HZ).unwrap_or_else(|e| {
         eprintln!("{e}");
         std::process::exit(1);
     });

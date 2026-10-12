@@ -41,7 +41,63 @@ fn feed(h: &ScriptHandle, m: &mut EngineModel, from: u32, n: u32) {
 fn hello_asks_for_delivery_credits() {
     let (t, h) = credited_session(Some(64));
     connected(t);
-    assert_eq!(h.sent()[0]["params"]["delivery"], json!({"credits": 256}));
+    assert_eq!(
+        h.sent()[0]["params"]["delivery"],
+        json!({"credits": 256, "max_hz": 60})
+    );
+}
+
+fn hello_delivery(max_hz: u16) -> Value {
+    let (t, h) = credited_session(Some(64));
+    let _ = EngineModel::connect_with(Box::new(t), false, max_hz);
+    h.sent()[0]["params"]["delivery"].clone()
+}
+
+#[test]
+fn hello_carries_the_clients_frame_rate() {
+    assert_eq!(hello_delivery(30), json!({"credits": 256, "max_hz": 30}));
+}
+
+#[test]
+fn a_frame_rate_outside_1_to_240_is_never_sent() {
+    assert_eq!(hello_delivery(0)["max_hz"], 1);
+    assert_eq!(hello_delivery(241)["max_hz"], 240);
+    assert_eq!(hello_delivery(u16::MAX)["max_hz"], 240);
+}
+
+#[test]
+fn a_later_hello_keeps_the_frame_rate() {
+    let (t, h) = credited_session(Some(64));
+    let mut m = EngineModel::connect_with(Box::new(t), false, 30);
+    m.poll();
+    m.set_tiles(true);
+    m.poll();
+    let hellos = h
+        .sent()
+        .into_iter()
+        .filter(|x| x["method"] == "bn.hello")
+        .map(|x| x["params"]["delivery"]["max_hz"].clone())
+        .collect::<Vec<_>>();
+    assert_eq!(hellos, [json!(30), json!(30)]);
+}
+
+#[test]
+fn credits_work_whether_or_not_the_engine_echoes_a_frame_rate() {
+    for echo in [Some(60), None] {
+        let mut hello = fixture("hello_result");
+        hello["result"]["delivery"] =
+            json!({"credits": 8, "held_frames": 256, "held_bytes": 1048576});
+        if let Some(hz) = echo {
+            hello["result"]["delivery"]["max_hz"] = json!(hz);
+        }
+        let (t, h) = ScriptedTransport::new();
+        let t = t
+            .on("bn.hello", vec![hello])
+            .on("bn.subscribe", subscribe_reply());
+        let mut m = connected(t);
+        feed(&h, &mut m, 1, 4);
+        assert_eq!(credits(&h), [4], "{echo:?}");
+    }
 }
 
 #[test]

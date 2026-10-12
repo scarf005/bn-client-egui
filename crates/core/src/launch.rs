@@ -172,7 +172,12 @@ pub struct Opened {
 /// path is the user's act (`save_engine`).
 ///
 /// `tiles` says the client draws tiles: the engine then sends tile ids where it has them.
-pub fn open_engine(engine: &Path, profile: &Profile, tiles: bool) -> Result<Opened, String> {
+pub fn open_engine(
+    engine: &Path,
+    profile: &Profile,
+    tiles: bool,
+    max_hz: u16,
+) -> Result<Opened, String> {
     let transport = StdioTransport::spawn_with(engine, profile)
         .map_err(|e| format!("cannot start engine {}: {e}", engine.display()))?;
     let root = game_root(engine, std::env::var_os("BN_ROOT").map(PathBuf::from));
@@ -183,7 +188,7 @@ pub fn open_engine(engine: &Path, profile: &Profile, tiles: bool) -> Result<Open
     let respawn = Box::new(move || {
         StdioTransport::spawn_with(&engine, &profile).map(|t| Box::new(t) as Box<dyn Transport>)
     });
-    let model = EngineModel::connect(Box::new(transport), tiles)
+    let model = EngineModel::connect_with(Box::new(transport), tiles, max_hz)
         .with_colors(colors)
         .with_respawn(respawn);
     Ok(Opened { model, root })

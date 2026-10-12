@@ -2,6 +2,9 @@
 //! A one hour wait shows its turns as they pass instead of one jump when it ends.
 use bn_client_core::transport::StdioTransport;
 use bn_client_core::{EngineModel, GameModel};
+
+/// Asked of the engine, so the bound below bites on a wait that takes seconds.
+const MAX_HZ: u16 = 10;
 use std::time::{Duration, Instant};
 
 fn wait_for(model: &mut EngineModel, what: &str, mut done: impl FnMut(&mut EngineModel) -> bool) {
@@ -56,7 +59,7 @@ fn start_wait(model: &mut EngineModel, label: &str) {
 fn live_engine_one_hour_wait_streams_its_turns_before_it_completes() {
     let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
     let transport = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
-    let mut model = EngineModel::new(Box::new(transport));
+    let mut model = EngineModel::connect_with(Box::new(transport), false, MAX_HZ);
     wait_for(&mut model, "the main menu", |m| m.live());
     choose_label(&mut model, "New Game");
     choose_label(&mut model, "Tutorial");
@@ -84,6 +87,11 @@ fn live_engine_one_hour_wait_streams_its_turns_before_it_completes() {
     println!(
         "WAIT wall {:?}, event frames while busy {frames}",
         started.elapsed()
+    );
+    let bound = started.elapsed().as_secs_f64() * f64::from(MAX_HZ) + 2.0;
+    assert!(
+        frames as f64 <= bound,
+        "the engine publishes at most max_hz frames per second: {frames} > {bound}"
     );
     assert!(
         frames >= 3,

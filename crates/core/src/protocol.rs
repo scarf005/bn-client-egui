@@ -782,6 +782,9 @@ pub struct DeliveryGrant {
     pub credits: u16,
     pub held_frames: u64,
     pub held_bytes: u64,
+    /// The frame rate cap the hello asked for, echoed; an engine without the cap leaves it out.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_hz: Option<u16>,
 }
 
 /// A count of pushed frames: a window of 1 to 256.
@@ -793,12 +796,27 @@ fn frame_window<'de, D: serde::Deserializer<'de>>(d: D) -> Result<u16, D::Error>
     }
 }
 
+/// A frames-per-second cap: 1 to 240.
+fn frame_rate<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<u16>, D::Error> {
+    match Option::<u16>::deserialize(d)? {
+        Some(n) if !(1..=240).contains(&n) => Err(serde::de::Error::custom("expected 1 to 240 Hz")),
+        hz => Ok(hz),
+    }
+}
+
 /// Opts in to credit delivery.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DeliveryRequest {
     #[serde(deserialize_with = "frame_window")]
     pub credits: u16,
+    /// The most frames per second the engine publishes while an activity runs.
+    #[serde(
+        default,
+        deserialize_with = "frame_rate",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub max_hz: Option<u16>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -915,9 +933,13 @@ impl HelloParams {
         Self { tiles, ..self }
     }
 
-    pub fn with_delivery(self, credits: u16) -> Self {
+    /// Asks for credits and a frame rate cap, kept within the 1 to 240 the engine accepts.
+    pub fn with_delivery(self, credits: u16, max_hz: u16) -> Self {
         Self {
-            delivery: Some(DeliveryRequest { credits }),
+            delivery: Some(DeliveryRequest {
+                credits,
+                max_hz: Some(max_hz.clamp(1, 240)),
+            }),
             ..self
         }
     }

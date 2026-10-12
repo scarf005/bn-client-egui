@@ -53,6 +53,9 @@ struct Cli {
     launch: LaunchArgs,
 }
 
+/// The frames per second the window shows: eframe does not report the display's refresh rate at start-up.
+const MAX_HZ: u16 = 60;
+
 /// Starts the engine and builds the running app.
 fn start_engine(
     ctx: &egui::Context,
@@ -63,7 +66,7 @@ fn start_engine(
         game_root(&engine, std::env::var_os("BN_ROOT").map(PathBuf::from)).as_deref(),
         settings_path().as_deref(),
     );
-    let Opened { model, root } = open_engine(&engine, profile, tiles)?;
+    let Opened { model, root } = open_engine(&engine, profile, tiles, MAX_HZ)?;
     if let Some(root) = &root {
         fonts::install(ctx, root);
     }
