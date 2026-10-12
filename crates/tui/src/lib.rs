@@ -12,7 +12,7 @@ use bn_client_core::markup::plain;
 use bn_client_core::{ActionEntry, Failure, GameModel, Loading, Menu, Overmap, Pos, Rgb, keys};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::Frame;
-use ratatui::layout::{Constraint, Layout, Rect};
+use ratatui::layout::{Constraint, Layout, Position, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Clear, Gauge, Paragraph, Wrap};
@@ -61,6 +61,7 @@ pub struct TuiApp<M: GameModel> {
     menu_hits: MenuHits,
     /// The action row of the open menu the keyboard focus is on (Alt+Down, Alt+Up), where Enter sends it.
     action_focus: Option<usize>,
+    footer: Footer,
 }
 
 /// What a click on the open menu can reach: the row ids from the first drawn one, and the tab ids.
@@ -70,6 +71,26 @@ struct MenuHits {
     rows: Vec<String>,
     bar: Rect,
     tabs: Vec<(String, u16, u16)>,
+    /// The description under the rows.
+    footer: Rect,
+}
+
+/// The description under a menu's rows: the text it was last drawn for, how far it is scrolled, and
+/// how many lines it has and shows.
+#[derive(Default)]
+struct Footer {
+    text: String,
+    scroll: usize,
+    total: usize,
+    shown: usize,
+}
+
+impl Footer {
+    /// Scrolls by `lines` (negative is up), staying within the text.
+    fn scroll_by(&mut self, lines: isize) {
+        let last = self.total.saturating_sub(self.shown);
+        self.scroll = self.scroll.saturating_add_signed(lines).min(last);
+    }
 }
 
 fn color(c: Rgb) -> Color {
@@ -141,6 +162,7 @@ impl<M: GameModel> TuiApp<M> {
             pickup: Default::default(),
             menu_hits: Default::default(),
             action_focus: None,
+            footer: Footer::default(),
         }
     }
 
@@ -255,6 +277,7 @@ impl<M: GameModel> TuiApp<M> {
                 "NPC_TRADE" => self.trade_key(&menu, key),
                 "PICKUP" => self.pickup_key(&menu, key),
                 _ if (menu.terminal() || menu.description()) && self.terminal_key(key) => {}
+                _ if self.footer_key(key) => {}
                 _ if !menu.screen && self.action_row_key(&menu, key) => {}
                 _ if !menu.screen && self.settings_key(&menu, key) => {}
                 _ => self.menu_key(&menu, key),
@@ -307,6 +330,17 @@ impl<M: GameModel> TuiApp<M> {
     /// The rows of the menu that stand for an engine action (`action:NAME`), which the engine's own cursor
     /// never reaches. Alt+Down and Alt+Up move the focus among them; Enter sends the one in focus, and
     /// any other key leaves them (the action's own key, shown beside the row, works throughout).
+    /// Alt+PageUp and Alt+PageDown page the description under the rows, which the engine has no key for.
+    fn footer_key(&mut self, key: KeyEvent) -> bool {
+        let page = isize::try_from(self.footer.shown).unwrap_or(isize::MAX);
+        match (key.code, key.modifiers.contains(KeyModifiers::ALT)) {
+            (KeyCode::PageUp, true) => self.footer.scroll_by(-page),
+            (KeyCode::PageDown, true) => self.footer.scroll_by(page),
+            _ => return false,
+        }
+        true
+    }
+
     fn action_row_key(&mut self, menu: &Menu, key: KeyEvent) -> bool {
         let rows = menu
             .entries()
@@ -506,6 +540,14 @@ impl<M: GameModel> TuiApp<M> {
             MouseEventKind::ScrollDown => Some(false),
             _ => None,
         };
+        let over_footer = self
+            .menu_hits
+            .footer
+            .contains(Position::new(ev.column, ev.row));
+        if let Some(up) = wheel.filter(|_| over_footer) {
+            self.footer.scroll_by(if up { -1 } else { 1 });
+            return;
+        }
         if let Some(up) = wheel {
             // Only a list the engine scrolls natively (it registers SCROLL_UP/SCROLL_DOWN) takes the
             // wheel; the highlight is the engine's own cursor, so any other menu ignores it, as native.
@@ -1128,13 +1170,16 @@ impl<M: GameModel> TuiApp<M> {
             .map(|t| (plain(&t.label), t.selected))
             .collect::<Vec<_>>();
         // What the engine says about the row its cursor is on.
-        let footer = entries
+        let described = entries
             .get(selected)
             .map(|c| plain(&c.description))
-            .unwrap_or_default()
-            .lines()
-            .map(str::to_string)
-            .collect();
+            .unwrap_or_default();
+        if self.footer.text != described {
+            self.footer = Footer {
+                text: described.clone(),
+                ..Footer::default()
+            };
+        }
         let popup = Popup {
             title: &menu.title,
             header: plain(&menu.message)
@@ -1145,9 +1190,13 @@ impl<M: GameModel> TuiApp<M> {
             tabs,
             rows,
             selected,
-            footer,
+            footer: described.lines().map(str::to_string).collect(),
+            footer_scroll: self.footer.scroll,
         };
         let layout = Self::draw_popup(f, &popup);
+        self.footer.total = layout.footer_total;
+        self.footer.shown = usize::from(layout.footer.height);
+        self.footer.scroll = layout.footer_scroll;
         let tab_ids = menu
             .tabs()
             .into_iter()
@@ -1159,6 +1208,7 @@ impl<M: GameModel> TuiApp<M> {
             list: layout.list,
             rows: ids.into_iter().skip(layout.offset).collect(),
             bar: layout.bar,
+            footer: layout.footer,
             tabs: tab_ids
                 .into_iter()
                 .zip(widths)
@@ -1190,6 +1240,7 @@ impl<M: GameModel> TuiApp<M> {
             rows,
             selected: row,
             footer: vec![],
+            footer_scroll: 0,
         };
         Self::draw_popup(f, &popup);
     }
@@ -1228,7 +1279,10 @@ impl<M: GameModel> TuiApp<M> {
                 _ => wrap(l, usize::from(width) - 2),
             })
             .collect::<Vec<_>>();
-        let foot = (footer.len() as u16).min(area.height.saturating_sub(2) / 3);
+        // The description gets the room it needs, down to a few rows of the list; the rest scrolls.
+        let room = area.height.saturating_sub(2 + head + bar);
+        let keep = (popup.rows.len() as u16).min(3);
+        let foot = (footer.len() as u16).min(room.saturating_sub(keep));
         let want = head + bar + popup.rows.len() as u16 + foot + 2;
         let height = want.min(area.height);
         let rect = Rect::new(
@@ -1255,6 +1309,9 @@ impl<M: GameModel> TuiApp<M> {
             header_area,
         );
         f.render_widget(Paragraph::new(tab_bar), bar_area);
+        let footer_scroll = popup
+            .footer_scroll
+            .min(footer.len().saturating_sub(usize::from(foot)));
         let offset = (popup.selected + 1).saturating_sub(usize::from(list.height));
         let lines = popup
             .rows
@@ -1288,6 +1345,7 @@ impl<M: GameModel> TuiApp<M> {
             Paragraph::new(
                 footer
                     .iter()
+                    .skip(footer_scroll)
                     .map(|l| Line::styled(l.clone(), Style::new().fg(Color::Gray)))
                     .collect::<Vec<_>>(),
             ),
@@ -1297,6 +1355,9 @@ impl<M: GameModel> TuiApp<M> {
             list,
             offset,
             bar: bar_area,
+            footer: footer_area,
+            footer_total: footer.len(),
+            footer_scroll,
         }
     }
 }
@@ -1307,6 +1368,10 @@ struct PopupLayout {
     /// Index of the first row drawn.
     offset: usize,
     bar: Rect,
+    footer: Rect,
+    /// Lines the whole description wraps to, and how many of them are scrolled off the top.
+    footer_total: usize,
+    footer_scroll: usize,
 }
 
 /// Tab labels in a row, the selected one reversed.
@@ -1359,6 +1424,8 @@ struct Popup<'a> {
     selected: usize,
     /// Detail text under the rows, such as the highlighted row's description.
     footer: Vec<String>,
+    /// How many lines of the footer are scrolled off the top.
+    footer_scroll: usize,
 }
 
 fn action_label(a: &ActionEntry) -> String {

@@ -423,3 +423,29 @@ fn alt_page_keys_scroll_a_description_taller_than_the_screen_and_stop_at_its_end
     let shown = text(&render(&mut app));
     assert!(shown.contains("detail line 1 "), "{shown}");
 }
+
+#[test]
+fn the_wheel_over_a_long_description_scrolls_it_instead_of_the_engine_menu() {
+    let (mut app, h) = engine();
+    render(&mut app);
+    open_described(&mut app, &h, 80);
+    let t = render(&mut app);
+    let (x, y) = rows(&t)
+        .iter()
+        .enumerate()
+        .find_map(|(y, l)| l.find("detail line 1 ").map(|x| (x as u16, y as u16)))
+        .unwrap();
+    let wheel = MouseEvent {
+        kind: MouseEventKind::ScrollDown,
+        column: x,
+        row: y,
+        modifiers: KeyModifiers::NONE,
+    };
+    for _ in 0..3 {
+        app.handle_mouse(wheel);
+    }
+    let shown = text(&render(&mut app));
+    assert!(!shown.contains("detail line 3 "), "{shown}");
+    assert!(shown.contains("detail line 4 "), "{shown}");
+    assert!(operations(&h).is_empty());
+}
