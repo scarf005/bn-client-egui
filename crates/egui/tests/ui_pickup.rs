@@ -179,3 +179,29 @@ fn a_stolen_row_keeps_its_mark_and_the_right_position_anchors_the_list_at_the_ri
     let (h, _) = harness_with(b);
     assert!(h.get_by_label("lighter (17/25)").rect().min.x > 400.0);
 }
+
+/// The pickup fixture with the pane's `PICKUP_POSITION`.
+fn at(position: &str) -> Value {
+    let mut b = pickup();
+    b["interaction"]["compat"] = json!({"panes": [{
+        "id": "p", "label": "Pick up", "role": "pickup", "area_id": position,
+        "area_label": "Pick up", "area_description": "", "filter": "", "storage_kind": ""
+    }]});
+    b
+}
+
+#[test]
+fn the_right_position_docks_the_list_beside_the_sidebar_not_over_it() {
+    let (h, _) = harness_with(at("right"));
+    let header = h.get_by_label("PICK Wgt 0.2/45.0  Vol 0.30/0.00").rect();
+    let sidebar = h.get_by_label("Resize sidebar").rect();
+    assert!(header.max.x <= sidebar.min.x, "{header:?} over {sidebar:?}");
+    let (h, _) = harness_with(at("left"));
+    assert!(
+        h.get_by_label("PICK Wgt 0.2/45.0  Vol 0.30/0.00")
+            .rect()
+            .min
+            .x
+            < 50.0
+    );
+}
