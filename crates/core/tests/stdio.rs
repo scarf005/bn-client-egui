@@ -148,3 +148,40 @@ fn profile_args_pick_fresh_and_dirs_and_keep_the_rest() {
     assert_eq!(cli.engine.as_deref(), Some(std::path::Path::new("e")));
     assert!(Cli::try_parse_from(["bn", "--userdir"]).is_err());
 }
+
+#[test]
+fn stdio_transport_pays_credits_as_it_reads_without_the_ui_polling() {
+    let dir = std::env::temp_dir().join(format!("bn-stdio-credit-{}", std::process::id()));
+    let log = dir.join("received");
+    let event = r#"{"jsonrpc":"2.0","method":"bn.events","params":{"epoch":"e","events":[]}}"#;
+    // Reads the hello, pushes four frames, then records what the client writes after them.
+    let script = format!(
+        "#!/bin/sh\nread line\nfor i in 1 2 3 4; do printf '%s\\n' '{event}'; done\nwhile read line; do printf '%s\\n' \"$line\" >> {}; done\n",
+        log.display()
+    );
+    let mut t = spawn_script(&dir, &script, StdioTransport::spawn_fresh);
+    t.send(request(1, "bn.hello", json!({})));
+    t.set_credits(Some(4));
+    // Nothing is polled after the first frame: the reader thread pays for the other three.
+    assert!(matches!(recv(&mut t), Incoming::Events(_)));
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let paid = loop {
+        let text = std::fs::read_to_string(&log).unwrap_or_default();
+        if text.lines().count() >= 2 || Instant::now() > deadline {
+            break text;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    };
+    let frames: Vec<_> = paid
+        .lines()
+        .map(|l| serde_json::from_str::<serde_json::Value>(l).unwrap())
+        .collect();
+    assert_eq!(frames.len(), 2, "{paid}");
+    assert!(
+        frames
+            .iter()
+            .all(|f| f["method"] == "bn.credit" && f["params"] == json!({"frames": 2}))
+    );
+    drop(t);
+    std::fs::remove_dir_all(dir).unwrap();
+}

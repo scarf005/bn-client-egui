@@ -793,7 +793,7 @@ fn frame_window<'de, D: serde::Deserializer<'de>>(d: D) -> Result<u16, D::Error>
     }
 }
 
-/// Opts in to credit delivery; the clients do not send it yet.
+/// Opts in to credit delivery.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DeliveryRequest {
@@ -913,6 +913,13 @@ impl HelloParams {
 
     pub fn with_tiles(self, tiles: bool) -> Self {
         Self { tiles, ..self }
+    }
+
+    pub fn with_delivery(self, credits: u16) -> Self {
+        Self {
+            delivery: Some(DeliveryRequest { credits }),
+            ..self
+        }
     }
 
     pub fn with_viewport(self, viewport: Viewport) -> Self {

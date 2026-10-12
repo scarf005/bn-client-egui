@@ -373,6 +373,7 @@ impl EngineModel {
                         rows: VIEW.y as u32,
                     })
                     .with_tiles(tiles)
+                    .with_delivery(crate::transport::CREDIT_WINDOW)
             ),
             Pending::Hello,
         );
@@ -441,6 +442,16 @@ impl EngineModel {
         if matches!(outcome, Outcome::Resubscribe(_)) {
             self.subscribe();
         }
+    }
+
+    /// Tells the transport what a hello granted; a new hello replaces the old grant, so an answer without
+    /// one ends credits.
+    fn set_credits(&mut self, hello: &Value) {
+        let window = serde_json::from_value::<protocol::Hello>(hello.clone())
+            .ok()
+            .and_then(|h| h.delivery)
+            .map(|d| d.credits);
+        self.transport.set_credits(window);
     }
 
     fn handle(&mut self, msg: Incoming) {
@@ -564,6 +575,9 @@ impl EngineModel {
             return;
         }
         if matches!(kind, Pending::Retile) {
+            if let Ok(v) = &result {
+                self.set_credits(v);
+            }
             // The engine refused (a command was running): ask again a moment later.
             if result.is_err() {
                 self.tiles_told = !self.tiles;
@@ -613,6 +627,7 @@ impl EngineModel {
                     ))
                 });
                 self.mark("hello");
+                self.set_credits(&value);
                 self.subscribe();
             }
             Pending::Subscribe => match serde_json::from_value::<Snapshot>(value) {
@@ -878,6 +893,7 @@ impl EngineModel {
                 protocol::HelloParams::new("bn-client")
                     .with_tiles(self.tiles)
                     .with_tint_ids(self.tint_ids.clone())
+                    .with_delivery(crate::transport::CREDIT_WINDOW)
             ),
             Pending::Retile,
         );

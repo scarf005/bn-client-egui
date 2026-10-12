@@ -41,7 +41,7 @@ fn feed(h: &ScriptHandle, m: &mut EngineModel, from: u32, n: u32) {
 fn hello_asks_for_delivery_credits() {
     let (t, h) = credited_session(Some(64));
     connected(t);
-    assert_eq!(h.sent()[0]["params"]["delivery"], json!({"credits": 64}));
+    assert_eq!(h.sent()[0]["params"]["delivery"], json!({"credits": 256}));
 }
 
 #[test]

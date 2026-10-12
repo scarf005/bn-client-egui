@@ -22,6 +22,9 @@ pub trait Transport {
     fn send(&mut self, msg: Value);
     /// The next parsed incoming message, without blocking.
     fn recv(&mut self) -> Option<Incoming>;
+    /// Sets the delivery credits the engine granted, or none: the transport pays for each pushed frame as it
+    /// reads it, so a long activity streams without waiting for the UI thread.
+    fn set_credits(&mut self, _window: Option<u16>) {}
     /// The engine's last stderr lines, oldest first.
     fn stderr_tail(&self) -> Vec<String> {
         vec![]
@@ -30,6 +33,35 @@ pub trait Transport {
     fn exit_reason(&mut self) -> Option<String> {
         None
     }
+}
+
+/// Pushed frames the client asks the engine to send before it pays again: the most the engine allows, so a
+/// burst of turns never outruns the payments.
+pub const CREDIT_WINDOW: u16 = 256;
+
+/// Delivery credits in force: the window the engine granted and the frames read since the last payment.
+#[derive(Clone, Copy)]
+struct Credits {
+    window: u16,
+    unpaid: u16,
+}
+
+impl Credits {
+    /// Counts a pushed frame; returns the frames to pay for once half the window is read.
+    fn read(&mut self, msg: &Incoming) -> Option<u16> {
+        if !matches!(msg, Incoming::Events(_) | Incoming::Command(_)) {
+            return None;
+        }
+        self.unpaid += 1;
+        (self.unpaid >= self.window.div_ceil(2)).then(|| std::mem::take(&mut self.unpaid))
+    }
+}
+
+/// Ids of the payments, far above the ids of the model's requests; their answers are ignored.
+const CREDIT_ID: u64 = 1 << 40;
+
+fn credit_call(id: u64, frames: u16) -> String {
+    request(id, "bn.credit", json!(protocol::CreditParams { frames })).to_string()
 }
 
 /// How many stderr lines are kept for the error screen.
@@ -106,6 +138,7 @@ pub struct StdioTransport {
     /// The throwaway profile directory, removed on drop.
     dir: Option<PathBuf>,
     stderr: Arc<Mutex<VecDeque<String>>>,
+    credits: Arc<Mutex<Option<Credits>>>,
 }
 
 impl StdioTransport {
@@ -188,11 +221,25 @@ impl StdioTransport {
             sent
         };
         let read_trace = trace.clone();
+        let credits: Arc<Mutex<Option<Credits>>> = Arc::default();
+        let paying = credits.clone();
+        let (out, lines) = mpsc::channel::<String>();
+        let pay = out.clone();
         std::thread::spawn(move || {
+            let mut payment = CREDIT_ID;
             for line in BufReader::new(stdout).lines() {
                 let Ok(line) = line else { break };
                 read_trace.line("<-", &line);
-                if !line.trim().is_empty() && !notify(protocol::parse_line(&line)) {
+                if line.trim().is_empty() {
+                    continue;
+                }
+                let msg = protocol::parse_line(&line);
+                let owed = paying.lock().unwrap().as_mut().and_then(|c| c.read(&msg));
+                if let Some(frames) = owed {
+                    payment += 1;
+                    let _ = pay.send(credit_call(payment, frames));
+                }
+                if !notify(msg) {
                     return;
                 }
             }
@@ -200,7 +247,6 @@ impl StdioTransport {
             let _ = err_reader.join();
             notify(Incoming::Closed);
         });
-        let (out, lines) = mpsc::channel::<String>();
         std::thread::spawn(move || {
             let mut stdin = stdin;
             for line in lines {
@@ -220,6 +266,7 @@ impl StdioTransport {
             waker,
             dir,
             stderr,
+            credits,
         })
     }
 }
@@ -231,6 +278,10 @@ impl Transport for StdioTransport {
 
     fn send(&mut self, msg: Value) {
         let _ = self.out.send(msg.to_string());
+    }
+
+    fn set_credits(&mut self, window: Option<u16>) {
+        *self.credits.lock().unwrap() = window.map(|window| Credits { window, unpaid: 0 });
     }
 
     fn recv(&mut self) -> Option<Incoming> {
@@ -279,6 +330,7 @@ pub struct ScriptHandle {
     closed: Arc<AtomicBool>,
     stderr: Arc<Mutex<Vec<String>>>,
     exit: Arc<Mutex<Option<String>>>,
+    credits: Arc<Mutex<Option<Credits>>>,
 }
 
 impl ScriptHandle {
@@ -360,7 +412,27 @@ impl Transport for ScriptedTransport {
                 .swap(false, Ordering::SeqCst)
                 .then_some(Incoming::Closed);
         };
-        Some(protocol::parse_message(&msg).unwrap_or_else(|e| Incoming::Malformed(e.to_string())))
+        let msg =
+            protocol::parse_message(&msg).unwrap_or_else(|e| Incoming::Malformed(e.to_string()));
+        let owed = self
+            .handle
+            .credits
+            .lock()
+            .unwrap()
+            .as_mut()
+            .and_then(|c| c.read(&msg));
+        if let Some(frames) = owed {
+            self.handle.sent.lock().unwrap().push(request(
+                CREDIT_ID,
+                "bn.credit",
+                json!(protocol::CreditParams { frames }),
+            ));
+        }
+        Some(msg)
+    }
+
+    fn set_credits(&mut self, window: Option<u16>) {
+        *self.handle.credits.lock().unwrap() = window.map(|window| Credits { window, unpaid: 0 });
     }
 
     fn stderr_tail(&self) -> Vec<String> {
