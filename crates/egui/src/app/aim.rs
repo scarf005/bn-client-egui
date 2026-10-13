@@ -243,8 +243,7 @@ impl<M: GameModel> App<M> {
                                             continue;
                                         };
                                         let on = pane.area == cell.label;
-                                        let blocked =
-                                            pane.blocked.iter().any(|b| *b == cell.action_id);
+                                        let blocked = pane.blocked.contains(&cell.action_id);
                                         let b = ui
                                             .add_enabled(
                                                 cell.available && !self.model.busy(),
