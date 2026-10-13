@@ -1799,6 +1799,9 @@ pub struct List {
     /// The affordance that runs on a row's activation.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub activate: Option<String>,
+    /// The list takes a filter text: its filter affordance is among `affordances`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub filterable: Option<bool>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -1843,6 +1846,9 @@ pub struct Row {
     /// A heading over the rows that follow: it is not a thing to choose.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub header: Option<bool>,
+    /// The row switches something on or off, and this is which it is now.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub toggled: Option<bool>,
     /// The affordances this row allows; absent: all of the list's.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub affordances: Option<Vec<RowAffordance>>,
