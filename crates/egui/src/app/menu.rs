@@ -118,6 +118,7 @@ impl<M: GameModel> App<M> {
             // Rows fill the list, so the window is as wide as it may get from its first frame; growing
             // into it later would move its centred position.
             width: Some(max_width + frame.total_margin().sum().x),
+            max_width: Some(max_width + frame.total_margin().sum().x),
             // The window offers its content the whole height a list may take, not half of what is free.
             height: Some(super::dialog_scroll_height(ctx)),
             frame: Some(frame),
@@ -125,7 +126,6 @@ impl<M: GameModel> App<M> {
         };
         let shown = windows::show(ctx, spec, |ui| {
             ui.set_min_width(520.0);
-            ui.set_max_width(max_width);
             self.banner(ui, &menu.banner);
             // Cancel sits right under the title, so it is at the same place for every dialog.
             if menu.can_cancel && !menu.acknowledges() {

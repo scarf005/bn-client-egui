@@ -213,6 +213,23 @@ fn a_window_the_engine_does_not_let_cancel_has_no_close_button() {
 }
 
 #[test]
+fn a_menu_window_is_narrowed_by_dragging_its_left_edge() {
+    let (mut h, _) = menu_window(&settings("windows-menu-narrow"), true);
+    let before = window(&h);
+    let edge = egui::pos2(before.left() - 2.0, before.center().y);
+    drag(&mut h, edge, edge + egui::vec2(150.0, 0.0));
+    let after = window(&h);
+    assert!(
+        after.width() < before.width() - 100.0,
+        "{before:?} -> {after:?}"
+    );
+    assert!(
+        (after.right() - before.right()).abs() < 2.0,
+        "{before:?} -> {after:?}"
+    );
+}
+
+#[test]
 fn an_inventory_without_a_hint_or_totals_starts_right_under_its_title_bar() {
     let (t, script) = session();
     let app = App::new(EngineModel::new(Box::new(t)));
