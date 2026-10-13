@@ -1294,10 +1294,8 @@ fn crafting_menu_exposes_context_field_details_and_sends_fill_and_set_count() {
     assert_eq!((field.id.as_str(), field.value.as_str()), ("filter", ""));
     let club = menu.choices.iter().find(|c| c.id == "recipe:aa").unwrap();
     assert!(club.description.starts_with("Time to complete"));
-    assert_eq!(
-        club.columns,
-        [("Skill".to_string(), "fabrication 1".into())]
-    );
+    assert_eq!(club.column("skill"), "fabrication 1");
+    assert_eq!(club.column_label("skill"), "Skill");
 
     m.fill("nope", "club", true);
     assert!(submits(&h).is_empty(), "unknown fields are never submitted");
@@ -1431,7 +1429,7 @@ fn the_selected_tab_picks_the_pane_and_a_target_interaction_is_a_cursor_not_a_me
     let mut m = connected(t);
     let row = |id: &str, label: &str, pane: Option<&str>, selected: bool| {
         let mut c = json!({"id":id,"label":label,"description":"d","denial":"","enabled":true,
-            "selectable":true,"selected":selected,"columns":[{"label":"Base","value":"8"}]});
+            "selectable":true,"selected":selected,"columns":[{"key":"base","label":"Base","value":"8"}]});
         if let Some(p) = pane {
             c["pane_id"] = p.into();
         }
@@ -1452,10 +1450,7 @@ fn the_selected_tab_picks_the_pane_and_a_target_interaction_is_a_cursor_not_a_me
     assert_eq!(menu.tabs().len(), 2);
     assert_eq!(menu.entries()[0].label, "Melee");
     assert_eq!(menu.entries()[0].description, "d");
-    assert_eq!(
-        menu.entries()[0].columns,
-        [("Base".to_string(), "8".to_string())]
-    );
+    assert_eq!(menu.entries()[0].column("base"), "8");
     h.push(show(
         42,
         json!([]),

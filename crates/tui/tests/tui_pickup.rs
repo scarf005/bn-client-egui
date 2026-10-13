@@ -29,15 +29,20 @@ fn pickup() -> Value {
         key("SELECT_ALL", "Select all", "A"),
         key("HELP_KEYBINDINGS", "Help", "?"),
     ]);
-    let nesting = |v: &str| json!({"label": "Nesting", "value": v});
+    let nesting = |v: &str| json!({"key": "nesting", "label": "Nesting", "value": v});
     let rows = b["interaction"]["choices"].as_array_mut().unwrap();
     rows[0]["columns"] = json!([nesting("parent with 1 child stacks")]);
     rows[0]["selected"] = json!(true);
     rows[0]["label"] = json!("backpack");
+    rows[0]["hotkey"] = json!("a");
+    rows[0]["mark"] = json!({"glyph": "+", "color": "c_light_blue"});
+    rows[1]["hotkey"] = json!("b");
+    rows[1]["mark"] = json!({"glyph": "#", "color": "c_light_blue"});
     rows.push(json!({
         "id": "pickup:c", "label": "<color_c_red>rock</color>", "enabled": true,
         "description": "A rock.", "denial": "", "selectable": true, "selected": false,
-        "columns": [nesting("child of pickup:a")], "available_count": 1, "selected_count": 0
+        "columns": [nesting("child of pickup:a")], "available_count": 1, "selected_count": 0,
+        "hotkey": "c", "mark": {"glyph": "-"}, "nest_color": "c_yellow", "parent_id": "pickup:a"
     }));
     b["interaction"]["choice_total"] = json!(3);
     b
@@ -120,10 +125,10 @@ fn the_window_is_the_native_pickup_list_with_header_marks_hints_and_info() {
     assert_eq!(at(11), "[<] Prev           [A] All          [>] Next");
     assert!(at(12).starts_with("┌< tin can >"));
     let buf = t.backend().buffer();
-    assert_eq!(buf[(2, 1)].fg, Color::LightBlue, "+ is light blue");
+    assert_eq!(buf[(2, 1)].fg, Color::Rgb(110, 150, 255), "+ is light blue");
     assert_eq!(
         buf[(1, 3)].fg,
-        Color::Yellow,
+        Color::Rgb(240, 220, 80),
         "child of a half-marked parent"
     );
     assert!(
@@ -196,10 +201,8 @@ fn enter_confirms_through_the_engines_own_key() {
 fn with_pane(position: &str, over_weight: bool) -> Value {
     let mut b = pickup();
     let rows = b["interaction"]["choices"].as_array_mut().unwrap();
-    rows[0]["columns"] = json!([
-        {"label": "Name markup", "value": "<color_light_red>!</color> 2 lighter"},
-        {"label": "Row color", "value": "c_light_green"}
-    ]);
+    rows[0]["markup"] = json!("<color_light_red>!</color> 2 lighter");
+    rows[0]["color"] = json!("c_light_green");
     b["interaction"]["compat"] = json!({"panes": [{
         "id": "p", "label": "Pick up", "role": "pickup", "area_id": position,
         "area_label": "Pick up", "area_description": "", "filter": "", "storage_kind": "",

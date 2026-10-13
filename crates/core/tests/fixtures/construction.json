@@ -61,10 +61,12 @@
           "selected": false,
           "columns": [
             {
+              "key": "favorite",
               "label": "Favorite",
               "value": "no"
             },
             {
+              "key": "buildable",
               "label": "Buildable",
               "value": "yes"
             }
@@ -80,10 +82,12 @@
           "selected": false,
           "columns": [
             {
+              "key": "favorite",
               "label": "Favorite",
               "value": "no"
             },
             {
+              "key": "buildable",
               "label": "Buildable",
               "value": "no"
             }
@@ -142,10 +146,12 @@
           "selected": false,
           "columns": [
             {
+              "key": "favorite",
               "label": "Favorite",
               "value": "no"
             },
             {
+              "key": "buildable",
               "label": "Buildable",
               "value": "no"
             }

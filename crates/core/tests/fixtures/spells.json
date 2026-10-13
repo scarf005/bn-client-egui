@@ -68,30 +68,32 @@
      "highlighted": false,
      "columns": [
       {
+       "key": "spell_level",
        "label": "Spell Level",
        "value": "3"
       },
       {
+       "key": "failure_chance",
        "label": "Failure Chance",
        "value": "12.0 % Failure Chance"
       },
       {
+       "key": "casting_cost",
        "label": "Casting Cost",
        "value": "15 mana"
       },
       {
+       "key": "casting_time",
        "label": "Casting Time",
        "value": "1 second"
       },
       {
+       "key": "range",
        "label": "Range",
        "value": "5"
-      },
-      {
-       "label": "Favorite",
-       "value": "*"
       }
-     ]
+     ],
+     "favorite": true
     },
     {
      "id": "entry:1",
@@ -105,22 +107,27 @@
      "highlighted": true,
      "columns": [
       {
+       "key": "spell_level",
        "label": "Spell Level",
        "value": "1"
       },
       {
+       "key": "failure_chance",
        "label": "Failure Chance",
        "value": "40.0 % Failure Chance"
       },
       {
+       "key": "casting_cost",
        "label": "Casting Cost",
        "value": "80 mana"
       },
       {
+       "key": "casting_time",
        "label": "Casting Time",
        "value": "5 seconds"
       },
       {
+       "key": "range",
        "label": "Range",
        "value": "self"
       }

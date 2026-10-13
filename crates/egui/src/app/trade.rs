@@ -5,7 +5,7 @@
 use super::aim::Step;
 use super::menu::list_row_style;
 use super::{App, a11y};
-use bn_client_core::{ActionEntry, GameModel, Menu, MenuChoice, MenuPane};
+use bn_client_core::{ActionEntry, GameModel, Menu, MenuPane};
 use eframe::egui::{self, accesskit};
 use std::collections::HashMap;
 
@@ -28,11 +28,6 @@ fn tone_color(tone: &str) -> Option<egui::Color32> {
         "bad" => Some(RED),
         _ => None,
     }
-}
-
-fn column<'a>(row: &'a MenuChoice, label: &str) -> &'a str {
-    let found = row.columns.iter().find(|(l, _)| l == label);
-    found.map_or("", |(_, v)| v.as_str())
 }
 
 /// The key hints of the native header: `[key] label` for each action the engine offers.
@@ -77,16 +72,6 @@ fn category_state(ui: &mut egui::Ui, on: bool) {
             format!("Category select {state}"),
         )
     });
-}
-
-/// The native selection mark: all of the stack, some of it, or none.
-fn selection_mark(row: &MenuChoice) -> char {
-    match (row.selected_count, row.available_count) {
-        (Some(n), Some(total)) if n > 0 && n >= total => '+',
-        (Some(n), _) if n > 0 => '#',
-        _ if row.selected => '+',
-        _ => '-',
-    }
 }
 
 /// What a frame of the window asks the engine for.
@@ -218,19 +203,27 @@ impl<M: GameModel> App<M> {
                     let rows = menu
                         .choices
                         .iter()
-                        .filter(|c| c.group.as_deref() == Some(pane.id.as_str()));
+                        .filter(|c| c.group.as_deref() == Some(pane.id.as_str()))
+                        .collect::<Vec<_>>();
                     // What the number columns and the spacing leave for a name; longer ones are cut.
                     let name_width = (ui.available_width() - 270.0).max(120.0);
                     egui::Grid::new(("trade_table", &pane.id))
                         .spacing([10.0, 2.0])
                         .show(ui, |ui| {
-                            for label in ["Name (charges)", "amt", "weight", "vol", "unit price"] {
-                                ui.weak(label);
+                            let head = rows.first();
+                            for key in [
+                                "name",
+                                "available",
+                                "stack_weight",
+                                "stack_volume",
+                                "unit_price",
+                            ] {
+                                ui.weak(head.map_or("", |r| r.column_label(key)));
                             }
                             ui.end_row();
                             let mut category = "";
-                            for (i, row) in rows.enumerate() {
-                                let shown = column(row, "Category");
+                            for (i, row) in rows.iter().copied().enumerate() {
+                                let shown = row.column("category");
                                 if shown != category && !shown.is_empty() {
                                     category = shown;
                                     ui.colored_label(MAGENTA, shown);
@@ -253,7 +246,9 @@ impl<M: GameModel> App<M> {
                                                 ui,
                                                 &format!(
                                                     "{key} {} {}",
-                                                    selection_mark(row),
+                                                    row.mark
+                                                        .as_ref()
+                                                        .map_or("", |m| m.glyph.as_str()),
                                                     row.label
                                                 ),
                                             );
@@ -330,10 +325,10 @@ impl<M: GameModel> App<M> {
                                 } else {
                                     String::new()
                                 });
-                                ui.label(column(row, "Stack weight"));
-                                ui.label(column(row, "Stack volume"));
-                                let price = egui::RichText::new(column(row, "Unit price"));
-                                ui.label(match column(row, "Price tone") {
+                                ui.label(row.column("stack_weight"));
+                                ui.label(row.column("stack_volume"));
+                                let price = egui::RichText::new(row.column("unit_price"));
+                                ui.label(match row.column("price_tone") {
                                     "good" => price.color(GREEN),
                                     "bad" => price.color(RED),
                                     _ => price.weak(),

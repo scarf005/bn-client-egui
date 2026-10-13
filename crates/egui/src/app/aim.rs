@@ -394,11 +394,10 @@ impl<M: GameModel> App<M> {
                             if label.hovered() || (row.highlighted && out.described.is_none()) {
                                 out.described = Some(row.description.clone());
                             }
-                            for key in ["Count", "Weight", "Volume"] {
-                                let found =
-                                    row.columns.iter().find(|(l, v)| l == key && !v.is_empty());
-                                if let Some((_, v)) = found {
-                                    ui.weak(v);
+                            for key in ["count", "weight", "volume"] {
+                                let value = row.column(key);
+                                if !value.is_empty() {
+                                    ui.weak(value);
                                 }
                             }
                         });

@@ -965,8 +965,8 @@ impl<M: GameModel> TuiApp<M> {
             let values = row
                 .columns
                 .iter()
-                .filter(|(_, value)| !value.is_empty())
-                .map(|(label, value)| format!("{label} {value}"))
+                .filter(|c| !c.value.is_empty())
+                .map(|c| format!("{} {}", c.label, c.value))
                 .collect::<Vec<_>>()
                 .join(", ");
             let text = match (row.hotkey.is_empty(), values.is_empty()) {
@@ -1054,35 +1054,8 @@ impl<M: GameModel> TuiApp<M> {
                     (Some(e), _) => format!(": {}", settings::shown_value(e)),
                     _ => String::new(),
                 };
-                // The row's values beside it, as the native lists print them; a `<name> color` column
-                // tints the value of `<name>`, and `source` only names the selector column.
-                let tint = |name: &str| {
-                    c.columns
-                        .iter()
-                        .find(|(label, _)| label.strip_suffix(" color") == Some(name))
-                        .map(|(_, color)| color.as_str())
-                };
-                let columns = c
-                    .columns
-                    .iter()
-                    .filter(|(label, value)| {
-                        !label.ends_with(" color")
-                            && !["source", "Category", "Name markup"].contains(&label.as_str())
-                            && !value.is_empty()
-                    })
-                    .map(|(label, value)| {
-                        let value = match tint(label) {
-                            Some(color) => format!("<color_{color}>{value}</color>"),
-                            None => value.clone(),
-                        };
-                        match label.is_empty() || *label == c.label {
-                            // A value that only repeats the row's own text adds nothing.
-                            true if plain(&value) == plain(&c.label) => String::new(),
-                            true => format!("  {value}"),
-                            false => format!("  {label}: {value}"),
-                        }
-                    })
-                    .collect::<String>();
+                // The row's values beside it, as the native lists print them.
+                let columns = c.values_markup();
                 // Chosen rows (an enabled panel or zone, an active mutation or mod) are lit white; the
                 // native cursor row drops its colours.
                 let style = match c.selected && menu.focus.is_some() {
@@ -1100,14 +1073,14 @@ impl<M: GameModel> TuiApp<M> {
                     (k, _) => format!("{k} "),
                 };
                 // An inventory row is drawn in its item's color, charges and all.
-                let name = match c.columns.iter().find(|(l, _)| l == "Row color") {
-                    Some((_, color)) if c.enabled => {
-                        let markup = c.columns.iter().find(|(l, _)| l == "Name markup");
-                        format!(
-                            "<color_{color}>{}</color>",
-                            markup.map_or(c.label.as_str(), |(_, m)| m.as_str())
-                        )
-                    }
+                let name = match c.color.as_str() {
+                    "" => c.label.clone(),
+                    color if c.enabled => format!(
+                        "<color_{color}>{}</color>",
+                        Some(c.markup.as_str())
+                            .filter(|m| !m.is_empty())
+                            .unwrap_or(&c.label)
+                    ),
                     _ => c.label.clone(),
                 };
                 let text = format!("{name}{value}{columns}{hint}{denial}");

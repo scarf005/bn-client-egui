@@ -1,7 +1,7 @@
 use crate::colors::ColorMap;
 use crate::markup::{self, Run};
 
-use crate::protocol::{Editor, ModTileset, Vehicle};
+use crate::protocol::{Column, Editor, Mark, ModTileset, Vehicle};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Pos {
     pub x: i32,
@@ -142,6 +142,47 @@ impl LogLine {
     }
 }
 
+impl MenuChoice {
+    /// The value of the column named `key`; empty when the row has none.
+    pub fn column(&self, key: &str) -> &str {
+        self.columns
+            .iter()
+            .find(|c| c.key == key)
+            .map_or("", |c| c.value.as_str())
+    }
+
+    /// The row's values as markup after its label: `  caption: value`, a value tinted by its column's
+    /// color; the selector bookkeeping columns are left out.
+    pub fn values_markup(&self) -> String {
+        let shown =
+            |c: &&Column| !matches!(c.key.as_str(), "source" | "category") && !c.value.is_empty();
+        self.columns
+            .iter()
+            .filter(shown)
+            .map(|c| {
+                let value = match c.color.as_deref() {
+                    Some(color) => format!("<color_{color}>{}</color>", c.value),
+                    None => c.value.clone(),
+                };
+                match c.label.is_empty() {
+                    // A value that only repeats the row's own text adds nothing.
+                    true if markup::plain(&value) == markup::plain(&self.label) => String::new(),
+                    true => format!("  {value}"),
+                    false => format!("  {}: {value}", c.label.trim_end_matches(':')),
+                }
+            })
+            .collect()
+    }
+
+    /// The engine's caption of the column named `key`; empty when the row has none.
+    pub fn column_label(&self, key: &str) -> &str {
+        self.columns
+            .iter()
+            .find(|c| c.key == key)
+            .map_or("", |c| c.label.as_str())
+    }
+}
+
 /// One selectable row of the engine's current interaction menu.
 #[derive(Clone, Debug, PartialEq)]
 pub struct MenuChoice {
@@ -165,8 +206,18 @@ pub struct MenuChoice {
     pub available_count: Option<u64>,
     /// The engine's detail text for the row; empty when it has none.
     pub description: String,
-    /// Label and value pairs shown beside the row.
-    pub columns: Vec<(String, String)>,
+    /// The values shown beside the row.
+    pub columns: Vec<Column>,
+    pub favorite: bool,
+    /// Game color names of the row's text and of its hotkey; empty for the default.
+    pub color: String,
+    pub key_color: String,
+    /// The row's name with the native color tags; empty when it is the label.
+    pub markup: String,
+    /// The color of the nesting slash drawn before a nested row; empty for a plain row.
+    pub nest_color: String,
+    /// The selection mark the native list prints; none when it prints none.
+    pub mark: Option<Mark>,
     /// How the row's value can be set directly, as an option of the options menu.
     pub editor: Option<Editor>,
 }

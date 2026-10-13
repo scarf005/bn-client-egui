@@ -1270,11 +1270,13 @@ impl EngineModel {
                     selected_count: c.selected_count,
                     available_count: c.available_count,
                     description: described(&c.description),
-                    columns: c
-                        .columns
-                        .iter()
-                        .map(|col| (col.label.clone(), col.value.clone()))
-                        .collect(),
+                    columns: c.columns.clone(),
+                    favorite: c.favorite,
+                    color: c.color.clone().unwrap_or_default(),
+                    key_color: c.key_color.clone().unwrap_or_default(),
+                    markup: c.markup.clone().unwrap_or_default(),
+                    nest_color: c.nest_color.clone().unwrap_or_default(),
+                    mark: c.mark.clone(),
                     editor: c.editor.clone(),
                 })
                 .collect(),

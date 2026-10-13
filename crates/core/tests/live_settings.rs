@@ -74,7 +74,7 @@ fn leave(model: &mut EngineModel) {
 
 fn value(model: &EngineModel, id: &str, column: usize) -> String {
     row(model, id)
-        .map(|r| r.columns[column].1.clone())
+        .map(|r| r.columns[column].value.clone())
         .unwrap_or_default()
 }
 
@@ -136,7 +136,7 @@ fn live_rule_screens_add_edit_move_and_remove_rules_and_colors_pick_a_custom_col
         .into_iter()
         .find(|c| c.id.starts_with("color:"))
         .unwrap();
-    assert_eq!(first.columns[0].1, "default");
+    assert_eq!(first.columns[0].value, "default");
     choose(&mut model, &first.id);
     assert_ne!(context(&model), "COLORS", "the color list is open");
     let pick = model.menu().unwrap().choices[1].id.clone();

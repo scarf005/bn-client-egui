@@ -5,6 +5,7 @@
 //! pickup list shares: the count box of a marked stack, the key hints and the letter keys.
 use super::menu::{list_frame, list_row_style};
 use super::{App, a11y};
+use bn_client_core::protocol::Column;
 use bn_client_core::{ActionEntry, GameModel, Menu, MenuChoice, PaneTotals};
 use eframe::egui::{self, accesskit};
 use std::collections::HashMap;
@@ -20,36 +21,11 @@ pub struct Inventory {
 /// The blue of the cursor row.
 pub(super) const BAR: egui::Color32 = egui::Color32::from_rgb(10, 10, 220);
 
-/// The cells of a row the engine publishes around its own: not shown as cells.
-const META: [&str; 5] = [
-    "source",
-    "Category",
-    "Name markup",
-    "Row color",
-    "Key color",
-];
-
-/// The value of the labelled column of a row; empty when it has none.
-pub(super) fn column<'a>(row: &'a MenuChoice, label: &str) -> &'a str {
-    let found = row.columns.iter().find(|(l, _)| l == label);
-    found.map_or("", |(_, v)| v.as_str())
-}
-
 /// `text` in the game color `name`, as markup.
 pub(super) fn tinted(name: &str, text: &str) -> String {
     match name {
         "" => text.to_string(),
         name => format!("<color_{name}>{text}</color>"),
-    }
-}
-
-/// The native selection mark: all of the stack, some of it, or none.
-pub(super) fn selection_mark(row: &MenuChoice) -> char {
-    match (row.selected_count, row.available_count) {
-        (Some(n), Some(total)) if n > 0 && n >= total => '+',
-        (Some(n), _) if n > 0 => '#',
-        _ if row.selected => '+',
-        _ => '-',
     }
 }
 
@@ -89,9 +65,11 @@ pub(super) fn typed_hotkey<'a, M: GameModel>(
 }
 
 /// The cells of a row: the first is the name, the others have titles the first category header prints.
-fn cells(row: &MenuChoice) -> Vec<&(String, String)> {
-    let own = |(l, _): &&(String, String)| !META.contains(&l.as_str());
-    row.columns.iter().filter(own).collect()
+fn cells(row: &MenuChoice) -> Vec<&Column> {
+    row.columns
+        .iter()
+        .filter(|c| c.key.starts_with("cell"))
+        .collect()
 }
 
 /// A row's weight and volume header as the native window prints them: `Weight (kg): 3.8 / 45.0`.
@@ -202,7 +180,7 @@ impl<M: GameModel> App<M> {
             .map(|s| {
                 menu.choices
                     .iter()
-                    .filter(|c| column(c, "source") == *s)
+                    .filter(|c| c.column("source") == *s)
                     .collect::<Vec<_>>()
             })
             .filter(|rows| !rows.is_empty())
@@ -246,7 +224,7 @@ impl<M: GameModel> App<M> {
                         let first = entered && index == 0;
                         focused |= self.inventory_list(
                             ui,
-                            (index, rows, first, height, menu.can_set_count),
+                            (index, rows, first, height),
                             (&mut ids, &mut chosen, &mut count, &mut described),
                         );
                     }
@@ -257,7 +235,7 @@ impl<M: GameModel> App<M> {
                 self.item_info(
                     ui,
                     &shown
-                        .map(|c| tinted(column(c, "Row color"), &c.label))
+                        .map(|c| tinted(&c.color, &c.label))
                         .unwrap_or_default(),
                     shown.map(|c| c.description.as_str()),
                 );
@@ -293,7 +271,7 @@ impl<M: GameModel> App<M> {
     fn inventory_list<'a>(
         &mut self,
         ui: &mut egui::Ui,
-        (index, rows, first, height, multiselect): (usize, &[&'a MenuChoice], bool, f32, bool),
+        (index, rows, first, height): (usize, &[&'a MenuChoice], bool, f32),
         (ids, chosen, count, described): (
             &mut Vec<egui::Id>,
             &mut Option<String>,
@@ -312,19 +290,19 @@ impl<M: GameModel> App<M> {
                         // A cell no row of the list fills is not shown, as in the native column.
                         let shown_cell = |at: usize| {
                             rows.iter()
-                                .any(|r| cells(r).get(at).is_some_and(|(_, v)| !v.is_empty()))
+                                .any(|r| cells(r).get(at).is_some_and(|c| !c.value.is_empty()))
                         };
                         let mut category = None;
                         for (i, row) in rows.iter().enumerate() {
-                            let shown = column(row, "Category");
+                            let shown = row.column("category");
                             if category != Some(shown) && !shown.is_empty() {
                                 if category.is_none() {
                                     ui.label(self.rich(ui, &tinted("c_magenta", shown)));
-                                    for (at, (title, _)) in cells(row).iter().enumerate().skip(1) {
+                                    for (at, cell) in cells(row).iter().enumerate().skip(1) {
                                         if !shown_cell(at) {
                                             continue;
                                         }
-                                        let title = tinted("c_magenta", title);
+                                        let title = tinted("c_magenta", &cell.label);
                                         ui.label(self.rich(ui, &title));
                                     }
                                 } else {
@@ -333,23 +311,17 @@ impl<M: GameModel> App<M> {
                                 category = Some(shown);
                                 ui.end_row();
                             }
-                            let row_color = column(row, "Row color");
                             let own = cells(row);
-                            let name = own.first().map_or(row.label.as_str(), |(_, v)| v);
+                            let name = own.first().map_or(row.label.as_str(), |c| c.value.as_str());
                             let key = match row.hotkey.as_str() {
                                 "" => " ".to_string(),
-                                k => tinted(column(row, "Key color"), k),
+                                k => tinted(&row.key_color, k),
                             };
-                            let mark = if multiselect {
-                                format!(
-                                    "{} ",
-                                    tinted("c_light_green", &selection_mark(row).to_string())
-                                )
-                            } else {
-                                String::new()
-                            };
+                            let mark = row.mark.as_ref().map_or(String::new(), |m| {
+                                format!("{} ", tinted(m.color.as_deref().unwrap_or(""), &m.glyph))
+                            });
                             let tone = if row.enabled {
-                                row_color
+                                row.color.as_str()
                             } else {
                                 "c_dark_gray"
                             };
@@ -358,7 +330,7 @@ impl<M: GameModel> App<M> {
                                     list_row_style(ui);
                                     // The native row keeps the name's own colors, such as green charges, unless
                                     // it is refused.
-                                    let name = match (row.enabled, column(row, "Name markup")) {
+                                    let name = match (row.enabled, row.markup.as_str()) {
                                         (true, m) if !m.is_empty() => m,
                                         _ => name,
                                     };
@@ -403,7 +375,8 @@ impl<M: GameModel> App<M> {
                             if button.hovered() {
                                 *described = Some(*row);
                             }
-                            for (at, (_, value)) in own.iter().enumerate().skip(1) {
+                            for (at, cell) in own.iter().enumerate().skip(1) {
+                                let value = &cell.value;
                                 if !shown_cell(at) {
                                     continue;
                                 }
