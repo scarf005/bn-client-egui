@@ -211,6 +211,7 @@ impl<M: GameModel> TuiApp<M> {
 
     /// Sends the next queued input once the engine is free; call between frames.
     pub fn tick(&mut self) {
+        self.send_filter();
         self.run_aim_steps();
     }
 

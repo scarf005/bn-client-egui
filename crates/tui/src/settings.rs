@@ -15,6 +15,8 @@ pub(super) struct Edit {
     prompt: bool,
     /// Commit ends the interaction; a filter beside a list only updates it.
     submit: bool,
+    /// The text last sent as a filter, so the newest is sent once, as soon as the engine can take it.
+    sent: Option<String>,
 }
 
 impl Edit {
@@ -86,6 +88,7 @@ impl<M: GameModel> TuiApp<M> {
                         numeric: f.kind == "integer",
                         prompt: true,
                         submit: true,
+                        sent: None,
                     });
                 }
                 (Some(f), false, KeyCode::Char('/')) => {
@@ -95,6 +98,7 @@ impl<M: GameModel> TuiApp<M> {
                         numeric: false,
                         prompt: false,
                         submit: false,
+                        sent: None,
                     });
                     return true;
                 }
@@ -146,6 +150,7 @@ impl<M: GameModel> TuiApp<M> {
                     numeric: numeric(editor),
                     prompt: false,
                     submit: true,
+                    sent: None,
                 });
             }
             _ => return false,
@@ -168,10 +173,20 @@ impl<M: GameModel> TuiApp<M> {
             }
             _ => self.edit = Some(edit),
         }
-        // A filter shows the engine's state as it is typed.
-        if let Some(edit) = self.edit.as_ref().filter(|e| !e.submit) {
-            let (id, text) = (edit.id.clone(), edit.text.clone());
-            self.model.fill(&id, &text, false);
+        self.send_filter();
+    }
+
+    /// A filter shows the engine's state as it is typed: the newest text goes out whenever the engine is
+    /// free, and a text it was too busy for waits.
+    pub(super) fn send_filter(&mut self) {
+        if let Some(edit) = self
+            .edit
+            .as_mut()
+            .filter(|e| !e.submit && e.sent.as_ref() != Some(&e.text))
+            && !self.model.busy()
+        {
+            edit.sent = Some(edit.text.clone());
+            self.model.fill(&edit.id, &edit.text, false);
         }
     }
 }
