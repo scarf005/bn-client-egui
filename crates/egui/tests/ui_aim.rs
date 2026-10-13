@@ -186,6 +186,39 @@ fn a_count_moves_that_many_through_the_native_amount_prompt() {
 }
 
 #[test]
+fn a_count_whose_amount_prompt_never_opens_is_dropped_and_fills_no_later_prompt() {
+    let (mut h, script) = harness();
+    h.get_by_label("tin can").click();
+    h.run_steps(2);
+    finished(&mut h, &script);
+    h.get_by_label("Amount to move").focus();
+    h.run_steps(2);
+    h.get_by_label("Amount to move").type_text("2");
+    h.run_steps(2);
+    h.get_by_label("Move an amount of item").click();
+    h.run_steps(3);
+    // The engine finishes the move with no prompt up (the destination was full): the count is dropped
+    // at once, with no wait for a prompt that the completion says never opened.
+    finished(&mut h, &script);
+    let sent = operations(&script).len();
+    let mut prompt = aim();
+    prompt["interaction"]["context"] = json!("STRING_INPUT");
+    prompt["interaction"]["kind"] = json!("field");
+    prompt["interaction"]["choices"] = json!([]);
+    prompt["interaction"]["choice_total"] = json!(0);
+    prompt["interaction"]["compat"] = json!({"panes": []});
+    prompt["interaction"]["field"] = json!({"id":"field:value","label":"How many?","description":"",
+        "value":"","type":"text","max_length":10,"printable":false});
+    script.push(event(42, prompt));
+    h.run_steps(4);
+    assert_eq!(
+        operations(&script).len(),
+        sent,
+        "a later prompt is not answered with the dropped count"
+    );
+}
+
+#[test]
 fn a_pane_filter_is_typed_in_its_own_box_and_sent_through_the_native_filter() {
     let (mut h, script) = harness();
     h.get_by_label("Left pane filter").focus();
