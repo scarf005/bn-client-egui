@@ -194,23 +194,28 @@ impl<M: GameModel> App<M> {
             frame: Some(frame),
             ..self.window_spec(ctx, "inventory", &title)
         };
+        let hint = pane.map(|p| &p.description).filter(|h| !h.is_empty());
+        let totals = pane.and_then(|p| p.totals.as_ref());
         let shown = windows::show(ctx, spec, |ui| {
-            ui.horizontal(|ui| {
-                ui.vertical(|ui| {
-                    if let Some(hint) = pane.map(|p| &p.description).filter(|h| !h.is_empty()) {
-                        ui.label(self.rich(ui, &tinted("c_dark_gray", hint)));
-                    }
-                });
-                if let Some(totals) = pane.and_then(|p| p.totals.as_ref()) {
-                    ui.with_layout(egui::Layout::top_down(egui::Align::Max), |ui| {
-                        for (line, over) in totals_lines(totals) {
-                            let tone = if over { "c_red" } else { "c_dark_gray" };
-                            ui.label(self.rich(ui, &tinted(tone, &line)));
+            // A header with nothing to say takes no line.
+            if hint.is_some() || totals.is_some() {
+                ui.horizontal(|ui| {
+                    ui.vertical(|ui| {
+                        if let Some(hint) = hint {
+                            ui.label(self.rich(ui, &tinted("c_dark_gray", hint)));
                         }
                     });
-                }
-            });
-            ui.separator();
+                    if let Some(totals) = totals {
+                        ui.with_layout(egui::Layout::top_down(egui::Align::Max), |ui| {
+                            for (line, over) in totals_lines(totals) {
+                                let tone = if over { "c_red" } else { "c_dark_gray" };
+                                ui.label(self.rich(ui, &tinted(tone, &line)));
+                            }
+                        });
+                    }
+                });
+                ui.separator();
+            }
             if lists.is_empty() {
                 ui.label(self.rich(ui, &tinted("c_dark_gray", &menu.message)));
             }

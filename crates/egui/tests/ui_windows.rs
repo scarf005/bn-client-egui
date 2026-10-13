@@ -26,6 +26,7 @@ fn menu_window<'a>(settings: &std::path::Path, can_cancel: bool) -> (H<'a>, Scri
     let mut menu = fixture("events_43_menu");
     let change = &mut menu["params"]["events"][0]["changes"]["interaction"];
     change["interaction"]["allow_cancel"] = can_cancel.into();
+    change["interaction"]["context"] = "UILIST".into();
     change["interaction"]["choices"] = (0..30)
         .map(|i| {
             json!({"id":format!("c:{i}"),"label":format!("entry {i}"),"description":"","denial":"",
@@ -208,5 +209,40 @@ fn a_window_the_engine_does_not_let_cancel_has_no_close_button() {
             .sent()
             .iter()
             .all(|m| m["params"]["operation"]["kind"] != "cancel")
+    );
+}
+
+#[test]
+fn an_inventory_without_a_hint_or_totals_starts_right_under_its_title_bar() {
+    let (t, script) = session();
+    let app = App::new(EngineModel::new(Box::new(t)));
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(1100.0, 700.0))
+        .build_ui_state(|ui, app: &mut App<EngineModel>| app.show(ui), app);
+    h.run_steps(3);
+    for name in ["events_41_walk", "events_42_message"] {
+        script.push(fixture(name));
+    }
+    let mut menu = fixture("events_43_menu");
+    let change = &mut menu["params"]["events"][0]["changes"]["interaction"]["interaction"];
+    change["context"] = "INVENTORY".into();
+    change["title"] = "Inventory".into();
+    change["choices"] = json!([{"id":"i:0","label":"hammer","enabled":true,"description":"",
+        "denial":"","selectable":true,"selected":true,"columns":[
+            {"key":"source","label":"","value":"inventory"},
+            {"key":"category","label":"","value":"TOOLS"},
+            {"key":"name","label":"Name","value":"hammer"}]}]);
+    change["choice_total"] = 1.into();
+    script.push(menu);
+    h.run_steps(5);
+    let bar = h
+        .get_all_by_label("Inventory")
+        .find(|n| n.accesskit_node().role() == egui::accesskit::Role::TitleBar)
+        .unwrap()
+        .rect();
+    let category = h.get_by_label("TOOLS").rect();
+    assert!(
+        category.min.y - bar.max.y < 20.0,
+        "{bar:?} then {category:?}"
     );
 }
