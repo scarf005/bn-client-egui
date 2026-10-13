@@ -680,6 +680,11 @@ pub trait GameModel {
     fn scroll_menu(&mut self, _up: bool) -> bool {
         false
     }
+    /// The colour names the game data defines, loaded by the client; renderers resolve names with it.
+    fn colors(&self) -> &ColorMap {
+        static DEFAULT: std::sync::OnceLock<ColorMap> = std::sync::OnceLock::new();
+        DEFAULT.get_or_init(ColorMap::default)
+    }
     /// The open screens of the interaction stack, outermost first; empty from a 0.1 engine.
     fn screens(&self) -> &[Screen] {
         &[]

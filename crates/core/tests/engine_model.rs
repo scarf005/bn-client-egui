@@ -456,6 +456,11 @@ fn cell_colors_come_from_the_game_palette() {
     m.poll();
     // The zombie is light_green, palette slot 10.
     assert_eq!(m.cell(Pos { x: 23, y: 12 }).color, Rgb(10, 0, 0));
+    assert_eq!(
+        m.colors().index(10),
+        Rgb(10, 0, 0),
+        "renderers resolve names with the palette the model loaded"
+    );
 }
 
 fn polled(t: ScriptedTransport) -> EngineModel {

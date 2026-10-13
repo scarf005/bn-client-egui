@@ -1969,6 +1969,10 @@ impl GameModel for EngineModel {
         }
     }
 
+    fn colors(&self) -> &ColorMap {
+        &self.colors
+    }
+
     fn screens(&self) -> &[Screen] {
         self.replica.stack()
     }
