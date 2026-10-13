@@ -440,6 +440,7 @@ impl<M: GameModel> App<M> {
             && !self.model.busy()
         {
             self.prompt_send = None;
+            self.prompt_sent.push(text.clone());
             self.model.fill(&id, &text, submit);
         }
         self.menu_focus = menu.focus.clone();
@@ -467,11 +468,23 @@ impl<M: GameModel> App<M> {
         ui: &mut egui::Ui,
         field: &bn_client_core::model::MenuField,
     ) -> egui::Response {
-        let (seen, text) = &mut self.prompt;
-        if *seen != (field.id.clone(), field.value.clone()) {
-            *seen = (field.id.clone(), field.value.clone());
-            text.clone_from(&field.value);
+        // The engine's value replaces the box only when it is news: a new prompt, or a value this box did not
+        // send. The echo of an older send, or any change while input is still going out, must not undo the
+        // newer text, whose cursor would then land in the wrong place.
+        let value = (field.id.clone(), field.value.clone());
+        if self.prompt.0 != value {
+            let fresh = self.prompt.0.0 != field.id;
+            let echo = self.prompt_sent.contains(&field.value);
+            let sending = self.prompt_send.is_some() || self.model.busy();
+            if fresh {
+                self.prompt_sent.clear();
+            }
+            if fresh || !(echo || sending) {
+                self.prompt.1.clone_from(&field.value);
+            }
+            self.prompt.0 = value;
         }
+        let text = &mut self.prompt.1;
         let label = markup::plain(&field.label);
         let edit = egui::TextEdit::singleline(text).desired_width(f32::INFINITY);
         let response = ui.add(edit.hint_text(label.as_str()));
@@ -480,7 +493,18 @@ impl<M: GameModel> App<M> {
             .accesskit_node_builder(response.id, move |b| b.set_label(name));
         let enter = ui.input(|i| i.key_pressed(egui::Key::Enter));
         let submit = (response.lost_focus() || response.has_focus()) && enter;
-        if response.changed() || submit {
+        // Preedit text sits in the box while composing; only the committed text is typed.
+        let composing = ui.input(|i| {
+            i.events
+                .iter()
+                .fold(self.prompt_composing, |composing, event| match event {
+                    egui::Event::Ime(egui::ImeEvent::Preedit { text, .. }) => !text.is_empty(),
+                    egui::Event::Ime(egui::ImeEvent::Commit(_)) => false,
+                    _ => composing,
+                })
+        });
+        self.prompt_composing = composing;
+        if (response.changed() && !composing) || submit {
             let submit = submit || self.prompt_send.as_ref().is_some_and(|s| s.2);
             self.prompt_send = Some((field.id.clone(), text.clone(), submit));
         }

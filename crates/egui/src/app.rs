@@ -127,6 +127,10 @@ pub struct App<M: GameModel> {
     prompt: ((String, String), String),
     /// The newest prompt text not yet sent, and whether Enter asked to submit it.
     prompt_send: Option<(String, String, bool)>,
+    /// The texts sent to the prompt since it opened, whose echoes from the engine are not news.
+    prompt_sent: Vec<String>,
+    /// An IME composition is open in the prompt: its preedit text is not typed yet.
+    prompt_composing: bool,
     /// Shots, explosions and floating text now playing on the map.
     effects: Effects,
     /// The engine's look cursor was up at the last frame.
@@ -191,6 +195,8 @@ impl<M: GameModel> App<M> {
             cursor_placed: false,
             prompt: Default::default(),
             prompt_send: None,
+            prompt_sent: Vec::new(),
+            prompt_composing: false,
             effects: Effects::default(),
             was_looking: false,
             menu_ids: Vec::new(),
