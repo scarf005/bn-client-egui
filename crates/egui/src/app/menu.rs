@@ -285,6 +285,14 @@ impl<M: GameModel> App<M> {
                                 } else {
                                     *ui.layout()
                                 };
+                                // A refused row is plain dim text: the game's colours would hide that it is.
+                                let text = if choice.enabled {
+                                    text
+                                } else {
+                                    egui::RichText::new(text.text())
+                                        .color(ui.visuals().weak_text_color())
+                                        .into()
+                                };
                                 let button = ui
                                     .with_layout(layout, |ui| {
                                         self.control(
@@ -296,6 +304,11 @@ impl<M: GameModel> App<M> {
                                         )
                                     })
                                     .inner;
+                                let button = if choice.denial.is_empty() {
+                                    button
+                                } else {
+                                    button.on_disabled_hover_text(markup::plain(&choice.denial))
+                                };
                                 ids.extend(button.enabled().then_some(button.id));
                                 if choice.id.starts_with("action:") {
                                     action_ids.push(button.id);
@@ -577,5 +590,5 @@ fn is_prose(description: &str) -> bool {
         .any(|c| !(c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_'))
 }
 
-/// A list this short is read at a glance; the engine's filter is offered from here on.
-const FILTER_MIN_ROWS: usize = 10;
+/// A list this short is a question rather than something to search; the engine's filter is offered from here on.
+const FILTER_MIN_ROWS: usize = 3;

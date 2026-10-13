@@ -1258,9 +1258,9 @@ fn list_with(rows: usize) -> Value {
 }
 
 #[test]
-fn the_filter_button_is_for_long_lists_not_for_a_two_row_question() {
+fn the_filter_button_is_for_lists_to_search_not_for_a_two_row_question() {
     let filter = json!([{"id":"FILTER","name":"Filter","keys":["/"]}]);
-    for (rows, shown) in [(2, false), (9, false), (30, true)] {
+    for (rows, shown) in [(2, false), (8, true), (30, true)] {
         let (mut h, script) = harness();
         h.run_steps(3);
         script.push(show(41, filter.clone(), list_with(rows)));
