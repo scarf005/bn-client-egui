@@ -614,17 +614,22 @@ impl EngineModel {
                 s.set_stage(stage, n.is_terminal());
             }
         }
-        if n.is_terminal() && self.running.remove(&n.command_id) {
+        let latest = self.command_id.as_deref() == Some(&n.command_id);
+        let outstanding = n.is_terminal() && self.running.remove(&n.command_id);
+        if outstanding {
             self.busy = self.unanswered > 0 || !self.running.is_empty();
         }
-        if n.is_terminal() && self.command_id.as_deref() == Some(&n.command_id) {
-            self.command_id = None;
+        if n.is_terminal() && (latest || outstanding) {
+            if latest {
+                self.command_id = None;
+            }
             // The world swap after choosing the Tutorial ends its command with stale_epoch.
             let swap =
                 n.stage == "interrupted" && n.error.as_ref().is_some_and(|e| e == "stale_epoch");
             if n.stage != "completed" && !swap {
                 let reason = n.error.as_ref().map(error_kind);
-                if !self.stale_resend(reason.as_deref()) {
+                // A kept resend is the latest command; an earlier queued one is only reported.
+                if !(latest && self.stale_resend(reason.as_deref())) {
                     self.report_failure(n.error_text.as_deref().unwrap_or(&n.stage));
                 }
             }
