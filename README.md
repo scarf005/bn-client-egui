@@ -5,7 +5,7 @@ Cataclysm: Bright Nights, built on egui/eframe (AccessKit). The UI talks to a
 `GameModel` trait with two implementations: `FakeModel` (in-memory, used by most tests) and
 `EngineModel` (unified engine protocol 0.2 over the engine's stdio, newline-delimited JSON-RPC).
 
-License: undecided (no LICENSE file yet).
+License: AGPL-3.0-only (see LICENSE).
 
     cargo run --release -p bn-client-egui      # finds the engine itself (see below)
     cargo run -p bn-client-egui -- --fake      # in-memory fake model, no engine
