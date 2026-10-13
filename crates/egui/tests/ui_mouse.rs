@@ -7,7 +7,7 @@ use bn_client_egui::{App, Clock, EngineModel, GameModel};
 use common::{fixture, session};
 use eframe::egui;
 use egui_kittest::Harness;
-use egui_kittest::kittest::Queryable;
+use egui_kittest::kittest::{NodeT, Queryable};
 use serde_json::{Value, json};
 
 type H<'a> = Harness<'a, App<EngineModel>>;
@@ -180,6 +180,71 @@ fn the_wheel_in_a_scrollable_menu_is_one_engine_scroll_step_per_event() {
         operations(&script),
         [json!({"kind":"action","action_id":"SCROLL_DOWN"})]
     );
+}
+
+#[test]
+fn the_wheel_in_a_scrollable_menu_never_blinks_the_cancel_button() {
+    let (mut h, script) = harness();
+    let actions =
+        json!([{"id":"SCROLL_UP","name":"Scroll up"},{"id":"SCROLL_DOWN","name":"Scroll down"}]);
+    let rows = (0..30)
+        .map(|i| row(&format!("c:{i}"), &format!("entry {i}"), i == 0, None))
+        .collect::<Vec<_>>();
+    open_menu(&mut h, &script, json!(rows), actions, None);
+    h.hover_at(egui::pos2(400.0, 300.0));
+    for _ in 0..6 {
+        h.event(egui::Event::MouseWheel {
+            unit: egui::MouseWheelUnit::Line,
+            delta: egui::vec2(0.0, -1.0),
+            modifiers: egui::Modifiers::NONE,
+            phase: egui::TouchPhase::Move,
+        });
+        h.run_steps(1);
+        assert!(
+            !h.get_by_label("Cancel").accesskit_node().is_disabled(),
+            "Cancel went dim while a wheel step was in flight"
+        );
+    }
+}
+
+#[test]
+fn the_wheel_to_the_end_of_a_list_the_engine_has_more_of_fetches_the_next_page() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    for name in ["events_41_walk", "events_42_message"] {
+        script.push(fixture(name));
+    }
+    let mut menu = fixture("events_43_menu");
+    let change = &mut menu["params"]["events"][0]["changes"]["interaction"]["interaction"];
+    change["choices"] = (0..30)
+        .map(|i| row(&format!("c:{i}"), &format!("entry {i}"), false, None))
+        .collect();
+    change["choice_total"] = json!(90);
+    script.push(menu);
+    h.run_steps(3);
+    let pages = |script: &ScriptHandle| {
+        script
+            .sent_methods()
+            .iter()
+            .filter(|m| *m == "bn.interaction.choices")
+            .count()
+    };
+    assert_eq!(
+        pages(&script),
+        0,
+        "the first page is all it asks for at first"
+    );
+    h.hover_at(egui::pos2(300.0, 200.0));
+    for _ in 0..10 {
+        h.event(egui::Event::MouseWheel {
+            unit: egui::MouseWheelUnit::Line,
+            delta: egui::vec2(0.0, -10.0),
+            modifiers: egui::Modifiers::NONE,
+            phase: egui::TouchPhase::Move,
+        });
+        h.run_steps(3);
+    }
+    assert_eq!(pages(&script), 1);
 }
 
 #[test]

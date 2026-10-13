@@ -93,6 +93,17 @@ fn tabbing_to_an_item_below_the_fold_scrolls_it_into_view() {
     assert!(rect.max.y <= log_top && rect.min.y >= 0.0, "{rect:?}");
 }
 
+#[test]
+fn tab_on_the_map_is_the_engines_and_leaves_the_sidebar_scroll_alone() {
+    let mut h = crowded();
+    let before = drop_rect(&h, 0);
+    for _ in 0..40 {
+        h.key_press(egui::Key::Tab);
+        h.run_steps(2);
+    }
+    assert_eq!(drop_rect(&h, 0), before);
+}
+
 fn colour(name: &str) -> egui::Color32 {
     let c = bn_client_core::colors::ColorMap::default().resolve(name).0;
     egui::Color32::from_rgb(c.0, c.1, c.2)
