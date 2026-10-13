@@ -665,3 +665,59 @@ fn return_on_a_grid_cell_runs_the_affordance_the_cell_names() {
     assert_eq!(out.invoke, None);
     assert_eq!(out.denial, Some(Text::Plain("Blocked".into())));
 }
+
+/// The native query popup (Yes / No): the engine binds Left, Right and Confirm and keeps its own cursor.
+fn query_popup(cursor: &str) -> Screen {
+    let mut screen = screen_with(
+        json!({"id": "list", "kind": "list", "columns": [], "selection": "single", "total": 2,
+            "activate": "pick", "rows": [
+                row("option:0", json!({"selected": cursor == "option:0"})),
+                row("option:1", json!({"selected": cursor == "option:1"}))]}),
+        json!([
+            pick(),
+            plain("LEFT", &["LEFT"]),
+            plain("RIGHT", &["RIGHT"]),
+            plain("CONFIRM", &["RETURN"])
+        ]),
+    );
+    screen.focus =
+        Some(serde_json::from_value(json!({"component_id": "list", "row_id": cursor})).unwrap());
+    screen
+}
+
+#[test]
+fn up_and_down_move_the_focus_among_a_popups_options_and_return_takes_the_focused_one() {
+    let (mut ui, screen) = (Interaction::default(), query_popup("option:0"));
+    ui.sync(std::slice::from_ref(&screen));
+    let down = press(&mut ui, &screen, "DOWN");
+    assert_eq!(
+        (invoked(&down), down.revealed.as_deref()),
+        (None, Some("option:1"))
+    );
+    assert_eq!(
+        invoked(&press(&mut ui, &screen, "RETURN")),
+        Some(("pick", json!({"row": "option:1"}))),
+        "the engine's cursor is still on Yes"
+    );
+    let up = press(&mut ui, &screen, "UP");
+    assert_eq!(up.revealed.as_deref(), Some("option:0"));
+    assert_eq!(
+        invoked(&press(&mut ui, &screen, "RETURN")).map(|(id, _)| id),
+        Some("CONFIRM"),
+        "back on the engine's cursor, its Confirm key stays the engine's"
+    );
+}
+
+#[test]
+fn left_and_right_stay_the_engines_on_a_popup() {
+    let (mut ui, screen) = (Interaction::default(), query_popup("option:0"));
+    ui.sync(std::slice::from_ref(&screen));
+    assert_eq!(
+        invoked(&press(&mut ui, &screen, "RIGHT")).map(|(id, _)| id),
+        Some("RIGHT")
+    );
+    assert_eq!(
+        invoked(&press(&mut ui, &screen, "LEFT")).map(|(id, _)| id),
+        Some("LEFT")
+    );
+}
