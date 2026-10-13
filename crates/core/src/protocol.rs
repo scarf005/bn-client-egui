@@ -347,6 +347,9 @@ impl AvatarChange {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct InventoryItem {
+    /// Names the row for `Pickup` and `Drop`.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub id: String,
     pub look: Look,
     pub name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -515,6 +518,9 @@ pub struct Interaction {
     /// Whether the native category-selection mode is on, where the screen has one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub category_mode: Option<bool>,
+    /// The choice any key press takes, on a press-any-key screen that binds no key.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub any_key_choice_id: Option<String>,
     /// Fixed-width lines drawn above the menu: the main menu's title art and version.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub banner: Option<Vec<String>>,
@@ -837,6 +843,9 @@ pub struct CommandNotice {
     pub stage: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<Value>,
+    /// The engine's localized reason for `error`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error_text: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub at: Option<At>,
 }
@@ -962,6 +971,16 @@ pub enum Operation {
     /// The left click of Tiles and curses on a map square: plans a route, a repeat walks it.
     Travel {
         pos: WorldPos,
+    },
+    /// Picks up `count` items of the `avatar.ground` row `item_id`.
+    Pickup {
+        item_id: String,
+        count: u64,
+    },
+    /// Drops `count` items of the `avatar.inventory` row `item_id`.
+    Drop {
+        item_id: String,
+        count: u64,
     },
 }
 
@@ -1096,6 +1115,9 @@ pub struct ResultParams {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ApplicationError {
     pub kind: String,
+    /// The engine's localized reason for `kind`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub action: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

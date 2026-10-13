@@ -61,7 +61,7 @@ fn model_is_not_ready_until_the_last_snapshot_part() {
 fn step_submits_a_move_action_against_the_current_boundary() {
     let (t, h) = session();
     let mut m = connected(t.on("bn.command.submit", walk_reply()));
-    assert!(m.step_toward(Pos { x: 30, y: 12 }));
+    assert!(m.invoke_action("RIGHT"));
     let sent = submits(&h);
     assert_eq!(sent.len(), 1);
     assert_eq!(
@@ -75,12 +75,12 @@ fn step_submits_a_move_action_against_the_current_boundary() {
 }
 
 #[test]
-fn diagonal_without_a_matching_action_does_not_submit() {
+fn an_action_the_engine_does_not_offer_is_not_submitted() {
     let (t, h) = session();
     let mut m = connected(t);
-    assert!(!m.step_toward(Pos { x: 25, y: 5 }));
+    assert!(!m.invoke_action("RIGHTUP"));
     assert!(submits(&h).is_empty());
-    assert!(m.messages().last().unwrap().contains("RIGHTUP"));
+    assert!(m.messages().is_empty(), "the client writes no text for it");
 }
 
 #[test]
@@ -90,9 +90,9 @@ fn second_step_waits_for_the_first_command_to_finish() {
         t.on("bn.command.submit", walk_reply())
             .on("bn.command.submit", walk_reply()),
     );
-    m.step_toward(Pos { x: 30, y: 12 });
+    m.invoke_action("RIGHT");
     m.poll();
-    assert!(m.step_toward(Pos { x: 30, y: 12 }), "still walking");
+    assert!(!m.invoke_action("RIGHT"), "busy");
     assert_eq!(submits(&h).len(), 1, "busy: no second submit");
     h.push(fixture("events_41_walk"));
     h.push(fixture("command_completed"));
@@ -104,55 +104,50 @@ fn second_step_waits_for_the_first_command_to_finish() {
     );
     assert_eq!(m.origin(), Pos { x: -16, y: -8 });
     assert_eq!(m.cell(Pos { x: 20, y: 12 }).glyph, '.');
-    m.step_toward(Pos { x: 30, y: 12 });
+    m.invoke_action("RIGHT");
     let sent = submits(&h);
     assert_eq!(sent.len(), 2);
     assert_eq!(sent[1]["params"]["expect"]["revision"], "32");
 }
 
 #[test]
-fn rejected_command_is_reported_and_blocks_the_walk_once() {
+fn a_rejected_command_is_reported_in_the_engines_words() {
     let (t, h) = session();
     let mut m = connected(t.on("bn.command.submit", walk_reply()));
-    m.step_toward(Pos { x: 30, y: 12 });
+    m.invoke_action("RIGHT");
     h.push(fixture("command_rejected"));
     m.poll();
-    assert!(m.messages().last().unwrap().contains("the screen changed"));
-    assert!(
-        !m.step_toward(Pos { x: 30, y: 12 }),
-        "walk stops after a rejection"
-    );
-    assert!(
-        m.step_toward(Pos { x: 30, y: 12 }),
-        "next attempt submits again"
+    assert_eq!(
+        m.messages().last().unwrap(),
+        "The screen changed, try again."
     );
 }
 
 #[test]
-fn a_failed_non_walk_command_does_not_cancel_the_next_step() {
+fn a_failed_command_does_not_cancel_the_next_one() {
     let (t, h) = session();
     let mut m = connected(
         t.on("bn.command.submit", walk_reply())
             .on("bn.command.submit", walk_reply()),
     );
-    m.pick_up(0);
+    m.invoke_action("RIGHT");
     h.push(fixture("command_rejected"));
     m.poll();
-    assert!(
-        m.step_toward(Pos { x: 30, y: 12 }),
-        "only a rejected step stops the walk"
-    );
-    assert_eq!(submits(&h).len(), 2, "the step was submitted");
+    assert!(m.invoke_action("RIGHT"));
+    assert_eq!(submits(&h).len(), 2, "the next command was submitted");
 }
 
 #[test]
-fn error_response_to_submit_frees_the_queue_and_reports_the_kind() {
+fn error_response_to_submit_frees_the_queue_and_reports_the_engines_words() {
     let (t, _h) = session();
-    let err = json!({"jsonrpc":"2.0","id":null,"error":{"code":1000,"message":"busy","data":{"kind":"command_busy"}}});
+    let err = json!({"jsonrpc":"2.0","id":null,"error":{"code":1000,"message":"busy","data":{"kind":"command_busy","message":"Another command is still running."}}});
     let mut m = connected(t.on("bn.command.submit", vec![err]));
-    m.step_toward(Pos { x: 30, y: 12 });
+    m.invoke_action("RIGHT");
     m.poll();
-    assert!(m.messages().last().unwrap().contains("command_busy"));
+    assert_eq!(
+        m.messages().last().unwrap(),
+        "Another command is still running."
+    );
 }
 
 #[test]
@@ -217,7 +212,7 @@ fn resync_mid_command_rebuilds_the_mirror_and_keeps_the_command_outcome() {
         t.on("bn.command.submit", walk_reply())
             .on("bn.subscribe", subscribe_reply()),
     );
-    assert!(m.step_toward(Pos { x: 30, y: 12 }));
+    assert!(m.invoke_action("RIGHT"));
     h.push(fixture("events_41_walk"));
     h.push(fixture("events_42_message"));
     m.poll();
@@ -343,19 +338,34 @@ fn cancel_menu_submits_cancel_only_when_allowed() {
 }
 
 #[test]
-fn pick_up_and_drop_invoke_registered_actions() {
+fn pick_up_and_drop_send_the_engines_row_id_and_count() {
     let (t, h) = session();
-    let mut m = connected(t.on("bn.command.submit", walk_reply()));
-    m.drop_item(0);
-    assert!(
-        m.messages().last().unwrap().contains("drop"),
-        "missing action is reported"
+    let mut m = connected(
+        t.on("bn.command.submit", walk_reply())
+            .on("bn.command.submit", walk_reply()),
     );
-    assert!(submits(&h).is_empty());
+    let mut ground = item("tin can", 2, None, "2 tin cans");
+    ground["id"] = json!("item:g1");
+    let mut carried = item("flashlight", 1, Some("carried"), "flashlight");
+    carried["id"] = json!("item:i1");
+    h.push(avatar_event(
+        json!([carried]),
+        json!([ground, item("no id", 1, None, "no id")]),
+    ));
+    m.poll();
+    m.pick_up(1);
+    assert!(submits(&h).is_empty(), "a row without an id names nothing");
     m.pick_up(0);
     assert_eq!(
         submits(&h)[0]["params"]["operation"],
-        json!({"kind":"action","action_id":"pickup"})
+        json!({"kind":"pickup","item_id":"item:g1","count":2})
+    );
+    h.push(fixture("command_completed"));
+    m.poll();
+    m.drop_item(0);
+    assert_eq!(
+        submits(&h)[1]["params"]["operation"],
+        json!({"kind":"drop","item_id":"item:i1","count":1})
     );
 }
 
@@ -529,7 +539,7 @@ fn travel_click_submits_the_absolute_square_at_a_free_boundary() {
     let (t, h) = session();
     let mut m = connected(t.on("bn.command.submit", walk_reply()));
     // Avatar (3, 4) is drawn at view (20, 12).
-    assert!(m.travel(Pos { x: 22, y: 12 }));
+    m.travel(Pos { x: 22, y: 12 });
     let sent = submits(&h);
     assert_eq!(
         sent[0]["params"]["operation"],
@@ -537,10 +547,7 @@ fn travel_click_submits_the_absolute_square_at_a_free_boundary() {
     );
     assert_eq!(sent[0]["params"]["expect"]["schema_id"], Value::Null);
     assert!(m.busy());
-    assert!(
-        m.travel(Pos { x: 23, y: 12 }),
-        "handled, but not sent twice"
-    );
+    m.travel(Pos { x: 23, y: 12 });
     assert_eq!(submits(&h).len(), 1, "one command at a time");
 }
 
@@ -553,7 +560,7 @@ fn travel_click_is_ignored_while_a_menu_is_open() {
     }
     m.poll();
     assert!(m.menu().is_some());
-    assert!(m.travel(Pos { x: 22, y: 12 }));
+    m.travel(Pos { x: 22, y: 12 });
     assert!(submits(&h).is_empty());
 }
 
@@ -592,7 +599,7 @@ fn empty_action_list_between_auto_move_steps_keeps_the_controls_until_idle() {
     let mut m = connected(t.on("bn.command.submit", walk_reply()));
     let before = m.actions();
     assert!(!before.is_empty());
-    assert!(m.travel(Pos { x: 22, y: 12 }));
+    m.travel(Pos { x: 22, y: 12 });
     h.push(change(
         41,
         json!({"interaction": boundary_without_actions()}),
@@ -613,9 +620,9 @@ fn empty_action_list_between_auto_move_steps_keeps_the_controls_until_idle() {
 fn interrupted_by(error: &str) -> (EngineModel, Vec<String>) {
     let (t, h) = session();
     let mut m = connected(t.on("bn.command.submit", walk_reply()));
-    assert!(m.travel(Pos { x: 22, y: 12 }));
+    m.travel(Pos { x: 22, y: 12 });
     h.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{
-        "epoch":"e7f3","command_id":"c:5","stage":"interrupted","error":error}}));
+        "epoch":"e7f3","command_id":"c:5","stage":"interrupted","error":error,"error_text":"The game is not ready."}}));
     m.poll();
     assert!(!m.busy());
     let messages = m.messages().to_vec();
@@ -625,10 +632,7 @@ fn interrupted_by(error: &str) -> (EngineModel, Vec<String>) {
 #[test]
 fn interrupted_command_shows_the_engine_error_reason() {
     let (_, messages) = interrupted_by("not_ready");
-    assert_eq!(
-        messages.last().unwrap(),
-        "Command interrupted: the game is not ready."
-    );
+    assert_eq!(messages.last().unwrap(), "The game is not ready.");
 }
 
 #[test]
@@ -644,16 +648,11 @@ fn with_door(h: &bn_client_core::transport::ScriptHandle, x: i32) {
 }
 
 #[test]
-fn clicking_an_adjacent_closed_door_bumps_it_open_like_tiles() {
+fn clicking_an_adjacent_closed_door_sends_the_same_travel_as_any_square() {
     let (t, h) = session();
     let mut m = connected(t.on("bn.command.submit", walk_reply()));
-    with_door(&h, 4);
-    m.poll();
-    assert!(m.travel(Pos { x: 21, y: 12 }));
-    assert_eq!(
-        submits(&h)[0]["params"]["operation"],
-        json!({"kind":"action","action_id":"RIGHT"})
-    );
+    m.travel(Pos { x: 21, y: 12 });
+    assert_eq!(submits(&h)[0]["params"]["operation"]["kind"], "travel");
 }
 
 #[test]
@@ -662,7 +661,7 @@ fn clicking_a_distant_closed_door_still_asks_the_engine_for_a_route() {
     let mut m = connected(t.on("bn.command.submit", walk_reply()));
     with_door(&h, 6);
     m.poll();
-    assert!(m.travel(Pos { x: 23, y: 12 }));
+    m.travel(Pos { x: 23, y: 12 });
     assert_eq!(
         submits(&h)[0]["params"]["operation"],
         json!({"kind":"travel","pos":pos(6, 4)})
@@ -673,7 +672,7 @@ fn clicking_a_distant_closed_door_still_asks_the_engine_for_a_route() {
 fn travel_that_plans_nothing_is_silent_like_native_where_a_failed_click_route_prints_no_message() {
     let (t, h) = session();
     let mut m = connected(t.on("bn.command.submit", walk_reply()));
-    assert!(m.travel(Pos { x: 22, y: 12 }));
+    m.travel(Pos { x: 22, y: 12 });
     h.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{
         "epoch":"e7f3","command_id":"c:5","stage":"completed"}}));
     m.poll();
@@ -685,7 +684,7 @@ fn travel_that_plans_nothing_is_silent_like_native_where_a_failed_click_route_pr
 fn travel_that_planned_a_route_is_simply_done() {
     let (t, h) = session();
     let mut m = connected(t.on("bn.command.submit", walk_reply()));
-    assert!(m.travel(Pos { x: 22, y: 12 }));
+    m.travel(Pos { x: 22, y: 12 });
     h.push(change(41, json!({"route": [pos(4, 4), pos(5, 4)]})));
     h.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{
         "epoch":"e7f3","command_id":"c:5","stage":"completed"}}));
@@ -743,16 +742,14 @@ fn travel_to_a_square_the_engine_cannot_resolve_is_reported_once_in_words() {
             .on("bn.command.submit", walk_reply()),
     );
     for id in ["c:5", "c:5"] {
-        assert!(m.travel(Pos { x: 39, y: 12 }));
+        m.travel(Pos { x: 39, y: 12 });
         h.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{
-            "epoch":"e7f3","command_id":id,"stage":"rejected","error":"validation_failed"}}));
+            "epoch":"e7f3","command_id":id,"stage":"rejected","error":"validation_failed",
+            "error_text":"Travel rejected: outside the map window."}}));
         m.poll();
         assert!(!m.busy());
     }
-    assert_eq!(
-        m.messages(),
-        ["Travel rejected: that square is outside the map window the engine can resolve."]
-    );
+    assert_eq!(m.messages(), ["Travel rejected: outside the map window."]);
 }
 
 fn view_event(sequence: u64, min_x: i32, max_x: i32) -> Value {
@@ -834,22 +831,8 @@ fn the_shown_map_is_the_middle_of_the_engines_view_and_never_larger() {
     );
 }
 
-#[test]
-fn a_click_outside_the_engines_view_is_ignored_without_a_message() {
-    let (t, h) = session();
-    let mut m = connected(t.on("bn.command.submit", walk_reply()));
-    h.push(view_event(41, -15, 20));
-    m.poll();
-    // View column 36 would be absolute x 21, one past the window; column 35 is its last square.
-    assert!(m.travel(Pos { x: 39, y: 12 }));
-    assert!(submits(&h).is_empty());
-    assert!(m.messages().is_empty(), "{:?}", m.messages());
-    assert!(m.travel(Pos { x: 35, y: 12 }));
-    assert_eq!(submits(&h).len(), 1);
-}
-
 fn not_ready() -> Value {
-    json!({"jsonrpc":"2.0","id":null,"error":{"code":1000,"message":"x","data":{"kind":"not_ready"}}})
+    json!({"jsonrpc":"2.0","id":null,"error":{"code":1000,"message":"x","data":{"kind":"not_ready","message":"There is nothing to interrupt."}}})
 }
 
 #[test]
@@ -859,7 +842,7 @@ fn interrupt_sends_bn_interrupt_while_a_command_is_in_flight() {
         "bn.interrupt",
         vec![json!({"jsonrpc":"2.0","id":null,"result":{}})],
     ));
-    assert!(m.step_toward(Pos { x: 30, y: 12 }));
+    assert!(m.invoke_action("RIGHT"));
     assert!(m.busy());
     assert!(m.interrupt());
     m.poll();
@@ -888,7 +871,7 @@ fn a_not_ready_interrupt_settles_a_command_whose_completion_was_never_heard() {
                     "epoch":"e7f3","command_id":"c:5","stage":"completed"}})],
             ),
     );
-    assert!(m.step_toward(Pos { x: 30, y: 12 }));
+    assert!(m.invoke_action("RIGHT"));
     assert!(m.busy());
     assert!(m.interrupt());
     m.poll();
@@ -910,7 +893,7 @@ fn a_not_ready_interrupt_keeps_a_command_the_engine_still_runs() {
                     "epoch":"e7f3","command_id":"c:5","stage":"executing"}})],
             ),
     );
-    assert!(m.step_toward(Pos { x: 30, y: 12 }));
+    assert!(m.invoke_action("RIGHT"));
     assert!(m.interrupt());
     m.poll();
     m.poll();
@@ -925,7 +908,7 @@ fn a_not_ready_interrupt_is_explained_once() {
             .on("bn.interrupt", vec![not_ready()])
             .on("bn.interrupt", vec![not_ready()]),
     );
-    assert!(m.step_toward(Pos { x: 30, y: 12 }));
+    assert!(m.invoke_action("RIGHT"));
     assert!(m.interrupt());
     m.poll();
     assert!(m.interrupt());
@@ -1310,51 +1293,6 @@ fn an_avatar_that_carries_nothing_empties_the_inventory_panel() {
     assert!(m.inventory().is_empty());
 }
 
-#[test]
-fn picking_up_a_ground_item_marks_that_item_in_the_native_menu_and_confirms() {
-    let (t, h) = session();
-    let mut m = connected(
-        t.on("bn.command.submit", walk_reply())
-            .on("bn.command.submit", walk_reply())
-            .on("bn.command.submit", walk_reply()),
-    );
-    h.push(avatar_event(
-        json!([]),
-        json!([
-            item("combat knife", 1, None, "combat knife"),
-            item("tin can", 1, None, "tin can")
-        ]),
-    ));
-    m.poll();
-    m.pick_up(1);
-    let mut menu = fixture("events_43_menu");
-    menu["params"]["events"][0]["sequence"] = json!("42");
-    let interaction = &mut menu["params"]["events"][0]["changes"]["interaction"];
-    interaction["actions"] =
-        json!([{"id": "pickup_all", "name": "x"}, {"id": "CONFIRM", "name": "Confirm"}]);
-    interaction["interaction"]["choices"][1]["enabled"] = json!(true);
-    interaction["interaction"]["choices"][1]["selectable"] = json!(true);
-    interaction["interaction"]["choices"][1]["denial"] = json!("");
-    interaction["interaction"]["choices"][1]["label"] = json!("tin can");
-    // The engine publishes the menu before it reports the command done.
-    h.push(menu);
-    h.push(fixture("command_completed"));
-    m.poll();
-    let operations = submits(&h)
-        .into_iter()
-        .map(|s| s["params"]["operation"].clone())
-        .collect::<Vec<_>>();
-    assert_eq!(
-        operations[0]["action_id"], "pickup",
-        "the fixture offers no pickup_all"
-    );
-    assert_eq!(
-        operations[1],
-        json!({"kind": "choose", "choice_id": "c:2"}),
-        "the clicked item, not the first row"
-    );
-}
-
 fn crafting(name: &str) -> Value {
     let text = std::fs::read_to_string(concat!(
         env!("CARGO_MANIFEST_DIR"),
@@ -1465,7 +1403,8 @@ fn any_key_acknowledges_a_press_any_key_popup_and_only_that() {
             "denial":"","enabled":true,"selectable":true,"selected":true,"columns":[]});
         ack["label"] = "Press any key".into();
         json!({"schema_id":"s:p","kind":"choices","context":"POPUP_WAIT","title":"","message":"Nothing.",
-            "allow_cancel":false,"choices":[ack],"choice_total":1,"allow_set_count":false})
+            "allow_cancel":false,"choices":[ack],"choice_total":1,"allow_set_count":false,
+            "any_key_choice_id": if anykey {json!("acknowledge")} else {Value::Null}})
     };
     for (anykey, sent) in [(true, 1), (false, 0)] {
         let (t, h) = session();
@@ -1494,7 +1433,8 @@ fn any_key_continues_a_terminal_prompt_but_does_not_answer_its_security_query() 
         };
         json!({"schema_id":"s:term","kind":"choices","context":context,"title":"Evac shelter computer",
             "message":"Login successful.  Press any key…","allow_cancel":false,"choices":choices,
-            "choice_total":ids.len(),"allow_set_count":false})
+            "choice_total":ids.len(),"allow_set_count":false,
+            "any_key_choice_id": if ids == ["continue"] {json!("continue")} else {Value::Null}})
     };
     for (ids, sent) in [(&["continue"][..], 1), (&["yes", "no", "quit"][..], 0)] {
         let (t, h) = session();
@@ -1559,7 +1499,8 @@ fn aiming_reports_the_cursor_distance_against_the_range_and_the_shot_status_only
         json!({"schema_id":"s:a","kind":"target","context":context,"title":"Firing Uzi 9mm","message":"",
             "allow_cancel":true,"choices":[],"choice_total":0,"allow_set_count":false,
             "target":{"source":{"dim":"","x":2,"y":4,"z":0},"current":{"dim":"","x":x,"y":6,"z":0},
-                "range":8,"distance_metric":"square","status":status,"candidates":[]}})
+                "range":8,"distance_metric":"square","status":status,"candidates":[],
+                "status_text": format!("range {}/8, {}", (x - 2).abs().max(2), match status { "good" => "ready to fire", "out_of_range" => "out of range", _ => "out of ammo" })}})
     };
     let (t, h) = session();
     let mut m = connected(t);
@@ -1763,7 +1704,7 @@ mod failures {
     fn silence_with_a_command_in_flight_is_a_stall_that_a_message_clears() {
         let (t, h) = session();
         let (mut m, clock) = with_clock(t.on("bn.command.submit", walk_reply()));
-        assert!(m.step_toward(Pos { x: 30, y: 12 }));
+        assert!(m.invoke_action("RIGHT"));
         m.poll();
         clock.advance(Duration::from_secs(119));
         m.poll();
@@ -1781,7 +1722,7 @@ mod failures {
     fn heartbeats_keep_a_long_activity_from_counting_as_stalled() {
         let (t, h) = session();
         let (mut m, clock) = with_clock(t.on("bn.command.submit", walk_reply()));
-        assert!(m.step_toward(Pos { x: 30, y: 12 }));
+        assert!(m.invoke_action("RIGHT"));
         m.poll();
         // Ten minutes of activity, with a heartbeat every two seconds.
         for _ in 0..300 {
@@ -1804,7 +1745,7 @@ mod failures {
     fn loading_notifications_also_count_as_signs_of_life() {
         let (t, h) = session();
         let (mut m, clock) = with_clock(t.on("bn.command.submit", walk_reply()));
-        assert!(m.step_toward(Pos { x: 30, y: 12 }));
+        assert!(m.invoke_action("RIGHT"));
         m.poll();
         for _ in 0..100 {
             clock.advance(Duration::from_secs(60));
@@ -2388,9 +2329,9 @@ fn a_rejected_command_is_logged_in_words_not_as_the_engines_error_name() {
     let mut m = connected(t.on("bn.command.submit", walk_reply()));
     assert!(m.invoke_action("RIGHT"));
     h.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{
-        "epoch":"e7f3","command_id":"c:5","stage":"rejected","error":"validation_failed"}}));
+        "epoch":"e7f3","command_id":"c:5","stage":"rejected","error":"validation_failed","error_text":"Not possible here."}}));
     m.poll();
-    assert_eq!(m.messages(), ["Command rejected: not possible here."]);
+    assert_eq!(m.messages(), ["Not possible here."]);
 }
 
 /// The walk fixture moved to `to`, with the engine's window of `window` squares around `to` when it has one.
@@ -2559,7 +2500,7 @@ fn snake_boundary(id: &str, refresh: bool) -> Value {
 }
 
 fn stale_boundary() -> Value {
-    json!({"jsonrpc":"2.0","id":null,"error":{"code":1000,"message":"stale","data":{"kind":"stale_boundary"}}})
+    json!({"jsonrpc":"2.0","id":null,"error":{"code":1000,"message":"stale","data":{"kind":"stale_boundary","message":"The screen changed, try again."}}})
 }
 
 #[test]
@@ -2614,7 +2555,10 @@ fn a_key_rejected_stale_on_a_screen_without_refresh_is_not_resent() {
     ));
     m.poll();
     assert_eq!(submits(&h).len(), 1);
-    assert!(m.messages().last().unwrap().contains("stale_boundary"));
+    assert_eq!(
+        m.messages().last().unwrap(),
+        "The screen changed, try again."
+    );
 }
 
 fn heard(sequence: u32, text: &str, logged: Option<bool>) -> serde_json::Value {

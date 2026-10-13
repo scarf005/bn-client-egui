@@ -1,4 +1,5 @@
 //! Needs a real engine build: `BN_ENGINE=/path/to/cataclysm-bn-tiles cargo test -p bn-client-core --test live_inventory -- --ignored --test-threads=1`
+mod common;
 use bn_client_core::transport::StdioTransport;
 use bn_client_core::watchdog::Watchdog;
 use bn_client_core::{EngineModel, GameModel};
@@ -70,13 +71,8 @@ fn settle(model: &mut EngineModel) {
 #[test]
 #[ignore = "requires BN_ENGINE"]
 fn live_pick_up_a_chosen_ground_item_wield_it_and_drop_it() {
-    use bn_client_core::Pos;
     let mut model = start_tutorial();
-    let me = model.player();
-    model.step_toward(Pos {
-        x: me.x + 1,
-        y: me.y,
-    });
+    common::step(&mut model, 1, 0);
     wait_for(&mut model, "idle", |m| !m.busy());
     dismiss_popups(&mut model);
     assert_eq!(model.inventory().len(), 0, "{:?}", model.inventory());
@@ -114,13 +110,8 @@ fn live_pick_up_a_chosen_ground_item_wield_it_and_drop_it() {
 #[test]
 #[ignore = "requires BN_ENGINE"]
 fn live_pickup_list_has_the_carry_header_a_cursor_row_marks_and_the_confirm_action() {
-    use bn_client_core::Pos;
     let mut model = start_tutorial();
-    let me = model.player();
-    model.step_toward(Pos {
-        x: me.x + 1,
-        y: me.y,
-    });
+    common::step(&mut model, 1, 0);
     wait_for(&mut model, "idle", |m| !m.busy());
     dismiss_popups(&mut model);
     assert!(model.invoke_action("pickup"));

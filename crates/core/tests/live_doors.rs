@@ -87,7 +87,7 @@ fn live_engine_click_on_an_adjacent_closed_door_opens_it() {
     let door = below(&m);
     assert_eq!(m.cell(door).id, "t_door_c", "found a closed door below");
     wait_for(&mut m, "idle", |m| !m.busy());
-    assert!(m.travel(door));
+    m.travel(door);
     wait_for(&mut m, "the click", |m| !m.busy());
     dismiss_popups(&mut m);
     wait_for(&mut m, "the door to open", |m| {

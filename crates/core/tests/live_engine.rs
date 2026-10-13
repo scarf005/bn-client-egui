@@ -1,4 +1,5 @@
 //! Needs a real engine build: `BN_ENGINE=/path/to/cataclysm-bn-tiles cargo test --test live_engine -- --ignored`
+mod common;
 use bn_client_core::transport::{Profile, StdioTransport};
 use bn_client_core::watchdog::Watchdog;
 use bn_client_core::{EngineModel, GameModel, Pos};
@@ -66,14 +67,7 @@ fn live_engine_starts_the_tutorial_and_walks_one_step() {
     // The view follows the avatar, so only the absolute square tells that it moved.
     let square = |m: &EngineModel| (m.player().x + m.origin().x, m.player().y + m.origin().y);
     let start = square(&model);
-    let me = model.player();
-    assert!(
-        model.step_toward(Pos {
-            x: me.x + 1,
-            y: me.y
-        }),
-        "movement was submitted"
-    );
+    assert!(common::step(&mut model, 1, 0), "movement was submitted");
     wait_for(&mut model, "one step east", |m| square(m) != start);
     assert_eq!(square(&model), (start.0 + 1, start.1));
 }
@@ -181,7 +175,7 @@ fn live_engine_travel_click_plans_a_route_and_a_second_click_walks_it() {
     let mut best: Option<(Pos, i32)> = None;
     for at in candidates.into_iter().take(60) {
         wait_for(&mut model, "idle", |m| !m.busy());
-        assert!(model.travel(at), "the click was handled");
+        model.travel(at);
         wait_for(&mut model, "the click to finish", |m| !m.busy());
         if model.route().last() != Some(&at) {
             continue;
@@ -212,7 +206,7 @@ fn live_engine_travel_click_plans_a_route_and_a_second_click_walks_it() {
             x: goal.0 - model.origin().x,
             y: goal.1 - model.origin().y,
         };
-        assert!(model.travel(at));
+        model.travel(at);
         wait_for(&mut model, "the click to finish", |m| !m.busy());
         dismiss_popups(&mut model);
     }
@@ -239,12 +233,8 @@ fn live_engine_remembered_furniture_stays_drawn_after_walking_past_it() {
     dismiss_popups(&mut model);
 
     let step = |model: &mut EngineModel, dy: i32| {
-        let me = model.player();
         wait_for(model, "idle", |m| !m.busy());
-        model.step_toward(Pos {
-            x: me.x,
-            y: me.y + dy,
-        });
+        common::step(model, 0, dy);
         wait_for(model, "the step to finish", |m| !m.busy());
         dismiss_popups(model);
     };
@@ -295,7 +285,7 @@ fn live_engine_map_follows_the_declared_viewport_and_accepts_clicks_across_it() 
     // The far east column was outside the default 36x24 window; the engine now accepts a click there.
     let me = model.player();
     wait_for(&mut model, "idle", |m| !m.busy());
-    assert!(model.travel(Pos { x: 59, y: me.y }));
+    model.travel(Pos { x: 59, y: me.y });
     wait_for(&mut model, "the click to finish", |m| !m.busy());
     assert!(
         model.messages().iter().all(|m| !m.contains("rejected")),

@@ -1,8 +1,9 @@
 //! Per-step and start-up latency against a real engine:
 //! `BN_ENGINE=... cargo test --release --test live_latency -- --ignored --nocapture`
+mod common;
 use bn_client_core::transport::StdioTransport;
 use bn_client_core::watchdog::Watchdog;
-use bn_client_core::{EngineModel, GameModel, Pos};
+use bn_client_core::{EngineModel, GameModel};
 /// Nanoseconds the engine's threads have run and have waited for a CPU, from the kernel's scheduler stats.
 fn sched(pid: u32) -> (f64, f64) {
     let (mut run, mut wait) = (0.0, 0.0);
@@ -141,15 +142,11 @@ fn measure_startup_and_steps() {
         model.take_trace();
         // The view follows the avatar, so only the absolute square tells that it moved.
         let square = |m: &EngineModel| (m.player().x + m.origin().x, m.player().y + m.origin().y);
-        let (start, from) = (model.player(), square(&model));
+        let from = square(&model);
         let dx = if i / 5 % 2 == 0 { 1 } else { -1 };
-        let target = Pos {
-            x: start.x + dx,
-            y: start.y,
-        };
         let before = sched(pid);
         assert!(
-            model.step_toward(target),
+            common::step(&mut model, dx, 0),
             "step {i}: {:?}",
             model.messages()
         );

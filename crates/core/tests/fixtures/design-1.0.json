@@ -903,7 +903,8 @@
    "epoch": "e7f3",
    "command_id": "c:5",
    "stage": "rejected",
-   "error": "stale_revision"
+   "error": "stale_revision",
+   "error_text": "The screen changed, try again."
   }
  },
  "resync": {

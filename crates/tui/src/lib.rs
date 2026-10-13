@@ -28,8 +28,6 @@ pub struct TuiApp<M: GameModel> {
     /// Identity of the menu `selected` refers to; a different menu resets the selection.
     menu_sig: Option<(String, usize, Option<String>)>,
     quit: bool,
-    /// Absolute destination of our own walk, for models without engine travel.
-    destination: Option<Pos>,
     /// Where the map cells were last drawn, for mouse clicks.
     map_cells: Rect,
     /// Where the overmap's cells were last drawn, and the overmap they show.
@@ -125,16 +123,6 @@ fn token(key: KeyEvent) -> Option<String> {
     ))
 }
 
-fn arrow(code: KeyCode) -> Option<(i32, i32)> {
-    match code {
-        KeyCode::Up => Some((0, -1)),
-        KeyCode::Down => Some((0, 1)),
-        KeyCode::Left => Some((-1, 0)),
-        KeyCode::Right => Some((1, 0)),
-        _ => None,
-    }
-}
-
 impl<M: GameModel> TuiApp<M> {
     pub fn new(model: M) -> Self {
         Self {
@@ -143,7 +131,6 @@ impl<M: GameModel> TuiApp<M> {
             menu_sig: None,
             terminal: Default::default(),
             quit: false,
-            destination: None,
             map_cells: Rect::default(),
             overmap_cells: Rect::default(),
             overmap_notes: Rect::default(),
@@ -207,31 +194,9 @@ impl<M: GameModel> TuiApp<M> {
         menu
     }
 
-    /// Whether our own walk is under way and needs `tick`s.
-    pub fn walking(&self) -> bool {
-        self.destination.is_some()
-    }
-
-    /// One step of our own walk (models without engine travel); call between frames.
+    /// Sends the next queued input once the engine is free; call between frames.
     pub fn tick(&mut self) {
         self.run_aim_steps();
-        let Some(dest) = self.destination else {
-            return;
-        };
-        let origin = self.model.origin();
-        let target = Pos {
-            x: dest.x - origin.x,
-            y: dest.y - origin.y,
-        };
-        if self.model.busy() {
-            return;
-        }
-        if !self.model.step_toward(target) {
-            self.model.say("Something blocks the way.".into());
-            self.destination = None;
-        } else if self.model.player() == target {
-            self.destination = None;
-        }
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) {
@@ -249,11 +214,8 @@ impl<M: GameModel> TuiApp<M> {
             return;
         }
         if key.code == KeyCode::Esc {
-            // Esc stops a running activity and our own walk, whichever applies.
+            // Esc stops a running activity, else closes the overmap or a menu.
             let stopped = self.model.interrupt();
-            if self.destination.take().is_some() {
-                return;
-            }
             if stopped {
                 return;
             }
@@ -279,7 +241,6 @@ impl<M: GameModel> TuiApp<M> {
                 _ => self.menu_key(&menu, key),
             };
         }
-        self.destination = None;
         if token(key).is_some_and(|t| self.model.press(&t)) {
             return;
         }
@@ -287,15 +248,7 @@ impl<M: GameModel> TuiApp<M> {
             KeyCode::Tab => self.actions_open = Some(0),
             KeyCode::PageUp => self.log_back += LOG_LINES,
             KeyCode::PageDown => self.log_back = self.log_back.saturating_sub(LOG_LINES),
-            code => {
-                if let Some((dx, dy)) = arrow(code) {
-                    let me = self.model.player();
-                    self.model.step_toward(Pos {
-                        x: me.x + dx,
-                        y: me.y + dy,
-                    });
-                }
-            }
+            _ => {}
         }
     }
 
@@ -407,11 +360,9 @@ impl<M: GameModel> TuiApp<M> {
         }
     }
 
-    /// The model's own travel if it has one (engine: first call plans, second walks), else our walk.
+    /// A mouse click on a map square: the engine plans the route, a repeat walks it.
     fn go_to(&mut self, view: Pos) {
-        if !self.model.travel(view) {
-            self.destination = Some(self.absolute(view));
-        }
+        self.model.travel(view);
     }
 
     /// The mouse as the game reads it: the wheel steps an engine menu, hovering a map cell asks for its

@@ -1,5 +1,6 @@
 //! Needs a real engine build: `BN_ENGINE=... cargo test -p bn-client-core --test live_follow -- --ignored --nocapture`
 //! Walks ten steps each way on the tutorial map and prints where the player is in the view.
+mod common;
 use bn_client_core::transport::StdioTransport;
 use bn_client_core::watchdog::Watchdog;
 use bn_client_core::{EngineModel, GameModel, Pos};
@@ -71,11 +72,7 @@ fn live_player_stays_centred_while_walking() {
     for (name, dx, dy) in [("E", 1, 0), ("W", -1, 0), ("S", 0, 1), ("N", 0, -1)] {
         for n in 0..10 {
             dismiss_popups(&mut model);
-            let me = model.player();
-            let sent = model.step_toward(Pos {
-                x: me.x + dx,
-                y: me.y + dy,
-            });
+            let sent = common::step(&mut model, dx, dy);
             wait_for(&mut model, "step", |m| !m.busy());
             model.poll();
             let (size, me) = (model.size(), model.player());

@@ -43,11 +43,7 @@ fn run(model: impl GameModel) -> std::io::Result<()> {
             app.model.poll();
             terminal.draw(|f| app.draw(f))?;
             // Engine messages and key presses both arrive here, so neither waits for a timer.
-            let wait = match app.walking() {
-                true => Duration::from_millis(50),
-                false => Duration::from_secs(1),
-            };
-            let first = rx.recv_timeout(wait);
+            let first = rx.recv_timeout(Duration::from_secs(1));
             for msg in first.into_iter().chain(rx.try_iter()) {
                 match msg {
                     Msg::Key(k) => app.handle_key(k),
