@@ -2,7 +2,7 @@
 
 use crate::colors::ColorMap;
 use crate::model::{Cell, Rgb};
-use crate::protocol::{Attitude, Avatar, Look, SidebarSide, SidebarText};
+use crate::protocol::{Avatar, Look, SidebarSide, SidebarText};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Span {
@@ -235,7 +235,7 @@ pub struct Creature {
     pub name: String,
     /// Squares from the avatar.
     pub distance: u32,
-    /// Its sprite or glyph; an NPC's glyph is coloured by attitude as the native compass does.
+    /// Its sprite, or its glyph in the colour of its look.
     pub cell: Cell,
 }
 
@@ -260,12 +260,10 @@ pub struct Layout {
     pub panels: Vec<Panel>,
 }
 
-/// The colour the native compass gives an NPC's glyph by its attitude.
-fn npc_color(attitude: Attitude) -> &'static str {
-    match attitude {
-        Attitude::Hostile => "red",
-        Attitude::Friendly => "light_green",
-        Attitude::Neutral | Attitude::Any => "pink",
+impl Layout {
+    /// Whether the message log panel is on.
+    pub fn has_log(&self) -> bool {
+        self.panels.iter().any(|p| p.body == Body::Log)
     }
 }
 
@@ -280,16 +278,10 @@ pub fn layout(avatar: &Avatar, colors: &ColorMap, cell: impl Fn(&Look) -> Cell) 
             creatures: d
                 .creatures
                 .iter()
-                .map(|c| {
-                    let mut cell = cell(&c.look);
-                    if c.look.kind == "npc" {
-                        cell.color = colors.resolve(npc_color(c.attitude)).0;
-                    }
-                    Creature {
-                        name: c.name.clone(),
-                        distance: c.distance,
-                        cell,
-                    }
+                .map(|c| Creature {
+                    name: c.name.clone(),
+                    distance: c.distance,
+                    cell: cell(&c.look),
                 })
                 .collect(),
         })

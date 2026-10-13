@@ -687,9 +687,7 @@ impl<M: GameModel> TuiApp<M> {
             return Self::draw_loading(f, &loading);
         }
         let layout = self.model.sidebar_layout();
-        let log_shown = layout
-            .as_ref()
-            .is_none_or(|l| l.panels.iter().any(|p| p.body == Body::Log));
+        let log_shown = layout.as_ref().is_none_or(native::Layout::has_log);
         let [main, status, log] = Layout::vertical([
             Constraint::Min(5),
             Constraint::Length(1),
@@ -809,7 +807,12 @@ impl<M: GameModel> TuiApp<M> {
             .aiming()
             .map(|note| format!(" | {note}"))
             .unwrap_or_default();
-        format!("{command}{hover}{note}")
+        // With the log panel off, the client's own results and errors are said here instead.
+        let said = match self.model.sidebar_layout().is_some_and(|l| !l.has_log()) {
+            true => self.model.messages().last().map(|m| format!(" | {m}")),
+            false => None,
+        };
+        format!("{command}{hover}{note}{}", said.unwrap_or_default())
     }
 
     /// The engine is gone or silent: its last stderr lines and how to restart.

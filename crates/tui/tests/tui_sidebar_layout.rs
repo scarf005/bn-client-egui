@@ -24,6 +24,11 @@ fn panel(id: &str, enabled: bool) -> Value {
 
 /// The screen rows of a 120x60 terminal whose avatar has a sidebar in `side` of `width` columns.
 fn screen(side: &str, width: u32, panels: &[Value]) -> Vec<String> {
+    said(side, width, panels, None)
+}
+
+/// As `screen`, after the client said `message`.
+fn said(side: &str, width: u32, panels: &[Value], message: Option<&str>) -> Vec<String> {
     let (t, h) = session();
     let mut model = EngineModel::new(Box::new(t));
     model.poll();
@@ -35,6 +40,9 @@ fn screen(side: &str, width: u32, panels: &[Value]) -> Vec<String> {
         "sequence": "41", "revision": "32", "type": "cells.seen", "changes": {"avatar": avatar}}]}}),
     );
     model.poll();
+    if let Some(message) = message {
+        model.say(message.into());
+    }
     let mut app = TuiApp::new(model);
     let mut t = Terminal::new(TestBackend::new(120, 60)).unwrap();
     t.draw(|f| app.draw(f)).unwrap();
@@ -102,5 +110,15 @@ fn the_message_log_follows_its_panel() {
         !screen("right", 40, &off)
             .iter()
             .any(|r| r.contains("Message log"))
+    );
+}
+
+#[test]
+fn the_clients_own_results_show_in_the_status_line_when_the_log_panel_is_off() {
+    let off = ["Health", "Location", "Compass"].map(|id| panel(id, true));
+    let rows = said("right", 40, &off, Some("Nothing to pick up."));
+    assert!(
+        rows.iter()
+            .any(|r| r.contains("Ready | Nothing to pick up."))
     );
 }

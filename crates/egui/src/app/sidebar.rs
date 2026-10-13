@@ -34,7 +34,7 @@ impl<M: GameModel> App<M> {
     /// The whole sidebar: the message log pinned to its bottom, the panels of `layout` (all of the status
     /// without one) filling the rest.
     pub(super) fn sidebar_panel(&mut self, ui: &mut egui::Ui, layout: Option<&Layout>) {
-        let log = layout.is_none_or(|l| l.panels.iter().any(|p| p.body == Body::Log));
+        let log = layout.is_none_or(Layout::has_log);
         if !log {
             return self.sidebar_panels(ui, layout);
         }

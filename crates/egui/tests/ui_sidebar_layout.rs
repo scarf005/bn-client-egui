@@ -2,7 +2,7 @@
 //! the engine's panel labels, the compass and the direction of a heard sound.
 mod common;
 use bn_client_egui::transport::ScriptHandle;
-use bn_client_egui::{App, EngineModel};
+use bn_client_egui::{App, EngineModel, GameModel};
 use common::{fixture, session};
 use eframe::egui;
 use egui_kittest::Harness;
@@ -153,4 +153,14 @@ fn a_heard_sound_shows_the_engines_direction_name_and_distance() {
     h.run_steps(4);
     h.get_by_label("a loud explosion (southeast, 12)");
     h.get_by_label("Tick. (3)");
+}
+
+#[test]
+fn the_clients_own_results_show_in_the_status_line_when_the_log_panel_is_off() {
+    let mut off = all_panels();
+    off[4]["enabled"] = json!(false);
+    let mut h = shown("right", 44, &off);
+    h.state_mut().model.say("Nothing to pick up.".into());
+    h.run_steps(3);
+    h.get_by_label("Nothing to pick up.");
 }

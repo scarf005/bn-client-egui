@@ -197,26 +197,18 @@ fn the_compass_lists_each_direction_by_its_heading_and_keeps_the_engines_nearest
 }
 
 #[test]
-fn an_npc_glyph_takes_the_attitude_colour_and_a_monster_keeps_its_own() {
-    let colors = ColorMap::default();
-    let layout = shown(&with_compass());
+fn every_creature_is_drawn_from_its_look_whatever_its_attitude() {
+    let mut a = with_compass();
+    a.compass.as_mut().unwrap()[0].creatures[1].attitude =
+        bn_client_core::protocol::Attitude::Hostile;
+    let layout = shown(&a);
     let Body::Compass(directions) = &layout.panels[1].body else {
         panic!("the compass panel");
     };
     let (zombie, rae) = (&directions[0].creatures[0], &directions[0].creatures[1]);
-    assert_eq!(rae.cell.color, colors.resolve("light_green").0);
+    assert_eq!(rae.cell.color, Cell::default().color);
     assert_eq!(zombie.cell.color, Cell::default().color);
-    let mut hostile = with_compass();
-    hostile.compass.as_mut().unwrap()[0].creatures[1].attitude =
-        bn_client_core::protocol::Attitude::Hostile;
-    let layout = shown(&hostile);
-    let Body::Compass(directions) = &layout.panels[1].body else {
-        panic!("the compass panel");
-    };
-    assert_eq!(
-        directions[0].creatures[1].cell.color,
-        colors.resolve("red").0
-    );
+    assert_eq!((rae.cell.glyph, zombie.cell.glyph), ('@', 'Z'));
 }
 
 #[test]
