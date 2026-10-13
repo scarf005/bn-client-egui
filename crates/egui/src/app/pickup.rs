@@ -1,33 +1,16 @@
 //! The native pickup list: `PICK Wgt/Vol` header, one row per stack as its letter, nesting slash, mark
 //! and name in the item's color, the cursor bar, the count box of a marked stack, the key hints under
 //! the list, and the cursor row's item description. Letters mark rows; Enter confirms, Escape cancels.
-use super::inventory::{column, key_hints, selection_mark, tinted, typed_hotkey};
+use super::inventory::{key_hints, tinted, typed_hotkey};
 use super::menu::{list_frame, list_row_style};
 use super::{App, a11y};
-use bn_client_core::{GameModel, Menu, MenuChoice};
+use bn_client_core::{GameModel, Menu};
 use eframe::egui::{self, accesskit};
 
 #[derive(Default)]
 pub struct Pickup {
     /// The row the cursor was last on, so the list scrolls only when it moves.
     cursor: Option<String>,
-}
-
-/// The native nesting slash of a row: gray under an unmarked parent, yellow under a marked one that
-/// still has an unmarked child, light blue when all its children are marked; none for a plain row.
-fn nesting(rows: &[&MenuChoice], row: &MenuChoice) -> Option<&'static str> {
-    let parent_id = column(row, "Nesting").strip_prefix("child of ")?;
-    let parent = rows.iter().find(|r| r.id == parent_id);
-    let mark = format!("child of {parent_id}");
-    let all = rows
-        .iter()
-        .filter(|r| column(r, "Nesting") == mark)
-        .all(|r| r.selected);
-    Some(match parent {
-        Some(p) if p.selected && all => "c_light_blue",
-        Some(p) if p.selected => "c_yellow",
-        _ => "c_dark_gray",
-    })
 }
 
 impl<M: GameModel> App<M> {
@@ -102,18 +85,22 @@ impl<M: GameModel> App<M> {
                             ui.horizontal(|ui| {
                                 list_row_style(ui);
                                 ui.spacing_mut().item_spacing.x = 0.0;
-                                let color = column(row, "Row color");
+                                let color = row.color.as_str();
                                 let key = match row.hotkey.as_str() {
                                     "" => " ".to_string(),
                                     k => tinted(color, k),
                                 };
-                                let slash = nesting(&rows, row)
-                                    .map_or(" ".to_string(), |c| tinted(c, "\\"));
-                                let mark = match selection_mark(row) {
-                                    '-' => "- ".to_string(),
-                                    m => tinted("c_light_blue", &format!("{m} ")),
+                                let slash = match row.nest_color.as_str() {
+                                    "" => " ".to_string(),
+                                    c => tinted(c, "\\"),
                                 };
-                                let name = match column(row, "Name markup") {
+                                let mark = row.mark.as_ref().map_or(String::new(), |m| {
+                                    tinted(
+                                        m.color.as_deref().unwrap_or(""),
+                                        &format!("{} ", m.glyph),
+                                    )
+                                });
+                                let name = match row.markup.as_str() {
                                     "" => tinted(color, &row.label),
                                     markup => tinted(color, markup),
                                 };
@@ -178,7 +165,7 @@ impl<M: GameModel> App<M> {
                 self.item_info(
                     ui,
                     &shown
-                        .map(|r| tinted(column(r, "Row color"), &r.label))
+                        .map(|r| tinted(&r.color, &r.label))
                         .unwrap_or_default(),
                     shown.map(|r| r.description.as_str()),
                 );

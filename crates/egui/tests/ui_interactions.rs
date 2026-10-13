@@ -317,23 +317,6 @@ fn a_line_of_two_dashes_in_an_entry_description_is_a_rule_not_text() {
 }
 
 #[test]
-fn a_value_that_repeats_the_entry_text_is_not_printed_twice() {
-    let (mut h, script) = harness();
-    h.run_steps(3);
-    let mut item = choice("c:1", "lighter (3/25)");
-    item["columns"] = json!([{"label":"lighter (3/25)","value":"lighter (3/25)"}]);
-    script.push(show(
-        41,
-        json!([]),
-        json!({"schema_id":"s:m","kind":"choices","context":"UILIST","title":"Wield item",
-            "message":"","allow_cancel":true,"choices":[item],
-            "choice_total":1,"allow_set_count":false}),
-    ));
-    h.run_steps(3);
-    h.get_by_label("lighter (3/25)");
-}
-
-#[test]
 fn colour_tags_in_a_label_are_drawn_not_printed() {
     let (mut h, script) = harness();
     h.run_steps(3);

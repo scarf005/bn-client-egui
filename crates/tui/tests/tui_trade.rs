@@ -214,7 +214,7 @@ fn row_hotkeys_are_light_green_before_the_labels_with_blank_padding() {
 }
 
 #[test]
-fn list_rows_tint_a_value_by_its_color_column_and_skip_the_source_column() {
+fn list_rows_tint_a_value_by_its_column_color_and_skip_the_source_column() {
     let mut boundary = trade();
     let i = &mut boundary["interaction"];
     i["context"] = "ITEM_LIST".into();
@@ -223,9 +223,8 @@ fn list_rows_tint_a_value_by_its_color_column_and_skip_the_source_column() {
         c["pane_id"] = Value::Null;
     }
     i["choices"][1]["columns"] = json!([
-        ["weight", "0.30 kg"],
-        ["weight color", "light_red"],
-        ["source", "hidden-pane"]
+        {"key": "weight", "label": "weight", "value": "0.30 kg", "color": "light_red"},
+        {"key": "source", "label": "source", "value": "hidden-pane"}
     ]);
     let (mut app, _) = open(boundary);
     let t = render(&mut app);
@@ -290,6 +289,7 @@ fn rows_mark_all_some_or_none_like_native_under_a_category_header() {
     let all = &mut boundary["interaction"]["choices"][1];
     all["selected"] = true.into();
     all["selected_count"] = 1.into();
+    all["mark"] = json!({"glyph": "+"});
     let (mut app, _) = open(boundary);
     let t = render(&mut app);
     // Partial of three, all of one, and (in the pane test above) none.

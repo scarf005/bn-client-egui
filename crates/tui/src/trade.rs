@@ -32,23 +32,6 @@ pub(super) struct Trade {
     count: Option<String>,
 }
 
-pub(super) fn column<'a>(row: &'a MenuChoice, name: &str) -> &'a str {
-    row.columns
-        .iter()
-        .find(|(l, _)| l == name)
-        .map_or("", |(_, v)| v.as_str())
-}
-
-/// The native selection mark: all of the stack, some of it, or none.
-pub(super) fn selection_mark(row: &MenuChoice) -> char {
-    match (row.selected_count, row.available_count) {
-        (Some(n), Some(total)) if n > 0 && n >= total => '+',
-        (Some(n), _) if n > 0 => '#',
-        _ if row.selected => '+',
-        _ => '-',
-    }
-}
-
 /// A line of a pane: a category header or a row.
 enum Entry<'a> {
     Header(&'a str),
@@ -249,16 +232,17 @@ impl<M: GameModel> TuiApp<M> {
         );
         // The native column header row, over the same fixed columns the rows use.
         let name_width = width.saturating_sub(RIGHT + 4 + 2);
+        let head = |key: &str| rows.first().map_or("", |r| r.column_label(key));
         f.render_widget(
             Paragraph::new(Line::styled(
                 format!(
                     "{}{:<name_width$} {:<7} {:<7} {:<7} {:<10}",
                     " ".repeat(6),
-                    "Name (charges)",
-                    "amt",
-                    "weight",
-                    "vol",
-                    "unit price"
+                    head("name"),
+                    head("available"),
+                    head("stack_weight"),
+                    head("stack_volume"),
+                    head("unit_price")
                 ),
                 Style::new().fg(Color::Gray),
             )),
@@ -277,7 +261,7 @@ impl<M: GameModel> TuiApp<M> {
         let mut entries = vec![];
         let mut category = "";
         for row in rows {
-            let shown = column(row, "Category");
+            let shown = row.column("category");
             if !shown.is_empty() && shown != category {
                 category = shown;
                 entries.push(Entry::Header(shown));
@@ -313,7 +297,7 @@ impl<M: GameModel> TuiApp<M> {
                 continue;
             };
             self.trade.rows.push((cell, row.id.clone()));
-            let mark = format!("{} ", selection_mark(row));
+            let mark = format!("{} ", row.mark.as_ref().map_or("", |m| m.glyph.as_str()));
             let name_width = width.saturating_sub(RIGHT + 4 + mark.len());
             // The native key column: the row's key in green, blank where the row has none.
             let key = match row.hotkey.as_str() {
@@ -341,18 +325,18 @@ impl<M: GameModel> TuiApp<M> {
                 (_, _, Some(n)) if n > 1 => n.to_string(),
                 _ => String::new(),
             };
-            let tone = match column(row, "Price tone") {
+            let tone = match row.column("price_tone") {
                 "good" => Color::LightGreen,
                 "bad" => Color::LightRed,
                 _ => Color::Gray,
             };
             spans.push(Span::raw(format!(
                 " {amount:>7} {:>7} {:>7} ",
-                column(row, "Stack weight"),
-                column(row, "Stack volume"),
+                row.column("stack_weight"),
+                row.column("stack_volume"),
             )));
             spans.push(Span::styled(
-                format!("{:>10}", column(row, "Unit price")),
+                format!("{:>10}", row.column("unit_price")),
                 Style::new().fg(tone),
             ));
             let style = match (row.enabled, row.highlighted) {

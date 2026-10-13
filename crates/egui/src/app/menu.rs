@@ -270,7 +270,7 @@ impl<M: GameModel> App<M> {
                                         &format!(
                                             "{key}{}{}{}",
                                             choice.label,
-                                            column_text(&choice.label, &choice.columns),
+                                            choice.values_markup(),
                                             hint.unwrap_or_default()
                                         ),
                                     )
@@ -330,7 +330,7 @@ impl<M: GameModel> App<M> {
                                     b.set_role(accesskit::Role::MenuItem);
                                     // The row's text also carries its key; its name is the label and values only.
                                     if whole_row {
-                                        let text = column_text(&choice.label, &choice.columns);
+                                        let text = choice.values_markup();
                                         b.set_label(markup::plain(&format!(
                                             "{}{text}",
                                             choice.label
@@ -355,9 +355,7 @@ impl<M: GameModel> App<M> {
                                     described = Some(&choice.description);
                                 }
                                 if !whole_row {
-                                    ui.label(
-                                        self.rich(ui, &column_text(&choice.label, &choice.columns)),
-                                    );
+                                    ui.label(self.rich(ui, &choice.values_markup()));
                                 }
                                 if !choice.enabled && !choice.denial.is_empty() && !said {
                                     ui.label(self.rich(ui, &choice.denial));
@@ -569,39 +567,6 @@ pub(super) fn list_row_style(ui: &mut egui::Ui) {
     visuals.widgets.inactive.bg_stroke = egui::Stroke::NONE;
     visuals.selection.bg_fill = super::inventory::BAR;
     visuals.selection.stroke = egui::Stroke::new(1.0, egui::Color32::WHITE);
-}
-
-/// An entry's labelled values as markup after its label; a `<name> color` column colours the value of
-/// `<name>`, and a column named like the entry itself is just its value.
-pub(super) fn column_text(entry: &str, columns: &[(String, String)]) -> String {
-    let tint = |name: &str| {
-        columns
-            .iter()
-            .find(|(label, _)| label.strip_suffix(" color") == Some(name))
-            .map(|(_, color)| color.as_str())
-    };
-    columns
-        .iter()
-        // `source` names the selector column an item comes from; the engine keeps it for clients.
-        .filter(|(label, value)| {
-            !label.ends_with(" color") && label != "source" && !value.is_empty()
-        })
-        .map(|(label, value)| {
-            let value = match tint(label) {
-                Some(color) => format!("<color_{color}>{value}</color>"),
-                None => value.clone(),
-            };
-            if label.is_empty() || label == entry {
-                // A value that only repeats the entry's own text adds nothing.
-                if markup::plain(value.as_str()) == markup::plain(entry) {
-                    return String::new();
-                }
-                format!("  {value}")
-            } else {
-                format!("  {}: {value}", label.trim_end_matches(':'))
-            }
-        })
-        .collect()
 }
 
 /// A description the player can read; the engine fills it with the bound action's name (`NO`,

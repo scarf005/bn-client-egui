@@ -337,30 +337,37 @@
      "highlighted": true,
      "columns": [
       {
+       "key": "type",
        "label": "Type",
        "value": "long-sleeved shirt"
       },
       {
+       "key": "pane",
        "label": "Pane",
        "value": "left"
       },
       {
+       "key": "area",
        "label": "Area",
        "value": "Directly below you"
       },
       {
+       "key": "storage",
        "label": "Storage",
        "value": "ground"
       },
       {
+       "key": "count",
        "label": "Count",
        "value": "1"
       },
       {
+       "key": "weight",
        "label": "Weight",
        "value": "0.15 kg"
       },
       {
+       "key": "volume",
        "label": "Volume",
        "value": "0.75 L"
       }
@@ -381,30 +388,37 @@
      "highlighted": false,
      "columns": [
       {
+       "key": "type",
        "label": "Type",
        "value": "tin can"
       },
       {
+       "key": "pane",
        "label": "Pane",
        "value": "left"
       },
       {
+       "key": "area",
        "label": "Area",
        "value": "Directly below you"
       },
       {
+       "key": "storage",
        "label": "Storage",
        "value": "ground"
       },
       {
+       "key": "count",
        "label": "Count",
        "value": "3"
       },
       {
+       "key": "weight",
        "label": "Weight",
        "value": "0.30 kg"
       },
       {
+       "key": "volume",
        "label": "Volume",
        "value": "0.75 L"
       }
@@ -425,30 +439,37 @@
      "highlighted": false,
      "columns": [
       {
+       "key": "type",
        "label": "Type",
        "value": "trench coat"
       },
       {
+       "key": "pane",
        "label": "Pane",
        "value": "right"
       },
       {
+       "key": "area",
        "label": "Area",
        "value": "Worn Items"
       },
       {
+       "key": "storage",
        "label": "Storage",
        "value": "worn"
       },
       {
+       "key": "count",
        "label": "Count",
        "value": "1"
       },
       {
+       "key": "weight",
        "label": "Weight",
        "value": "1.00 kg"
       },
       {
+       "key": "volume",
        "label": "Volume",
        "value": "3.00 L"
       }

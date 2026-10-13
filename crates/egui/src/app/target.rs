@@ -1,7 +1,7 @@
 //! The panes of a target screen, such as the map editor's tile and actions, in a window beside the map
 //! the cursor moves on. The keys still go to the engine; an action row is a button for it.
 use super::App;
-use super::menu::{column_text, list_frame, list_row_style};
+use super::menu::{list_frame, list_row_style};
 use bn_client_core::{GameModel, markup};
 use eframe::egui;
 
@@ -36,7 +36,7 @@ impl<M: GameModel> App<M> {
                             chosen = Some(row.id.clone());
                         }
                     } else {
-                        let values = column_text(&row.label, &row.columns);
+                        let values = row.values_markup();
                         let text = format!("{}: {}{values}", row.label, row.description);
                         ui.label(self.rich(ui, &text));
                     }

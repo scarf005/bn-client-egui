@@ -168,10 +168,8 @@ fn enter_on_a_focused_row_confirms_like_the_native_key_instead_of_unmarking_it()
 #[test]
 fn a_stolen_row_keeps_its_mark_and_the_right_position_anchors_the_list_at_the_right_edge() {
     let mut b = pickup();
-    b["interaction"]["choices"][0]["columns"] = json!([
-        {"label": "Name markup", "value": "<color_light_red>!</color> 2 lighter"},
-        {"label": "Row color", "value": "c_light_green"}
-    ]);
+    b["interaction"]["choices"][0]["markup"] = json!("<color_light_red>!</color> 2 lighter");
+    b["interaction"]["choices"][0]["color"] = json!("c_light_green");
     b["interaction"]["compat"] = json!({"panes": [{
         "id": "p", "label": "Pick up", "role": "pickup", "area_id": "right",
         "area_label": "Pick up", "area_description": "", "filter": "", "storage_kind": ""

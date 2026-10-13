@@ -192,7 +192,7 @@ impl<M: GameModel> TuiApp<M> {
         let columns = row
             .columns
             .iter()
-            .map(|(l, v)| Line::raw(format!("{l}: {v}")));
+            .map(|c| Line::raw(format!("{}: {}", c.label, c.value)));
         let text = row
             .description
             .lines()

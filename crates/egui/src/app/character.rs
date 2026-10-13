@@ -23,31 +23,9 @@ struct Out {
     described: Option<String>,
 }
 
-/// Which part of a row the engine's plain `Color` column colors.
-#[derive(Clone, Copy, PartialEq)]
-enum Tint {
-    Label,
-    FirstColumn,
-}
-
-/// How one list prints its rows: the key column, the value columns, and where its colors apply.
+/// How one list prints its rows: the keys of the value columns.
 struct Spec<'a> {
-    key: &'a str,
     columns: &'a [&'a str],
-    tint: Tint,
-}
-
-fn column<'a>(row: &'a MenuChoice, label: &str) -> &'a str {
-    let found = row.columns.iter().find(|(l, _)| l == label);
-    found.map_or("", |(_, v)| v.as_str())
-}
-
-/// A row's value under the column `name`; the first column also takes the value the engine labels with the row's own name.
-fn cell<'a>(row: &'a MenuChoice, index: usize, name: &str) -> &'a str {
-    match column(row, name) {
-        "" if index == 0 => column(row, &row.label),
-        found => found,
-    }
 }
 
 fn colored(text: &str, color: &str) -> String {
@@ -68,39 +46,44 @@ fn is_header(row: &MenuChoice) -> bool {
     !row.enabled && row.denial.is_empty() && row.columns.is_empty()
 }
 
-/// The color of a value column: its `<name> color` column, else the plain `Color` of the first column.
-fn value_color<'a>(row: &'a MenuChoice, spec: &Spec, index: usize) -> &'a str {
-    let name = spec.columns[index];
-    match column(row, &format!("{name} color")) {
-        "" if spec.tint == Tint::FirstColumn && index == 0 => column(row, "Color"),
-        found => found,
-    }
-}
-
 fn row_markup(row: &MenuChoice, spec: &Spec, widths: &[usize]) -> String {
-    let key = match column(row, spec.key) {
+    let key = match row.hotkey.as_str() {
         "" => String::new(),
         key => format!("{} ", colored(key, "light_green")),
     };
-    let label_color = match spec.tint {
-        Tint::Label => column(row, "Color"),
-        Tint::FirstColumn => "",
-    };
-    let mut line = format!("{key}{}", pad(&colored(&name(row), label_color), widths[0]));
-    for (index, name) in spec.columns.iter().enumerate() {
-        let value = colored(cell(row, index, name), value_color(row, spec, index));
+    let mut line = format!("{key}{}", pad(&colored(&name(row), &row.color), widths[0]));
+    for (index, key) in spec.columns.iter().enumerate() {
+        let value = colored(row.column(key), column_color(row, key));
         line += &format!("  {}", pad(&value, widths[index + 1]));
     }
     line.trim_end().to_string()
 }
 
-/// A row's name; a bionic's label ends with the power the `Power` column already holds.
+/// The game color of the value of the column `key`; empty when the engine sent none.
+fn column_color<'a>(row: &'a MenuChoice, key: &str) -> &'a str {
+    row.columns
+        .iter()
+        .find(|c| c.key == key)
+        .and_then(|c| c.color.as_deref())
+        .unwrap_or("")
+}
+
+/// A row's name; a bionic's label ends with the power the `power` column already holds.
 fn name(row: &MenuChoice) -> String {
-    let power = column(row, "Power");
+    let power = row.column("power");
     match row.label.strip_suffix(power) {
         Some(name) if !power.is_empty() => name.trim_end_matches(", ").to_string(),
         _ => row.label.clone(),
     }
+}
+
+/// The engine's caption of the column `key`, from the first row that has it.
+fn caption(rows: &[&MenuChoice], key: &str) -> String {
+    let mut labels = rows.iter().map(|r| r.column_label(key));
+    labels
+        .find(|l| !l.is_empty())
+        .unwrap_or_default()
+        .to_string()
 }
 
 /// The widths of the label and of each value column over `rows`, the header names included.
@@ -113,9 +96,9 @@ fn widths(rows: &[&MenuChoice], spec: &Spec) -> Vec<usize> {
         .max()
         .unwrap_or(0);
     std::iter::once(label)
-        .chain(spec.columns.iter().enumerate().map(|(index, name)| {
-            let longest = rows.iter().map(|r| width(cell(r, index, name))).max();
-            longest.unwrap_or(0).max(width(name))
+        .chain(spec.columns.iter().map(|key| {
+            let longest = rows.iter().map(|r| width(r.column(key))).max();
+            longest.unwrap_or(0).max(width(&caption(rows, key)))
         }))
         .collect()
 }
@@ -216,7 +199,7 @@ impl<M: GameModel> App<M> {
         let widths = widths(rows, spec);
         let font = egui::TextStyle::Monospace.resolve(ui.style());
         if !rows.is_empty() {
-            let key = if rows.iter().any(|r| !column(r, spec.key).is_empty()) {
+            let key = if rows.iter().any(|r| !r.hotkey.is_empty()) {
                 "  "
             } else {
                 ""
@@ -225,8 +208,8 @@ impl<M: GameModel> App<M> {
                 .columns
                 .iter()
                 .zip(&widths[1..])
-                .fold(pad("", widths[0]), |line, (name, width)| {
-                    format!("{line}  {}", pad(name, *width))
+                .fold(pad("", widths[0]), |line, (key, width)| {
+                    format!("{line}  {}", pad(&caption(rows, key), *width))
                 });
             ui.weak(egui::RichText::new(format!("{key}{names}")).font(font.clone()));
         }
@@ -329,25 +312,15 @@ impl<M: GameModel> App<M> {
         let rows = group(menu, pane);
         let spec = match pane {
             "stats" => Spec {
-                key: "",
-                columns: &["Current", "Base"],
-                tint: Tint::FirstColumn,
+                columns: &["current", "base"],
             },
             "encumbrance" => Spec {
-                key: "",
-                columns: &["Encumbrance", "Layering", "Warmth"],
-                tint: Tint::FirstColumn,
+                columns: &["encumbrance", "layering", "warmth"],
             },
             "skills" => Spec {
-                key: "",
-                columns: &["Level", "Exercise"],
-                tint: Tint::FirstColumn,
+                columns: &["level", "exercise"],
             },
-            _ => Spec {
-                key: "",
-                columns: &[],
-                tint: Tint::Label,
-            },
+            _ => Spec { columns: &[] },
         };
         let height = super::dialog_scroll_height(ui.ctx()) * 0.6;
         ui.columns(2, |cols| {
@@ -373,7 +346,7 @@ impl<M: GameModel> App<M> {
             .show(ui, |ui| {
                 for row in group(menu, "speed") {
                     ui.label(self.rich(ui, &row.label));
-                    let value = colored(column(row, "Value"), column(row, "Color"));
+                    let value = colored(row.column("value"), column_color(row, "value"));
                     ui.label(self.rich(ui, &value));
                     ui.end_row();
                 }
@@ -400,9 +373,7 @@ impl<M: GameModel> App<M> {
         self.pane_strip(ui, menu, out);
         let rows = menu.entries();
         let spec = Spec {
-            key: "Manual (shortcut)",
-            columns: &["Power", "State"],
-            tint: Tint::Label,
+            columns: &["power", "state"],
         };
         egui::ScrollArea::vertical()
             .id_salt("bionic_rows")
@@ -414,7 +385,7 @@ impl<M: GameModel> App<M> {
         let fuel = rows
             .iter()
             .find(|r| r.highlighted)
-            .map(|r| column(r, "Fuel"))
+            .map(|r| r.column("fuel"))
             .filter(|f| !f.is_empty());
         let text = out.described.take().map(|d| match fuel {
             Some(fuel) => format!("{d}\n\nFuel: {fuel}"),
@@ -441,16 +412,13 @@ impl<M: GameModel> App<M> {
         let height = super::dialog_scroll_height(ui.ctx()) * 0.6;
         ui.columns(2, |cols| {
             let lists = [
-                ("Passive", &passive, &[][..]),
-                ("Active", &active, &["State"][..]),
+                ("passive", &passive, &[][..]),
+                ("active", &active, &["state"][..]),
             ];
             for (col, (name, rows, columns)) in cols.iter_mut().zip(lists) {
-                col.strong(name);
-                let spec = Spec {
-                    key: "Key",
-                    columns,
-                    tint: Tint::Label,
-                };
+                let heading = menu.pane_tabs.iter().find(|(id, ..)| id == name);
+                col.strong(heading.map_or("", |(_, label, _)| label.as_str()));
+                let spec = Spec { columns };
                 egui::ScrollArea::vertical()
                     .id_salt(("mutation_rows", name))
                     .max_height(height)
@@ -472,6 +440,7 @@ impl<M: GameModel> App<M> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bn_client_core::protocol::Column;
 
     fn row(label: &str, columns: &[(&str, &str)]) -> MenuChoice {
         MenuChoice {
@@ -489,65 +458,53 @@ mod tests {
             description: String::new(),
             columns: columns
                 .iter()
-                .map(|(l, v)| (l.to_string(), v.to_string()))
+                .map(|(k, v)| Column {
+                    key: k.to_string(),
+                    label: k.to_uppercase(),
+                    value: v.to_string(),
+                    color: None,
+                })
                 .collect(),
+            favorite: false,
+            color: String::new(),
+            key_color: String::new(),
+            markup: String::new(),
+            nest_color: String::new(),
+            mark: None,
             editor: None,
         }
     }
 
     #[test]
-    fn a_color_column_tints_the_first_value_of_a_stat_and_the_label_of_a_trait() {
-        let stat = row(
-            "Strength:",
-            &[("Current", "8"), ("Base", "8"), ("Color", "c_white")],
-        );
+    fn a_column_color_tints_its_value_and_a_row_color_its_name() {
+        let mut stat = row("Strength:", &[("current", "8"), ("base", "8")]);
+        stat.columns[0].color = Some("c_white".into());
         let spec = Spec {
-            key: "",
-            columns: &["Current", "Base"],
-            tint: Tint::FirstColumn,
+            columns: &["current", "base"],
         };
         let line = row_markup(&stat, &spec, &[10, 7, 4]);
         assert_eq!(line, "Strength:   <color_c_white>8</color>        8");
-        let trait_row = row("Quick", &[("Color", "c_green")]);
-        let spec = Spec {
-            key: "",
-            columns: &[],
-            tint: Tint::Label,
-        };
+        let mut trait_row = row("Quick", &[]);
+        trait_row.color = "c_green".into();
         assert_eq!(
-            row_markup(&trait_row, &spec, &[5]),
+            row_markup(&trait_row, &Spec { columns: &[] }, &[5]),
             "<color_c_green>Quick</color>"
         );
     }
 
     #[test]
-    fn height_and_age_show_the_value_the_engine_labels_with_their_name() {
-        let height = row("Height:", &[("Height:", "175 cm")]);
-        let spec = Spec {
-            key: "",
-            columns: &["Current", "Base"],
-            tint: Tint::FirstColumn,
-        };
-        assert_eq!(row_markup(&height, &spec, &[7, 6, 4]), "Height:  175 cm");
+    fn a_header_names_the_column_with_the_engine_caption() {
+        let stat = row("Strength:", &[("current", "8")]);
+        assert_eq!(caption(&[&stat], "current"), "CURRENT");
+        assert_eq!(caption(&[&stat], "base"), "");
     }
 
     #[test]
-    fn a_named_color_column_tints_only_its_value() {
-        let part = row(
-            "TORSO",
-            &[
-                ("Encumbrance", "3"),
-                ("Warmth", "9"),
-                ("Warmth color", "c_red"),
-            ],
-        );
-        let spec = Spec {
-            key: "",
-            columns: &["Encumbrance", "Warmth"],
-            tint: Tint::FirstColumn,
-        };
-        assert_eq!(value_color(&part, &spec, 0), "");
-        assert_eq!(value_color(&part, &spec, 1), "c_red");
+    fn only_the_colored_column_of_a_part_is_tinted() {
+        let mut part = row("TORSO", &[("encumbrance", "3"), ("warmth", "9")]);
+        part.columns[1].color = Some("c_red".into());
+        assert_eq!(column_color(&part, "encumbrance"), "");
+        assert_eq!(column_color(&part, "warmth"), "c_red");
     }
 
     #[test]
@@ -563,6 +520,6 @@ mod tests {
             enabled: false,
             ..row("Combat", &[])
         }));
-        assert!(!is_header(&row("Melee", &[("Level", "2")])));
+        assert!(!is_header(&row("Melee", &[("level", "2")])));
     }
 }

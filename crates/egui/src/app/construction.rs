@@ -174,10 +174,10 @@ impl<M: GameModel> App<M> {
                             if !row.denial.is_empty() {
                                 ui.colored_label(ui.visuals().warn_fg_color, &row.denial);
                             }
-                            for (label, value) in &row.columns {
+                            for column in &row.columns {
                                 ui.horizontal(|ui| {
-                                    ui.label(label);
-                                    ui.label(value);
+                                    ui.label(&column.label);
+                                    ui.label(&column.value);
                                 });
                             }
                             ui.separator();
