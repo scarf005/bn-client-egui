@@ -160,7 +160,7 @@ fn right_click_is_the_engines_context_click_and_opens_no_menu_of_its_own() {
 }
 
 #[test]
-fn the_wheel_in_a_scrollable_menu_is_one_engine_scroll_step_per_event() {
+fn the_wheel_in_a_menu_the_engine_can_scroll_scrolls_the_clients_list_and_sends_no_scroll_action() {
     let (mut h, script) = harness();
     let actions =
         json!([{"id":"SCROLL_UP","name":"Scroll up"},{"id":"SCROLL_DOWN","name":"Scroll down"}]);
@@ -168,18 +168,19 @@ fn the_wheel_in_a_scrollable_menu_is_one_engine_scroll_step_per_event() {
         .map(|i| row(&format!("c:{i}"), &format!("entry {i}"), i == 0, None))
         .collect::<Vec<_>>();
     open_menu(&mut h, &script, json!(rows), actions, None);
+    let before = h.get_by_label("entry 10").rect();
     h.hover_at(egui::pos2(400.0, 300.0));
-    h.event(egui::Event::MouseWheel {
-        unit: egui::MouseWheelUnit::Line,
-        delta: egui::vec2(0.0, -1.0),
-        modifiers: egui::Modifiers::NONE,
-        phase: egui::TouchPhase::Move,
-    });
-    h.run_steps(3);
-    assert_eq!(
-        operations(&script),
-        [json!({"kind":"action","action_id":"SCROLL_DOWN"})]
-    );
+    for _ in 0..3 {
+        h.event(egui::Event::MouseWheel {
+            unit: egui::MouseWheelUnit::Line,
+            delta: egui::vec2(0.0, -1.0),
+            modifiers: egui::Modifiers::NONE,
+            phase: egui::TouchPhase::Move,
+        });
+        h.run_steps(3);
+    }
+    assert!(operations(&script).is_empty());
+    assert!(h.get_by_label("entry 10").rect().min.y < before.min.y - 20.0);
 }
 
 #[test]

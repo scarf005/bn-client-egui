@@ -103,29 +103,6 @@ impl<M: GameModel> App<M> {
         let mut cancel = self.palette.is_none()
             && ctx.input(|i| i.key_pressed(egui::Key::Escape))
             && menu.can_cancel;
-        // The wheel moves the engine's cursor by its own steps, as in a native list; the list only
-        // follows the cursor, so one wheel does not scroll twice.
-        let engine_scroll = self.model.can_scroll_menu();
-        if engine_scroll {
-            // One engine step per wheel event, not per smoothed frame.
-            let steps = ctx.input(|i| {
-                i.raw
-                    .events
-                    .iter()
-                    .filter_map(|e| match e {
-                        egui::Event::MouseWheel { delta, .. } if delta.y != 0.0 => {
-                            Some(delta.y > 0.0)
-                        }
-                        _ => None,
-                    })
-                    .collect::<Vec<_>>()
-            });
-            for up in steps {
-                if self.model.scroll_menu(up) {
-                    ctx.request_repaint();
-                }
-            }
-        }
         let mut cursor_seen = None;
         let title = markup::plain(&menu.title);
         let frame = list_frame(ctx);
@@ -191,10 +168,6 @@ impl<M: GameModel> App<M> {
                 + if info { DESCRIPTION_HEIGHT + row } else { 0.0 };
             let listed = area
                 .max_height(super::dialog_scroll_height(ctx) - footer)
-                .scroll_source(egui::scroll_area::ScrollSource {
-                    mouse_wheel: !engine_scroll,
-                    ..Default::default()
-                })
                 .show(ui, |ui| {
                     // A popup's one button comes first, so it is where the last one was whatever the text.
                     if !menu.acknowledges() {
