@@ -5,6 +5,7 @@
 //! pickup list shares: the count box of a marked stack, the key hints and the letter keys.
 use super::menu::{list_frame, list_row_style};
 use super::{App, a11y};
+use crate::windows::{self, WindowSpec};
 use bn_client_core::protocol::Column;
 use bn_client_core::{ActionEntry, GameModel, Menu, MenuChoice, PaneTotals};
 use eframe::egui::{self, accesskit};
@@ -187,72 +188,70 @@ impl<M: GameModel> App<M> {
             .collect::<Vec<_>>();
         let frame = list_frame(ctx);
         let mut described = None;
-        egui::Window::new(&title)
-            .id(a11y::dialog_id(&title))
-            .title_bar(false)
-            .anchor(egui::Align2::CENTER_TOP, super::dialog_offset(ctx))
-            .collapsible(false)
-            .resizable(false)
-            .default_width(
-                (lists.len().max(1) as f32 * 420.0).min(ctx.content_rect().width() * 0.9),
-            )
-            .frame(frame)
-            .show(ctx, |ui| {
-                ui.horizontal(|ui| {
-                    ui.vertical(|ui| {
-                        ui.label(self.rich(ui, &tinted("c_white", &menu.title)));
-                        if let Some(hint) = pane.map(|p| &p.description).filter(|h| !h.is_empty()) {
-                            ui.label(self.rich(ui, &tinted("c_dark_gray", hint)));
+        let spec = WindowSpec {
+            closable: menu.can_cancel,
+            width: Some((lists.len().max(1) as f32 * 420.0).min(ctx.content_rect().width() * 0.9)),
+            frame: Some(frame),
+            ..self.window_spec(ctx, "inventory", &title)
+        };
+        let shown = windows::show(ctx, spec, |ui| {
+            ui.horizontal(|ui| {
+                ui.vertical(|ui| {
+                    if let Some(hint) = pane.map(|p| &p.description).filter(|h| !h.is_empty()) {
+                        ui.label(self.rich(ui, &tinted("c_dark_gray", hint)));
+                    }
+                });
+                if let Some(totals) = pane.and_then(|p| p.totals.as_ref()) {
+                    ui.with_layout(egui::Layout::top_down(egui::Align::Max), |ui| {
+                        for (line, over) in totals_lines(totals) {
+                            let tone = if over { "c_red" } else { "c_dark_gray" };
+                            ui.label(self.rich(ui, &tinted(tone, &line)));
                         }
                     });
-                    if let Some(totals) = pane.and_then(|p| p.totals.as_ref()) {
-                        ui.with_layout(egui::Layout::top_down(egui::Align::Max), |ui| {
-                            for (line, over) in totals_lines(totals) {
-                                let tone = if over { "c_red" } else { "c_dark_gray" };
-                                ui.label(self.rich(ui, &tinted(tone, &line)));
-                            }
-                        });
-                    }
-                });
-                ui.separator();
-                if lists.is_empty() {
-                    ui.label(self.rich(ui, &tinted("c_dark_gray", &menu.message)));
                 }
-                let height = ctx.content_rect().height() * 0.45;
-                ui.columns(lists.len().max(1), |cols| {
-                    for (index, (ui, rows)) in cols.iter_mut().zip(&lists).enumerate() {
-                        let first = entered && index == 0;
-                        focused |= self.inventory_list(
-                            ui,
-                            (index, rows, first, height),
-                            (&mut ids, &mut chosen, &mut count, &mut described),
-                        );
-                    }
-                });
-                let hovered = described.take();
-                let cursor = menu.choices.iter().find(|c| c.highlighted);
-                let shown = hovered.or(cursor);
-                self.item_info(
-                    ui,
-                    &shown
-                        .map(|c| tinted(&c.color, &c.label))
-                        .unwrap_or_default(),
-                    shown.map(|c| c.description.as_str()),
-                );
-                ui.separator();
-                ui.horizontal(|ui| {
-                    let actions = self.model.actions();
-                    let filter = pane.map_or("", |p| p.filter.as_str());
-                    let text = match filter {
-                        "" => key_hints(&actions, &[("INVENTORY_FILTER", "Filter")]),
-                        f => key_hints(&actions, &[("INVENTORY_FILTER", "Filter:")]) + " " + f,
-                    };
-                    ui.label(self.rich(ui, &tinted("c_light_gray", &text)));
-                    if menu.category_mode == Some(true) {
-                        ui.label(self.rich(ui, &tinted("h_white", "Category selection mode")));
-                    }
-                });
             });
+            ui.separator();
+            if lists.is_empty() {
+                ui.label(self.rich(ui, &tinted("c_dark_gray", &menu.message)));
+            }
+            let height = ctx.content_rect().height() * 0.45;
+            ui.columns(lists.len().max(1), |cols| {
+                for (index, (ui, rows)) in cols.iter_mut().zip(&lists).enumerate() {
+                    let first = entered && index == 0;
+                    focused |= self.inventory_list(
+                        ui,
+                        (index, rows, first, height),
+                        (&mut ids, &mut chosen, &mut count, &mut described),
+                    );
+                }
+            });
+            let hovered = described.take();
+            let cursor = menu.choices.iter().find(|c| c.highlighted);
+            let shown = hovered.or(cursor);
+            self.item_info(
+                ui,
+                &shown
+                    .map(|c| tinted(&c.color, &c.label))
+                    .unwrap_or_default(),
+                shown.map(|c| c.description.as_str()),
+            );
+            ui.separator();
+            ui.horizontal(|ui| {
+                let actions = self.model.actions();
+                let filter = pane.map_or("", |p| p.filter.as_str());
+                let text = match filter {
+                    "" => key_hints(&actions, &[("INVENTORY_FILTER", "Filter")]),
+                    f => key_hints(&actions, &[("INVENTORY_FILTER", "Filter:")]) + " " + f,
+                };
+                ui.label(self.rich(ui, &tinted("c_light_gray", &text)));
+                if menu.category_mode == Some(true) {
+                    ui.label(self.rich(ui, &tinted("h_white", "Category selection mode")));
+                }
+            });
+        });
+        if self.keep_window(ctx, "inventory", &shown) {
+            self.model.cancel_menu();
+        }
         self.menu_ids = ids;
         a11y::dialog(ctx, &title, &menu.message);
         if let Some((id, n)) = count {

@@ -2,14 +2,15 @@
 
 use crate::tileset::{self, PaintQuery, Paints, Placed, Query, Tileset, TilesetInfo, Turn};
 use crate::tint::{Paint, tint_pixel};
+use crate::windows::WindowState;
 use bn_client_core::protocol::ModTileset;
 use bn_client_core::{Cell, Layer, OvermapTile};
 use eframe::egui::{self, Color32, Mesh, Rect, Shape, TextureHandle, TextureId, TextureOptions};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::collections::VecDeque;
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, channel};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -26,7 +27,7 @@ const ZOOM_STEP: f32 = 1.25;
 const ZOOM_STEPS: i8 = 4;
 
 /// The choice that survives a restart.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Settings {
     /// Draw sprites (true) or ASCII glyphs (false); absent until the player chooses, so the engine's
     /// `USE_TILES` option decides.
@@ -40,6 +41,9 @@ pub struct Settings {
     /// The map zoom in steps from the tileset's own size, which the zoom keys and the wheel move.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub zoom: i8,
+    /// Where each kind of window sits, how large it is and whether it is collapsed.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub windows: BTreeMap<String, WindowState>,
 }
 
 fn is_zero(n: &i8) -> bool {
@@ -412,6 +416,8 @@ fn decode(sheet: &tileset::Sheet, fx: Fx) -> Option<Vec<egui::ColorImage>> {
 
 pub struct Display {
     settings: Settings,
+    /// Window places changed and not yet written.
+    unsaved: bool,
     path: Option<PathBuf>,
     /// The game's folder is known, so tilesets can be looked for.
     rooted: bool,
@@ -443,6 +449,7 @@ impl Display {
             .unwrap_or_default();
         let mut display = Self {
             settings,
+            unsaved: false,
             path,
             rooted: root.is_some(),
             tilesets: root.map_or(vec![], tileset::available),
@@ -597,6 +604,22 @@ impl Display {
         let zoom = zoom.clamp(-ZOOM_STEPS, ZOOM_STEPS);
         if zoom != self.settings.zoom {
             self.settings.zoom = zoom;
+            self.save();
+        }
+    }
+
+    /// Where the player left windows of this kind.
+    pub fn window(&self, kind: &str) -> Option<WindowState> {
+        self.settings.windows.get(kind).copied()
+    }
+
+    /// Remembers where windows of this kind are; written to the file once nothing is being dragged.
+    pub fn keep_window(&mut self, kind: &str, state: WindowState, settled: bool) {
+        if self.window(kind) != Some(state) {
+            self.settings.windows.insert(kind.into(), state);
+            self.unsaved = true;
+        }
+        if settled && std::mem::take(&mut self.unsaved) {
             self.save();
         }
     }

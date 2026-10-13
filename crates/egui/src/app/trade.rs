@@ -5,6 +5,7 @@
 use super::aim::Step;
 use super::menu::list_row_style;
 use super::{App, a11y};
+use crate::windows::{self, WindowSpec};
 use bn_client_core::{ActionEntry, GameModel, Menu, MenuPane};
 use eframe::egui::{self, accesskit};
 use std::collections::HashMap;
@@ -99,64 +100,66 @@ impl<M: GameModel> App<M> {
             && ctx.input(|i| i.key_pressed(egui::Key::Escape))
             && menu.can_cancel;
         let title = bn_client_core::markup::plain(&menu.title);
-        egui::Window::new(&title)
-            .id(a11y::dialog_id(&title))
-            .anchor(egui::Align2::CENTER_TOP, super::dialog_offset(ctx))
-            .collapsible(false)
-            .default_width(1000.0)
-            .max_width(ctx.content_rect().width() - 16.0)
-            .show(ctx, |ui| {
-                ui.horizontal(|ui| {
-                    ui.weak(key_hints(&self.model.actions()));
-                    if let Some(on) = menu.category_mode {
-                        category_state(ui, on);
-                    }
-                });
-                let message = bn_client_core::markup::plain(&menu.message);
-                match tone_color(&menu.message_tone) {
-                    Some(color) => ui.colored_label(color, message),
-                    None => ui.label(message),
-                };
-                ui.columns(2, |cols| {
-                    for (index, ui) in cols.iter_mut().enumerate() {
-                        let pane = &menu.panes[index];
-                        let first = entered && index == 0;
-                        focused |= self.trade_pane(ui, menu, (index, pane, first), &mut out);
-                    }
-                });
-                ui.separator();
-                let height = ctx.content_rect().height() * 0.2;
-                egui::ScrollArea::vertical()
-                    .id_salt("trade_description")
-                    .max_height(height)
-                    .show(ui, |ui| {
-                        ui.set_min_height(height);
-                        ui.set_min_width(ui.available_width());
-                        ui.label(self.rich(ui, &out.described.take().unwrap_or_default()));
-                    });
-                ui.separator();
-                ui.horizontal(|ui| {
-                    for (label, id) in [
-                        ("Confirm trade", "CONFIRM"),
-                        ("Autobalance", "AUTOBALANCE"),
-                        ("Category select", "CATEGORY_SELECTION"),
-                        ("Examine", "EXAMINE"),
-                    ] {
-                        let offered = self.model.actions().iter().any(|a| a.id == id);
-                        let button = self.control(ui, label, id, offered, false);
-                        out.ids.extend(button.enabled().then_some(button.id));
-                        if button.clicked() {
-                            action = Some(id);
-                        }
-                    }
-                    if menu.can_cancel {
-                        let button =
-                            ui.add_enabled(self.idle(), egui::Button::new("Cancel"));
-                        out.ids.extend(button.enabled().then_some(button.id));
-                        cancel |= button.clicked();
-                    }
-                });
+        let spec = WindowSpec {
+            closable: menu.can_cancel,
+            width: Some(1000.0),
+            max_width: Some(ctx.content_rect().width() - 16.0),
+            ..self.window_spec(ctx, "trade", &title)
+        };
+        let shown = windows::show(ctx, spec, |ui| {
+            ui.horizontal(|ui| {
+                ui.weak(key_hints(&self.model.actions()));
+                if let Some(on) = menu.category_mode {
+                    category_state(ui, on);
+                }
             });
+            let message = bn_client_core::markup::plain(&menu.message);
+            match tone_color(&menu.message_tone) {
+                Some(color) => ui.colored_label(color, message),
+                None => ui.label(message),
+            };
+            ui.columns(2, |cols| {
+                for (index, ui) in cols.iter_mut().enumerate() {
+                    let pane = &menu.panes[index];
+                    let first = entered && index == 0;
+                    focused |= self.trade_pane(ui, menu, (index, pane, first), &mut out);
+                }
+            });
+            ui.separator();
+            let height = ctx.content_rect().height() * 0.2;
+            egui::ScrollArea::vertical()
+                .id_salt("trade_description")
+                .max_height(height)
+                .show(ui, |ui| {
+                    ui.set_min_height(height);
+                    ui.set_min_width(ui.available_width());
+                    ui.label(self.rich(ui, &out.described.take().unwrap_or_default()));
+                });
+            ui.separator();
+            ui.horizontal(|ui| {
+                for (label, id) in [
+                    ("Confirm trade", "CONFIRM"),
+                    ("Autobalance", "AUTOBALANCE"),
+                    ("Category select", "CATEGORY_SELECTION"),
+                    ("Examine", "EXAMINE"),
+                ] {
+                    let offered = self.model.actions().iter().any(|a| a.id == id);
+                    let button = self.control(ui, label, id, offered, false);
+                    out.ids.extend(button.enabled().then_some(button.id));
+                    if button.clicked() {
+                        action = Some(id);
+                    }
+                }
+                if menu.can_cancel {
+                    let button = ui.add_enabled(self.idle(), egui::Button::new("Cancel"));
+                    out.ids.extend(button.enabled().then_some(button.id));
+                    cancel |= button.clicked();
+                }
+            });
+        });
+        if self.keep_window(ctx, "trade", &shown) {
+            self.model.cancel_menu();
+        }
         self.menu_ids = out.ids;
         a11y::dialog(ctx, &title, &menu.message);
         if let Some((id, n)) = out.count {

@@ -2,6 +2,7 @@ use crate::a11y;
 use crate::display::Display;
 use crate::effects::Effects;
 use crate::text;
+use crate::windows::{Origin, Shown, WindowSpec};
 use bn_client_core::{Failure, GameModel, Loading, Overmap, Pos, keys};
 use eframe::egui::{self, accesskit};
 use std::collections::VecDeque;
@@ -45,9 +46,34 @@ fn rgb(c: bn_client_core::Rgb) -> egui::Color32 {
     egui::Color32::from_rgb(c.0, c.1, c.2)
 }
 
-/// Every dialog opens at the top centre, 12% down, so the same click lands on the same control.
-fn dialog_offset(ctx: &egui::Context) -> [f32; 2] {
-    [0.0, ctx.content_rect().height() * 0.12]
+impl<M: GameModel> App<M> {
+    /// A window of `kind` titled `title`, where the player left windows of its kind, else at the top centre,
+    /// 12% down, so the same click lands on the same control.
+    fn window_spec(&self, ctx: &egui::Context, kind: &str, title: &str) -> WindowSpec {
+        WindowSpec {
+            kind: kind.into(),
+            title: title.into(),
+            id: a11y::dialog_id(title),
+            saved: self.display.window(kind),
+            origin: Origin::top_center(ctx),
+            width: None,
+            height: None,
+            max_width: None,
+            frame: None,
+            title_bar: !title.is_empty(),
+            closable: false,
+        }
+    }
+
+    /// Remembers where the player left the window just shown, written once the pointer is up; true when its close
+    /// button was pressed.
+    fn keep_window<R>(&mut self, ctx: &egui::Context, kind: &str, shown: &Shown<R>) -> bool {
+        if let Some(state) = shown.state {
+            let settled = !ctx.input(|i| i.pointer.any_down());
+            self.display.keep_window(kind, state, settled);
+        }
+        shown.closed
+    }
 }
 
 /// The tallest a dialog's list grows: the room under the dialog's top, less its title, tabs and description.

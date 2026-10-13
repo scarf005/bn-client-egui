@@ -2,6 +2,7 @@
 //! buildability and the selected construction's requirements. The engine owns the lists and the
 //! placement that follows a choice; the client only keeps which construction is selected.
 use super::{App, a11y};
+use crate::windows::{self, WindowSpec};
 use bn_client_core::{GameModel, Menu, MenuChoice};
 use eframe::egui::{self, accesskit};
 
@@ -92,110 +93,114 @@ impl<M: GameModel> App<M> {
         let mut editing = false;
         let mut focused = false;
         let mut fill = None;
-        egui::Window::new(&menu.title)
-            .id(a11y::dialog_id(&menu.title))
-            .anchor(egui::Align2::CENTER_TOP, super::dialog_offset(ctx))
-            .collapsible(false)
-            .default_size(egui::vec2(900.0, 560.0))
-            .show(ctx, |ui| {
-                ui.horizontal_wrapped(|ui| {
-                    for tab in &tabs {
-                        let button =
-                            self.control(ui, tab.label.clone(), &tab.id, tab.enabled, tab.selected);
-                        a11y::tab(ui.ctx(), button.id, tab.selected);
-                        ids.extend(button.enabled().then_some(button.id));
-                        if button.clicked() {
-                            chosen = Some(tab.id.clone());
-                        }
-                    }
-                });
-                if let Some(field) = &menu.field {
-                    let hint = field.label.trim_end_matches(':');
-                    let edit = egui::TextEdit::singleline(&mut self.construction.search)
-                        .hint_text(hint)
-                        .desired_width(f32::INFINITY);
-                    let response = ui.add(edit);
-                    let label = hint.to_owned();
-                    ui.ctx()
-                        .accesskit_node_builder(response.id, move |b| b.set_label(label));
-                    a11y::text_field(ui.ctx(), response.id);
-                    ids.push(response.id);
-                    editing |= response.has_focus();
-                    if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-                        fill = Some((field.id.clone(), self.construction.search.clone()));
-                    }
-                }
-                ui.separator();
-                ui.columns(2, |cols| {
-                    egui::ScrollArea::vertical()
-                        .id_salt("constructions")
-                        .max_height(420.0)
-                        .show(&mut cols[0], |ui| {
-                            for (i, row) in rows.iter().enumerate() {
-                                let on = selected.as_ref() == Some(&row.id);
-                                let text = egui::RichText::new(&row.label);
-                                let text = if row.enabled {
-                                    text
-                                } else {
-                                    text.color(ui.visuals().error_fg_color)
-                                };
-                                let mut response = ui.selectable_label(on, text);
-                                ids.extend(on.then_some(response.id));
-                                if !row.denial.is_empty() {
-                                    response = response.on_hover_text(&row.denial);
-                                }
-                                ui.ctx().accesskit_node_builder(response.id, |b| {
-                                    b.set_role(accesskit::Role::MenuItem)
-                                });
-                                if entered && i == 0 {
-                                    response.request_focus();
-                                    focused = response.has_focus();
-                                }
-                                if on && std::mem::take(&mut self.construction.scroll_to_selected) {
-                                    response.scroll_to_me(None);
-                                    response.request_focus();
-                                }
-                                if response.clicked() {
-                                    selected = Some(row.id.clone());
-                                }
-                                if response.double_clicked() {
-                                    build = true;
-                                }
-                            }
-                        });
-                    let ui = &mut cols[1];
-                    let Some(row) = rows.iter().find(|c| selected.as_ref() == Some(&c.id)) else {
-                        return;
-                    };
-                    egui::ScrollArea::vertical()
-                        .id_salt("requirements")
-                        .max_height(420.0)
-                        .show(ui, |ui| {
-                            if !row.denial.is_empty() {
-                                ui.colored_label(ui.visuals().warn_fg_color, &row.denial);
-                            }
-                            for column in &row.columns {
-                                ui.horizontal(|ui| {
-                                    ui.label(&column.label);
-                                    ui.label(&column.value);
-                                });
-                            }
-                            ui.separator();
-                            ui.label(&row.description);
-                        });
-                    ui.separator();
-                    let name = format!("Construct {}", row.label);
-                    let button = self.control(ui, name, &row.id, row.enabled, false);
+        let spec = WindowSpec {
+            closable: menu.can_cancel,
+            width: Some(900.0),
+            height: Some(560.0),
+            ..self.window_spec(ctx, "construction", &menu.title)
+        };
+        let shown = windows::show(ctx, spec, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                for tab in &tabs {
+                    let button =
+                        self.control(ui, tab.label.clone(), &tab.id, tab.enabled, tab.selected);
+                    a11y::tab(ui.ctx(), button.id, tab.selected);
                     ids.extend(button.enabled().then_some(button.id));
-                    build |= button.clicked();
-                });
-                if menu.can_cancel {
-                    let close = ui.button("Close");
-                    a11y::button(ui.ctx(), close.id, false);
-                    ids.push(close.id);
-                    cancel |= close.clicked();
+                    if button.clicked() {
+                        chosen = Some(tab.id.clone());
+                    }
                 }
             });
+            if let Some(field) = &menu.field {
+                let hint = field.label.trim_end_matches(':');
+                let edit = egui::TextEdit::singleline(&mut self.construction.search)
+                    .hint_text(hint)
+                    .desired_width(f32::INFINITY);
+                let response = ui.add(edit);
+                let label = hint.to_owned();
+                ui.ctx()
+                    .accesskit_node_builder(response.id, move |b| b.set_label(label));
+                a11y::text_field(ui.ctx(), response.id);
+                ids.push(response.id);
+                editing |= response.has_focus();
+                if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                    fill = Some((field.id.clone(), self.construction.search.clone()));
+                }
+            }
+            ui.separator();
+            ui.columns(2, |cols| {
+                egui::ScrollArea::vertical()
+                    .id_salt("constructions")
+                    .max_height(420.0)
+                    .show(&mut cols[0], |ui| {
+                        for (i, row) in rows.iter().enumerate() {
+                            let on = selected.as_ref() == Some(&row.id);
+                            let text = egui::RichText::new(&row.label);
+                            let text = if row.enabled {
+                                text
+                            } else {
+                                text.color(ui.visuals().error_fg_color)
+                            };
+                            let mut response = ui.selectable_label(on, text);
+                            ids.extend(on.then_some(response.id));
+                            if !row.denial.is_empty() {
+                                response = response.on_hover_text(&row.denial);
+                            }
+                            ui.ctx().accesskit_node_builder(response.id, |b| {
+                                b.set_role(accesskit::Role::MenuItem)
+                            });
+                            if entered && i == 0 {
+                                response.request_focus();
+                                focused = response.has_focus();
+                            }
+                            if on && std::mem::take(&mut self.construction.scroll_to_selected) {
+                                response.scroll_to_me(None);
+                                response.request_focus();
+                            }
+                            if response.clicked() {
+                                selected = Some(row.id.clone());
+                            }
+                            if response.double_clicked() {
+                                build = true;
+                            }
+                        }
+                    });
+                let ui = &mut cols[1];
+                let Some(row) = rows.iter().find(|c| selected.as_ref() == Some(&c.id)) else {
+                    return;
+                };
+                egui::ScrollArea::vertical()
+                    .id_salt("requirements")
+                    .max_height(420.0)
+                    .show(ui, |ui| {
+                        if !row.denial.is_empty() {
+                            ui.colored_label(ui.visuals().warn_fg_color, &row.denial);
+                        }
+                        for column in &row.columns {
+                            ui.horizontal(|ui| {
+                                ui.label(&column.label);
+                                ui.label(&column.value);
+                            });
+                        }
+                        ui.separator();
+                        ui.label(&row.description);
+                    });
+                ui.separator();
+                let name = format!("Construct {}", row.label);
+                let button = self.control(ui, name, &row.id, row.enabled, false);
+                ids.extend(button.enabled().then_some(button.id));
+                build |= button.clicked();
+            });
+            if menu.can_cancel {
+                let close = ui.button("Close");
+                a11y::button(ui.ctx(), close.id, false);
+                ids.push(close.id);
+                cancel |= close.clicked();
+            }
+        });
+        if self.keep_window(ctx, "construction", &shown) {
+            self.model.cancel_menu();
+        }
 
         self.menu_ids = ids;
         a11y::dialog(ctx, &menu.title, &menu.message);

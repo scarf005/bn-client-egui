@@ -3,6 +3,7 @@
 //! the owner line. The engine owns the cursor and the highlight; arrows and the game's own keys go to it.
 use super::{App, a11y, rgb};
 use crate::text;
+use crate::windows::{self, WindowSpec};
 use bn_client_core::protocol::{Vehicle, VehicleRequirement};
 use bn_client_core::{GameModel, Menu, MenuChoice, action_hint};
 use eframe::egui::{self, accesskit};
@@ -60,23 +61,27 @@ impl<M: GameModel> App<M> {
             && ctx.input(|i| i.key_pressed(egui::Key::Escape))
             && menu.can_cancel;
         let title = bn_client_core::markup::plain(&vehicle.name);
-        egui::Window::new(&title)
-            .id(a11y::dialog_id("Vehicle"))
-            .anchor(egui::Align2::CENTER_TOP, super::dialog_offset(ctx))
-            .collapsible(false)
-            .default_width(1000.0)
-            .max_width(ctx.content_rect().width() - 16.0)
-            .show(ctx, |ui| {
-                self.vehicle_modes(ui, menu, vehicle, entered, &mut out);
-                ui.separator();
-                ui.columns(3, |cols| {
-                    self.vehicle_grid(&mut cols[0], menu, vehicle, &mut out);
-                    self.vehicle_requirements(&mut cols[1], menu, vehicle);
-                    self.vehicle_list(&mut cols[2], menu, vehicle, &mut out);
-                });
-                ui.separator();
-                self.vehicle_stats(ui, vehicle);
+        let spec = WindowSpec {
+            closable: menu.can_cancel,
+            id: a11y::dialog_id("Vehicle"),
+            width: Some(1000.0),
+            max_width: Some(ctx.content_rect().width() - 16.0),
+            ..self.window_spec(ctx, "vehicle", &title)
+        };
+        let shown = windows::show(ctx, spec, |ui| {
+            self.vehicle_modes(ui, menu, vehicle, entered, &mut out);
+            ui.separator();
+            ui.columns(3, |cols| {
+                self.vehicle_grid(&mut cols[0], menu, vehicle, &mut out);
+                self.vehicle_requirements(&mut cols[1], menu, vehicle);
+                self.vehicle_list(&mut cols[2], menu, vehicle, &mut out);
             });
+            ui.separator();
+            self.vehicle_stats(ui, vehicle);
+        });
+        if self.keep_window(ctx, "vehicle", &shown) {
+            self.model.cancel_menu();
+        }
         self.menu_ids = out.ids;
         a11y::dialog(ctx, &title, &menu.message);
         if let Some(id) = out.chosen {

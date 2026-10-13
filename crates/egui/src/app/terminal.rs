@@ -3,6 +3,7 @@
 //! as buttons). The engine owns the text and the answers; the keys still go to the engine.
 use super::menu::{list_frame, list_row_style};
 use super::{App, a11y};
+use crate::windows::{self, WindowSpec};
 use bn_client_core::{GameModel, Menu, markup};
 use eframe::egui;
 
@@ -29,52 +30,54 @@ impl<M: GameModel> App<M> {
             false => egui::Color32::LIGHT_GRAY,
         };
         let font = egui::FontId::monospace(14.0);
-        egui::Window::new(&title)
-            .id(a11y::dialog_id(&title))
-            .anchor(egui::Align2::CENTER_TOP, super::dialog_offset(ctx))
-            .collapsible(false)
-            .resizable(false)
-            .frame(list_frame(ctx))
-            .default_width((ctx.content_rect().width() * 0.7).clamp(480.0, 960.0))
-            .show(ctx, |ui| {
-                ui.visuals_mut().override_text_color = Some(color);
-                egui::ScrollArea::vertical()
-                    .max_height(super::dialog_scroll_height(ctx))
-                    .show(ui, |ui| {
-                        ui.set_min_width(ui.available_width());
-                        for line in menu.message.lines() {
-                            // The native text window draws a line of two dashes as a rule.
-                            if line == "--" {
-                                ui.separator();
-                                continue;
-                            }
-                            let runs = self.model.styled(line);
-                            let job = crate::text::job(&runs, &font);
-                            ui.add(egui::Label::new(job).wrap_mode(egui::TextWrapMode::Wrap));
+        let spec = WindowSpec {
+            closable: menu.can_cancel,
+            frame: Some(list_frame(ctx)),
+            width: Some((ctx.content_rect().width() * 0.7).clamp(480.0, 960.0)),
+            ..self.window_spec(ctx, "terminal", &title)
+        };
+        let shown = windows::show(ctx, spec, |ui| {
+            ui.visuals_mut().override_text_color = Some(color);
+            egui::ScrollArea::vertical()
+                .max_height(super::dialog_scroll_height(ctx))
+                .show(ui, |ui| {
+                    ui.set_min_width(ui.available_width());
+                    for line in menu.message.lines() {
+                        // The native text window draws a line of two dashes as a rule.
+                        if line == "--" {
+                            ui.separator();
+                            continue;
                         }
-                    });
-                ui.separator();
-                ui.horizontal_wrapped(|ui| {
-                    list_row_style(ui);
-                    for (i, row) in menu.choices.iter().enumerate() {
-                        let button = self.control(
-                            ui,
-                            markup::plain(&row.label),
-                            &row.id,
-                            row.enabled,
-                            row.selected,
-                        );
-                        ids.extend(button.enabled().then_some(button.id));
-                        if entered && i == 0 {
-                            button.request_focus();
-                            focused = button.has_focus();
-                        }
-                        if button.clicked() {
-                            chosen = Some(row.id.clone());
-                        }
+                        let runs = self.model.styled(line);
+                        let job = crate::text::job(&runs, &font);
+                        ui.add(egui::Label::new(job).wrap_mode(egui::TextWrapMode::Wrap));
                     }
                 });
+            ui.separator();
+            ui.horizontal_wrapped(|ui| {
+                list_row_style(ui);
+                for (i, row) in menu.choices.iter().enumerate() {
+                    let button = self.control(
+                        ui,
+                        markup::plain(&row.label),
+                        &row.id,
+                        row.enabled,
+                        row.selected,
+                    );
+                    ids.extend(button.enabled().then_some(button.id));
+                    if entered && i == 0 {
+                        button.request_focus();
+                        focused = button.has_focus();
+                    }
+                    if button.clicked() {
+                        chosen = Some(row.id.clone());
+                    }
+                }
             });
+        });
+        if self.keep_window(ctx, "terminal", &shown) {
+            self.model.cancel_menu();
+        }
         self.menu_ids = ids;
         a11y::dialog(ctx, &title, &markup::plain(&menu.message));
         if let Some(id) = chosen {

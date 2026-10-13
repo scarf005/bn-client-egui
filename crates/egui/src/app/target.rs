@@ -2,6 +2,7 @@
 //! the cursor moves on. The keys still go to the engine; an action row is a button for it.
 use super::App;
 use super::menu::{list_frame, list_row_style};
+use crate::windows::{self, Origin, WindowSpec};
 use bn_client_core::{GameModel, markup};
 use eframe::egui;
 
@@ -12,36 +13,40 @@ impl<M: GameModel> App<M> {
         };
         let title = markup::plain(&panel.title);
         let mut chosen = None;
-        egui::Window::new(&title)
-            .id(egui::Id::new("target_panel"))
-            .anchor(egui::Align2::RIGHT_TOP, [-8.0, 48.0])
-            .collapsible(false)
-            .resizable(false)
-            .frame(list_frame(ctx))
-            .show(ctx, |ui| {
-                list_row_style(ui);
-                let rows = panel.entries();
-                for (i, row) in rows.iter().copied().enumerate() {
-                    if let Some(heading) = panel.heading(i.checked_sub(1).map(|p| rows[p]), row) {
-                        ui.add(egui::Label::new(egui::RichText::new(heading).strong()));
-                    }
-                    if row.id.starts_with("action:") {
-                        let key = match row.hotkey.is_empty() {
-                            true => String::new(),
-                            false => format!("<color_light_green>{}</color> ", row.hotkey),
-                        };
-                        let text = self.rich(ui, &format!("{key}{}", row.label));
-                        let button = self.control(ui, text, &row.id, row.enabled, row.selected);
-                        if button.clicked() {
-                            chosen = Some(row.id.clone());
-                        }
-                    } else {
-                        let values = row.values_markup();
-                        let text = format!("{}: {}{values}", row.label, row.description);
-                        ui.label(self.rich(ui, &text));
-                    }
+        let spec = WindowSpec {
+            id: egui::Id::new("target_panel"),
+            origin: Origin {
+                pivot: egui::Align2::RIGHT_TOP,
+                pos: ctx.content_rect().right_top() + egui::vec2(-8.0, 48.0),
+            },
+            frame: Some(list_frame(ctx)),
+            ..self.window_spec(ctx, "target", &title)
+        };
+        let shown = windows::show(ctx, spec, |ui| {
+            list_row_style(ui);
+            let rows = panel.entries();
+            for (i, row) in rows.iter().copied().enumerate() {
+                if let Some(heading) = panel.heading(i.checked_sub(1).map(|p| rows[p]), row) {
+                    ui.add(egui::Label::new(egui::RichText::new(heading).strong()));
                 }
-            });
+                if row.id.starts_with("action:") {
+                    let key = match row.hotkey.is_empty() {
+                        true => String::new(),
+                        false => format!("<color_light_green>{}</color> ", row.hotkey),
+                    };
+                    let text = self.rich(ui, &format!("{key}{}", row.label));
+                    let button = self.control(ui, text, &row.id, row.enabled, row.selected);
+                    if button.clicked() {
+                        chosen = Some(row.id.clone());
+                    }
+                } else {
+                    let values = row.values_markup();
+                    let text = format!("{}: {}{values}", row.label, row.description);
+                    ui.label(self.rich(ui, &text));
+                }
+            }
+        });
+        self.keep_window(ctx, "target", &shown);
         if let Some(id) = chosen {
             ctx.request_repaint();
             self.model.choose(&id);

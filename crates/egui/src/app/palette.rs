@@ -2,6 +2,7 @@
 
 use super::{App, QUEUE, Queued};
 use crate::a11y;
+use crate::windows::{self, WindowSpec};
 use bn_client_core::{GameModel, markup};
 use eframe::egui::{self, accesskit};
 
@@ -56,54 +57,55 @@ impl<M: GameModel> App<M> {
         a11y::trap_tab(ctx, &self.palette_ids, false);
         let entered = self.palette_ids.is_empty();
         let mut ids = Vec::new();
-        egui::Window::new("Actions")
-            .id(a11y::dialog_id("Actions"))
-            .anchor(egui::Align2::CENTER_TOP, super::dialog_offset(ctx))
-            .collapsible(false)
-            .resizable(false)
-            .default_width(420.0)
-            .show(ctx, |ui| {
-                let search = ui.add(
-                    egui::TextEdit::singleline(&mut query)
-                        .hint_text("Search")
-                        .desired_width(f32::INFINITY),
-                );
-                search.widget_info(|| {
-                    egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Search actions")
-                });
-                a11y::text_field(ui.ctx(), search.id);
-                ids.push(search.id);
-                if entered {
-                    search.request_focus();
-                }
-                if search.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-                    invoke = actions.first().map(|a| a.id.clone());
-                }
-                egui::ScrollArea::vertical()
-                    .max_height(ui.ctx().content_rect().height() * 0.6)
-                    .show(ui, |ui| {
-                        ui.with_layout(egui::Layout::top_down_justified(egui::Align::Min), |ui| {
-                            for a in &actions {
-                                let label = match a.keys.is_empty() {
-                                    true => markup::plain(&a.name),
-                                    false => format!(
-                                        "{} ({})",
-                                        markup::plain(&a.name),
-                                        a.keys.join(", ")
-                                    ),
-                                };
-                                let button = self.control(ui, label, &a.id, true, false);
-                                ui.ctx().accesskit_node_builder(button.id, |b| {
-                                    b.set_role(accesskit::Role::MenuItem)
-                                });
-                                ids.push(button.id);
-                                if button.clicked() {
-                                    invoke = Some(a.id.clone());
-                                }
-                            }
-                        });
-                    });
+        let spec = WindowSpec {
+            closable: true,
+            id: a11y::dialog_id("Actions"),
+            width: Some(420.0),
+            ..self.window_spec(ctx, "palette", "Actions")
+        };
+        let shown = windows::show(ctx, spec, |ui| {
+            let search = ui.add(
+                egui::TextEdit::singleline(&mut query)
+                    .hint_text("Search")
+                    .desired_width(f32::INFINITY),
+            );
+            search.widget_info(|| {
+                egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Search actions")
             });
+            a11y::text_field(ui.ctx(), search.id);
+            ids.push(search.id);
+            if entered {
+                search.request_focus();
+            }
+            if search.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                invoke = actions.first().map(|a| a.id.clone());
+            }
+            egui::ScrollArea::vertical()
+                .max_height(ui.ctx().content_rect().height() * 0.6)
+                .show(ui, |ui| {
+                    ui.with_layout(egui::Layout::top_down_justified(egui::Align::Min), |ui| {
+                        for a in &actions {
+                            let label = match a.keys.is_empty() {
+                                true => markup::plain(&a.name),
+                                false => {
+                                    format!("{} ({})", markup::plain(&a.name), a.keys.join(", "))
+                                }
+                            };
+                            let button = self.control(ui, label, &a.id, true, false);
+                            ui.ctx().accesskit_node_builder(button.id, |b| {
+                                b.set_role(accesskit::Role::MenuItem)
+                            });
+                            ids.push(button.id);
+                            if button.clicked() {
+                                invoke = Some(a.id.clone());
+                            }
+                        }
+                    });
+                });
+        });
+        if self.keep_window(ctx, "palette", &shown) {
+            self.palette = None;
+        }
         a11y::dialog(ctx, "Actions", "");
         self.palette_ids = ids;
         match invoke {

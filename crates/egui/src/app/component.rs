@@ -5,13 +5,14 @@
 //! calls the interaction core (`bn_client_core::interaction`), which decides what is sent.
 
 use super::App;
+use crate::windows::{self, Shown, WindowSpec};
 use crate::{a11y, editor, text};
 use bn_client_core::colors::ColorMap;
 use bn_client_core::interaction::{self, ArgKind, InvokeError, Reason};
 use bn_client_core::protocol::{
-    Affordance, CanvasComponent, Component, Editor, EditorValue, FieldKind, Form, FormField, Grid,
-    List, MapComponent, MapMode, PanelStat, Row, Screen, ScreenRole, Selection, Text, TextBlock,
-    TextRole, Tone,
+    Affordance, AffordanceRole, CanvasComponent, Component, Editor, EditorValue, FieldKind, Form,
+    FormField, Grid, List, MapComponent, MapMode, PanelStat, Row, Screen, ScreenRole, Selection,
+    Text, TextBlock, TextRole, Tone,
 };
 use bn_client_core::{Canvas, CanvasRun, GameModel, markup};
 use eframe::egui::{self, WidgetInfo, WidgetType};
@@ -188,7 +189,10 @@ impl<M: GameModel> App<M> {
             return self.menu(ctx);
         };
         let mut out = vec![];
-        self.screen_window(ctx, top, &mut out);
+        let shown = self.screen_window(ctx, top, &mut out);
+        if self.keep_window(ctx, "screen", &shown) {
+            out.push(Intent::Cancel);
+        }
         self.screens.reveal = None;
         out.into_iter().for_each(|intent| self.apply(intent));
     }
@@ -291,38 +295,42 @@ impl<M: GameModel> App<M> {
         self.settle(out);
     }
 
-    fn screen_window(&self, ctx: &egui::Context, screen: &Screen, out: &mut Vec<Intent>) {
+    fn screen_window(
+        &self,
+        ctx: &egui::Context,
+        screen: &Screen,
+        out: &mut Vec<Intent>,
+    ) -> Shown<()> {
         let title = markup::plain(&screen.title.as_ref().map(Text::shown).unwrap_or_default());
         let frame = super::menu::list_frame(ctx);
         let max_width = (ctx.content_rect().width() * 0.8).max(520.0);
-        egui::Window::new(&title)
-            .id(a11y::dialog_id(&title))
-            .title_bar(!title.is_empty())
-            .anchor(egui::Align2::CENTER_TOP, super::dialog_offset(ctx))
-            .collapsible(false)
-            .resizable(false)
-            .default_width(max_width + frame.total_margin().sum().x)
-            .default_height(super::dialog_scroll_height(ctx))
-            .frame(frame)
-            .show(ctx, |ui| {
-                ui.set_min_width(520.0);
-                ui.set_max_width(max_width);
-                let Some(root) = &screen.root else {
-                    return;
-                };
-                self.component(ui, screen, root, out);
-                self.question(ui, screen, out);
-                if let Some(denial) = &self.screens.denial {
-                    ui.colored_label(BAD, markup::plain(denial));
-                }
-                let named = claimed(root);
-                let rest = screen
-                    .affordances
-                    .iter()
-                    .filter(|a| !named.contains(a.id.as_str()))
-                    .collect::<Vec<_>>();
-                self.affordance_buttons(ui, &rest, None, out);
-            });
+        let spec = WindowSpec {
+            closable: interaction::with_role(screen, AffordanceRole::Cancel).is_some(),
+            frame: Some(frame),
+            width: Some(max_width + frame.total_margin().sum().x),
+            height: Some(super::dialog_scroll_height(ctx)),
+            ..self.window_spec(ctx, "screen", &title)
+        };
+        let shown = windows::show(ctx, spec, |ui| {
+            ui.set_min_width(520.0);
+            ui.set_max_width(max_width);
+            let Some(root) = &screen.root else {
+                return;
+            };
+            self.component(ui, screen, root, out);
+            self.question(ui, screen, out);
+            if let Some(denial) = &self.screens.denial {
+                ui.colored_label(BAD, markup::plain(denial));
+            }
+            let named = claimed(root);
+            let rest = screen
+                .affordances
+                .iter()
+                .filter(|a| !named.contains(a.id.as_str()))
+                .collect::<Vec<_>>();
+            self.affordance_buttons(ui, &rest, None, out);
+        });
+        shown
     }
 
     /// One line of the engine's text with its colour tags; what does not fit is cut.

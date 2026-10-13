@@ -5,6 +5,7 @@
 use super::menu::list_row_style;
 use super::{App, a11y};
 use crate::text;
+use crate::windows::{self, WindowSpec};
 use bn_client_core::{GameModel, Menu, MenuChoice, markup};
 use eframe::egui::{self, accesskit};
 
@@ -133,19 +134,25 @@ impl<M: GameModel> App<M> {
             ..Default::default()
         };
         let title = markup::plain(&menu.title);
-        egui::Window::new(&title)
-            .id(a11y::dialog_id(&title))
-            .anchor(egui::Align2::CENTER_TOP, super::dialog_offset(ctx))
-            .collapsible(false)
-            .resizable(false)
-            .show(ctx, |ui| {
-                ui.set_width((ctx.content_rect().width() * 0.8).clamp(560.0, 900.0));
-                match menu.context.as_str() {
-                    "PLAYER_INFO" => self.sheet(ui, menu, entered, &mut out),
-                    "BIONICS" => self.bionics(ui, menu, &mut out),
-                    _ => self.mutations(ui, menu, &mut out),
-                }
-            });
+        let kind = format!("character:{}", menu.context);
+        let width = (ctx.content_rect().width() * 0.8).clamp(560.0, 900.0);
+        let margin = egui::Frame::window(&ctx.global_style()).total_margin();
+        let spec = WindowSpec {
+            closable: menu.can_cancel,
+            width: Some(width + margin.sum().x),
+            ..self.window_spec(ctx, &kind, &title)
+        };
+        let shown = windows::show(ctx, spec, |ui| {
+            ui.set_width(width);
+            match menu.context.as_str() {
+                "PLAYER_INFO" => self.sheet(ui, menu, entered, &mut out),
+                "BIONICS" => self.bionics(ui, menu, &mut out),
+                _ => self.mutations(ui, menu, &mut out),
+            }
+        });
+        if self.keep_window(ctx, &kind, &shown) {
+            self.model.cancel_menu();
+        }
         self.menu_ids = std::mem::take(&mut out.ids);
         a11y::dialog(ctx, &title, &markup::plain(&menu.message));
         if let Some(id) = out.action {

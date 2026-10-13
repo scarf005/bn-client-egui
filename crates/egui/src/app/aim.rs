@@ -2,6 +2,7 @@
 //! select on click and move on Enter or by dragging to the other pane, a move button with an amount,
 //! and a filter per pane. Every control is a native action; the engine owns the lists.
 use super::{App, a11y};
+use crate::windows::{self, WindowSpec};
 use bn_client_core::protocol::Area;
 use bn_client_core::{ActionEntry, GameModel, Menu, MenuChoice, MenuPane};
 use eframe::egui::{self, accesskit};
@@ -104,84 +105,87 @@ impl<M: GameModel> App<M> {
             && ctx.input(|i| i.key_pressed(egui::Key::Escape))
             && menu.can_cancel;
         let title = bn_client_core::markup::plain(&menu.title);
-        egui::Window::new(&title)
-            .id(a11y::dialog_id(&title))
-            .anchor(egui::Align2::CENTER_TOP, super::dialog_offset(ctx))
-            .collapsible(false)
-            .default_width(1100.0)
-            .show(ctx, |ui| {
-                ui.columns(2, |cols| {
-                    for (index, ui) in cols.iter_mut().enumerate() {
-                        let Some(pane) = menu.panes.get(index) else {
-                            continue;
-                        };
-                        let rows = menu
-                            .choices
-                            .iter()
-                            .filter(|c| c.group.as_deref() == Some(pane.id.as_str()))
-                            .collect::<Vec<_>>();
-                        self.aim_pane(ui, (index, pane, &rows), (&actions, &menu.areas), &mut out);
-                    }
+        let spec = WindowSpec {
+            closable: menu.can_cancel,
+            width: Some(1100.0),
+            ..self.window_spec(ctx, "aim", &title)
+        };
+        let shown = windows::show(ctx, spec, |ui| {
+            ui.columns(2, |cols| {
+                for (index, ui) in cols.iter_mut().enumerate() {
+                    let Some(pane) = menu.panes.get(index) else {
+                        continue;
+                    };
+                    let rows = menu
+                        .choices
+                        .iter()
+                        .filter(|c| c.group.as_deref() == Some(pane.id.as_str()))
+                        .collect::<Vec<_>>();
+                    self.aim_pane(ui, (index, pane, &rows), (&actions, &menu.areas), &mut out);
+                }
+            });
+            // Always the same height, so the buttons below do not move as the cursor row changes.
+            ui.separator();
+            let text = out.described.take().unwrap_or_default();
+            egui::ScrollArea::vertical()
+                .id_salt("aim_description")
+                .max_height(DESCRIPTION_HEIGHT)
+                .show(ui, |ui| {
+                    ui.set_min_height(DESCRIPTION_HEIGHT);
+                    ui.set_min_width(ui.available_width());
+                    ui.label(self.rich(ui, &text));
                 });
-                // Always the same height, so the buttons below do not move as the cursor row changes.
-                ui.separator();
-                let text = out.described.take().unwrap_or_default();
-                egui::ScrollArea::vertical()
-                    .id_salt("aim_description")
-                    .max_height(DESCRIPTION_HEIGHT)
-                    .show(ui, |ui| {
-                        ui.set_min_height(DESCRIPTION_HEIGHT);
-                        ui.set_min_width(ui.available_width());
-                        ui.label(self.rich(ui, &text));
-                    });
-                ui.separator();
-                ui.horizontal(|ui| {
-                    for action in ["MOVE_SINGLE_ITEM", "MOVE_ITEM_STACK", "EXAMINE", "SORT"] {
-                        if let Some(entry) = find(action) {
-                            self.aim_button(ui, &mut out, entry);
-                        }
-                    }
-                    let edit = egui::TextEdit::singleline(&mut self.aim.amount)
-                        .desired_width(50.0)
-                        .hint_text("Amount");
-                    let response = ui.add(edit);
-                    ui.ctx().accesskit_node_builder(response.id, |b| {
-                        b.set_label("Amount to move");
-                    });
-                    out.ids.push(response.id);
-                    self.aim.editing |= response.has_focus();
-                    let amount = self
-                        .aim
-                        .amount
-                        .trim()
-                        .parse::<u64>()
-                        .ok()
-                        .filter(|n| *n > 0);
-                    if let Some(entry) = find("MOVE_VARIABLE_ITEM") {
-                        let go = ui
-                            .add_enabled(
-                                amount.is_some() && self.idle(),
-                                egui::Button::new(&entry.name),
-                            )
-                            .on_hover_text(entry.keys.join(", "));
-                        a11y::button(ui.ctx(), go.id, false);
-                        out.ids.extend(go.enabled().then_some(go.id));
-                        if let (true, Some(n)) = (go.clicked(), amount) {
-                            out.todo.push(Step::Action(entry.id.clone()));
-                            out.todo.push(Step::Fill(n.to_string()));
-                        }
-                    }
-                    if let Some(entry) = find("MOVE_ALL_ITEMS") {
+            ui.separator();
+            ui.horizontal(|ui| {
+                for action in ["MOVE_SINGLE_ITEM", "MOVE_ITEM_STACK", "EXAMINE", "SORT"] {
+                    if let Some(entry) = find(action) {
                         self.aim_button(ui, &mut out, entry);
                     }
-                    if menu.can_cancel {
-                        let close = ui.button("Close");
-                        a11y::button(ui.ctx(), close.id, false);
-                        out.ids.push(close.id);
-                        cancel |= close.clicked();
-                    }
+                }
+                let edit = egui::TextEdit::singleline(&mut self.aim.amount)
+                    .desired_width(50.0)
+                    .hint_text("Amount");
+                let response = ui.add(edit);
+                ui.ctx().accesskit_node_builder(response.id, |b| {
+                    b.set_label("Amount to move");
                 });
+                out.ids.push(response.id);
+                self.aim.editing |= response.has_focus();
+                let amount = self
+                    .aim
+                    .amount
+                    .trim()
+                    .parse::<u64>()
+                    .ok()
+                    .filter(|n| *n > 0);
+                if let Some(entry) = find("MOVE_VARIABLE_ITEM") {
+                    let go = ui
+                        .add_enabled(
+                            amount.is_some() && self.idle(),
+                            egui::Button::new(&entry.name),
+                        )
+                        .on_hover_text(entry.keys.join(", "));
+                    a11y::button(ui.ctx(), go.id, false);
+                    out.ids.extend(go.enabled().then_some(go.id));
+                    if let (true, Some(n)) = (go.clicked(), amount) {
+                        out.todo.push(Step::Action(entry.id.clone()));
+                        out.todo.push(Step::Fill(n.to_string()));
+                    }
+                }
+                if let Some(entry) = find("MOVE_ALL_ITEMS") {
+                    self.aim_button(ui, &mut out, entry);
+                }
+                if menu.can_cancel {
+                    let close = ui.button("Close");
+                    a11y::button(ui.ctx(), close.id, false);
+                    out.ids.push(close.id);
+                    cancel |= close.clicked();
+                }
             });
+        });
+        if self.keep_window(ctx, "aim", &shown) {
+            self.model.cancel_menu();
+        }
         self.menu_ids = out.ids;
         a11y::dialog(ctx, &title, &menu.message);
         self.aim_do(out.todo);

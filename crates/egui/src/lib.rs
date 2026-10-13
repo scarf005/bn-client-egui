@@ -12,6 +12,7 @@ pub mod text;
 pub mod theme;
 pub mod tileset;
 pub mod tint;
+pub mod windows;
 
 pub use app::App;
 pub use bn_client_core::*;
