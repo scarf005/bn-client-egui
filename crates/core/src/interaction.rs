@@ -173,6 +173,15 @@ pub fn affordance_for_key<'a>(screen: &'a Screen, key: &str) -> Option<&'a Affor
     }
 }
 
+/// Whether the screen binds the key, enabled or not. A navigation key the client handles itself (moving the
+/// focus, scrolling) goes to the engine when this is true, and to the client only when it is false.
+pub fn binds_key(screen: &Screen, key: &str) -> bool {
+    screen
+        .affordances
+        .iter()
+        .any(|a| a.keys.iter().any(|k| k == key))
+}
+
 /// The enabled affordance with the role, such as the one Escape takes.
 pub fn with_role(screen: &Screen, role: AffordanceRole) -> Option<&Affordance> {
     screen

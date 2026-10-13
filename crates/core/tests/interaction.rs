@@ -3,7 +3,7 @@
 
 use bn_client_core::interaction::{
     ArgError, ArgKind, Basis, Interaction, InvokeError, OVERRIDES, Pages, Window,
-    affordance_for_key, check_args, submit, with_role,
+    affordance_for_key, binds_key, check_args, submit, with_role,
 };
 use bn_client_core::protocol::{
     Affordance, AffordanceRole, ArgShape, At, Boundary, Component, Expect, InvokeArgs, List,
@@ -219,6 +219,25 @@ fn a_key_runs_the_enabled_affordance_that_binds_it() {
         "off, and not any_key"
     );
     assert!(affordance_for_key(top, "x").is_none());
+}
+
+#[test]
+fn a_navigation_key_belongs_to_the_engine_when_the_screen_binds_it_even_disabled() {
+    let b = aim_stack();
+    let top = b.stack.last().unwrap();
+    assert!(binds_key(top, "UP"), "the engine moves the cursor");
+    assert!(binds_key(top, "o"), "bound to a disabled affordance");
+    assert!(!binds_key(top, "x"), "unbound keys are the client's");
+}
+
+#[test]
+fn any_key_does_not_bind_a_key_for_navigation() {
+    let b = boundary(json!([screen(
+        "screen:4",
+        json!([{"id": "dismiss", "label": "Continue", "keys": [], "enabled": true,
+            "role": "any_key", "expect": "screen"}])
+    )]));
+    assert!(!binds_key(b.stack.last().unwrap(), "DOWN"));
 }
 
 #[test]
