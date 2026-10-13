@@ -169,6 +169,10 @@ pub struct Cell {
     pub light: Option<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub memory: Option<Memory>,
+    /// Open air in sight on the avatar's level: how many levels down the square is that the native
+    /// tiles view draws here.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub below: Option<u8>,
 }
 
 impl Cell {
