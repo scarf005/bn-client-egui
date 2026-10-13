@@ -451,3 +451,25 @@ fn without_a_stack_the_screen_is_the_0_1_menu() {
     h.run_steps(4);
     h.get_by_label("Map");
 }
+
+#[test]
+fn return_on_the_focused_grid_cell_runs_the_affordance_the_cell_names() {
+    let grid = json!({"id": "grid", "kind": "grid", "cols": 2, "rows": 1, "cursor": {"x": 0, "y": 0},
+        "cells": [
+            {"x": 0, "y": 0, "id": "cell:0", "glyph": "A", "affordance": "go", "enabled": true},
+            {"x": 1, "y": 0, "id": "cell:1", "glyph": "B", "affordance": "go", "enabled": true}]});
+    let go = affordance("go", &[], json!({"row": {"component_id": "grid"}}));
+    let (mut h, script) = harness(dialog(grid, vec![go]));
+    h.key_press(egui::Key::ArrowRight);
+    h.run_steps(2);
+    assert!(
+        submits(&script).is_empty(),
+        "moving the cursor sends nothing"
+    );
+    h.key_press(egui::Key::Enter);
+    h.run_steps(3);
+    assert_eq!(
+        submits(&script),
+        [boundary_invoke("go", json!({"row": "cell:0"}))]
+    );
+}
