@@ -1377,6 +1377,15 @@ pub struct ApplicationError {
     pub action: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub at: Option<At>,
+    /// On a hello refused for its `schema`: the hash each side has.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub schema: Option<SchemaMismatch>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SchemaMismatch {
+    pub engine: String,
+    pub client: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

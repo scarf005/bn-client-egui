@@ -606,8 +606,8 @@
                 "glyph": "/",
                 "color": "brown"
               },
-              "name": "|| stick",
-              "label": "<color_c_light_green>|| </color>stick (wielded)",
+              "name": "||\u00a0stick",
+              "label": "<color_c_light_green>||\u00a0</color>stick (wielded)",
               "slot": "wielded",
               "durability": {
                 "symbol": "||",
@@ -1806,6 +1806,7 @@
             "revision": "34",
             "type": "message.logged",
             "command": "c:5",
+            "changes": {},
             "data": {
               "id": "7",
               "text": "You open the door.",
@@ -1820,6 +1821,7 @@
             "revision": "34",
             "type": "message.logged",
             "command": "c:5",
+            "changes": {},
             "data": {
               "id": "7",
               "text": "You open the door.",
@@ -2535,31 +2537,11 @@
         "selectable": true,
         "selected": true,
         "columns": [
-          {
-            "key": "spell_level",
-            "label": "Spell Level",
-            "value": "3"
-          },
-          {
-            "key": "failure_chance",
-            "label": "Failure Chance",
-            "value": "12.0 % Failure Chance"
-          },
-          {
-            "key": "casting_cost",
-            "label": "Casting Cost",
-            "value": "15 mana"
-          },
-          {
-            "key": "casting_time",
-            "label": "Casting Time",
-            "value": "1 second"
-          },
-          {
-            "key": "range",
-            "label": "Range",
-            "value": "5"
-          }
+          { "key": "spell_level", "label": "Spell Level", "value": "3" },
+          { "key": "failure_chance", "label": "Failure Chance", "value": "12.0 % Failure Chance" },
+          { "key": "casting_cost", "label": "Casting Cost", "value": "15 mana" },
+          { "key": "casting_time", "label": "Casting Time", "value": "1 second" },
+          { "key": "range", "label": "Range", "value": "5" }
         ]
       }
     },
@@ -2575,10 +2557,7 @@
         "area_description": "Free capacity: 43.83 kg, 14.97 L",
         "filter": "",
         "storage_kind": "inventory",
-        "page": {
-          "number": 1,
-          "count": 2
-        },
+        "page": { "number": 1, "count": 2 },
         "totals": {
           "weight": "1.17",
           "weight_max": "45.00",
@@ -2624,50 +2603,16 @@
         "owned": true,
         "mode": "install",
         "verb": "Install",
-        "cursor": {
-          "x": 0,
-          "y": 1
-        },
+        "cursor": { "x": 0, "y": 1 },
         "blocked": false,
         "cells": [
-          {
-            "dx": 0,
-            "dy": 0,
-            "glyph": "o",
-            "color": "light_gray"
-          },
-          {
-            "dx": 0,
-            "dy": -1,
-            "glyph": "H",
-            "color": "light_gray"
-          }
+          { "dx": 0, "dy": 0, "glyph": "o", "color": "light_gray" },
+          { "dx": 0, "dy": -1, "glyph": "H", "color": "light_gray" }
         ],
-        "parts": [
-          {
-            "name": "frame",
-            "open": "[",
-            "close": "]",
-            "health": 62,
-            "broken": false
-          }
-        ],
-        "stats": [
-          "Safe/Top Speed:  12/ 24 km/h",
-          "",
-          "Mass:    16 kg"
-        ],
+        "parts": [{ "name": "frame", "open": "[", "close": "]", "health": 62, "broken": false }],
+        "stats": ["Safe/Top Speed:  12/ 24 km/h", "", "Mass:    16 kg"],
         "tabs": {
-          "labels": [
-            "All",
-            "Cargo",
-            "Light",
-            "Util",
-            "Hull",
-            "Internal",
-            "Other",
-            "Filter"
-          ],
+          "labels": ["All", "Cargo", "Light", "Util", "Hull", "Internal", "Other", "Filter"],
           "selected": 0,
           "filter": ""
         },
@@ -2677,54 +2622,17 @@
           "time": "30 minutes",
           "time_heading": "Time required:",
           "groups": [
-            {
-              "kind": "skill",
-              "heading": "Skills required:",
-              "empty_text": "NONE"
-            },
-            {
-              "kind": "component",
-              "heading": "Components required:",
-              "empty_text": ""
-            },
-            {
-              "kind": "tool",
-              "heading": "Tools required:",
-              "empty_text": ""
-            },
-            {
-              "kind": "extra",
-              "heading": "Additional requirements:",
-              "empty_text": ""
-            }
+            { "kind": "skill", "heading": "Skills required:", "empty_text": "NONE" },
+            { "kind": "component", "heading": "Components required:", "empty_text": "" },
+            { "kind": "tool", "heading": "Tools required:", "empty_text": "" },
+            { "kind": "extra", "heading": "Additional requirements:", "empty_text": "" }
           ],
-          "stats": [
-            {
-              "label": "Durability",
-              "value": "120"
-            }
-          ],
+          "stats": [{ "label": "Durability", "value": "120" }],
           "requirements": [
-            {
-              "kind": "skill",
-              "text": "mechanics 1",
-              "met": true
-            },
-            {
-              "kind": "component",
-              "text": "2x plank",
-              "met": true
-            },
-            {
-              "kind": "tool",
-              "text": "hammer OR rock",
-              "met": false
-            },
-            {
-              "kind": "extra",
-              "text": "1 tool with lifting 1 OR strength 10",
-              "met": true
-            }
+            { "kind": "skill", "text": "mechanics 1", "met": true },
+            { "kind": "component", "text": "2x plank", "met": true },
+            { "kind": "tool", "text": "hammer OR rock", "met": false },
+            { "kind": "extra", "text": "1 tool with lifting 1 OR strength 10", "met": true }
           ],
           "can_do": false
         }
@@ -2772,13 +2680,7 @@
         "enabled": true,
         "selectable": true,
         "selected": false,
-        "columns": [
-          {
-            "key": "key",
-            "label": "Key",
-            "value": "a or A"
-          }
-        ]
+        "columns": [{ "key": "key", "label": "Key", "value": "a or A" }]
       }
     },
     {
@@ -2794,16 +2696,8 @@
         "selectable": false,
         "selected": false,
         "columns": [
-          {
-            "key": "id",
-            "label": "Id",
-            "value": "t_grass"
-          },
-          {
-            "key": "move_cost",
-            "label": "Move cost",
-            "value": "2"
-          }
+          { "key": "id", "label": "Id", "value": "t_grass" },
+          { "key": "move_cost", "label": "Move cost", "value": "2" }
         ]
       }
     },
@@ -2846,43 +2740,19 @@
             "available": false
           }
         ],
-        "compat": {
-          "panes": []
-        }
+        "compat": { "panes": [] }
       }
     },
     {
       "name": "overmap with the cursor square described",
       "def": "overmap",
       "value": {
-        "origin": {
-          "dim": "",
-          "x": 49,
-          "y": 50,
-          "z": 0
-        },
-        "player": {
-          "dim": "",
-          "x": 50,
-          "y": 50,
-          "z": 0
-        },
+        "origin": { "dim": "", "x": 49, "y": 50, "z": 0 },
+        "player": { "dim": "", "x": 50, "y": 50, "z": 0 },
         "cols": 1,
         "rows": 1,
-        "cells": [
-          [
-            [
-              "F",
-              2,
-              0
-            ]
-          ]
-        ],
-        "legend": [
-          "│",
-          "│F forest",
-          "│Use movement keys to pan."
-        ],
+        "cells": [[["F", 2, 0]]],
+        "legend": ["│", "│F forest", "│Use movement keys to pan."],
         "cursor_description": "forest",
         "notes": [],
         "path": []
@@ -2892,62 +2762,18 @@
       "name": "overmap with the cursor on the player, its note and a route",
       "def": "overmap",
       "value": {
-        "origin": {
-          "dim": "",
-          "x": 50,
-          "y": 50,
-          "z": 0
-        },
-        "player": {
-          "dim": "",
-          "x": 50,
-          "y": 50,
-          "z": 0
-        },
+        "origin": { "dim": "", "x": 50, "y": 50, "z": 0 },
+        "player": { "dim": "", "x": 50, "y": 50, "z": 0 },
         "cols": 1,
         "rows": 1,
-        "cells": [
-          [
-            [
-              "N",
-              15,
-              0
-            ]
-          ]
-        ],
-        "legend": [
-          "│",
-          "│F forest"
-        ],
+        "cells": [[["N", 15, 0]]],
+        "legend": ["│", "│F forest"],
         "cursor_description": "forest",
         "cursor_here": "You are here.",
         "cursor_note": "Note: cache",
         "route_text": "Route of 2 squares.",
-        "notes": [
-          {
-            "pos": {
-              "dim": "",
-              "x": 50,
-              "y": 50,
-              "z": 0
-            },
-            "text": "cache"
-          }
-        ],
-        "path": [
-          {
-            "dim": "",
-            "x": 51,
-            "y": 50,
-            "z": 0
-          },
-          {
-            "dim": "",
-            "x": 52,
-            "y": 50,
-            "z": 0
-          }
-        ]
+        "notes": [{ "pos": { "dim": "", "x": 50, "y": 50, "z": 0 }, "text": "cache" }],
+        "path": [{ "dim": "", "x": 51, "y": 50, "z": 0 }, { "dim": "", "x": 52, "y": 50, "z": 0 }]
       }
     },
     {
@@ -2964,43 +2790,18 @@
         "choices": [],
         "choice_total": 0,
         "target": {
-          "source": {
-            "dim": "",
-            "x": 60,
-            "y": 60,
-            "z": 0
-          },
-          "current": {
-            "dim": "",
-            "x": 61,
-            "y": 60,
-            "z": 0
-          },
-          "minimum": {
-            "dim": "",
-            "x": 0,
-            "y": 0,
-            "z": -10
-          },
-          "maximum": {
-            "dim": "",
-            "x": 131,
-            "y": 131,
-            "z": 10
-          },
+          "source": { "dim": "", "x": 60, "y": 60, "z": 0 },
+          "current": { "dim": "", "x": 61, "y": 60, "z": 0 },
+          "minimum": { "dim": "", "x": 0, "y": 0, "z": -10 },
+          "maximum": { "dim": "", "x": 131, "y": 131, "z": 10 },
           "range": 132,
           "distance_metric": "square",
           "distance": 1,
           "status": "look",
           "candidates": [],
-          "description": [
-            "Grass; Lighting: bright",
-            "There is a tree here."
-          ]
+          "description": ["Grass; Lighting: bright", "There is a tree here."]
         },
-        "compat": {
-          "panes": []
-        }
+        "compat": { "panes": [] }
       }
     },
     {
@@ -3033,41 +2834,12 @@
         "choices": [],
         "choice_total": 0,
         "refresh_ms": 100,
-        "compat": {
-          "panes": []
-        },
+        "compat": { "panes": [] },
         "canvas": {
           "cols": 80,
           "rows": [
-            [
-              [
-                "                    S N A K E",
-                7,
-                0
-              ]
-            ],
-            [
-              [
-                "#####",
-                7,
-                0
-              ],
-              [
-                "#",
-                15,
-                0
-              ],
-              [
-                "   ",
-                7,
-                0
-              ],
-              [
-                "*",
-                9,
-                0
-              ]
-            ],
+            [["                    S N A K E", 7, 0]],
+            [["#####", 7, 0], ["#", 15, 0], ["   ", 7, 0], ["*", 9, 0]],
             []
           ]
         }
@@ -3460,10 +3232,7 @@
         "owner": "Ada",
         "owned": true,
         "mode": "remove",
-        "cursor": {
-          "x": 0,
-          "y": 0
-        },
+        "cursor": { "x": 0, "y": 0 },
         "blocked": false,
         "cells": [],
         "parts": [],
@@ -3472,12 +3241,7 @@
           "name": "frame",
           "description": "",
           "stats": [],
-          "requirements": [
-            {
-              "kind": "tool",
-              "text": "wrench"
-            }
-          ],
+          "requirements": [{ "kind": "tool", "text": "wrench" }],
           "can_do": true
         }
       }
@@ -4541,15 +4305,7 @@
       "why": "foreground is a curses color index 0-15",
       "value": {
         "cols": 4,
-        "rows": [
-          [
-            [
-              "#",
-              16,
-              0
-            ]
-          ]
-        ]
+        "rows": [[["#", 16, 0]]]
       }
     }
   ]
