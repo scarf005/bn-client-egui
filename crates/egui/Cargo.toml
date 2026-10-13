@@ -22,7 +22,7 @@ profile = ["dep:puffin", "profiling/profile-with-puffin"]
 
 [dev-dependencies]
 cpu-time = "1"
-egui_kittest = "=0.36.2"
+egui_kittest = { version = "=0.36.2", features = ["wgpu"] }
 
 [[example]]
 name = "present_probe"
