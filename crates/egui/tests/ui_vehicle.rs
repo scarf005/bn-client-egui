@@ -226,3 +226,64 @@ fn clicking_a_tab_chooses_it_through_the_engine() {
         [json!({"kind":"choose","choice_id":"tab:1"})]
     );
 }
+
+#[test]
+fn a_task_list_offers_no_cursor_arrows() {
+    let (h, _) = harness(install_screen());
+    for action in ["LEFT", "UP", "DOWN", "RIGHT"] {
+        assert!(h.query_by_label(action).is_none(), "{action}");
+    }
+}
+
+#[test]
+fn the_owner_line_has_no_label_of_the_clients_own() {
+    let (h, _) = harness(main_screen());
+    h.get_by_label_contains("Bicycle (Ada)");
+    assert!(h.query_by_label("Name:").is_none());
+}
+
+#[test]
+fn empty_lists_print_no_text_the_engine_did_not_send() {
+    let mut screen = main_screen();
+    screen["interaction"]["vehicle"]["parts"] = json!([]);
+    let (h, _) = harness(screen);
+    assert!(h.query_by_label("No part here").is_none());
+    let mut screen = install_screen();
+    screen["interaction"]["choices"] = json!([]);
+    let (h, _) = harness(screen);
+    assert!(h.query_by_label("Nothing to choose").is_none());
+}
+
+#[test]
+fn the_filter_is_shown_as_the_engine_sent_it() {
+    let mut screen = install_screen();
+    screen["interaction"]["vehicle"]["tabs"]["filter"] = json!("board");
+    let (h, _) = harness(screen);
+    h.get_by_label("board");
+    assert!(h.query_by_label("Filter: board").is_none());
+}
+
+#[test]
+fn a_vehicle_wider_than_the_window_is_cut_around_the_cursor_not_wrapped() {
+    let marked = |far: bool| {
+        let mut screen = main_screen();
+        let cells = &mut screen["interaction"]["vehicle"]["cells"];
+        cells[1] = json!({"dx": 0, "dy": -1, "glyph": "Q", "color": "light_gray"});
+        if far {
+            for dx in [-40, 40] {
+                cells
+                    .as_array_mut()
+                    .unwrap()
+                    .push(json!({"dx": dx, "dy": 0, "glyph": "#", "color": "light_gray"}));
+            }
+        }
+        screen
+    };
+    let (narrow, _) = harness(marked(false));
+    let (wide, _) = harness(marked(true));
+    assert!(wide.query_by_label_contains("#").is_none());
+    assert_eq!(
+        wide.get_by_label_contains("Q").rect().height(),
+        narrow.get_by_label_contains("Q").rect().height()
+    );
+}
