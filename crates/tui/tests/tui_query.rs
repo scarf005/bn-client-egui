@@ -1,7 +1,7 @@
 #![recursion_limit = "512"]
 mod common;
-use bn_client_core::{EngineModel, GameModel};
 use bn_client_core::transport::ScriptHandle;
+use bn_client_core::{EngineModel, GameModel};
 use bn_client_tui::TuiApp;
 use common::{connected, fixture, session};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
