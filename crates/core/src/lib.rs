@@ -2,6 +2,7 @@ pub mod clock;
 pub mod color_table;
 pub mod colors;
 pub mod engine_model;
+pub mod interaction;
 pub mod keys;
 pub mod launch;
 pub mod markup;

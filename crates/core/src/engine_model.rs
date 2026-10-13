@@ -2,6 +2,7 @@
 
 use crate::clock::Clock;
 use crate::colors::ColorMap;
+use crate::interaction::{self, InvokeError, Pages};
 use crate::keys;
 use crate::markup::{self, Run};
 use crate::model::{
@@ -10,13 +11,13 @@ use crate::model::{
     OvermapTile, PaneTotals, Pos, Rgb, Shape,
 };
 use crate::protocol::{
-    self, CanvasWire, Cell as WorldCell, Entity, Expect, Incoming, InteractionExpect, Known,
-    LoadingNotice, Look, ModTileset, Operation, Snapshot, Submit, Traits, WorldPos,
+    self, CanvasWire, Cell as WorldCell, Entity, Incoming, InvokeArgs, Known, LoadingNotice, Look,
+    ModTileset, Operation, Row, Screen, Snapshot, Traits, WorldPos,
 };
 use crate::replica::{Outcome, Replica};
 use crate::transport::{Transport, request};
 use serde_json::{Value, json};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 
 /// The map window asked for until the UI reports its own size.
@@ -78,6 +79,8 @@ enum Pending {
     Retile,
     Describe,
     Choices,
+    /// The rows of a list of the top screen, past its first page; the list is in `row_requests`.
+    Rows,
 }
 
 /// The choices past the first page of the interaction with this boundary and schema.
@@ -88,9 +91,6 @@ struct Paged {
     /// A page was asked for and has not arrived.
     waiting: bool,
 }
-
-/// The engine sends at most this many choices per request.
-const PAGE: u64 = 200;
 
 /// Starts the engine again on the same profile.
 pub type Respawn = Box<dyn FnMut() -> std::io::Result<Box<dyn Transport>>>;
@@ -134,8 +134,12 @@ pub struct EngineModel {
     /// A `bn.subscribe` is outstanding; events from the old stream are stale.
     subscribing: bool,
     connected: bool,
-    /// A submitted command has not reached a terminal stage yet.
+    /// A submitted command has not reached a terminal stage yet: `unanswered` or `running` is not empty.
     busy: bool,
+    /// Submits whose answer has not arrived; the engine queues screen-scoped ones behind a running command.
+    unanswered: u32,
+    /// The commands the engine accepted that have not reached a terminal stage.
+    running: HashSet<String>,
     command_id: Option<String>,
     /// The command in flight and the boundary it was sent against; a resend is not recorded.
     sent: Option<(Operation, String)>,
@@ -158,6 +162,9 @@ pub struct EngineModel {
     ground_items: Vec<ItemRow>,
     /// Pages of a long menu fetched after the first, for the interaction they belong to.
     paged: Paged,
+    /// The same for the lists of the top screen, by component id, and which list each request asked for.
+    pages: Pages,
+    row_requests: HashMap<u64, String>,
     /// The tile each running explosion is drawn with, from its `explosion.started`.
     explosion_tiles: HashMap<String, String>,
     /// The same for the rows of `inventory`, for `Drop`.
@@ -393,6 +400,8 @@ impl EngineModel {
             subscribing: false,
             connected: true,
             busy: false,
+            unanswered: 0,
+            running: HashSet::new(),
             command_id: None,
             sent: None,
             resend: None,
@@ -409,6 +418,8 @@ impl EngineModel {
             inventory_cells: vec![],
             ground_items: vec![],
             paged: Paged::default(),
+            pages: Pages::default(),
+            row_requests: HashMap::new(),
             explosion_tiles: HashMap::new(),
             inventory_items: vec![],
             trace: vec![],
@@ -495,10 +506,12 @@ impl EngineModel {
         }
     }
 
-    fn call(&mut self, method: &str, params: Value, kind: Pending) {
+    /// Sends a request and returns its id.
+    fn call(&mut self, method: &str, params: Value, kind: Pending) -> u64 {
         self.next_id += 1;
         self.pending.insert(self.next_id, kind);
         self.transport.send(request(self.next_id, method, params));
+        self.next_id
     }
 
     fn subscribe(&mut self) {
@@ -558,6 +571,8 @@ impl EngineModel {
             Incoming::Malformed(e) => self.messages.push(format!("Bad engine message: {e}")),
             Incoming::Closed => {
                 self.connected = false;
+                self.unanswered = 0;
+                self.running.clear();
                 self.busy = false;
                 self.messages.push("Engine connection closed.".into());
                 let message = match self.transport.exit_reason() {
@@ -599,8 +614,10 @@ impl EngineModel {
                 s.set_stage(stage, n.is_terminal());
             }
         }
+        if n.is_terminal() && self.running.remove(&n.command_id) {
+            self.busy = self.unanswered > 0 || !self.running.is_empty();
+        }
         if n.is_terminal() && self.command_id.as_deref() == Some(&n.command_id) {
-            self.busy = false;
             self.command_id = None;
             // The world swap after choosing the Tutorial ends its command with stale_epoch.
             let swap =
@@ -625,7 +642,8 @@ impl EngineModel {
         if matches!(kind, Pending::Submit)
             && let Err(e) = &result
         {
-            self.busy = false;
+            self.unanswered = self.unanswered.saturating_sub(1);
+            self.busy = self.unanswered > 0 || !self.running.is_empty();
             let kind = e.data.as_ref().map_or(e.message.clone(), error_kind);
             self.stale_resend(Some(&kind));
             if let Some(s) = &mut self.status {
@@ -641,6 +659,18 @@ impl EngineModel {
                 .unwrap_or_default();
             if let Some(h) = self.hovered.as_mut() {
                 h.lines = Some(lines);
+            }
+            return;
+        }
+        if matches!(kind, Pending::Rows) {
+            let asked = self.row_requests.remove(&id);
+            let reply = result
+                .ok()
+                .and_then(|v| serde_json::from_value::<protocol::ChoicesReply>(v).ok());
+            match (reply, asked) {
+                (Some(protocol::ChoicesReply::Rows(page)), _) => self.pages.accept(page),
+                (_, Some(component_id)) => self.pages.failed(&component_id),
+                _ => {}
             }
             return;
         }
@@ -715,6 +745,7 @@ impl EngineModel {
             | Pending::Interrupt
             | Pending::Outcome
             | Pending::Retile
+            | Pending::Rows
             | Pending::Describe => {}
             Pending::Choices => {
                 self.paged.waiting = false;
@@ -726,7 +757,10 @@ impl EngineModel {
             }
             Pending::Submit => {
                 self.mark("received");
+                self.unanswered = self.unanswered.saturating_sub(1);
                 self.command_id = value["command_id"].as_str().map(String::from);
+                self.running.extend(self.command_id.clone());
+                self.busy = self.unanswered > 0 || !self.running.is_empty();
                 if let Some(s) = self.status.as_mut().filter(|s| s.stage == "sent") {
                     s.set_stage("accepted".into(), false);
                 }
@@ -812,25 +846,30 @@ impl EngineModel {
     }
 
     fn submit(&mut self, operation: Operation) -> bool {
+        self.send(operation).is_ok()
+    }
+
+    /// The one way a command leaves the client: `interaction::submit` builds it with the expectation its
+    /// operation takes, or says why there is none.
+    fn send(&mut self, operation: Operation) -> Result<(), InvokeError> {
         let (Some(at), Some(b)) = (self.replica.at(), self.replica.boundary()) else {
-            return false;
+            return Err(InvokeError::NoScreen);
         };
-        let submit = Submit {
-            epoch: at.epoch.clone(),
-            expect: Expect::Interaction(InteractionExpect {
-                revision: at.revision.clone(),
-                boundary_id: b.boundary_id.clone(),
-                schema_id: b.interaction.as_ref().map(|i| i.schema_id.clone()),
-            }),
-            operation,
+        let basis = interaction::Basis {
+            at,
+            boundary: b,
+            busy: self.busy,
         };
+        let submit = interaction::submit(&basis, operation)?;
+        let boundary_id = b.boundary_id.clone();
         self.status = Some(self.describe(&submit.operation));
-        self.sent = Some((submit.operation.clone(), b.boundary_id.clone()));
+        self.sent = Some((submit.operation.clone(), boundary_id));
+        self.unanswered += 1;
         self.busy = true;
         let params = serde_json::to_value(submit).expect("submit serializes");
         self.mark("submit");
         self.call("bn.command.submit", params, Pending::Submit);
-        true
+        Ok(())
     }
 
     /// What the user pressed, named from the boundary the command was sent against.
@@ -852,6 +891,15 @@ impl EngineModel {
                 (
                     found.map(|a| markup::plain(&a.name)),
                     Some(action_id.clone()),
+                )
+            }
+            Operation::Invoke { affordance_id, .. } => {
+                let found = boundary
+                    .and_then(|b| b.stack.last())
+                    .and_then(|s| s.affordances.iter().find(|a| &a.id == affordance_id));
+                (
+                    found.map(|a| markup::plain(&a.label.shown())),
+                    Some(affordance_id.clone()),
                 )
             }
             Operation::Travel { .. } => (Some("Travel".into()), None),
@@ -1916,6 +1964,59 @@ impl GameModel for EngineModel {
         }
     }
 
+    fn screens(&self) -> &[Screen] {
+        self.replica.stack()
+    }
+
+    fn invoke_affordance(
+        &mut self,
+        affordance_id: &str,
+        args: InvokeArgs,
+    ) -> Result<(), InvokeError> {
+        self.send(Operation::Invoke {
+            affordance_id: affordance_id.into(),
+            args: Some(args),
+        })
+    }
+
+    fn more_rows(&mut self, component_id: &str) {
+        let (Some(b), Some(at)) = (self.replica.boundary(), self.replica.at()) else {
+            return;
+        };
+        let list = match b
+            .stack
+            .last()
+            .and_then(|s| s.root.as_ref()?.find(component_id))
+        {
+            Some(protocol::Component::List(list)) => list,
+            _ => return,
+        };
+        let (epoch, boundary_id) = (at.epoch.clone(), b.boundary_id.clone());
+        let Some(page) = self.pages.next(&boundary_id, list) else {
+            return;
+        };
+        let params = protocol::ChoicesParams {
+            epoch,
+            boundary_id,
+            component_id: Some(page.component_id.clone()),
+            offset: page.offset,
+            limit: page.limit,
+        };
+        let id = self.call(
+            "bn.interaction.choices",
+            serde_json::to_value(params).expect("choices params serialize"),
+            Pending::Rows,
+        );
+        self.row_requests.insert(id, page.component_id);
+    }
+
+    fn rows<'a>(&'a self, list: &'a protocol::List) -> Vec<&'a Row> {
+        match self.replica.boundary() {
+            Some(b) => self.pages.rows(&b.boundary_id, list),
+            None => list.rows.iter().collect(),
+        }
+    }
+
     fn more_choices(&mut self) {
         let Some(b) = self.replica.boundary() else {
             return;
@@ -1947,7 +2048,7 @@ impl GameModel for EngineModel {
             boundary_id,
             component_id: None,
             offset: loaded as u64,
-            limit: PAGE,
+            limit: protocol::PAGE_ROWS,
         };
         self.call(
             "bn.interaction.choices",

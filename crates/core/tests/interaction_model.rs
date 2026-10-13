@@ -1,0 +1,234 @@
+//! The interaction core on a live model: the 0.2 hello, an invoke from the top screen's affordances, and
+//! the pages of a list.
+
+mod common;
+use bn_client_core::interaction::InvokeError;
+use bn_client_core::protocol::{self, Component, InvokeArgs};
+use bn_client_core::transport::{ScriptHandle, ScriptedTransport};
+use bn_client_core::{ConnectOptions, EngineModel, GameModel, Wire};
+use common::fixture;
+use serde_json::{Value, json};
+
+fn affordances() -> Value {
+    json!([
+        {"id": "UP", "label": "Move up", "keys": ["UP", "k"], "enabled": true, "expect": "screen"},
+        {"id": "pick", "label": "Choose", "keys": [], "enabled": true, "expect": "boundary",
+            "args": {"row": {"component_id": "list"}}}
+    ])
+}
+
+fn list_root(total: u64) -> Value {
+    json!({"id": "list", "kind": "list", "columns": [], "selection": "single", "total": total,
+        "rows": [row("a")]})
+}
+
+fn row(id: &str) -> Value {
+    json!({"id": id, "label": id, "description": "", "denial": "", "enabled": true,
+        "selectable": true, "selected": false, "columns": []})
+}
+
+/// A subscribe answer whose boundary carries a stack of one screen.
+fn subscribe_with_stack(total: u64) -> Vec<Value> {
+    let mut subscribe = fixture("subscribe_result");
+    subscribe["result"]["interaction"]["stack"] = json!([{
+        "screen_id": "screen:3", "role": "dialog", "root": list_root(total),
+        "affordances": affordances()}]);
+    vec![
+        subscribe,
+        fixture("snapshot_part_0"),
+        fixture("snapshot_part_1"),
+    ]
+}
+
+fn model(
+    wire: Wire,
+    total: u64,
+    extra: impl FnOnce(ScriptedTransport) -> ScriptedTransport,
+) -> (EngineModel, ScriptHandle) {
+    let (t, h) = ScriptedTransport::new();
+    let t = extra(
+        t.on("bn.hello", vec![fixture("hello_result")])
+            .on("bn.subscribe", subscribe_with_stack(total)),
+    );
+    let options = ConnectOptions {
+        wire,
+        ..ConnectOptions::default()
+    };
+    let mut m = EngineModel::open(Box::new(t), options);
+    m.poll();
+    (m, h)
+}
+
+fn submits(h: &ScriptHandle) -> Vec<Value> {
+    h.sent()
+        .into_iter()
+        .filter(|m| m["method"] == "bn.command.submit")
+        .map(|m| m["params"].clone())
+        .collect()
+}
+
+#[test]
+fn the_default_hello_speaks_0_1_with_its_loose_members() {
+    let (_, h) = model(Wire::default(), 1, |t| t);
+    let hello = &h.sent()[0]["params"];
+    assert_eq!(hello["versions"], json!(["0.1"]));
+    assert_eq!(hello["delivery"], json!({"credits": 256, "max_hz": 60}));
+    assert!(hello.get("schema").is_none() && hello.get("capabilities").is_none());
+}
+
+#[test]
+fn the_0_2_hello_names_the_schema_and_its_capabilities() {
+    let (_, h) = model(Wire::V02, 1, |t| t);
+    let hello = &h.sent()[0]["params"];
+    assert_eq!(hello["versions"], json!(["0.2"]));
+    assert_eq!(hello["schema"], json!(protocol::SCHEMA_HASH));
+    assert_eq!(
+        hello["capabilities"]["delivery"],
+        json!({"credits": 256, "max_hz": 60})
+    );
+    assert!(hello.get("delivery").is_none() && hello.get("viewport").is_none());
+    assert_eq!(
+        hello["capabilities"]["viewport"],
+        json!({"cols": 40, "rows": 25})
+    );
+}
+
+#[test]
+fn the_stack_of_the_boundary_is_the_models_screens() {
+    let (m, _) = model(Wire::V02, 1, |t| t);
+    let [screen] = m.screens() else {
+        panic!("one screen: {:?}", m.screens())
+    };
+    assert_eq!(screen.screen_id, "screen:3");
+    assert_eq!(screen.affordances.len(), 2);
+}
+
+#[test]
+fn a_screen_scoped_invoke_goes_out_expecting_the_screen_and_queues_while_busy() {
+    let (mut m, h) = model(Wire::V02, 1, |t| {
+        t.on("bn.command.submit", vec![fixture("submit_result")])
+    });
+    m.invoke_affordance("UP", InvokeArgs::default()).unwrap();
+    assert!(m.busy());
+    m.invoke_affordance("UP", InvokeArgs::default()).unwrap();
+    assert_eq!(
+        submits(&h),
+        [
+            json!({"epoch": "e7f3", "expect": {"screen_id": "screen:3"},
+                "operation": {"kind": "invoke", "affordance_id": "UP", "args": {}}}),
+            json!({"epoch": "e7f3", "expect": {"screen_id": "screen:3"},
+                "operation": {"kind": "invoke", "affordance_id": "UP", "args": {}}}),
+        ]
+    );
+}
+
+#[test]
+fn a_boundary_scoped_invoke_waits_for_the_running_command() {
+    let (mut m, h) = model(Wire::V02, 1, |t| t);
+    let args = InvokeArgs {
+        row: Some("a".into()),
+        ..InvokeArgs::default()
+    };
+    m.invoke_affordance("pick", args.clone()).unwrap();
+    assert_eq!(
+        submits(&h)[0]["expect"],
+        json!({"boundary_id": "b:12", "revision": "31"})
+    );
+    assert_eq!(m.invoke_affordance("pick", args), Err(InvokeError::Busy));
+    assert_eq!(submits(&h).len(), 1);
+}
+
+#[test]
+fn an_invoke_the_screen_does_not_offer_is_not_sent() {
+    let (mut m, h) = model(Wire::V02, 1, |t| t);
+    assert_eq!(
+        m.invoke_affordance("nope", InvokeArgs::default()),
+        Err(InvokeError::Unknown("nope".into()))
+    );
+    assert!(submits(&h).is_empty() && !m.busy());
+}
+
+fn rows_list(m: &EngineModel) -> &protocol::List {
+    match m.screens().last().and_then(|s| s.root.as_ref()) {
+        Some(Component::List(list)) => list,
+        other => panic!("a list: {other:?}"),
+    }
+}
+
+fn page_reply(ids: &[&str], total: u64) -> Vec<Value> {
+    vec![
+        json!({"jsonrpc": "2.0", "result": {"boundary_id": "b:12", "component_id": "list",
+        "total": total, "rows": ids.iter().map(|id| row(id)).collect::<Vec<_>>()}}),
+    ]
+}
+
+#[test]
+fn the_rows_past_the_first_page_are_asked_for_by_component_id() {
+    let (mut m, h) = model(Wire::V02, 3, |t| {
+        t.on("bn.interaction.choices", page_reply(&["b", "c"], 3))
+    });
+    assert_eq!(m.rows(rows_list(&m)).len(), 1);
+    m.more_rows("list");
+    m.more_rows("list");
+    let asked = h
+        .sent()
+        .into_iter()
+        .filter(|x| x["method"] == "bn.interaction.choices")
+        .map(|x| x["params"].clone())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        asked,
+        [
+            json!({"epoch": "e7f3", "boundary_id": "b:12", "component_id": "list",
+            "offset": 1, "limit": 200})
+        ],
+        "once, while the page is on its way"
+    );
+    m.poll();
+    let ids = m
+        .rows(rows_list(&m))
+        .iter()
+        .map(|r| r.id.clone())
+        .collect::<Vec<_>>();
+    assert_eq!(ids, ["a", "b", "c"]);
+    m.more_rows("list");
+    assert_eq!(
+        h.sent_methods()
+            .iter()
+            .filter(|x| *x == "bn.interaction.choices")
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn a_refused_page_is_not_asked_again_in_the_same_boundary() {
+    let refusal = json!({"jsonrpc": "2.0", "error": {"code": 1000, "message": "x",
+        "data": {"kind": "stale_boundary"}}});
+    let (mut m, h) = model(Wire::V02, 3, |t| {
+        t.on("bn.interaction.choices", vec![refusal])
+            .on("bn.interaction.choices", page_reply(&["b", "c"], 3))
+    });
+    m.more_rows("list");
+    m.poll();
+    m.more_rows("list");
+    m.poll();
+    m.more_rows("list");
+    let asks = h
+        .sent_methods()
+        .iter()
+        .filter(|x| *x == "bn.interaction.choices")
+        .count();
+    assert_eq!(asks, 1);
+    assert_eq!(m.rows(rows_list(&m)).len(), 1);
+}
+
+#[test]
+fn a_component_that_is_not_a_list_asks_for_nothing() {
+    let (mut m, h) = model(Wire::V02, 3, |t| t);
+    m.more_rows("missing");
+    assert!(
+        !h.sent_methods()
+            .contains(&"bn.interaction.choices".to_string())
+    );
+}

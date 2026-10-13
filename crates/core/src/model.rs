@@ -1,7 +1,10 @@
 use crate::colors::ColorMap;
+use crate::interaction::InvokeError;
 use crate::markup::{self, Run};
 
-use crate::protocol::{Area, Column, Editor, Mark, ModTileset, Vehicle};
+use crate::protocol::{
+    Area, Column, Editor, InvokeArgs, List, Mark, ModTileset, Row, Screen, Vehicle,
+};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Pos {
     pub x: i32,
@@ -676,6 +679,20 @@ pub trait GameModel {
     /// One wheel step in the open menu; `up` moves the engine's cursor three rows up.
     fn scroll_menu(&mut self, _up: bool) -> bool {
         false
+    }
+    /// The open screens of the interaction stack, outermost first; empty from a 0.1 engine.
+    fn screens(&self) -> &[Screen] {
+        &[]
+    }
+    /// Runs an affordance of the top screen by id, with the arguments its shape asks for.
+    fn invoke_affordance(&mut self, _id: &str, _args: InvokeArgs) -> Result<(), InvokeError> {
+        Err(InvokeError::NoScreen)
+    }
+    /// Fetches the next page of a list that has more rows than it holds.
+    fn more_rows(&mut self, _component_id: &str) {}
+    /// The rows of a list of the top screen that are known: its first page, then the pages fetched.
+    fn rows<'a>(&'a self, list: &'a List) -> Vec<&'a Row> {
+        list.rows.iter().collect()
     }
     /// Fetches the next page of a menu that has more choices than it lists.
     fn more_choices(&mut self) {}
