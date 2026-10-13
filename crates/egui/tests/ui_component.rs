@@ -2,7 +2,7 @@
 //! (`crates/core/tests/fixtures/0.2.examples/`): one test per component kind, then the affordances and keys.
 mod common;
 use bn_client_egui::transport::{ScriptHandle, ScriptedTransport};
-use bn_client_egui::{App, Clock, ConnectOptions, EngineModel, Wire};
+use bn_client_egui::{App, Clock, ConnectOptions, EngineModel};
 use common::fixture;
 use eframe::egui;
 use egui_kittest::Harness;
@@ -51,10 +51,7 @@ fn harness<'a>(screen: Value) -> (H<'a>, ScriptHandle) {
         .on("bn.subscribe", reply)
         .on("bn.command.submit", vec![fixture("submit_result")]);
     let clock = Clock::manual();
-    let options = ConnectOptions {
-        wire: Wire::V02,
-        ..ConnectOptions::default()
-    };
+    let options = ConnectOptions::default();
     let model = EngineModel::open(Box::new(t), options).with_clock(clock.clone());
     let mut harness = Harness::builder()
         .with_size(egui::vec2(1100.0, 800.0))
