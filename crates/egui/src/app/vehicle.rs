@@ -311,17 +311,15 @@ impl<M: GameModel> App<M> {
             .max_height(ui.ctx().content_rect().height() * 0.4)
             .show(ui, |ui| {
                 for row in &rows {
-                    let dim = row
-                        .columns
-                        .iter()
-                        .any(|(l, v)| l == "Materials" && v == "no");
                     let name = bn_client_core::markup::plain(&row.label);
                     let hotkey = match row.hotkey.as_str() {
                         "" => String::new(),
                         key => format!("{key} "),
                     };
-                    let text = egui::RichText::new(format!("{hotkey}{name}"));
-                    let text = if dim { text.weak() } else { text };
+                    let text = self.rich(
+                        ui,
+                        &super::inventory::tinted(&row.color, &format!("{hotkey}{name}")),
+                    );
                     let response = ui.selectable_label(row.highlighted, text);
                     if row.highlighted && !response.is_pointer_button_down_on() {
                         response.scroll_to_me(None);

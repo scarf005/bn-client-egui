@@ -43,6 +43,7 @@
      "selected": false,
      "columns": [
       {
+       "key": "type",
        "label": "Type",
        "value": "lighter"
       }
@@ -59,6 +60,7 @@
      "selected": true,
      "columns": [
       {
+       "key": "type",
        "label": "Type",
        "value": "can_food"
       }

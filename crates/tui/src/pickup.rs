@@ -3,7 +3,6 @@
 //! row's description in a bordered window below. Rows, the header and the keys are the engine's;
 //! the client only types a count (digits, then Enter, the mark key or a row key applies it).
 
-use super::trade::{column, selection_mark};
 use super::{SIDE_WIDTH, TuiApp, color};
 use bn_client_core::{GameModel, Menu, MenuChoice};
 use crossterm::event::{KeyCode, KeyEvent};
@@ -14,8 +13,6 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Clear, Paragraph, Wrap};
 use unicode_width::UnicodeWidthStr;
 
-/// The characters the native list hands out as row keys, in order, minus those an action binds.
-const ROW_KEYS: &str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ:;";
 /// Column of the item name; the key, nesting mark and selection mark come before it.
 const NAME_AT: u16 = 6;
 
@@ -33,18 +30,6 @@ fn tinted(name: &str, text: &str) -> String {
         "" => text.to_string(),
         name => format!("<color_{name}>{text}</color>"),
     }
-}
-
-/// The key of the `index`th row: the engine's when it publishes one, else the native sequence.
-fn row_key(menu: &Menu, actions: &[bn_client_core::ActionEntry], index: usize) -> Option<String> {
-    let entries = menu.entries();
-    let row = entries.get(index).filter(|r| !r.hotkey.is_empty());
-    let free = |c: &char| {
-        let bound = |a: &bn_client_core::ActionEntry| a.keys.iter().any(|k| *k == c.to_string());
-        !actions.iter().any(bound)
-    };
-    row.map(|r| r.hotkey.clone())
-        .or_else(|| ROW_KEYS.chars().filter(free).nth(index).map(String::from))
 }
 
 impl<M: GameModel> TuiApp<M> {
@@ -72,8 +57,7 @@ impl<M: GameModel> TuiApp<M> {
             (KeyCode::Char(c), _) => {
                 let typed = c.to_string();
                 let bound = actions.iter().any(|a| a.keys.contains(&typed));
-                let hit = (0..rows.len())
-                    .find(|&i| row_key(menu, &actions, i).as_deref() == Some(typed.as_str()));
+                let hit = rows.iter().position(|r| r.hotkey == typed);
                 match hit.filter(|_| !bound) {
                     Some(i) => self.take_count(rows[i]),
                     None => self.menu_key(menu, key),
@@ -182,11 +166,6 @@ impl<M: GameModel> TuiApp<M> {
         let at = rows.iter().position(|r| r.highlighted).unwrap_or(0);
         let start = usize::from(at as u16 / shown * shown);
         self.pickup.rows.clear();
-        let nested = |row: &MenuChoice| {
-            column(row, "Nesting")
-                .strip_prefix("child of ")
-                .map(str::to_string)
-        };
         for (n, row) in rows.iter().enumerate().skip(start).take(shown.into()) {
             let cell = Rect {
                 y: 1 + (n - start) as u16,
@@ -199,35 +178,37 @@ impl<M: GameModel> TuiApp<M> {
             } else {
                 Modifier::empty()
             });
-            let key = row_key(menu, &actions, n).unwrap_or_else(|| " ".into());
-            // The native backslash of a stack inside another: lit by how much of the parent is marked.
-            let parent = nested(row).and_then(|id| rows.iter().find(|r| r.id == id));
-            let tone = parent.map_or(Color::DarkGray, |p| {
-                let siblings = rows
-                    .iter()
-                    .filter(|r| nested(r).as_deref() == Some(p.id.as_str()));
-                match (p.selected, siblings.into_iter().all(|r| r.selected)) {
-                    (false, _) => Color::DarkGray,
-                    (true, true) => Color::LightBlue,
-                    (true, false) => Color::Yellow,
-                }
+            let key = Some(row.hotkey.clone())
+                .filter(|k| !k.is_empty())
+                .unwrap_or_else(|| " ".into());
+            // The native backslash of a stack inside another, in the color the engine lit it.
+            let paint = |tone: &str, text: &str| {
+                let runs = self.model.styled(&tinted(tone, text));
+                let span = |run: bn_client_core::markup::Run| {
+                    let style = run
+                        .color
+                        .map_or(Style::new(), |c| Style::new().fg(color(c)));
+                    Span::styled(run.text, style)
+                };
+                runs.into_iter().map(span).collect::<Vec<_>>()
+            };
+            let child = match row.nest_color.as_str() {
+                "" => vec![Span::raw(" ")],
+                nest => paint(nest, "\\"),
+            };
+            let mark = row.mark.as_ref().map_or(vec![Span::raw("  ")], |m| {
+                paint(m.color.as_deref().unwrap_or(""), &format!("{} ", m.glyph))
             });
-            let child = match (nested(row).is_some(), tone) {
-                (true, tone) => Span::styled("\\", Style::new().fg(tone)),
-                _ => Span::raw(" "),
-            };
-            let mark = selection_mark(row);
-            let mark = match mark {
-                '-' => Span::raw("- "),
-                m => Span::styled(format!("{m} "), Style::new().fg(Color::LightBlue)),
-            };
             let name_width = usize::from(width.saturating_sub(NAME_AT));
-            let mut spans = vec![Span::styled(key, hilite), child, mark, Span::raw("  ")];
+            let mut spans = vec![Span::styled(key, hilite)];
+            spans.extend(child);
+            spans.extend(mark);
+            spans.push(Span::raw("  "));
             let mut used = 0;
             // The row as the native list prints it: its markup (count, symbol, stolen mark) in the item's color.
-            let name = match column(row, "Name markup") {
-                "" => tinted(column(row, "Row color"), &row.label),
-                markup => tinted(column(row, "Row color"), markup),
+            let name = match row.markup.as_str() {
+                "" => tinted(&row.color, &row.label),
+                markup => tinted(&row.color, markup),
             };
             for run in self.model.styled(&name) {
                 let text = super::aim::fit(&run.text, name_width.saturating_sub(used));

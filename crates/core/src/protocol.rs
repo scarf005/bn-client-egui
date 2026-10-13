@@ -425,6 +425,30 @@ pub struct Choice {
     pub selected_count: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub available_count: Option<u64>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub favorite: bool,
+    /// Game color names of the row's text and of its hotkey.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key_color: Option<String>,
+    /// The row's name with the native color tags.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub markup: Option<String>,
+    /// The color of the nesting slash drawn before a nested row.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nest_color: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mark: Option<Mark>,
+}
+
+/// The selection mark the native list prints before a row.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Mark {
+    /// `+` all of the row, `#` some of it, `-` none.
+    pub glyph: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
 }
 
 /// A value the row can be set to directly with a `fill` on the row's id.
@@ -456,8 +480,14 @@ pub struct EditorValue {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Column {
+    /// The stable, untranslated name clients look the column up by.
+    #[serde(default)]
+    pub key: String,
     pub label: String,
     pub value: String,
+    /// The game color name of the value, when the native screen tints it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

@@ -184,7 +184,7 @@ fn live_tui_changes_an_option_and_rebinds_a_key_that_then_walks() {
         a.model
             .menu()
             .and_then(|m| m.choices.into_iter().find(|c| c.id == "action:RIGHT"))
-            .is_some_and(|c| c.columns[1].1 == "Unbound")
+            .is_some_and(|c| c.columns[1].value == "Unbound")
     };
     wait(&mut app, "the removal", |a| {
         context(a) != "HELP_KEYBINDINGS" || unbound(a)
@@ -209,7 +209,7 @@ fn live_tui_changes_an_option_and_rebinds_a_key_that_then_walks() {
         a.model
             .menu()
             .and_then(|m| m.choices.into_iter().find(|c| c.id == "action:RIGHT"))
-            .map(|c| c.columns[0].1.clone())
+            .map(|c| c.columns[0].value.clone())
     };
     wait(&mut app, "the new key", |a| keys(a).as_deref() == Some("z"));
     leave_saving(&mut app);

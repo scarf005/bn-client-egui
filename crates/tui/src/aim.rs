@@ -73,13 +73,6 @@ fn side(index: usize) -> &'static str {
     if index == 0 { "LEFT" } else { "RIGHT" }
 }
 
-fn column<'a>(row: &'a MenuChoice, name: &str) -> &'a str {
-    row.columns
-        .iter()
-        .find(|(l, _)| l == name)
-        .map_or("", |(_, v)| v.as_str())
-}
-
 /// The pane's weight and volume as the native header prints them, in red once over capacity.
 fn totals_spans(t: &PaneTotals) -> Vec<Span<'static>> {
     let shown = |text: String, over: bool| match over {
@@ -295,9 +288,9 @@ impl<M: GameModel> TuiApp<M> {
             spans.push(Span::raw(" ".repeat(name_width.saturating_sub(used))));
             spans.push(Span::raw(format!(
                 " {:>4} {:>9} {:>9}",
-                column(row, "Count"),
-                column(row, "Weight"),
-                column(row, "Volume")
+                row.column("count"),
+                row.column("weight"),
+                row.column("volume")
             )));
             let line = Line::from(spans);
             let line = match row.highlighted && source {

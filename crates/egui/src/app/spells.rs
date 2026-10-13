@@ -44,7 +44,7 @@ impl<M: GameModel> App<M> {
                         .max_height(height)
                         .show(&mut cols[0], |ui| {
                             for (i, row) in rows.iter().enumerate() {
-                                let favorite = row.columns.iter().any(|(l, _)| l == "Favorite");
+                                let favorite = row.favorite;
                                 let label = markup::plain(&row.label);
                                 let text = match (row.hotkey.is_empty(), favorite) {
                                     (true, false) => label,

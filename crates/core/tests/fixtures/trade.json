@@ -79,32 +79,51 @@
           "pane_id": "pane:npc",
           "columns": [
             {
-              "label": "Unit price",
+              "key": "name",
+              "label": "Name (charges)",
+              "value": "tin can (3)"
+            },
+            {
+              "key": "unit_price",
+              "label": "unit price",
               "value": "$0.50"
             },
             {
+              "key": "weight",
               "label": "Weight",
               "value": "0.10 kg"
             },
             {
+              "key": "price_tone",
               "label": "Price tone",
               "value": "good"
             },
             {
+              "key": "category",
               "label": "Category",
               "value": "TOOLS"
             },
             {
-              "label": "Stack weight",
+              "key": "stack_weight",
+              "label": "weight",
               "value": "0.30"
             },
             {
-              "label": "Stack volume",
+              "key": "stack_volume",
+              "label": "vol",
               "value": "0.00"
+            },
+            {
+              "key": "available",
+              "label": "amt",
+              "value": "3"
             }
           ],
           "available_count": 3,
-          "selected_count": 2
+          "selected_count": 2,
+          "mark": {
+            "glyph": "#"
+          }
         },
         {
           "id": "trade:y1",
@@ -117,28 +136,46 @@
           "pane_id": "pane:you",
           "columns": [
             {
-              "label": "Unit price",
+              "key": "name",
+              "label": "Name (charges)",
+              "value": "lighter"
+            },
+            {
+              "key": "unit_price",
+              "label": "unit price",
               "value": "$1.00"
             },
             {
+              "key": "price_tone",
               "label": "Price tone",
               "value": "bad"
             },
             {
+              "key": "category",
               "label": "Category",
               "value": "TOOLS"
             },
             {
-              "label": "Stack weight",
+              "key": "stack_weight",
+              "label": "weight",
               "value": "0.00"
             },
             {
-              "label": "Stack volume",
+              "key": "stack_volume",
+              "label": "vol",
               "value": "0.00"
+            },
+            {
+              "key": "available",
+              "label": "amt",
+              "value": "1"
             }
           ],
           "available_count": 1,
-          "selected_count": 0
+          "selected_count": 0,
+          "mark": {
+            "glyph": "-"
+          }
         }
       ],
       "compat": {

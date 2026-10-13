@@ -71,7 +71,7 @@ fn main_screen() -> Value {
 
 fn install_screen() -> Value {
     let unmet = json!({"enabled": false, "denial": "The requirements are not met.",
-        "highlighted": true, "columns": [{"label": "Materials", "value": "no"}]});
+        "highlighted": true, "color": "c_dark_gray"});
     let view = vehicle("install", |v| {
         v["tabs"] = json!({"labels": ["All", "Cargo"], "selected": 0, "filter": ""});
         v["detail"] = json!({

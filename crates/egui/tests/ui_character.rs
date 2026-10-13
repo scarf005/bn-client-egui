@@ -197,8 +197,8 @@ fn an_action_the_engine_does_not_offer_has_no_button() {
 #[test]
 fn mutations_list_passive_and_active_traits_side_by_side() {
     let (h, _) = harness("mutations");
-    h.get_by_label("Passive");
-    h.get_by_label("Active");
+    h.get_by_label("Passive:");
+    h.get_by_label("Active:");
     h.get_by_label_contains("Night vision");
     let spit = h.get_by_label_contains("Acid spit");
     let text = spit.accesskit_node().label().unwrap();
