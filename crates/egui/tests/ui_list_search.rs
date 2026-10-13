@@ -60,44 +60,6 @@ fn list(count: usize) -> Value {
         "allow_set_count":false})
 }
 
-const FILTER: &str = r#"[{"id":"FILTER","name":"Filter","keys":["/"]}]"#;
-
-fn actions() -> Value {
-    serde_json::from_str(FILTER).unwrap()
-}
-
-#[test]
-fn a_debug_sized_list_with_the_engine_filter_action_offers_the_filter() {
-    let (mut h, script) = harness();
-    h.run_steps(3);
-    script.push(show(41, actions(), list(8)));
-    h.run_steps(4);
-    h.get_by_label("Filter").click();
-    h.run_steps(3);
-    assert_eq!(
-        submits(&script),
-        [json!({"kind":"action","action_id":"FILTER"})]
-    );
-}
-
-#[test]
-fn a_two_row_question_offers_no_filter_even_with_the_action() {
-    let (mut h, script) = harness();
-    h.run_steps(3);
-    script.push(show(41, actions(), list(2)));
-    h.run_steps(4);
-    assert!(h.query_by_label("Filter").is_none());
-}
-
-#[test]
-fn a_list_without_the_engine_filter_action_offers_no_filter() {
-    let (mut h, script) = harness();
-    h.run_steps(3);
-    script.push(show(41, json!([]), list(30)));
-    h.run_steps(4);
-    assert!(h.query_by_label("Filter").is_none());
-}
-
 fn refused(id: &str, label: &str, denial: &str) -> Value {
     let mut c = choice(id, label);
     c["enabled"] = false.into();

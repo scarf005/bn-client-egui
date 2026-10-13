@@ -116,3 +116,92 @@ fn engine_key(key: egui::Key, modifiers: egui::Modifiers) -> Option<String> {
     };
     Some(name.to_string())
 }
+
+/// The state of a typing prompt between frames.
+#[derive(Clone, Default)]
+struct Typing {
+    /// The value the engine last showed.
+    engine: String,
+    text: String,
+    /// The text last handed out, so it goes out once.
+    handed: String,
+    /// Every text handed out, to tell the engine's echo of one from news.
+    sent: Vec<String>,
+    composing: bool,
+    entered: bool,
+    submit: bool,
+}
+
+/// What a typing prompt hands out this frame.
+#[derive(Default)]
+pub struct Typed {
+    /// The newest text, once the engine can take it.
+    pub changed: Option<String>,
+    /// The text that Return submits, once the engine can take it.
+    pub submit: Option<String>,
+}
+
+/// A text box whose every change goes out as it is typed and whose Return submits, such as the prompt of a
+/// list filter. The engine's value replaces the box only when it is news: a new prompt, or a value this box
+/// did not send. The echo of an older send, or any change while the engine is busy, must not undo the newer
+/// text, whose cursor would then land in the wrong place. `screen` tells one prompt from the next.
+pub fn typing_prompt(
+    ui: &mut egui::Ui,
+    screen: &str,
+    id: &str,
+    label: &str,
+    value: &str,
+    busy: bool,
+) -> Typed {
+    let key = egui::Id::new(("typing", screen, id));
+    let fresh = ui.data(|d| d.get_temp::<Typing>(key)).is_none();
+    let mut state = ui
+        .data(|d| d.get_temp::<Typing>(key))
+        .unwrap_or_else(|| Typing {
+            engine: value.into(),
+            text: value.into(),
+            handed: value.into(),
+            ..Typing::default()
+        });
+    if !fresh && state.engine != value {
+        if !(state.sent.iter().any(|sent| sent == value) || busy) {
+            state.text = value.into();
+            state.handed = value.into();
+        }
+        state.engine = value.into();
+    }
+    let edit = egui::TextEdit::singleline(&mut state.text).desired_width(f32::INFINITY);
+    let response = ui.add(edit.hint_text(label));
+    let name = label.to_string();
+    ui.ctx()
+        .accesskit_node_builder(response.id, move |b| b.set_label(name));
+    if !state.entered {
+        response.request_focus();
+        state.entered = response.has_focus();
+    }
+    let enter = ui.input(|i| i.key_pressed(egui::Key::Enter));
+    state.submit |= (response.lost_focus() || response.has_focus()) && enter;
+    // Preedit text sits in the box while composing; only the committed text is typed.
+    state.composing = ui.input(|i| {
+        i.events
+            .iter()
+            .fold(state.composing, |composing, event| match event {
+                egui::Event::Ime(egui::ImeEvent::Preedit { text, .. }) => !text.is_empty(),
+                egui::Event::Ime(egui::ImeEvent::Commit(_)) => false,
+                _ => composing,
+            })
+    });
+    let mut typed = Typed::default();
+    if state.submit && !busy {
+        state.submit = false;
+        state.handed = state.text.clone();
+        state.sent.push(state.text.clone());
+        typed.submit = Some(state.text.clone());
+    } else if state.text != state.handed && !state.composing && !busy {
+        state.handed = state.text.clone();
+        state.sent.push(state.text.clone());
+        typed.changed = Some(state.text.clone());
+    }
+    ui.data_mut(|d| d.insert_temp(key, state));
+    typed
+}

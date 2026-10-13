@@ -4,14 +4,14 @@
 
 use super::{color, token};
 use bn_client_core::colors::ColorMap;
-use bn_client_core::interaction::{ArgKind, Interaction, InvokeError, Reason, Window};
+use bn_client_core::interaction::{self, ArgKind, Interaction, InvokeError, Reason, Window};
 use bn_client_core::markup::Run;
 use bn_client_core::protocol::{
-    Component, FieldKind, Form, Grid, GridCell, List, MapComponent, Panel, Row, RowColumn, Screen,
-    ScreenRole, Selection, Split, Tabs, TextBlock, TextRole, Tone,
+    AffordanceRole, Component, FieldKind, Form, Grid, GridCell, List, MapComponent, Panel, Row,
+    RowColumn, Screen, ScreenRole, Selection, Split, Tabs, TextBlock, TextRole, Tone,
 };
 use bn_client_core::{GameModel, Rgb};
-use crossterm::event::KeyEvent;
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
@@ -71,12 +71,104 @@ pub(super) struct View {
     note: Option<String>,
     /// How much of each list and text the last frame showed.
     extents: HashMap<String, Window>,
+    /// The text of the prompt on top, which goes out as it is typed.
+    typing: Option<Typing>,
+}
+
+/// A text prompt the engine confirms with Return: a list filter, a name. Its text goes out with each key.
+struct Typing {
+    screen: String,
+    form: String,
+    field: String,
+    fill: String,
+    submit: String,
+    text: String,
+    /// The text last sent, so it goes out once.
+    handed: String,
+    /// Return was pressed and the text is to be submitted once the engine can take it.
+    submitting: bool,
+}
+
+impl Typing {
+    /// The prompt of `screen`, started from the engine's value for it.
+    fn of(screen: &Screen) -> Option<Self> {
+        nodes(screen).into_iter().find_map(|c| {
+            let Component::Form(form) = c else {
+                return None;
+            };
+            let submit = screen
+                .affordances
+                .iter()
+                .find(|a| Some(&a.id) == form.submit.as_ref())
+                .filter(|a| a.role == Some(AffordanceRole::Confirm))?;
+            let field = form.fields.iter().find(|f| f.kind == FieldKind::Text)?;
+            let fill = interaction::form_fill(screen, form, &field.id)?;
+            Some(Self {
+                screen: screen.screen_id.clone(),
+                form: form.head.id.clone(),
+                field: field.id.clone(),
+                fill: fill.id.clone(),
+                submit: submit.id.clone(),
+                text: field.value.clone(),
+                handed: field.value.clone(),
+                submitting: false,
+            })
+        })
+    }
+
+    /// A key typed into the prompt; false when the screen's own keys take it.
+    fn key(&mut self, key: KeyEvent) -> bool {
+        let plain = !key
+            .modifiers
+            .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT);
+        match key.code {
+            KeyCode::Char(c) if plain => self.text.push(c),
+            KeyCode::Backspace => {
+                self.text.pop();
+            }
+            KeyCode::Enter => self.submitting = true,
+            _ => return false,
+        }
+        true
+    }
 }
 
 impl View {
     /// Follows the stack the engine published.
     fn sync<M: GameModel>(&mut self, model: &M) {
         self.ui.sync(model.screens());
+        let top = described(model.screens());
+        if self.typing.as_ref().map(|t| &t.screen) != top.map(|s| &s.screen_id) {
+            self.typing = top.and_then(Typing::of);
+        }
+    }
+
+    /// Sends the prompt's newest text, or submits it, once the engine can take it.
+    fn send_typed<M: GameModel>(&mut self, model: &mut M) {
+        let (Some(typing), Some(screen)) = (self.typing.as_mut(), described(model.screens()))
+        else {
+            return;
+        };
+        if model.busy() || (typing.text == typing.handed && !typing.submitting) {
+            return;
+        }
+        let affordance = if typing.submitting {
+            &typing.submit
+        } else {
+            &typing.fill
+        };
+        let out = self.ui.fill(
+            screen,
+            affordance,
+            &typing.form,
+            &typing.field,
+            &typing.text,
+        );
+        typing.handed.clone_from(&typing.text);
+        typing.submitting = false;
+        if let Some((id, args)) = out.invoke {
+            let _ = model.invoke_affordance(&id, args);
+        }
     }
 
     /// Asks for the next page of each list the view is near the end of.
@@ -107,6 +199,7 @@ impl View {
     ) {
         self.sync(model);
         self.page(model);
+        self.send_typed(model);
         let model = &*model;
         let Some(screen) = described(model.screens()) else {
             return;
@@ -142,6 +235,7 @@ impl View {
                 colors: model.colors(),
                 ui: &mut self.ui,
                 extents: &mut self.extents,
+                typing: self.typing.as_ref(),
             };
             painter.component(f, root, body);
         }
@@ -189,6 +283,9 @@ impl View {
     pub(super) fn key<M: GameModel>(&mut self, model: &mut M, key: KeyEvent) {
         self.sync(model);
         self.note = None;
+        if self.ui.ask().is_none() && self.typing.as_mut().is_some_and(|typing| typing.key(key)) {
+            return;
+        }
         let Some(name) = token(key) else {
             return;
         };
@@ -394,6 +491,7 @@ struct Painter<'a, M> {
     colors: &'a ColorMap,
     ui: &'a mut Interaction,
     extents: &'a mut HashMap<String, Window>,
+    typing: Option<&'a Typing>,
 }
 
 impl<M: GameModel> Painter<'_, M> {
@@ -564,7 +662,13 @@ impl<M: GameModel> Painter<'_, M> {
                     .iter()
                     .find(|o| o.id == field.value)
                     .map_or(field.value.clone(), |o| o.label.shown()),
-                _ => field.value.clone(),
+                _ => match self
+                    .typing
+                    .filter(|t| t.form == form.head.id && t.field == field.id)
+                {
+                    Some(typing) => format!("{}_", typing.text),
+                    None => field.value.clone(),
+                },
             };
             let range = match (&field.min, &field.max) {
                 (Some(min), Some(max)) => format!(" [{min}..{max}]"),
@@ -797,6 +901,7 @@ impl<M: GameModel> Painter<'_, M> {
             f.render_widget(Paragraph::new(Line::from(spans)), head);
         }
         let any_hotkey = shown.iter().any(|r| r.hotkey.is_some());
+        let any_toggled = shown.iter().any(|r| r.toggled.is_some());
         let lines = shown
             .iter()
             .map(|row| {
@@ -807,6 +912,7 @@ impl<M: GameModel> Painter<'_, M> {
                     RowDraw {
                         current,
                         any_hotkey,
+                        any_toggled,
                         label_width,
                         widths: &widths,
                     },
@@ -868,6 +974,7 @@ impl<M: GameModel> Painter<'_, M> {
         let RowDraw {
             current,
             any_hotkey,
+            any_toggled,
             label_width,
             widths,
         } = draw;
@@ -884,6 +991,11 @@ impl<M: GameModel> Painter<'_, M> {
         let picked = self.ui.picks(&list.head.id).iter().any(|p| p.id == row.id);
         let boxed = matches!(list.selection, Selection::Multi | Selection::Count);
         let mark = match (&row.mark, boxed) {
+            _ if any_toggled => match row.toggled {
+                Some(true) => "[x] ".into(),
+                Some(false) => "[ ] ".into(),
+                None => "    ".into(),
+            },
             (Some(mark), _) => format!("{} ", mark.glyph),
             (None, true) if picked => "x ".into(),
             (None, true) => "- ".into(),
@@ -924,6 +1036,7 @@ impl<M: GameModel> Painter<'_, M> {
 struct RowDraw<'a> {
     current: bool,
     any_hotkey: bool,
+    any_toggled: bool,
     label_width: usize,
     widths: &'a [usize],
 }

@@ -1258,18 +1258,6 @@ fn list_with(rows: usize) -> Value {
 }
 
 #[test]
-fn the_filter_button_is_for_lists_to_search_not_for_a_two_row_question() {
-    let filter = json!([{"id":"FILTER","name":"Filter","keys":["/"]}]);
-    for (rows, shown) in [(2, false), (8, true), (30, true)] {
-        let (mut h, script) = harness();
-        h.run_steps(3);
-        script.push(show(41, filter.clone(), list_with(rows)));
-        h.run_steps(4);
-        assert_eq!(h.query_by_label("Filter").is_some(), shown, "{rows} rows");
-    }
-}
-
-#[test]
 fn a_filter_prompt_that_follows_an_untitled_list_takes_the_typing_at_once() {
     let (mut h, script) = harness();
     h.run_steps(3);

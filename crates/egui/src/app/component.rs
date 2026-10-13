@@ -217,8 +217,9 @@ impl<M: GameModel> App<M> {
                 })
                 .collect::<Vec<_>>()
         });
-        // A text box has the typing; its keys are not the screen's.
-        let keys = keys.into_iter().filter(|_| !ctx.text_edit_focused());
+        // A text box has the typing; its keys are not the screen's, except Escape, which closes the screen.
+        let typing = ctx.text_edit_focused();
+        let keys = keys.into_iter().filter(|key| !typing || key == "ESC");
         for key in keys {
             let Some(top) = sliced(self.model.screens()) else {
                 return;
@@ -516,6 +517,35 @@ impl<M: GameModel> App<M> {
             let fill = interaction::form_fill(screen, form, &field.id);
             let on = fill.is_some_and(|a| a.enabled);
             let id = format!("{}/{}", form.head.id, field.id);
+            // A prompt the engine confirms with Return takes each change as it is typed, so the screen can
+            // follow it (a list filter).
+            let submit = form
+                .submit
+                .as_deref()
+                .and_then(|submit| find(screen, submit))
+                .filter(|a| a.role == Some(AffordanceRole::Confirm));
+            if let (FieldKind::Text, Some(fill), Some(submit)) = (field.kind, fill, submit) {
+                let typed = editor::typing_prompt(
+                    ui,
+                    &screen.screen_id,
+                    &id,
+                    &label,
+                    &field.value,
+                    self.model.busy(),
+                );
+                let (affordance, value) = match (typed.submit, typed.changed) {
+                    (Some(value), _) => (submit, value),
+                    (None, Some(value)) => (fill, value),
+                    _ => continue,
+                };
+                out.push(Intent::Fill {
+                    affordance: affordance.id.clone(),
+                    form: form.head.id.clone(),
+                    field: field.id.clone(),
+                    value,
+                });
+                continue;
+            }
             let committed = match field.kind {
                 FieldKind::Key => {
                     ui.label(&label);
@@ -630,6 +660,8 @@ impl<M: GameModel> App<M> {
             row.parent_id.is_some().then(|| "  ".to_string()),
             matches!(list.selection, Selection::Multi | Selection::Count)
                 .then(|| if picked { "[x]" } else { "[ ]" }.to_string()),
+            row.toggled
+                .map(|on| if on { "[x]" } else { "[ ]" }.to_string()),
             row.mark
                 .as_ref()
                 .map(|m| tagged(m.color.as_deref(), &m.glyph)),
@@ -694,8 +726,16 @@ impl<M: GameModel> App<M> {
                         return;
                     }
                     let pick = interaction.picks(id).iter().find(|p| p.id == row.id);
-                    let text = self.line(ui, &Self::row_markup(list, row, pick.is_some()));
                     let on = row.enabled && row.selectable;
+                    let marked = Self::row_markup(list, row, pick.is_some());
+                    // A refused row is plain dim text: the game's colours would hide that it is.
+                    let text = if row.enabled {
+                        self.line(ui, &marked)
+                    } else {
+                        egui::RichText::new(markup::plain(&marked))
+                            .color(ui.visuals().weak_text_color())
+                            .into()
+                    };
                     let highlighted =
                         cursor == Some(row.id.as_str()) || (cursor.is_none() && row.selected);
                     let layout = egui::Layout::top_down_justified(egui::Align::Min);
@@ -838,5 +878,34 @@ impl<M: GameModel> App<M> {
                 }
             });
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn row(toggled: Option<bool>) -> Row {
+        serde_json::from_value(serde_json::json!({
+            "id": "r", "label": "Lighting", "description": "", "denial": "", "enabled": true,
+            "selectable": true, "selected": false, "columns": [], "toggled": toggled
+        }))
+        .unwrap()
+    }
+
+    fn list() -> List {
+        serde_json::from_value(serde_json::json!({
+            "id": "l", "kind": "list", "columns": [], "rows": [], "total": 0, "selection": "single"
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn a_switch_row_shows_whether_it_is_on_and_a_plain_row_shows_nothing() {
+        let text =
+            |toggled| App::<bn_client_core::EngineModel>::row_markup(&list(), &row(toggled), false);
+        assert_eq!(text(Some(true)), "[x] Lighting");
+        assert_eq!(text(Some(false)), "[ ] Lighting");
+        assert_eq!(text(None), "Lighting");
     }
 }

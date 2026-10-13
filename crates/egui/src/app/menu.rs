@@ -99,7 +99,6 @@ impl<M: GameModel> App<M> {
         let mut edited = None;
         let mut key_chosen = None;
         let mut more = false;
-        let mut filter_clicked = false;
         let mut cancel = self.palette.is_none()
             && ctx.input(|i| i.key_pressed(egui::Key::Escape))
             && menu.can_cancel;
@@ -159,13 +158,10 @@ impl<M: GameModel> App<M> {
             };
             // What sits under the list takes room from it, so the window never outgrows the screen.
             let row = ui.spacing().interact_size.y + ui.spacing().item_spacing.y;
-            let filter = self.model.actions().iter().any(|a| a.id == "FILTER")
-                && menu.field.is_none()
-                && menu.total > FILTER_MIN_ROWS;
             let paged = menu.total > menu.choices.len();
             let info = menu.choices.iter().any(|c| is_prose(&c.description));
-            let footer = row * (usize::from(filter) + usize::from(paged)) as f32
-                + if info { DESCRIPTION_HEIGHT + row } else { 0.0 };
+            let footer =
+                row * usize::from(paged) as f32 + if info { DESCRIPTION_HEIGHT + row } else { 0.0 };
             let listed = area
                 .max_height(super::dialog_scroll_height(ctx) - footer)
                 .show(ui, |ui| {
@@ -357,14 +353,6 @@ impl<M: GameModel> App<M> {
             // The end of a list the engine has more of fetches its next page, as the wheel or a drag gets there.
             let (shown, all) = (listed.inner_rect.height(), listed.content_size.y);
             more |= paged && all > shown && listed.state.offset.y + shown + 1.0 >= all;
-            if self.model.actions().iter().any(|a| a.id == "FILTER")
-                && menu.field.is_none()
-                && menu.total > FILTER_MIN_ROWS
-            {
-                let filter = ui.add_enabled(self.idle(), egui::Button::new("Filter"));
-                ids.extend(filter.enabled().then_some(filter.id));
-                filter_clicked = filter.clicked();
-            }
             if menu.total > menu.choices.len() {
                 // A character creation list is all there is to pick from, so its pages are fetched
                 // as they are missing; any other long list comes one page per click.
@@ -406,9 +394,6 @@ impl<M: GameModel> App<M> {
         }
         self.menu_ids = ids;
         self.action_ids = action_ids;
-        if filter_clicked {
-            self.model.invoke_action("FILTER");
-        }
         if more {
             self.model.more_choices();
             ctx.request_repaint();
@@ -591,6 +576,3 @@ fn is_prose(description: &str) -> bool {
         .chars()
         .any(|c| !(c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_'))
 }
-
-/// A list this short is a question rather than something to search; the engine's filter is offered from here on.
-const FILTER_MIN_ROWS: usize = 3;
