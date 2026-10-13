@@ -30,16 +30,9 @@ impl<M: GameModel> App<M> {
         let mut invoke = None;
         let close = ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
         let needle = query.to_lowercase();
-        let mut actions = self.model.actions();
-        // Options is a row of the main menu, not an action of its own; the palette offers it anyway.
-        if actions.iter().any(|a| a.id == "main_menu") {
-            actions.push(bn_client_core::ActionEntry {
-                id: OPTIONS.into(),
-                name: "Options".into(),
-                keys: vec![],
-            });
-        }
-        let mut actions = actions
+        let mut actions = self
+            .model
+            .actions()
             .into_iter()
             .filter(|a| {
                 a.name.to_lowercase().contains(&needle)
@@ -109,12 +102,6 @@ impl<M: GameModel> App<M> {
         match invoke {
             Some(id) => {
                 ctx.request_repaint();
-                let id = if id == OPTIONS {
-                    self.open_options = Some(self.clock.now());
-                    "main_menu".to_string()
-                } else {
-                    id
-                };
                 match self.model.busy() {
                     true => self.enqueue(Queued::Action(id)),
                     false => {
@@ -149,36 +136,6 @@ impl<M: GameModel> App<M> {
                 Queued::Action(id) => self.model.invoke_action(&id),
                 Queued::Key(key) => self.model.press(&key),
             };
-        }
-    }
-}
-
-/// The palette's own entry for the native Options screen.
-const OPTIONS: &str = "palette:options";
-
-/// The engine's action id of the main menu's Options row.
-const OPTIONS_ACTION: &str = "open_options";
-
-/// How long the palette waits for the main menu it asked for.
-const OPTIONS_WAIT: std::time::Duration = std::time::Duration::from_secs(5);
-
-impl<M: GameModel> App<M> {
-    /// Chooses the Options row of the main menu the palette opened for it.
-    pub(super) fn follow_options(&mut self, menu: &bn_client_core::Menu) {
-        let Some(since) = self.open_options else {
-            return;
-        };
-        if self.clock.now().saturating_sub(since) > OPTIONS_WAIT {
-            self.open_options = None;
-            return;
-        }
-        let row = menu
-            .choices
-            .iter()
-            .find(|c| c.action == OPTIONS_ACTION && c.enabled);
-        if let (Some(row), false) = (row, self.model.busy()) {
-            self.open_options = None;
-            self.model.choose(&row.id.clone());
         }
     }
 }
