@@ -210,6 +210,29 @@ fn a_filter_beside_a_list_updates_the_screen_without_ending_it() {
 }
 
 #[test]
+fn a_filter_typed_while_the_engine_is_busy_is_sent_in_full_once_it_is_free() {
+    let field = json!({"id":"field:value","label":"Filter","description":"","value":"","type":"text",
+        "max_length":-1,"printable":false});
+    let (mut app, h) = open(Some(field), vec![row("action:UP", "Move North", None)]);
+    for c in ['/', 'm', 'o', 'd', 'e'] {
+        app.handle_key(key(KeyCode::Char(c)));
+    }
+    assert_eq!(operations(&h), [fill("field:value", "m", false)]);
+    h.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{"epoch":"e7f3","command_id":"c:5","stage":"completed"}}));
+    app.model.poll();
+    app.tick();
+    assert_eq!(
+        operations(&h),
+        [
+            fill("field:value", "m", false),
+            fill("field:value", "mode", false)
+        ]
+    );
+    app.tick();
+    assert_eq!(operations(&h).len(), 2, "the same text is not sent twice");
+}
+
+#[test]
 fn a_plain_row_is_confirmed_by_the_engines_key_and_tab_opens_the_screens_actions() {
     let (mut app, h) = open(None, vec![row("mode:add_local", "Add local", None)]);
     let before = text(&mut app);
