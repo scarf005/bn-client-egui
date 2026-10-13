@@ -993,13 +993,28 @@ impl EngineModel {
         self.subscribe();
     }
 
+    /// The enabled affordance of the map that is the registered action `id`.
+    fn map_affordance(&self, id: &str) -> Option<&protocol::Affordance> {
+        let map = self
+            .replica
+            .stack()
+            .last()
+            .filter(|s| s.role == protocol::ScreenRole::Map)?;
+        map.affordances
+            .iter()
+            .find(|a| a.enabled && a.id.eq_ignore_ascii_case(id))
+    }
+
     fn refresh_actions(&mut self) {
         let offered = self.replica.boundary().map_or(&[][..], |b| &b.actions);
         if !offered.is_empty() || !self.busy {
-            // An action the engine lists with no keys cannot be run, so there is nothing to offer.
+            // An action with no keys is offered only where the map's affordances run it.
             self.shown = offered
                 .iter()
-                .filter(|a| a.keys.as_ref().is_none_or(|keys| !keys.is_empty()))
+                .filter(|a| {
+                    a.keys.as_ref().is_none_or(|keys| !keys.is_empty())
+                        || self.map_affordance(&a.id).is_some()
+                })
                 .map(|a| ActionEntry {
                     id: a.id.clone(),
                     name: a.name.clone(),
@@ -1842,8 +1857,20 @@ impl GameModel for EngineModel {
             .collect()
     }
 
+    /// A registered action of the map is its screen-scoped affordance: the engine queues it behind the
+    /// command in flight, and says `stale_screen` for one that outlived the map. Any other action waits
+    /// for the engine to be free.
     fn invoke_action(&mut self, id: &str) -> bool {
-        !self.busy && self.invoke(&[id.into()])
+        let offered = self.map_affordance(id).map(|a| a.id.clone());
+        match offered {
+            Some(affordance_id) => self
+                .send(Operation::Invoke {
+                    affordance_id,
+                    args: None,
+                })
+                .is_ok(),
+            None => !self.busy && self.invoke(&[id.into()]),
+        }
     }
 
     fn key_bound(&self, key: &str) -> bool {

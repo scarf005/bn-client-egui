@@ -6,7 +6,6 @@ use crate::windows::{Origin, Shown, WindowSpec};
 use bn_client_core::protocol::SidebarSide;
 use bn_client_core::{Failure, GameModel, Loading, Overmap, Pos, keys};
 use eframe::egui::{self, accesskit};
-use std::collections::VecDeque;
 
 mod aim;
 mod character;
@@ -38,9 +37,6 @@ const SIDEBAR_MIN_SHARE: f32 = 0.4;
 const SIDEBAR_CHROME: f32 = 28.0;
 /// The most of the window width the sidebar may be dragged to; a saved wider size shrinks to it.
 const SIDEBAR_MAX_SHARE: f32 = 0.4;
-
-/// After a popup closes, Space is held back until it has been quiet this long: the player is still dismissing.
-const POPUP_SPACE_HOLD: std::time::Duration = std::time::Duration::from_millis(500);
 
 /// Side length of one map cell in points.
 pub const CELL: f32 = 16.0;
@@ -130,10 +126,6 @@ pub struct App<M: GameModel> {
     log_height: Option<f32>,
     /// Title of the menu that last took focus, so a menu is entered once, not on every frame.
     menu_title: Option<String>,
-    /// When the last popup closed, to hold Space back for a moment.
-    ack_closed: Option<std::time::Duration>,
-    /// The menu on screen last frame was a popup.
-    in_popup: bool,
     /// A menu opened and its first control has not taken focus yet (it may be disabled for a frame).
     focus_menu: bool,
     /// The menu just closed; the map takes focus back.
@@ -176,26 +168,11 @@ pub struct App<M: GameModel> {
     trade: trade::Trade,
     /// The engine's selected row of the open menu, to keep it in view when the wheel moves it.
     menu_cursor: Option<String>,
-    /// Input pressed while a command ran, in order; each goes out as soon as the one before it is done.
-    queued: VecDeque<Queued>,
-    /// The key whose OS repeats are arriving, until it is released.
-    held: Option<String>,
-    /// The palette's Options entry went through the main menu; when it opens, its Options row is chosen.
-    open_options: Option<std::time::Duration>,
     /// The text prompt that already took the keyboard focus when it opened.
     prompt_focused: Option<String>,
     /// The loading step the list was last scrolled to; scrolling again every frame would repaint forever.
     scrolled_to: Option<usize>,
 }
-
-enum Queued {
-    Action(String),
-    Key(String),
-}
-
-/// How much input may wait for a running command. A held key repeats faster than the engine can step, and
-/// releasing it must stop the walk soon.
-const QUEUE: usize = 2;
 
 impl<M: GameModel> App<M> {
     pub fn new(model: M) -> Self {
@@ -217,8 +194,6 @@ impl<M: GameModel> App<M> {
             palette: None,
             log_height: None,
             menu_title: None,
-            ack_closed: None,
-            in_popup: false,
             focus_menu: false,
             refocus_map: false,
             cursor_placed: false,
@@ -244,9 +219,6 @@ impl<M: GameModel> App<M> {
             inventory: Default::default(),
             trade: Default::default(),
             menu_cursor: None,
-            queued: VecDeque::new(),
-            held: None,
-            open_options: None,
             prompt_focused: None,
             scrolled_to: None,
         }
@@ -417,7 +389,6 @@ impl<M: GameModel> App<M> {
             // The game is over: the next one starts with the cursor on its player and and no travel marker.
             (self.cursor_placed, self.marker) = (false, None);
         }
-        self.run_queued();
         self.run_aim_steps();
         // Esc interrupts a running activity; with none running it goes to the game like any key
         // (leaves look mode, acknowledges a popup, else opens the main menu).
@@ -591,51 +562,13 @@ impl<M: GameModel> App<M> {
             return;
         }
         let mut keys = typed.into_iter().chain(named).collect::<Vec<_>>();
-        match menu.as_ref().filter(|m| m.acknowledges()) {
-            // A popup takes one key per frame; the rest of a burst would land on the game it covers.
-            Some(_) => keys.truncate(1),
-            None => {
-                let now = self.clock.now();
-                let held = self
-                    .ack_closed
-                    .is_some_and(|t| now.saturating_sub(t) < POPUP_SPACE_HOLD);
-                // Each Space held back extends the hold: only a pause lets a Space through.
-                if held && keys.iter().any(|k| k == "SPACE") {
-                    self.ack_closed = Some(now);
-                }
-                keys.retain(|k| !(held && k == "SPACE"));
-            }
+        // A popup takes one key per frame; the rest of a burst would land on the game it covers.
+        if menu.as_ref().is_some_and(|m| m.acknowledges()) {
+            keys.truncate(1);
         }
+        // The map's keys are screen-scoped affordances, which the engine queues behind the command in flight.
         for key in keys {
-            if !self.model.busy() {
-                self.keys_consumed |= self.model.press(&key);
-            } else if self.model.key_bound(&key) {
-                self.enqueue(Queued::Key(key));
-                self.keys_consumed = true;
-            }
-        }
-        // Releasing a held key drops its repeats still waiting, so the walk ends with the step in flight.
-        let events = ctx.input(|i| i.events.clone());
-        for event in events {
-            if let egui::Event::Key {
-                key,
-                pressed,
-                repeat,
-                modifiers,
-                ..
-            } = event
-                && let Some(name) = key_name(key, modifiers)
-            {
-                match (pressed, repeat) {
-                    (true, true) => self.held = Some(name),
-                    (false, _) if self.held.as_ref() == Some(&name) => {
-                        self.queued
-                            .retain(|q| !matches!(q, Queued::Key(k) if *k == name));
-                        self.held = None;
-                    }
-                    _ => {}
-                }
-            }
+            self.keys_consumed |= self.model.press(&key) || self.model.key_bound(&key);
         }
     }
 

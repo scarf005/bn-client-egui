@@ -898,8 +898,8 @@ pub struct Override {
 pub const OVERRIDES: &[Override] = &[
     Override {
         module: "crates/egui/src/app.rs",
-        screen: "map key queue (run_queued) and the main menu rules",
-        slice: "S1",
+        screen: "the main menu rules",
+        slice: "S10",
     },
     Override {
         module: "crates/egui/src/app/aim.rs",
@@ -930,11 +930,6 @@ pub const OVERRIDES: &[Override] = &[
         module: "crates/egui/src/app/menu.rs",
         screen: "context dispatch and the 0.1 generic menu",
         slice: "S0",
-    },
-    Override {
-        module: "crates/egui/src/app/palette.rs",
-        screen: "action palette and its queued map keys",
-        slice: "S1",
     },
     Override {
         module: "crates/egui/src/app/pickup.rs",

@@ -350,9 +350,12 @@ fn a_held_key_at_the_map_queues_screen_scoped_invokes_up_to_the_engines_depth() 
     assert_eq!(held, 9, "the running move and eight waiting behind it");
     let sent = submits(&h);
     assert_eq!(sent.len(), 9);
-    assert!(sent.iter().all(|s| s["expect"] == json!({"screen_id": "screen:map:e1"})
-        && s["operation"]["kind"] == "invoke"
-        && s["operation"]["affordance_id"] == "UP"));
+    assert!(
+        sent.iter()
+            .all(|s| s["expect"] == json!({"screen_id": "screen:map:e1"})
+                && s["operation"]["kind"] == "invoke"
+                && s["operation"]["affordance_id"] == "UP")
+    );
 }
 
 #[test]
@@ -361,5 +364,8 @@ fn a_registered_action_the_map_offers_runs_as_its_affordance_while_a_command_run
     assert!(m.invoke_action("UP"));
     assert!(m.invoke_action("open_options"), "queued behind the move");
     assert_eq!(submits(&h)[1]["operation"]["affordance_id"], "open_options");
-    assert!(!m.invoke_action("pickup"), "an action the map does not offer is not sent");
+    assert!(
+        !m.invoke_action("pickup"),
+        "an action the map does not offer is not sent"
+    );
 }

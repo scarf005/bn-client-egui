@@ -17,12 +17,8 @@ impl<M: GameModel> App<M> {
             self.menu_ids.clear();
             self.action_ids.clear();
             self.refocus_map |= self.menu_title.take().is_some();
-            if std::mem::take(&mut self.in_popup) {
-                self.ack_closed = Some(self.clock.now());
-            }
             return;
         };
-        self.follow_options(&menu);
         // A popup follows another with the same empty title, so its text tells them apart.
         let shown = format!(
             "{}\n{}",
@@ -85,7 +81,6 @@ impl<M: GameModel> App<M> {
             self.focus_menu = entered && !focused;
             return;
         }
-        self.in_popup = menu.acknowledges();
         a11y::trap_tab(
             ctx,
             self.trapped_by_menu(),

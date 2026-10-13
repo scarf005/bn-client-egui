@@ -410,7 +410,32 @@ fn tab_and_shift_tab_are_the_engines_tab_keys_on_a_tabbed_screen() {
 }
 
 #[test]
-fn a_click_during_a_command_is_sent_when_it_finishes_instead_of_being_lost() {
+fn a_palette_click_during_a_command_at_the_map_is_sent_at_once_for_the_engine_to_queue() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    script.push(on_map(
+        show(
+            41,
+            json!([{"id":"UP","name":"Move up","keys":["k"]},
+                   {"id":"LEVEL_UP","name":"Ascend Stairs","keys":["<"]}]),
+            Value::Null,
+        ),
+        &["UP", "LEVEL_UP"],
+    ));
+    h.run_steps(3);
+    h.event(egui::Event::Text("k".into()));
+    h.run_steps(1);
+    open_palette(&mut h);
+    h.get_by_label("Ascend Stairs (<)").click();
+    h.run_steps(2);
+    assert_eq!(
+        submits(&script),
+        ["UP", "LEVEL_UP"].map(|id| json!({"kind":"invoke","affordance_id":id}))
+    );
+}
+
+#[test]
+fn a_palette_click_during_a_command_elsewhere_is_not_kept_for_later() {
     let (mut h, script) = harness();
     h.run_steps(3);
     script.push(show(
@@ -425,20 +450,10 @@ fn a_click_during_a_command_is_sent_when_it_finishes_instead_of_being_lost() {
     open_palette(&mut h);
     h.get_by_label("Ascend Stairs (<)").click();
     h.run_steps(2);
-    assert_eq!(submits(&script).len(), 1, "the engine is still busy");
     script.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{
         "epoch":"e7f3","command_id":"c:5","stage":"completed"}}));
-    script.push(show(
-        42,
-        json!([
-        {"id":"UP","name":"Move up","keys":["k"]},
-        {"id":"LEVEL_UP","name":"Ascend Stairs","keys":["<"]}]),
-        Value::Null,
-    ));
     h.run_steps(4);
-    let sent = submits(&script);
-    assert_eq!(sent.len(), 2);
-    assert_eq!(sent[1], json!({"kind":"action","action_id":"LEVEL_UP"}));
+    assert_eq!(submits(&script).len(), 1, "the click met a busy engine");
 }
 
 fn view_event(sequence: u32, min_x: i32, max_x: i32) -> Value {
@@ -734,56 +749,50 @@ fn a_popups_confirm_button_is_where_it_was_whatever_its_text_length() {
     assert_eq!(tops[0], tops[1], "{tops:?}");
 }
 
+/// `event` with the map as its stack, offering these registered actions as screen-scoped affordances.
+fn on_map(mut event: Value, ids: &[&str]) -> Value {
+    let affordances = ids
+        .iter()
+        .map(|id| json!({"id": id, "label": id, "keys": [], "enabled": true, "expect": "screen"}));
+    event["params"]["events"][0]["changes"]["interaction"]["stack"] = json!([
+        {"screen_id": "screen:map:e7f3", "role": "map", "root": null,
+            "affordances": affordances.collect::<Vec<_>>()}]);
+    event
+}
+
+/// The map and a popup over it, as the engine publishes them.
+fn popup_over_map(sequence: u32) -> Value {
+    let mut event = show(sequence, json!([]), Value::Null);
+    event["params"]["events"][0]["changes"]["interaction"]["stack"] = json!([
+        {"screen_id": "screen:map:e7f3", "role": "map", "root": null, "affordances": []},
+        {"screen_id": "screen:5", "role": "dialog",
+            "root": {"id": "text:message", "kind": "text", "markup": "Welcome."},
+            "affordances": [{"id": "bn:any_key", "label": "Press any key", "keys": [],
+                "enabled": true, "role": "any_key", "expect": "screen"}]}]);
+    event
+}
+
 #[test]
-fn space_right_after_a_popup_closes_does_not_reach_the_game_until_the_hold_ends() {
+fn every_space_of_a_burst_at_a_popup_is_aimed_at_that_popup() {
     let (mut h, script) = harness();
     h.run_steps(3);
-    script.push(show(
-        41,
-        json!([{"id":"jump","name":"Jump","keys":["SPACE"]}]),
-        popup_with("Welcome."),
-    ));
+    script.push(popup_over_map(41));
     h.run_steps(3);
-    h.key_press(egui::Key::Space);
-    h.run_steps(2);
-    assert_eq!(submits(&script).len(), 1, "the popup took the Space");
-    script.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{
-        "epoch":"e7f3","command_id":"c:5","stage":"completed"}}));
-    script.push(show(
-        42,
-        json!([{"id":"jump","name":"Jump","keys":["SPACE"]}]),
-        Value::Null,
-    ));
-    h.run_steps(3);
-    h.event(egui::Event::Text(" ".into()));
-    h.run_steps(2);
-    assert_eq!(
-        submits(&script).len(),
-        1,
-        "held back while the player is still dismissing"
-    );
-    // A burst keeps the hold alive: each Space within 500 ms of the last held one is held too.
-    for _ in 0..4 {
-        h.state()
-            .clock()
-            .advance(std::time::Duration::from_millis(300));
+    for _ in 0..3 {
         h.event(egui::Event::Text(" ".into()));
-        h.run_steps(2);
     }
-    assert_eq!(
-        submits(&script).len(),
-        1,
-        "a steady burst never reaches the game"
-    );
-    h.state()
-        .clock()
-        .advance(std::time::Duration::from_millis(600));
-    h.event(egui::Event::Text(" ".into()));
     h.run_steps(2);
-    assert_eq!(
-        submits(&script).last(),
-        Some(&json!({"kind":"action","action_id":"jump"}))
-    );
+    let sent = script
+        .sent()
+        .into_iter()
+        .filter(|m| m["method"] == "bn.command.submit")
+        .map(|m| m["params"].clone())
+        .collect::<Vec<_>>();
+    assert!(sent.len() >= 2, "{sent:?}");
+    for command in &sent {
+        assert_eq!(command["expect"], json!({"screen_id": "screen:5"}));
+        assert_eq!(command["operation"]["affordance_id"], "bn:any_key");
+    }
 }
 
 fn choices_menu(choices: Vec<Value>) -> Value {
@@ -1147,29 +1156,17 @@ fn list_menu_rows_fill_the_window_like_the_native_highlight_bar() {
     assert!(alpha.width() >= 500.0, "{alpha:?}");
 }
 
-fn finished_command(h: &mut H, script: &ScriptHandle) {
-    script.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{
-        "epoch":"e7f3","command_id":"c:5","stage":"completed"}}));
-    h.run_steps(4);
-}
-
 #[test]
-fn options_is_in_the_action_palette_and_opens_the_native_options_through_the_main_menu() {
-    options_through_the_main_menu(Some("open_options"));
-}
-
-#[test]
-fn a_row_labelled_options_that_runs_no_options_action_is_not_chosen() {
-    options_through_the_main_menu(None);
-}
-
-fn options_through_the_main_menu(action: Option<&str>) {
+fn options_is_in_the_action_palette_and_opens_from_the_map_through_its_affordance() {
     let (mut h, script) = harness();
     h.run_steps(3);
-    script.push(show(
-        41,
-        json!([{"id":"main_menu","name":"Main Menu","keys":["ESC"]}]),
-        Value::Null,
+    script.push(on_map(
+        show(
+            41,
+            json!([{"id":"open_options","name":"Options","keys":[]}]),
+            Value::Null,
+        ),
+        &["open_options"],
     ));
     h.run_steps(3);
     open_palette(&mut h);
@@ -1181,30 +1178,8 @@ fn options_through_the_main_menu(action: Option<&str>) {
     h.run_steps(3);
     assert_eq!(
         submits(&script),
-        [json!({"kind":"action","action_id":"main_menu"})]
+        [json!({"kind":"invoke","affordance_id":"open_options"})]
     );
-    finished_command(&mut h, &script);
-    let mut menu = choice("main:options", "Options");
-    menu["selected"] = false.into();
-    if let Some(action) = action {
-        menu["action_id"] = action.into();
-    }
-    script.push(show(
-        42,
-        json!([]),
-        json!({"schema_id":"s:mm","kind":"choices","context":"UILIST","title":"",
-            "message":"MAIN MENU","allow_cancel":true,"choices":[choice("main:wiki","Open Wiki"), menu],
-            "choice_total":2,"allow_set_count":false}),
-    ));
-    h.run_steps(5);
-    let last = submits(&script).last().cloned();
-    match action {
-        Some(_) => assert_eq!(
-            last,
-            Some(json!({"kind":"choose","choice_id":"main:options"}))
-        ),
-        None => assert_eq!(last, Some(json!({"kind":"action","action_id":"main_menu"}))),
-    }
 }
 
 #[test]

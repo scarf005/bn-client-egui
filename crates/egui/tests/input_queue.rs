@@ -1,18 +1,40 @@
-//! Keys pressed while a command runs wait their turn instead of being dropped.
+//! Keys held at the map go to the engine as screen-scoped affordances, which it queues behind the running one.
 mod common;
-use bn_client_egui::transport::ScriptHandle;
+use bn_client_egui::transport::{ScriptHandle, ScriptedTransport};
 use bn_client_egui::{App, EngineModel};
-use common::{fixture, session};
+use common::fixture;
 use eframe::egui;
 use egui_kittest::Harness;
+use serde_json::{Value, json};
 
 type H<'a> = Harness<'a, App<EngineModel>>;
 
-fn walking<'a>() -> (H<'a>, ScriptHandle) {
-    let (t, script) = session();
-    let t = (0..6).fold(t, |t, _| {
-        t.on("bn.command.submit", vec![fixture("submit_result")])
-    });
+/// A session at the map, whose engine holds `queue` commands behind the running one.
+fn walking<'a>(queue: u64) -> (H<'a>, ScriptHandle) {
+    let mut hello = fixture("hello_result");
+    hello["result"]["limits"]["screen_queue"] = json!(queue);
+    let mut subscribe = fixture("subscribe_result");
+    subscribe["result"]["interaction"]["stack"] = json!([{
+        "screen_id": "screen:map:e1", "role": "map",
+        "root": {"id": "map:world", "kind": "map", "affordances": [], "mode": "world"},
+        "affordances": [{"id": "RIGHT", "label": "Move East", "keys": ["RIGHT", "l"],
+            "enabled": true, "expect": "screen"}]}]);
+    let reply = vec![
+        subscribe,
+        fixture("snapshot_part_0"),
+        fixture("snapshot_part_1"),
+    ];
+    let (t, script) = ScriptedTransport::new();
+    let t = (0..20).fold(
+        t.on("bn.hello", vec![hello])
+            .on("bn.subscribe", reply.clone())
+            .on("bn.subscribe", reply),
+        |t, n| {
+            let mut received = fixture("submit_result");
+            received["result"]["command_id"] = json!(format!("c:{n}"));
+            t.on("bn.command.submit", vec![received])
+        },
+    );
     let app = App::new(EngineModel::new(Box::new(t)));
     let h = Harness::builder()
         .with_size(egui::vec2(1100.0, 800.0))
@@ -20,12 +42,13 @@ fn walking<'a>() -> (H<'a>, ScriptHandle) {
     (h, script)
 }
 
-fn submits(script: &ScriptHandle) -> usize {
+fn submits(script: &ScriptHandle) -> Vec<Value> {
     script
-        .sent_methods()
-        .iter()
-        .filter(|m| *m == "bn.command.submit")
-        .count()
+        .sent()
+        .into_iter()
+        .filter(|m| m["method"] == "bn.command.submit")
+        .map(|m| m["params"].clone())
+        .collect()
 }
 
 /// The key repeats the OS sends while a held key's step is still running.
@@ -37,87 +60,31 @@ fn repeat(h: &mut H, key: egui::Key, times: usize) {
 }
 
 #[test]
-fn a_held_key_sends_the_next_step_the_moment_the_previous_one_finishes() {
-    let (mut h, script) = walking();
+fn a_held_arrow_sends_every_repeat_to_the_engine_up_to_the_depth_of_its_queue() {
+    let (mut h, script) = walking(8);
     h.run_steps(3);
-    repeat(&mut h, egui::Key::ArrowRight, 6);
-    assert_eq!(submits(&script), 1, "one command in flight at a time");
-    script.push(fixture("command_completed"));
-    h.run_steps(1);
-    assert_eq!(
-        submits(&script),
-        2,
-        "no frame or key event is needed between steps"
-    );
-}
-
-#[test]
-fn releasing_a_held_key_ends_the_walk_within_the_queue_cap() {
-    let (mut h, script) = walking();
-    h.run_steps(3);
-    repeat(&mut h, egui::Key::ArrowRight, 20);
-    for _ in 0..6 {
-        script.push(fixture("command_completed"));
-        h.run_steps(2);
-    }
-    assert_eq!(
-        submits(&script),
-        3,
-        "the step that ran plus the two that waited"
-    );
-}
-
-#[test]
-fn a_key_that_runs_nothing_is_not_kept_for_later() {
-    let (mut h, script) = walking();
-    h.run_steps(3);
-    repeat(&mut h, egui::Key::ArrowRight, 1);
-    h.event(egui::Event::Text("z".into()));
-    h.run_steps(1);
-    script.push(fixture("command_completed"));
-    h.run_steps(2);
-    assert_eq!(submits(&script), 1);
-}
-
-fn key_event(key: egui::Key, pressed: bool, repeat: bool) -> egui::Event {
-    egui::Event::Key {
-        key,
-        physical_key: Some(key),
-        pressed,
-        repeat,
-        modifiers: egui::Modifiers::NONE,
+    repeat(&mut h, egui::Key::ArrowRight, 12);
+    let sent = submits(&script);
+    assert_eq!(sent.len(), 9, "the running step and eight behind it");
+    for command in &sent {
+        assert_eq!(command["expect"], json!({"screen_id": "screen:map:e1"}));
+        assert_eq!(command["operation"]["affordance_id"], "RIGHT");
     }
 }
 
 #[test]
-fn releasing_a_held_key_drops_its_repeats_still_waiting() {
-    let (mut h, script) = walking();
-    h.run_steps(3);
-    h.event(key_event(egui::Key::ArrowRight, true, false));
-    h.run_steps(1);
-    for _ in 0..5 {
-        h.event(key_event(egui::Key::ArrowRight, true, true));
-        h.run_steps(1);
-    }
-    h.event(key_event(egui::Key::ArrowRight, false, false));
-    h.run_steps(1);
-    for _ in 0..4 {
-        script.push(fixture("command_completed"));
-        h.run_steps(2);
-    }
-    assert_eq!(
-        submits(&script),
-        1,
-        "only the step in flight when it was released"
-    );
-}
-
-#[test]
-fn tapping_a_key_while_a_command_runs_is_kept_after_release() {
-    let (mut h, script) = walking();
+fn a_tap_while_a_command_runs_waits_in_the_engine_not_in_the_client() {
+    let (mut h, script) = walking(1);
     h.run_steps(3);
     repeat(&mut h, egui::Key::ArrowRight, 2);
-    script.push(fixture("command_completed"));
+    assert_eq!(submits(&script).len(), 2, "sent at once");
+}
+
+#[test]
+fn a_key_that_runs_nothing_is_not_sent() {
+    let (mut h, script) = walking(8);
+    h.run_steps(3);
+    h.event(egui::Event::Text("z".into()));
     h.run_steps(2);
-    assert_eq!(submits(&script), 2, "a tap's key-up does not cancel it");
+    assert!(submits(&script).is_empty());
 }
