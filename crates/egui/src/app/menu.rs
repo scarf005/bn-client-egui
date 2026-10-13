@@ -147,7 +147,7 @@ impl<M: GameModel> App<M> {
                 self.banner(ui, &menu.banner);
                 // Cancel sits right under the title, so it is at the same place for every dialog.
                 if menu.can_cancel && !menu.acknowledges() {
-                    let button = ui.add_enabled(!self.model.busy(), egui::Button::new("Cancel"));
+                    let button = ui.add_enabled(self.idle(), egui::Button::new("Cancel"));
                     ids.extend(button.enabled().then_some(button.id));
                     cancel |= button.clicked();
                 }
@@ -184,7 +184,8 @@ impl<M: GameModel> App<M> {
                 let info = menu.choices.iter().any(|c| is_prose(&c.description));
                 let footer = row * (usize::from(filter) + usize::from(paged)) as f32
                     + if info { DESCRIPTION_HEIGHT + row } else { 0.0 };
-                area.max_height(super::dialog_scroll_height(ctx) - footer)
+                let listed = area
+                    .max_height(super::dialog_scroll_height(ctx) - footer)
                     .scroll_source(egui::scroll_area::ScrollSource {
                         mouse_wheel: !engine_scroll,
                         ..Default::default()
@@ -224,7 +225,7 @@ impl<M: GameModel> App<M> {
                             let said = std::mem::replace(&mut last_denial, &choice.denial)
                                 == choice.denial;
                             if let Some(row) = &choice.editor {
-                                let usable = choice.enabled && !self.model.busy();
+                                let usable = choice.enabled && self.idle();
                                 let label = markup::plain(&choice.label);
                                 if let Some(value) =
                                     editor::value_editor(ui, &choice.id, &label, row, usable)
@@ -382,18 +383,21 @@ impl<M: GameModel> App<M> {
                             self.menu_message(ui, &menu);
                         }
                     });
+                // The end of a list the engine has more of fetches its next page, as the wheel or a drag gets there.
+                let (shown, all) = (listed.inner_rect.height(), listed.content_size.y);
+                more |= paged && all > shown && listed.state.offset.y + shown + 1.0 >= all;
                 if self.model.actions().iter().any(|a| a.id == "FILTER")
                     && menu.field.is_none()
                     && menu.total > FILTER_MIN_ROWS
                 {
-                    let filter = ui.add_enabled(!self.model.busy(), egui::Button::new("Filter"));
+                    let filter = ui.add_enabled(self.idle(), egui::Button::new("Filter"));
                     ids.extend(filter.enabled().then_some(filter.id));
                     filter_clicked = filter.clicked();
                 }
                 if menu.total > menu.choices.len() {
                     // A character creation list is all there is to pick from, so its pages are fetched
                     // as they are missing; any other long list comes one page per click.
-                    more = menu.context.starts_with("NEW_CHAR_");
+                    more |= menu.context.starts_with("NEW_CHAR_");
                     let rest = ui.button(format!(
                         "Load more ({} of {})",
                         menu.choices.len(),

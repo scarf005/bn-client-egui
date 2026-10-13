@@ -151,7 +151,7 @@ impl<M: GameModel> App<M> {
                     }
                     if menu.can_cancel {
                         let button =
-                            ui.add_enabled(!self.model.busy(), egui::Button::new("Cancel"));
+                            ui.add_enabled(self.idle(), egui::Button::new("Cancel"));
                         out.ids.extend(button.enabled().then_some(button.id));
                         cancel |= button.clicked();
                     }

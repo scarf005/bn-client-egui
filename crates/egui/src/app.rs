@@ -614,6 +614,12 @@ impl<M: GameModel> App<M> {
         }
     }
 
+    /// No command has been in flight long enough to show; a controls row dims only after that, so a wheel step
+    /// or a short command never blinks it.
+    fn idle(&self) -> bool {
+        !(self.settled() && self.model.busy())
+    }
+
     /// The command in flight has lasted long enough to show; shorter ones never blink the controls.
     fn settled(&self) -> bool {
         self.pending_since

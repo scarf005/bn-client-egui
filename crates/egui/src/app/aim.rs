@@ -160,7 +160,7 @@ impl<M: GameModel> App<M> {
                     if let Some(entry) = find("MOVE_VARIABLE_ITEM") {
                         let go = ui
                             .add_enabled(
-                                amount.is_some() && !self.model.busy(),
+                                amount.is_some() && self.idle(),
                                 egui::Button::new(&entry.name),
                             )
                             .on_hover_text(entry.keys.join(", "));
@@ -194,7 +194,7 @@ impl<M: GameModel> App<M> {
     /// A button for an action the engine offers, named and keyed as the engine reports it.
     fn aim_button(&self, ui: &mut egui::Ui, out: &mut Out, entry: &ActionEntry) {
         let b = ui
-            .add_enabled(!self.model.busy(), egui::Button::new(&entry.name))
+            .add_enabled(self.idle(), egui::Button::new(&entry.name))
             .on_hover_text(entry.keys.join(", "));
         a11y::button(ui.ctx(), b.id, false);
         out.ids.extend(b.enabled().then_some(b.id));
@@ -246,7 +246,7 @@ impl<M: GameModel> App<M> {
                                         let blocked = pane.blocked.contains(&cell.action_id);
                                         let b = ui
                                             .add_enabled(
-                                                cell.available && !self.model.busy(),
+                                                cell.available && self.idle(),
                                                 egui::Button::new(
                                                     egui::RichText::new(&cell.key)
                                                         .color(area_color(on, blocked)),
@@ -270,7 +270,7 @@ impl<M: GameModel> App<M> {
                             });
                         if let Some(entry) = actions.iter().find(|a| a.id == "TOGGLE_VEH") {
                             let key = entry.keys.first().map_or("", String::as_str);
-                            let b = ui.add_enabled(!self.model.busy(), egui::Button::new(key));
+                            let b = ui.add_enabled(self.idle(), egui::Button::new(key));
                             b.clone().on_hover_text(&entry.name);
                             ui.ctx().accesskit_node_builder(b.id, |n| {
                                 n.set_label(format!("{name} {}", entry.name));

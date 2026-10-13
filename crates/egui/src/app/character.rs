@@ -297,7 +297,7 @@ impl<M: GameModel> App<M> {
 
     fn close(&self, ui: &mut egui::Ui, menu: &Menu, out: &mut Out) {
         if menu.can_cancel {
-            let close = ui.add_enabled(!self.model.busy(), egui::Button::new("Close"));
+            let close = ui.add_enabled(self.idle(), egui::Button::new("Close"));
             a11y::button(ui.ctx(), close.id, false);
             out.ids.extend(close.enabled().then_some(close.id));
             out.cancel |= close.clicked();
