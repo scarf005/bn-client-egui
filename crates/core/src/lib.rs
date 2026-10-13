@@ -13,7 +13,7 @@ pub mod transport;
 pub mod watchdog;
 
 pub use clock::Clock;
-pub use engine_model::EngineModel;
+pub use engine_model::{ConnectOptions, EngineModel, Wire};
 pub use model::{
     ActionEntry, Canvas, CanvasRun, Cell, CommandStatus, Effect, Failure, FailureKind, FakeModel,
     GameModel, Layer, Loading, LogLine, Menu, MenuChoice, MenuPane, Mutation, Overmap, OvermapCell,

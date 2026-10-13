@@ -55,6 +55,8 @@ Live integration tests (ignored by default, need an engine build; the TUI one dr
 `tests/fixtures/0.1.examples.json` is the contract lane's file (round-trip tested exactly);
 `tests/fixtures/design-0.1.json` is a hand-written session from the design doc, not captured from an engine;
 replace it with a recorded session once an engine can produce one.
+`crates/core/schema/0.2.schema.json` and `tests/fixtures/0.2.examples/` are verbatim copies of the engine's 0.2 schema
+and examples; the schema's SHA-256 prefix is what a 0.2 hello names. The client speaks 0.1 unless `BN_WIRE=0.2`.
 
 Mouse: left-click walks, right-click opens Look / Move here, hover shows a tooltip,
 items drag between Ground and Inventory. Keyboard: focus the map, arrows move the

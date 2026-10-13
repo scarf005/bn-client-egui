@@ -150,86 +150,33 @@ fn hello_calls(h: &ScriptHandle) -> Vec<Value> {
         .collect()
 }
 
-fn granted(max_hz: Option<u16>) -> Value {
-    let mut hello = fixture("hello_result");
-    hello["result"]["delivery"] = json!({"credits": 8, "held_frames": 256, "held_bytes": 1048576});
-    if let Some(hz) = max_hz {
-        hello["result"]["delivery"]["max_hz"] = json!(hz);
-    }
-    hello
-}
-
 #[test]
-fn an_engine_that_rejects_only_the_frame_rate_gets_credits_without_it() {
+fn an_engine_that_rejects_the_hello_is_reported_after_one_try() {
     let (t, h) = ScriptedTransport::new();
     let t = t
         .on("bn.hello", vec![invalid_params()])
-        .on("bn.hello", vec![granted(None)])
-        .on("bn.subscribe", subscribe_reply());
-    let mut m = connected(t);
-    assert_eq!(
-        hello_calls(&h),
-        [
-            json!({"credits": 256, "max_hz": 60}),
-            json!({"credits": 256})
-        ]
-    );
-    assert!(m.failure().is_none() && m.live());
-    feed(&h, &mut m, 1, 4);
-    assert_eq!(credits(&h), [4], "credits stay on");
-}
-
-#[test]
-fn an_engine_that_rejects_delivery_gets_a_hello_without_it_and_no_credits() {
-    let (t, h) = ScriptedTransport::new();
-    let t = t
-        .on("bn.hello", vec![invalid_params()])
-        .on("bn.hello", vec![invalid_params()])
-        .on("bn.hello", vec![fixture("hello_result")])
-        .on("bn.subscribe", subscribe_reply());
-    let mut m = connected(t);
-    assert_eq!(
-        hello_calls(&h),
-        [
-            json!({"credits": 256, "max_hz": 60}),
-            json!({"credits": 256}),
-            Value::Null
-        ]
-    );
-    assert!(m.messages().is_empty(), "{:?}", m.messages());
-    feed(&h, &mut m, 1, 200);
-    assert_eq!(credits(&h), Vec::<u64>::new());
-}
-
-#[test]
-fn the_tiles_hello_uses_what_the_engine_accepted() {
-    let (t, h) = ScriptedTransport::new();
-    let t = t
-        .on("bn.hello", vec![invalid_params()])
-        .on("bn.hello", vec![invalid_params()])
-        .on("bn.hello", vec![fixture("hello_result")])
-        .on("bn.hello", vec![fixture("hello_result")])
-        .on("bn.subscribe", subscribe_reply());
-    let mut m = connected(t);
-    m.set_tiles(true);
-    m.poll();
-    assert_eq!(hello_calls(&h).last(), Some(&Value::Null));
-    assert_eq!(hello_calls(&h).len(), 4);
-}
-
-#[test]
-fn a_hello_without_delivery_that_still_fails_is_reported() {
-    let (t, h) = ScriptedTransport::new();
-    let t = t
-        .on("bn.hello", vec![invalid_params()])
-        .on("bn.hello", vec![invalid_params()])
-        .on("bn.hello", vec![invalid_params()]);
+        .on("bn.hello", vec![fixture("hello_result")]);
     let mut m = EngineModel::new(Box::new(t));
     m.poll();
-    assert_eq!(hello_calls(&h).len(), 3, "no fourth try");
+    assert_eq!(
+        hello_calls(&h),
+        [json!({"credits": 256, "max_hz": 60})],
+        "no second hello with less"
+    );
     let failure = m
         .failure()
         .expect("an engine that takes no hello is reported");
     assert_eq!(failure.kind, bn_client_core::FailureKind::Incompatible);
     assert_eq!(failure.message, "unknown member");
+}
+
+#[test]
+fn the_tiles_hello_asks_for_the_same_delivery() {
+    let (t, h) = credited_session(Some(8));
+    let t = t.on("bn.hello", vec![fixture("hello_result")]);
+    let mut m = connected(t);
+    m.set_tiles(true);
+    m.poll();
+    let delivery = json!({"credits": 256, "max_hz": 60});
+    assert_eq!(hello_calls(&h), [delivery.clone(), delivery]);
 }

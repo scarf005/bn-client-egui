@@ -26,13 +26,43 @@ const VIEW: Pos = Pos { x: 40, y: 25 };
 const MAX_VIEWPORT: i32 = 512;
 const RESIZE_DEBOUNCE: std::time::Duration = std::time::Duration::from_millis(250);
 
-/// What a hello asks of delivery. An engine that does not know a member answers with invalid params, and
-/// the hello is asked again with less.
-#[derive(Clone, Copy, PartialEq)]
-enum Ask {
-    Credits,
-    Rate,
-    Nothing,
+/// The protocol version the client speaks.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Wire {
+    /// The default, until the engine's 0.2 wire has merged.
+    #[default]
+    V01,
+    V02,
+}
+
+impl Wire {
+    /// `BN_WIRE=0.2` switches the client to 0.2; anything else leaves it on 0.1.
+    pub fn from_env() -> Self {
+        match std::env::var("BN_WIRE").as_deref() {
+            Ok("0.2") => Wire::V02,
+            _ => Wire::V01,
+        }
+    }
+}
+
+/// How a session starts.
+#[derive(Clone, Copy, Debug)]
+pub struct ConnectOptions {
+    /// The client draws tiles, so the engine sends tile ids too.
+    pub tiles: bool,
+    /// The most frames per second the client can show while an activity runs.
+    pub max_hz: u16,
+    pub wire: Wire,
+}
+
+impl Default for ConnectOptions {
+    fn default() -> Self {
+        Self {
+            tiles: false,
+            max_hz: DEFAULT_MAX_HZ,
+            wire: Wire::default(),
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -80,8 +110,8 @@ pub struct EngineModel {
     tiles_told: bool,
     /// The most frames per second the client shows, asked of the engine in every hello.
     max_hz: u16,
-    /// The delivery the engine last accepted, or the next to try.
-    ask: Ask,
+    /// The protocol version the hello asks for.
+    wire: Wire,
     /// The ids of the tints the client's tileset has, and what the engine was last told.
     tint_ids: Vec<String>,
     tints_told: Vec<String>,
@@ -321,11 +351,29 @@ impl EngineModel {
         Self::connect_with(transport, tiles, DEFAULT_MAX_HZ)
     }
 
-    /// Like `connect`, with the most frames per second the client can show while an activity runs.
+    /// Like `connect`, with the most frames per second the client can show while an activity runs. The
+    /// protocol version is 0.1 unless `BN_WIRE=0.2`.
     pub fn connect_with(transport: Box<dyn Transport>, tiles: bool, max_hz: u16) -> Self {
+        Self::open(
+            transport,
+            ConnectOptions {
+                tiles,
+                max_hz,
+                wire: Wire::from_env(),
+            },
+        )
+    }
+
+    /// Starts the session as `options` say.
+    pub fn open(transport: Box<dyn Transport>, options: ConnectOptions) -> Self {
+        let ConnectOptions {
+            tiles,
+            max_hz,
+            wire,
+        } = options;
         let mut m = Self {
             max_hz,
-            ask: Ask::Rate,
+            wire,
             tiles,
             tiles_told: tiles,
             tint_ids: vec![],
@@ -384,15 +432,15 @@ impl EngineModel {
                 rows: VIEW.y as u32,
             })
             .with_tiles(self.tiles);
-        self.call("bn.hello", json!(self.with_ask(params)), Pending::Hello);
+        self.call("bn.hello", json!(self.with_session(params)), Pending::Hello);
     }
 
-    fn with_ask(&self, params: protocol::HelloParams) -> protocol::HelloParams {
-        let credits = crate::transport::CREDIT_WINDOW;
-        match self.ask {
-            Ask::Rate => params.with_delivery(credits, Some(self.max_hz)),
-            Ask::Credits => params.with_delivery(credits, None),
-            Ask::Nothing => params,
+    /// A hello with the delivery this client needs, in the form of the version it speaks.
+    fn with_session(&self, params: protocol::HelloParams) -> protocol::HelloParams {
+        let params = params.with_delivery(crate::transport::CREDIT_WINDOW, Some(self.max_hz));
+        match self.wire {
+            Wire::V01 => params,
+            Wire::V02 => params.into_v02(protocol::SCHEMA_HASH),
         }
     }
 
@@ -626,18 +674,6 @@ impl EngineModel {
             if let Some(n) = result.ok().and_then(|v| serde_json::from_value(v).ok()) {
                 self.command_notice(n);
             }
-            return;
-        }
-        if matches!(kind, Pending::Hello)
-            && let Err(e) = &result
-            && e.code == INVALID_PARAMS
-            && self.ask != Ask::Nothing
-        {
-            self.ask = match self.ask {
-                Ask::Rate => Ask::Credits,
-                _ => Ask::Nothing,
-            };
-            self.hello();
             return;
         }
         if matches!(kind, Pending::Hello)
@@ -920,7 +956,11 @@ impl EngineModel {
         let params = protocol::HelloParams::new("bn-client")
             .with_tiles(self.tiles)
             .with_tint_ids(self.tint_ids.clone());
-        self.call("bn.hello", json!(self.with_ask(params)), Pending::Retile);
+        self.call(
+            "bn.hello",
+            json!(self.with_session(params)),
+            Pending::Retile,
+        );
         let (cols, rows) = (self.declared.x as u32, self.declared.y as u32);
         self.call(
             "bn.viewport",
@@ -1554,7 +1594,12 @@ impl GameModel for EngineModel {
         };
         match respawn() {
             Ok(transport) => {
-                let mut fresh = EngineModel::connect(transport, self.tiles)
+                let options = ConnectOptions {
+                    tiles: self.tiles,
+                    max_hz: self.max_hz,
+                    wire: self.wire,
+                };
+                let mut fresh = EngineModel::open(transport, options)
                     .with_clock(self.clock.clone())
                     .with_colors(self.colors.clone())
                     .with_stall(self.stall);
