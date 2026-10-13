@@ -287,3 +287,64 @@ fn the_last_of_the_queued_commands_ends_the_busy_state_in_any_order() {
     m.poll();
     assert!(!m.busy());
 }
+
+fn model_with_queue(queue: Option<u64>) -> EngineModel {
+    let mut hello = fixture("hello_result");
+    if let Some(queue) = queue {
+        hello["result"]["limits"]["screen_queue"] = json!(queue);
+    }
+    let (t, _) = ScriptedTransport::new();
+    let mut m = EngineModel::open(
+        Box::new(
+            t.on("bn.hello", vec![hello])
+                .on("bn.subscribe", subscribe_with_stack(1))
+                .on("bn.command.submit", accepted("c:1"))
+                .on("bn.command.submit", accepted("c:2"))
+                .on("bn.command.submit", accepted("c:3")),
+        ),
+        ConnectOptions {
+            wire: Wire::V02,
+            ..ConnectOptions::default()
+        },
+    );
+    m.poll();
+    m
+}
+
+#[test]
+fn the_engines_screen_queue_sets_how_many_screen_commands_wait() {
+    let up = |m: &mut EngineModel| m.invoke_affordance("UP", InvokeArgs::default());
+    let mut m = model_with_queue(None);
+    assert_eq!(up(&mut m), Ok(()));
+    assert_eq!(up(&mut m), Ok(()), "one waits behind the running one");
+    assert_eq!(
+        up(&mut m),
+        Err(InvokeError::Busy),
+        "a hello without a depth means 1"
+    );
+    let mut m = model_with_queue(Some(2));
+    assert_eq!(up(&mut m), Ok(()));
+    assert_eq!(up(&mut m), Ok(()));
+    assert_eq!(up(&mut m), Ok(()));
+    assert_eq!(up(&mut m), Err(InvokeError::Busy));
+}
+
+#[test]
+fn a_hello_the_engine_refuses_for_its_schema_fails_with_the_engines_error_and_asks_nothing_more() {
+    let refused = json!({"jsonrpc": "2.0", "error": {"code": 1000, "message": "application error",
+        "data": {"kind": "negotiation_failed", "action": "hello",
+            "message": "The schema does not match.",
+            "schema": {"engine": "sha256:0123456789abcdef", "client": "sha256:fedcba9876543210"}}}});
+    let (t, h) = ScriptedTransport::new();
+    let mut m = EngineModel::open(
+        Box::new(t.on("bn.hello", vec![refused])),
+        ConnectOptions {
+            wire: Wire::V02,
+            ..ConnectOptions::default()
+        },
+    );
+    m.poll();
+    let failure = m.failure().expect("the refusal is reported");
+    assert_eq!(failure.message, "The schema does not match.");
+    assert_eq!(h.sent_methods(), ["bn.hello"], "no fallback to 0.1");
+}

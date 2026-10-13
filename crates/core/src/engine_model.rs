@@ -136,6 +136,8 @@ pub struct EngineModel {
     connected: bool,
     /// A submitted command has not reached a terminal stage yet: `unanswered` or `running` is not empty.
     busy: bool,
+    /// How many screen-scoped commands the engine holds behind the running one; its hello says.
+    screen_queue: usize,
     /// Submits whose answer has not arrived; the engine queues screen-scoped ones behind a running command.
     unanswered: u32,
     /// The commands the engine accepted that have not reached a terminal stage.
@@ -400,6 +402,7 @@ impl EngineModel {
             subscribing: false,
             connected: true,
             busy: false,
+            screen_queue: 1,
             unanswered: 0,
             running: HashSet::new(),
             command_id: None,
@@ -739,6 +742,8 @@ impl EngineModel {
                     ))
                 });
                 self.mark("hello");
+                self.screen_queue = serde_json::from_value::<protocol::Hello>(value.clone())
+                    .map_or(1, |hello| hello.screen_queue());
                 self.set_credits(&value);
                 self.subscribe();
             }
@@ -863,7 +868,8 @@ impl EngineModel {
         let basis = interaction::Basis {
             at,
             boundary: b,
-            busy: self.busy,
+            outstanding: self.unanswered as usize + self.running.len(),
+            queue: self.screen_queue,
         };
         let submit = interaction::submit(&basis, operation)?;
         let boundary_id = b.boundary_id.clone();

@@ -908,6 +908,15 @@ pub struct Hello {
     pub role: Option<Role>,
 }
 
+impl Hello {
+    /// How many screen-scoped commands the engine holds behind the running one; 1 when it does not say.
+    pub fn screen_queue(&self) -> usize {
+        self.limits["screen_queue"]
+            .as_u64()
+            .map_or(1, |n| n.max(1) as usize)
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Role {

@@ -54,7 +54,8 @@ pub enum InvokeError {
     Unknown(String),
     /// The affordance is off; the engine's reason, when it gave one.
     Disabled(Option<Text>),
-    /// A command is running and the affordance is boundary-scoped, which the engine refuses meanwhile.
+    /// A command is running and the affordance is boundary-scoped, which the engine refuses meanwhile, or
+    /// a screen-scoped one finds the engine's queue full.
     Busy,
     Args(ArgError),
 }
@@ -206,8 +207,10 @@ pub fn gate(screen: &Screen, affordance: &Affordance, args: &InvokeArgs) -> Resu
 pub struct Basis<'a> {
     pub at: &'a At,
     pub boundary: &'a Boundary,
-    /// A submitted command has not reached a terminal stage.
-    pub busy: bool,
+    /// The commands submitted that have not reached a terminal stage.
+    pub outstanding: usize,
+    /// How many commands the engine holds behind the running one (`limits.screen_queue`).
+    pub queue: usize,
 }
 
 /// Whether `args` are what `shape` asks for: every member it names, no other, within its bounds.
@@ -294,10 +297,11 @@ fn invoke_expect(
     )
     .map_err(InvokeError::Args)?;
     match affordance.expect {
+        Scope::Screen if basis.outstanding > basis.queue => Err(InvokeError::Busy),
         Scope::Screen => Ok(Expect::Screen(ScreenExpect {
             screen_id: screen.screen_id.clone(),
         })),
-        Scope::Boundary if basis.busy => Err(InvokeError::Busy),
+        Scope::Boundary if basis.outstanding > 0 => Err(InvokeError::Busy),
         Scope::Boundary => Ok(Expect::Boundary(BoundaryExpect {
             boundary_id: basis.boundary.boundary_id.clone(),
             revision: basis.at.revision.clone(),

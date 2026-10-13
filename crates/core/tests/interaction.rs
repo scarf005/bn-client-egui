@@ -48,11 +48,21 @@ fn invoke(id: &str, args: Option<InvokeArgs>) -> Operation {
 }
 
 fn command(b: &Boundary, busy: bool, operation: Operation) -> Result<Value, InvokeError> {
+    queued(b, usize::from(busy), 8, operation)
+}
+
+fn queued(
+    b: &Boundary,
+    outstanding: usize,
+    queue: usize,
+    operation: Operation,
+) -> Result<Value, InvokeError> {
     let at = at();
     let basis = Basis {
         at: &at,
         boundary: b,
-        busy,
+        outstanding,
+        queue,
     };
     submit(&basis, operation).map(|s| serde_json::to_value(s).unwrap())
 }
@@ -680,4 +690,17 @@ fn expectations_are_the_forms_the_wire_defines() {
     let expect =
         serde_json::from_value::<Expect>(json!({"boundary_id": "b", "revision": "1"})).unwrap();
     assert!(matches!(expect, Expect::Boundary(_)));
+}
+
+#[test]
+fn a_screen_scoped_invoke_queues_up_to_the_engines_depth() {
+    let b = aim_stack();
+    let up = || invoke("UP", None);
+    assert!(
+        queued(&b, 8, 8, up()).is_ok(),
+        "the running one and eight waiting"
+    );
+    assert_eq!(queued(&b, 9, 8, up()), Err(InvokeError::Busy));
+    assert!(queued(&b, 1, 1, up()).is_ok());
+    assert_eq!(queued(&b, 2, 1, up()), Err(InvokeError::Busy));
 }
