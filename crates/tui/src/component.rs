@@ -4,15 +4,14 @@
 
 use super::{color, token};
 use bn_client_core::colors::ColorMap;
-use bn_client_core::interaction::{self, ArgKind, Interaction, InvokeError, Window};
+use bn_client_core::interaction::{ArgKind, Interaction, InvokeError, Reason, Window};
 use bn_client_core::markup::Run;
 use bn_client_core::protocol::{
-    Affordance, AffordanceRole, Component, FieldKind, Form, FormField, Grid, GridCell, InvokeArgs,
-    List, MapComponent, Panel, Row, RowColumn, Screen, ScreenRole, Selection, Split, Tabs,
-    TextBlock, TextRole, Tone,
+    Component, FieldKind, Form, Grid, GridCell, List, MapComponent, Panel, Row, RowColumn, Screen,
+    ScreenRole, Selection, Split, Tabs, TextBlock, TextRole, Tone,
 };
 use bn_client_core::{GameModel, Rgb};
-use crossterm::event::{KeyCode, KeyEvent};
+use crossterm::event::KeyEvent;
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
@@ -63,64 +62,21 @@ fn nodes(screen: &Screen) -> Vec<&Component> {
     screen.root.iter().flat_map(flatten).collect()
 }
 
-/// What the player is typing for an affordance that asks for a count or a text.
-struct Collect {
-    affordance: String,
-    needs: Vec<ArgKind>,
-    /// What was typed, for the prompt.
-    typed: String,
-    /// The form field the text goes to.
-    field: Option<FormField>,
-}
-
-/// What a key came to.
-enum Step {
-    Send(String, InvokeArgs),
-    Note(String),
-    Done,
-}
-
-/// The client-local state of the described screens: what the core keeps of the focus and the player's
-/// input, what is being typed, and how much each scrolling component showed.
+/// The client-local state of the described screens: the core's focus and ask, and how much each scrolling
+/// component showed.
 #[derive(Default)]
 pub(super) struct View {
     ui: Interaction,
-    collecting: Option<Collect>,
     /// What the last key was refused for, until the next key.
     note: Option<String>,
     /// How much of each list and text the last frame showed.
     extents: HashMap<String, Window>,
-    colors: ColorMap,
 }
 
 impl View {
-    /// Follows the stack, drops what belongs to a screen or an affordance that is gone, and puts the focus on
-    /// the row the engine marks selected when it names none.
+    /// Follows the stack the engine published.
     fn sync<M: GameModel>(&mut self, model: &M) {
-        let stack = model.screens();
-        self.ui.sync(stack);
-        let top = described(stack);
-        let kept =
-            |c: &Collect| top.is_some_and(|s| s.affordances.iter().any(|a| a.id == c.affordance));
-        if self.collecting.as_ref().is_some_and(|c| !kept(c)) {
-            self.collecting = None;
-        }
-        if self.ui.focus().row_id.is_some() {
-            return;
-        }
-        let selected = top.and_then(|screen| {
-            nodes(screen).into_iter().find_map(|c| match c {
-                Component::List(list) => model
-                    .rows(list)
-                    .into_iter()
-                    .find(|row| row.selected)
-                    .map(|row| (list.head.id.clone(), row.id.clone())),
-                _ => None,
-            })
-        });
-        if let Some((component, row)) = selected {
-            self.ui.focus_row(&component, &row);
-        }
+        self.ui.sync(model.screens());
     }
 
     /// Asks for the next page of each list the view is near the end of.
@@ -183,7 +139,7 @@ impl View {
             let mut painter = Painter {
                 model,
                 screen,
-                colors: &self.colors,
+                colors: model.colors(),
                 ui: &mut self.ui,
                 extents: &mut self.extents,
             };
@@ -195,27 +151,36 @@ impl View {
         f.render_widget(Paragraph::new(bar), bar_area);
     }
 
-    /// What is being typed, else what the last key was refused for.
+    /// What the core is asking for, else what the last key was refused for.
     fn prompt(&self, screen: &Screen) -> Option<Line<'static>> {
-        if let Some(c) = &self.collecting {
+        if let Some(ask) = self.ui.ask() {
             let label = screen
                 .affordances
                 .iter()
-                .find(|a| a.id == c.affordance)
+                .find(|a| a.id == ask.affordance_id)
                 .map(|a| a.label.shown())
                 .unwrap_or_default();
-            let typed = match &c.field {
-                Some(FormField {
-                    kind: FieldKind::Select,
-                    options: Some(options),
-                    ..
-                }) => options
-                    .iter()
-                    .find(|o| o.id == c.typed)
-                    .map_or(c.typed.clone(), |o| o.label.shown()),
-                _ => c.typed.clone(),
+            let value = match ask.asking {
+                Some(ArgKind::Count) => ask.count.map(|n| n.to_string()),
+                Some(ArgKind::Text) => match &ask.select {
+                    Some(select) => select.options.get(select.at).map(|o| o.label.shown()),
+                    None => ask.text.clone(),
+                },
+                Some(ArgKind::Pane) => ask.panes.get(ask.pane_at).map(|id| {
+                    nodes(screen)
+                        .into_iter()
+                        .find_map(|c| match c {
+                            Component::Panel(p) if &p.head.id == id => Some(p.title.shown()),
+                            _ => None,
+                        })
+                        .unwrap_or_else(|| id.clone())
+                }),
+                _ => None,
             };
-            return Some(Line::from(format!("{label}: {typed}_")));
+            return Some(Line::from(format!(
+                "{label}: {}_",
+                value.unwrap_or_default()
+            )));
         }
         let note = self.note.as_ref()?;
         Some(Line::styled(note.clone(), Style::new().fg(Color::Yellow)))
@@ -224,494 +189,77 @@ impl View {
     pub(super) fn key<M: GameModel>(&mut self, model: &mut M, key: KeyEvent) {
         self.sync(model);
         self.note = None;
-        let step = match described(model.screens()) {
-            Some(screen) => self.decide(&*model, screen, key),
-            None => Step::Done,
-        };
-        match step {
-            Step::Send(id, args) => {
-                if let Err(e) = model.invoke_affordance(&id, args) {
-                    self.note = Some(refusal(e));
-                }
-            }
-            Step::Note(text) => self.note = Some(text),
-            Step::Done => {}
-        }
-    }
-
-    /// A key the screen binds goes to the engine; the others move the focus here.
-    fn decide<M: GameModel>(&mut self, model: &M, screen: &Screen, key: KeyEvent) -> Step {
-        let tok = token(key);
-        if self.collecting.is_some() {
-            return self.collect_key(screen, key, tok);
-        }
-        if let Some(t) = tok.as_deref()
-            && interaction::binds_key(screen, t)
-        {
-            return match interaction::affordance_for_key(screen, t) {
-                Some(a) => self.trigger(screen, &a.id),
-                None => Step::Note(denial_of(screen, t)),
-            };
-        }
-        // A screen with nothing to move in waits for any key.
-        let idle = !nodes(screen)
-            .iter()
-            .any(|c| focusable(c) || matches!(c, Component::Tabs(_)));
-        if idle
-            && let Some(a) = tok
-                .as_deref()
-                .and_then(|t| interaction::affordance_for_key(screen, t))
-            && a.role == Some(AffordanceRole::AnyKey)
-        {
-            return self.trigger(screen, &a.id);
-        }
-        match self.navigate(model, screen, key, tok.as_deref()) {
-            Some(step) => step,
-            None => match tok
-                .as_deref()
-                .and_then(|t| interaction::affordance_for_key(screen, t))
-            {
-                Some(a) => self.trigger(screen, &a.id),
-                None => Step::Done,
-            },
-        }
-    }
-
-    /// Starts or finishes the arguments of an affordance, which the core gathers.
-    fn trigger(&mut self, screen: &Screen, id: &str) -> Step {
-        let Some(affordance) = screen.affordances.iter().find(|a| a.id == id) else {
-            return Step::Done;
-        };
-        if !affordance.enabled {
-            return Step::Note(
-                affordance
-                    .denial
-                    .as_ref()
-                    .map(|d| d.shown())
-                    .unwrap_or_default(),
-            );
-        }
-        let missing = self.ui.begin(affordance);
-        if missing.is_empty() {
-            return match self.ui.finish(affordance) {
-                Ok(args) => Step::Send(id.into(), args),
-                Err(missing) => Step::Note(format!("{missing:?}")),
-            };
-        }
-        if !missing
-            .iter()
-            .all(|kind| matches!(kind, ArgKind::Count | ArgKind::Text))
-        {
-            self.ui.cancel();
-            return Step::Note(format!("{missing:?}"));
-        }
-        let field = self.field_of(screen, affordance);
-        let typed = match &field {
-            Some(f) if f.kind != FieldKind::Key && missing.contains(&ArgKind::Text) => {
-                self.ui.set_text(&f.value);
-                f.value.clone()
-            }
-            _ => String::new(),
-        };
-        self.collecting = Some(Collect {
-            affordance: id.into(),
-            needs: missing,
-            typed,
-            field,
-        });
-        Step::Done
-    }
-
-    /// The form field a text goes to: the one the affordance names, else the one the focus is on.
-    fn field_of(&self, screen: &Screen, affordance: &Affordance) -> Option<FormField> {
-        let named = affordance
-            .args
-            .as_ref()
-            .and_then(|a| a.text.as_ref())
-            .and_then(|t| t.field_id.as_deref());
-        let wanted = named.or(self.ui.focus().row_id.as_deref())?;
-        nodes(screen).into_iter().find_map(|c| match c {
-            Component::Form(form) => form.fields.iter().find(|f| f.id == wanted).cloned(),
-            _ => None,
-        })
-    }
-
-    fn collect_key(&mut self, screen: &Screen, key: KeyEvent, tok: Option<String>) -> Step {
-        let Some(collect) = self.collecting.as_mut() else {
-            return Step::Done;
-        };
-        let kind = collect.field.as_ref().map(|f| f.kind);
-        let finish = key.code == KeyCode::Enter || kind == Some(FieldKind::Key);
-        match key.code {
-            KeyCode::Esc => {
-                self.ui.cancel();
-                self.collecting = None;
-                return Step::Done;
-            }
-            _ if kind == Some(FieldKind::Key) => {
-                if let Some(t) = &tok {
-                    self.ui.set_text(t);
-                }
-            }
-            KeyCode::Backspace => {
-                self.ui.pop_count();
-                self.ui.pop_text();
-                collect.typed.pop();
-            }
-            KeyCode::Left | KeyCode::Right if kind == Some(FieldKind::Select) => {
-                let options = collect
-                    .field
-                    .iter()
-                    .flat_map(|f| f.options.iter().flatten());
-                let ids = options.map(|o| o.id.as_str()).collect::<Vec<_>>();
-                let at = ids.iter().position(|id| *id == collect.typed);
-                let by = if key.code == KeyCode::Left { -1 } else { 1 };
-                let next = at.map_or(0, |at| {
-                    at.saturating_add_signed(by)
-                        .min(ids.len().saturating_sub(1))
-                });
-                if let Some(id) = ids.get(next) {
-                    collect.typed = id.to_string();
-                    self.ui.set_text(id);
-                }
-            }
-            KeyCode::Char(c) if collect.needs.contains(&ArgKind::Text) => {
-                self.ui.push_text(&c.to_string());
-                collect.typed.push(c);
-            }
-            KeyCode::Char(c) => {
-                if self.ui.push_count(c) {
-                    collect.typed.push(c);
-                }
-            }
-            _ => {}
-        }
-        if !finish {
-            return Step::Done;
-        }
-        let Some(affordance) = screen
-            .affordances
-            .iter()
-            .find(|a| Some(&a.id) == self.collecting.as_ref().map(|c| &c.affordance))
-        else {
-            return Step::Done;
-        };
-        match self.ui.finish(affordance) {
-            Ok(args) => {
-                self.collecting = None;
-                Step::Send(affordance.id.clone(), args)
-            }
-            Err(missing) => Step::Note(format!("{missing:?}")),
-        }
-    }
-
-    /// The focus keys. `None`: the key is not one of them.
-    fn navigate<M: GameModel>(
-        &mut self,
-        model: &M,
-        screen: &Screen,
-        key: KeyEvent,
-        tok: Option<&str>,
-    ) -> Option<Step> {
-        let all = nodes(screen);
-        let current = self.current(&all);
-        let step = match key.code {
-            KeyCode::Up => self.vertical(model, &all, current, -1),
-            KeyCode::Down => self.vertical(model, &all, current, 1),
-            KeyCode::PageUp => self.vertical(model, &all, current, -(PAGE as isize)),
-            KeyCode::PageDown => self.vertical(model, &all, current, PAGE as isize),
-            KeyCode::Home => self.vertical(model, &all, current, isize::MIN / 2),
-            KeyCode::End => self.vertical(model, &all, current, isize::MAX / 2),
-            KeyCode::Left => self.horizontal(screen, &all, current, -1),
-            KeyCode::Right => self.horizontal(screen, &all, current, 1),
-            KeyCode::Tab => self.cycle(model, &all, current, 1),
-            KeyCode::BackTab => self.cycle(model, &all, current, -1),
-            KeyCode::Enter => self.activate(screen, current),
-            KeyCode::Esc => match interaction::with_role(screen, AffordanceRole::Cancel) {
-                Some(a) => self.trigger(screen, &a.id),
-                None => Step::Done,
-            },
-            KeyCode::Char(' ') => self.mark(current),
-            KeyCode::Char(c) => return self.typed_key(model, screen, current, c, tok),
-            _ => return None,
-        };
-        Some(step)
-    }
-
-    /// The component the focus is in, else the first one that takes it.
-    fn current<'a>(&self, all: &[&'a Component]) -> Option<&'a Component> {
-        let focused = all
-            .iter()
-            .find(|c| Some(c.id()) == self.ui.focus().component_id.as_deref());
-        focused
-            .into_iter()
-            .chain(all)
-            .find(|c| focusable(c))
-            .copied()
-    }
-
-    fn vertical<M: GameModel>(
-        &mut self,
-        model: &M,
-        all: &[&Component],
-        current: Option<&Component>,
-        by: isize,
-    ) -> Step {
-        match current {
-            Some(Component::List(list)) => {
-                let rows = model.rows(list);
-                let id = &list.head.id;
-                self.ui.move_focus(id, &rows, by);
-                let at = self
-                    .ui
-                    .focus()
-                    .row_id
-                    .as_ref()
-                    .and_then(|row| rows.iter().position(|r| &r.id == row));
-                let visible = self.extents.get(id).map_or(PAGE, |w| w.visible);
-                if let Some(at) = at {
-                    let window = Window {
-                        total: rows.len(),
-                        visible,
-                    };
-                    self.ui.reveal(id, at, window);
-                }
-            }
-            Some(Component::Form(form)) => self.move_field(form, by.signum()),
-            Some(Component::Grid(grid)) => self.move_cell(grid, 0, by.signum() as i32),
-            _ => {
-                let text = all.iter().find(|c| matches!(c, Component::Text(_)));
-                if let Some((id, window)) =
-                    text.and_then(|c| Some((c.id(), self.extents.get(c.id())?)))
-                {
-                    self.ui
-                        .scroll_by(id, by.clamp(-(PAGE as isize), PAGE as isize), *window);
-                }
-            }
-        }
-        Step::Done
-    }
-
-    fn horizontal(
-        &mut self,
-        screen: &Screen,
-        all: &[&Component],
-        current: Option<&Component>,
-        by: isize,
-    ) -> Step {
-        let tabs = all.iter().find_map(|c| match c {
-            Component::Tabs(tabs) => Some(tabs),
-            _ => None,
-        });
-        if let Some(tabs) = tabs {
-            let at = tabs.tabs.iter().position(|t| t.selected).unwrap_or(0);
-            let next = match by < 0 {
-                true => tabs.tabs[..at].iter().rev().find(|t| t.enabled),
-                false => tabs.tabs.iter().skip(at + 1).find(|t| t.enabled),
-            };
-            return match (next, &tabs.select) {
-                (Some(tab), Some(select)) => {
-                    self.ui.focus_row(&tabs.head.id, &tab.id);
-                    self.trigger(screen, select)
-                }
-                _ => Step::Done,
-            };
-        }
-        if let Some(Component::Grid(grid)) = current {
-            self.move_cell(grid, by as i32, 0);
-        }
-        Step::Done
-    }
-
-    /// Moves to the next component that takes the focus, onto its first row.
-    fn cycle<M: GameModel>(
-        &mut self,
-        model: &M,
-        all: &[&Component],
-        current: Option<&Component>,
-        by: isize,
-    ) -> Step {
-        let takers = all.iter().filter(|c| focusable(c)).collect::<Vec<_>>();
-        let at = takers
-            .iter()
-            .position(|c| Some(c.id()) == current.map(|c| c.id()));
-        let next = at.map_or(0, |at| {
-            (at as isize + by).rem_euclid(takers.len() as isize) as usize
-        });
-        match takers.get(next) {
-            Some(Component::List(list)) => {
-                self.ui.move_focus(&list.head.id, &model.rows(list), 0);
-            }
-            Some(Component::Form(form)) => {
-                if let Some(field) = form.fields.first() {
-                    self.ui.focus_row(&form.head.id, &field.id);
-                }
-            }
-            Some(Component::Grid(grid)) => {
-                if let Some(id) = grid.cells.iter().find_map(|c| c.id.as_deref()) {
-                    self.ui.focus_row(&grid.head.id, id);
-                }
-            }
-            _ => {}
-        }
-        Step::Done
-    }
-
-    fn move_field(&mut self, form: &Form, by: isize) {
-        let at = self
-            .ui
-            .focus()
-            .row_id
-            .as_ref()
-            .filter(|_| self.ui.focus().component_id.as_ref() == Some(&form.head.id))
-            .and_then(|id| form.fields.iter().position(|f| &f.id == id));
-        let last = form.fields.len().saturating_sub(1);
-        let next = match (at, by < 0) {
-            (Some(at), _) => at.saturating_add_signed(by).min(last),
-            (None, true) => last,
-            (None, false) => 0,
-        };
-        if let Some(field) = form.fields.get(next) {
-            self.ui.focus_row(&form.head.id, &field.id);
-        }
-    }
-
-    /// The cell the focus is on, else the engine's cursor, else the first.
-    fn cell_at<'a>(&self, grid: &'a Grid) -> Option<&'a GridCell> {
-        let focused = self
-            .ui
-            .focus()
-            .row_id
-            .as_deref()
-            .filter(|_| self.ui.focus().component_id.as_deref() == Some(grid.head.id.as_str()));
-        let by_id = focused.and_then(|id| grid.cells.iter().find(|c| c.id.as_deref() == Some(id)));
-        let by_cursor = grid.cursor.and_then(|at| {
-            grid.cells
-                .iter()
-                .find(|c| i64::from(c.x) == i64::from(at.x) && i64::from(c.y) == i64::from(at.y))
-        });
-        by_id
-            .or(by_cursor)
-            .or_else(|| grid.cells.iter().find(|c| c.id.is_some()))
-    }
-
-    fn move_cell(&mut self, grid: &Grid, dx: i32, dy: i32) {
-        let Some(from) = self.cell_at(grid) else {
+        let Some(name) = token(key) else {
             return;
         };
-        let (x, y) = (
-            i64::from(from.x) + i64::from(dx),
-            i64::from(from.y) + i64::from(dy),
-        );
-        let to = grid
-            .cells
-            .iter()
-            .find(|c| i64::from(c.x) == x && i64::from(c.y) == y && c.id.is_some());
-        if let Some(id) = to.and_then(|c| c.id.as_deref()) {
-            self.ui.focus_row(&grid.head.id, id);
-        }
-    }
-
-    /// Enter on the component the focus is in: its activate, submit or cell affordance.
-    fn activate(&mut self, screen: &Screen, current: Option<&Component>) -> Step {
-        let id = match current {
-            Some(Component::List(list)) => list.activate.clone(),
-            Some(Component::Form(form)) => {
-                if self.ui.focus().component_id.as_ref() != Some(&form.head.id) {
-                    self.move_field(form, 0);
+        let outcome = match described(model.screens()) {
+            Some(screen) => {
+                let outcome = self
+                    .ui
+                    .press(screen, &name, PAGE, &|l| l.rows.iter().collect());
+                if !outcome.consumed {
+                    self.scroll_text(screen, &name);
                 }
-                form.submit.clone()
+                outcome
             }
-            Some(Component::Grid(grid)) => {
-                let cell = self.cell_at(grid);
-                if let Some(id) = cell.and_then(|c| c.id.as_deref()) {
-                    self.ui.focus_row(&grid.head.id, id);
-                }
-                cell.and_then(|c| c.affordance.clone())
-            }
-            _ => interaction::with_role(screen, AffordanceRole::Confirm).map(|a| a.id.clone()),
+            None => return,
         };
-        match id {
-            Some(id) => self.trigger(screen, &id),
-            None => Step::Done,
+        if let Some((id, args)) = outcome.invoke {
+            if let Err(e) = model.invoke_affordance(&id, args) {
+                self.note = Some(match e {
+                    InvokeError::Disabled(Some(reason)) => reason.shown(),
+                    InvokeError::Disabled(None) => words(Reason::Disabled),
+                    InvokeError::NoScreen => words(Reason::NoScreen),
+                    InvokeError::Unknown(_) => words(Reason::Unknown),
+                    InvokeError::Busy => words(Reason::Busy),
+                    InvokeError::Args(_) => words(Reason::BadArgs),
+                });
+            }
+        } else if let Some(denial) = outcome.denial {
+            self.note = Some(denial.shown());
+        } else if let Some(reason) = outcome.reason {
+            self.note = Some(words(reason));
         }
     }
+}
 
-    /// Space marks the focused row of a list that takes several.
-    fn mark(&mut self, current: Option<&Component>) -> Step {
-        if let Some(Component::List(list)) = current
-            && matches!(list.selection, Selection::Multi | Selection::Count)
-            && self.ui.focus().component_id.as_ref() == Some(&list.head.id)
-            && let Some(row) = self.ui.focus().row_id.clone()
-        {
-            self.ui.toggle_pick(&list.head.id, &row);
-        }
-        Step::Done
-    }
-
-    /// A character: a row's hotkey, or the first digit of a count.
-    fn typed_key<M: GameModel>(
-        &mut self,
-        model: &M,
-        screen: &Screen,
-        current: Option<&Component>,
-        c: char,
-        tok: Option<&str>,
-    ) -> Option<Step> {
-        let Some(Component::List(list)) = current else {
-            return None;
+impl View {
+    /// A key nothing took scrolls the first text, which the client shows in parts on its own.
+    fn scroll_text(&mut self, screen: &Screen, key: &str) {
+        let by = match key {
+            "UP" => -1,
+            "DOWN" => 1,
+            "PPAGE" => -(PAGE as isize),
+            "NPAGE" => PAGE as isize,
+            "HOME" => isize::MIN / 2,
+            "END" => isize::MAX / 2,
+            _ => return,
         };
-        let hotkey = model
-            .rows(list)
+        let text = nodes(screen)
             .into_iter()
-            .find(|row| row.enabled && row.hotkey.as_deref() == tok);
-        if let Some(row) = hotkey {
-            self.ui.focus_row(&list.head.id, &row.id);
-            return Some(match &list.activate {
-                Some(id) => self.trigger(screen, id),
-                None => Step::Done,
-            });
+            .find(|c| matches!(c, Component::Text(_)));
+        if let Some((id, window)) = text.and_then(|c| Some((c.id(), *self.extents.get(c.id())?))) {
+            self.ui.scroll_by(id, by, window);
         }
-        if list.selection != Selection::Count || !c.is_ascii_digit() {
-            return None;
-        }
-        let counted = screen.affordances.iter().find(|a| {
-            list.head.affordances.contains(&a.id)
-                && a.args.as_ref().is_some_and(|s| s.count.is_some())
-        })?;
-        let step = self.trigger(screen, &counted.id);
-        if let Some(collect) = self.collecting.as_mut()
-            && self.ui.push_count(c)
-        {
-            collect.typed.push(c);
-        }
-        Some(step)
     }
 }
 
-fn focusable(c: &Component) -> bool {
-    matches!(
-        c,
-        Component::List(_) | Component::Form(_) | Component::Grid(_)
-    )
-}
-
-/// Why an affordance did not go out: the engine's own reason, else the core's.
-fn refusal(e: InvokeError) -> String {
-    match e {
-        InvokeError::Disabled(Some(reason)) => reason.shown(),
-        e => format!("{e:?}"),
+/// The client's words for a refusal the engine gave no reason for.
+fn words(reason: Reason) -> String {
+    match reason {
+        Reason::NoScreen => "no screen",
+        Reason::Unknown => "unknown action",
+        Reason::Disabled => "unavailable",
+        Reason::RowDisabled | Reason::NotOnThisRow => "not for this row",
+        Reason::Missing(ArgKind::Row | ArgKind::Rows) => "choose a row",
+        Reason::Missing(ArgKind::Count) => "enter a count",
+        Reason::Missing(ArgKind::Text) => "enter text",
+        Reason::Missing(ArgKind::Pos) => "choose a square",
+        Reason::Missing(ArgKind::Pane) => "choose a pane",
+        Reason::Busy => "busy",
+        Reason::BadArgs => "wrong arguments",
     }
-}
-
-/// The reason the affordances bound to `key` are off.
-fn denial_of(screen: &Screen, key: &str) -> String {
-    screen
-        .affordances
-        .iter()
-        .filter(|a| a.keys.iter().any(|k| k == key))
-        .find_map(|a| a.denial.as_ref().map(|d| d.shown()))
-        .unwrap_or_default()
+    .into()
 }
 
 /// Each affordance with its keys, the off ones dim with their reason, flowed into lines.

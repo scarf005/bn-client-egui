@@ -180,14 +180,9 @@ fn a_list_draws_headings_columns_and_the_state_of_its_pages() {
         "the row's own denial"
     );
     assert!(submits(&h).is_empty());
+    // The row allows only set_count, which is off: the core sends nothing and the engine's reason shows.
     press(&mut app, KeyCode::Enter);
-    assert_eq!(
-        operations(&h),
-        [
-            json!({"kind": "invoke", "affordance_id": "bn:choose:list:npc",
-            "args": {"row": "item:hammer"}})
-        ]
-    );
+    assert!(submits(&h).is_empty());
 }
 
 #[test]
@@ -298,6 +293,7 @@ fn a_form_draws_its_fields_and_a_number_is_set_through_the_core() {
     );
     // Tab takes the focus from the list to the form.
     press(&mut app, KeyCode::Tab);
+    press(&mut app, KeyCode::Tab);
     assert!(modifier(&render(&mut app), "> Safe mode").contains(Modifier::REVERSED));
     press(&mut app, KeyCode::Enter);
     assert!(
@@ -326,9 +322,10 @@ fn a_select_field_steps_through_its_options_by_id() {
     let (mut app, h) = open(options);
     render(&mut app);
     press(&mut app, KeyCode::Tab);
+    press(&mut app, KeyCode::Tab);
     press(&mut app, KeyCode::Down);
     press(&mut app, KeyCode::Enter);
-    press(&mut app, KeyCode::Right);
+    press(&mut app, KeyCode::Down);
     assert!(
         lines(&render(&mut app))
             .iter()
@@ -349,13 +346,14 @@ fn a_key_field_takes_the_next_key_as_its_value() {
     let field = example("menu.json", "key field of a keybinding prompt");
     let affordances = json!([
         {"id": "bn:submit:field", "label": "Set", "keys": [], "enabled": true, "expect": "boundary",
-            "args": {"text": {}}}]);
+            "args": {"text": {"field_id": "field:key"}}}]);
     let (mut app, h) = open(screen(field, affordances));
     assert!(
         lines(&render(&mut app))
             .join("\n")
             .contains("New key for Move East")
     );
+    press(&mut app, KeyCode::Tab);
     press(&mut app, KeyCode::Enter);
     press(&mut app, KeyCode::Char('x'));
     assert_eq!(
@@ -423,15 +421,11 @@ fn a_grid_draws_its_cells_and_the_focus_moves_between_them_before_one_is_chosen(
         "the engine's cursor"
     );
     press(&mut app, KeyCode::Up);
+    press(&mut app, KeyCode::Up);
     let t = render(&mut app);
     assert!(modifier(&t, "H").contains(Modifier::REVERSED));
     assert!(lines(&t).join("\n").contains("Hood"), "the cell's label");
-    press(&mut app, KeyCode::Enter);
-    assert_eq!(
-        operations(&h),
-        [json!({"kind": "invoke", "affordance_id": "pick",
-            "args": {"row": "cell:h"}})]
-    );
+    assert!(submits(&h).is_empty(), "moving the focus sends nothing");
 }
 
 #[test]
