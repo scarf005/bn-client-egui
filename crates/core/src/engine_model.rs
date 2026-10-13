@@ -10,8 +10,8 @@ use crate::model::{
     OvermapTile, PaneTotals, Pos, Rgb, Shape,
 };
 use crate::protocol::{
-    self, CanvasWire, Cell as WorldCell, Entity, Expect, Incoming, Known, LoadingNotice, Look,
-    ModTileset, Operation, Snapshot, Submit, Traits, WorldPos,
+    self, CanvasWire, Cell as WorldCell, Entity, Expect, Incoming, InteractionExpect, Known,
+    LoadingNotice, Look, ModTileset, Operation, Snapshot, Submit, Traits, WorldPos,
 };
 use crate::replica::{Outcome, Replica};
 use crate::transport::{Transport, request};
@@ -781,11 +781,11 @@ impl EngineModel {
         };
         let submit = Submit {
             epoch: at.epoch.clone(),
-            expect: Expect {
+            expect: Expect::Interaction(InteractionExpect {
                 revision: at.revision.clone(),
                 boundary_id: b.boundary_id.clone(),
                 schema_id: b.interaction.as_ref().map(|i| i.schema_id.clone()),
-            },
+            }),
             operation,
         };
         self.status = Some(self.describe(&submit.operation));
@@ -1900,6 +1900,7 @@ impl GameModel for EngineModel {
         let params = protocol::ChoicesParams {
             epoch,
             boundary_id,
+            component_id: None,
             offset: loaded as u64,
             limit: PAGE,
         };

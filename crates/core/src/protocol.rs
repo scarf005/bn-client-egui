@@ -5,6 +5,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 pub const VERSION: &str = "0.1";
+pub const VERSION_02: &str = "0.2";
+/// The raw-byte SHA-256 prefix of the vendored `schema/0.2.schema.json`, computed by `build.rs`: what a 0.2 hello
+/// tells the engine this client was built against.
+pub const SCHEMA_HASH: &str = env!("BN_SCHEMA_HASH");
 
 fn is_default<T: Default + PartialEq>(v: &T) -> bool {
     *v == T::default()
@@ -726,6 +730,9 @@ pub struct Boundary {
     pub readiness: Readiness,
     pub actions: Vec<Action>,
     pub interaction: Option<Interaction>,
+    /// The open screens, outermost first; the last takes the input. Empty from a 0.1 engine.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub stack: Vec<Screen>,
 }
 
 /// A boundary in an event: `actions` is absent when it keeps the previous boundary's.
@@ -736,6 +743,8 @@ pub struct BoundaryChange {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub actions: Option<Vec<Action>>,
     pub interaction: Option<Interaction>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub stack: Vec<Screen>,
 }
 
 /// The only state-bearing part of an event, applied in field order (§3.4).
@@ -799,6 +808,9 @@ pub struct LoggedMessage {
     pub count: u32,
     /// The line as the native log prints it, with the repeat suffix.
     pub label: String,
+    /// The BN language id of a line that is not in the connection locale.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lang: Option<String>,
 }
 
 /// Result of `bn.subscribe`; `parts` snapshot-part notifications follow.
@@ -880,6 +892,27 @@ pub struct Hello {
     /// Present when the client opted in to credit delivery.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub delivery: Option<DeliveryGrant>,
+    /// The schema hash the engine was built with; a 0.2 engine answers with the one the hello named.
+    #[serde(
+        default,
+        deserialize_with = "schema_hash",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub schema: Option<String>,
+    /// The locale this connection receives, and the engine's own.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub locale: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub engine_locale: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub role: Option<Role>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Role {
+    Controller,
+    Spectator,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -937,8 +970,35 @@ pub struct CreditResult {
     pub credits: u16,
 }
 
+/// What a command is conditional on. The form follows the operation: an `invoke` carries the expectation its
+/// affordance's scope names, every other operation the 0.1 form.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Expect {
+#[serde(untagged)]
+pub enum Expect {
+    /// Holds while that screen is the top of the stack (`expect: screen`).
+    Screen(ScreenExpect),
+    /// Holds while the boundary and revision stand (`expect: boundary`).
+    Boundary(BoundaryExpect),
+    Interaction(InteractionExpect),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ScreenExpect {
+    pub screen_id: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BoundaryExpect {
+    pub boundary_id: String,
+    pub revision: String,
+}
+
+/// The 0.1 expectation of the operations that are not an `invoke`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct InteractionExpect {
     pub revision: String,
     pub boundary_id: String,
     pub schema_id: Option<String>,
@@ -987,13 +1047,123 @@ pub enum Operation {
         item_id: String,
         count: u64,
     },
+    /// Runs an affordance of the top screen, by id.
+    Invoke {
+        #[serde(deserialize_with = "opaque_id")]
+        affordance_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        args: Option<InvokeArgs>,
+    },
+}
+
+/// The members an affordance's `args` shape names, and no others.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct InvokeArgs {
+    #[serde(
+        default,
+        deserialize_with = "optional_id",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub row: Option<String>,
+    #[serde(
+        default,
+        deserialize_with = "some_rows",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub rows: Option<Vec<RowPick>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub count: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pos: Option<WorldPos>,
+    #[serde(
+        default,
+        deserialize_with = "optional_id",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub pane: Option<String>,
+}
+
+/// One row of a `rows` argument, with how much of it where the shape counts.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RowPick {
+    #[serde(deserialize_with = "opaque_id")]
+    pub id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub count: Option<u64>,
+}
+
+/// An id the engine mints: 1 to 256 characters, opaque to the client.
+fn opaque_id<'de, D: serde::Deserializer<'de>>(d: D) -> Result<String, D::Error> {
+    let id = String::deserialize(d)?;
+    match (1..=256).contains(&id.chars().count()) {
+        true => Ok(id),
+        false => Err(serde::de::Error::custom(
+            "expected an id of 1 to 256 characters",
+        )),
+    }
+}
+
+fn optional_id<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<String>, D::Error> {
+    opaque_id(d).map(Some)
+}
+
+fn some_rows<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<Vec<RowPick>>, D::Error> {
+    match Vec::<RowPick>::deserialize(d)? {
+        rows if rows.is_empty() => Err(serde::de::Error::custom("expected at least one row")),
+        rows => Ok(Some(rows)),
+    }
+}
+
+/// `sha256:` and 16 hex digits.
+fn schema_hash<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<String>, D::Error> {
+    let hash = String::deserialize(d)?;
+    let digits = hash.strip_prefix("sha256:").unwrap_or_default();
+    let hex = digits
+        .bytes()
+        .all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'));
+    match digits.len() == 16 && hex {
+        true => Ok(Some(hash)),
+        false => Err(serde::de::Error::custom(
+            "expected sha256: and 16 hex digits",
+        )),
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(try_from = "SubmitWire")]
 pub struct Submit {
     pub epoch: String,
     pub expect: Expect,
     pub operation: Operation,
+}
+
+#[derive(Deserialize)]
+struct SubmitWire {
+    epoch: String,
+    expect: Expect,
+    operation: Operation,
+}
+
+/// An `invoke` carries a 0.2 expectation and every other operation the 0.1 one.
+impl TryFrom<SubmitWire> for Submit {
+    type Error = String;
+
+    fn try_from(wire: SubmitWire) -> Result<Self, String> {
+        let invoke = matches!(wire.operation, Operation::Invoke { .. });
+        let legacy = matches!(wire.expect, Expect::Interaction(_));
+        match invoke != legacy {
+            true => Ok(Self {
+                epoch: wire.epoch,
+                expect: wire.expect,
+                operation: wire.operation,
+            }),
+            false => Err("the operation does not take this form of expectation".into()),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -1017,6 +1187,31 @@ pub struct HelloParams {
     pub tint_ids: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub delivery: Option<DeliveryRequest>,
+    /// 0.2: the hash of the schema the client was built with.
+    #[serde(
+        default,
+        deserialize_with = "schema_hash",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub schema: Option<String>,
+    /// 0.2: the BN language id the client wants its text in; the engine's own when absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub locale: Option<String>,
+    /// 0.2: the members above that say what the client can do.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capabilities: Option<Capabilities>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Capabilities {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tiles: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tint_ids: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub viewport: Option<Viewport>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delivery: Option<DeliveryRequest>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -1037,6 +1232,29 @@ impl HelloParams {
             tiles: false,
             tint_ids: vec![],
             delivery: None,
+            schema: None,
+            locale: None,
+            capabilities: None,
+        }
+    }
+
+    /// The same hello for a 0.2 engine: the version, the schema hash this client was built with, and
+    /// what the client can do under `capabilities` instead of loose members.
+    pub fn into_v02(self, schema: &str) -> Self {
+        Self {
+            versions: vec![VERSION_02.into()],
+            schema: Some(schema.into()),
+            capabilities: Some(Capabilities {
+                tiles: self.tiles.then_some(true),
+                tint_ids: (!self.tint_ids.is_empty()).then_some(self.tint_ids),
+                viewport: self.viewport,
+                delivery: self.delivery,
+            }),
+            viewport: None,
+            tiles: false,
+            tint_ids: vec![],
+            delivery: None,
+            ..self
         }
     }
 
@@ -1071,15 +1289,47 @@ impl HelloParams {
 pub struct ChoicesParams {
     pub epoch: String,
     pub boundary_id: String,
+    /// 0.2: the list whose rows are asked for; absent asks for the 0.1 interaction's choices.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub component_id: Option<String>,
     pub offset: u64,
+    #[serde(deserialize_with = "page_limit")]
     pub limit: u64,
 }
+
+/// A page holds 1 to 200 rows.
+fn page_limit<'de, D: serde::Deserializer<'de>>(d: D) -> Result<u64, D::Error> {
+    match u64::deserialize(d)? {
+        n if (1..=PAGE_ROWS).contains(&n) => Ok(n),
+        _ => Err(serde::de::Error::custom("expected 1 to 200 rows")),
+    }
+}
+
+/// The most rows the engine sends for a page, and a page of a list holds.
+pub const PAGE_ROWS: u64 = 200;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ChoicesResult {
     pub boundary_id: String,
     pub total: u64,
     pub choices: Vec<Choice>,
+}
+
+/// The rows of a list past its first page.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct RowsResult {
+    pub boundary_id: String,
+    pub component_id: String,
+    pub total: u64,
+    pub rows: Vec<Row>,
+}
+
+/// The answer of `bn.interaction.choices`: rows of a named list in 0.2, the interaction's choices in 0.1.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum ChoicesReply {
+    Rows(RowsResult),
+    Choices(ChoicesResult),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -1330,4 +1580,560 @@ pub struct Sidebar {
     pub weapon: SidebarText,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub style: Option<SidebarText>,
+}
+
+/// Player-facing text: a string already localized for the connection, or a message key with its arguments
+/// for the client to render from the engine's catalogues. A 0.2 engine sends strings only.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum Text {
+    Plain(String),
+    Localised(LocalisedString),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LocalisedString {
+    /// The msgid. The empty key joins `args`.
+    pub key: String,
+    /// The gettext context.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ctx: Option<String>,
+    /// The count that selects the plural form.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plural: Option<serde_json::Number>,
+    /// The values of the placeholders, in order.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub args: Option<Vec<TextArg>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum TextArg {
+    Number(serde_json::Number),
+    Text(Text),
+}
+
+impl Text {
+    /// What is shown: a string as it is, a message by its key until the catalogues render it (the empty
+    /// key shows its arguments joined).
+    pub fn shown(&self) -> String {
+        match self {
+            Text::Plain(text) => text.clone(),
+            Text::Localised(message) if message.key.is_empty() => message
+                .args
+                .iter()
+                .flatten()
+                .map(|arg| match arg {
+                    TextArg::Number(n) => n.to_string(),
+                    TextArg::Text(text) => text.shown(),
+                })
+                .collect(),
+            Text::Localised(message) => message.key.clone(),
+        }
+    }
+}
+
+/// The members every component has.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Head {
+    pub id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<Text>,
+    /// The ids of the screen's affordances that act on this component.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub affordances: Vec<String>,
+}
+
+/// A generic component, by `kind`: a client draws each without knowing the screen.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum Component {
+    List(List),
+    Tabs(Tabs),
+    Split(Split),
+    Panel(Panel),
+    Form(Form),
+    Text(TextBlock),
+    Grid(Grid),
+    Map(MapComponent),
+    Canvas(CanvasComponent),
+}
+
+impl Component {
+    pub fn head(&self) -> &Head {
+        match self {
+            Component::List(c) => &c.head,
+            Component::Tabs(c) => &c.head,
+            Component::Split(c) => &c.head,
+            Component::Panel(c) => &c.head,
+            Component::Form(c) => &c.head,
+            Component::Text(c) => &c.head,
+            Component::Grid(c) => &c.head,
+            Component::Map(c) => &c.head,
+            Component::Canvas(c) => &c.head,
+        }
+    }
+
+    pub fn id(&self) -> &str {
+        &self.head().id
+    }
+
+    /// The components directly inside this one.
+    pub fn children(&self) -> Vec<&Component> {
+        match self {
+            Component::Tabs(c) => c.child.iter().map(|child| &**child).collect(),
+            Component::Split(c) => c.children.iter().collect(),
+            Component::Panel(c) => c.child.iter().map(|child| &**child).collect(),
+            _ => vec![],
+        }
+    }
+
+    /// This component or the one inside it with `id`.
+    pub fn find(&self, id: &str) -> Option<&Component> {
+        match self.id() == id {
+            true => Some(self),
+            false => self.children().into_iter().find_map(|c| c.find(id)),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Selection {
+    None,
+    Single,
+    Multi,
+    Count,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct List {
+    #[serde(flatten)]
+    pub head: Head,
+    pub columns: Vec<ListColumn>,
+    /// The first page, at most 200 rows from `offset`; `bn.interaction.choices` pages the rest.
+    pub rows: Vec<Row>,
+    pub total: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub offset: Option<u64>,
+    pub selection: Selection,
+    /// The affordance that runs on a row's activation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub activate: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ListColumn {
+    pub key: String,
+    pub label: Text,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Row {
+    pub id: String,
+    pub label: Text,
+    pub description: Text,
+    pub denial: Text,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hotkey: Option<String>,
+    pub enabled: bool,
+    pub selectable: bool,
+    pub selected: bool,
+    pub columns: Vec<RowColumn>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub favorite: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key_color: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub markup: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nest_color: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mark: Option<Mark>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected_count: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub minimum_count: Option<u64>,
+    /// How much of the row there is, in native units.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max: Option<u64>,
+    /// A heading over the rows that follow: it is not a thing to choose.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub header: Option<bool>,
+    /// The affordances this row allows; absent: all of the list's.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub affordances: Option<Vec<RowAffordance>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub look: Option<Look>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RowColumn {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key: Option<String>,
+    pub label: Text,
+    pub value: Text,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RowAffordance {
+    pub id: String,
+    pub enabled: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub denial: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Tabs {
+    #[serde(flatten)]
+    pub head: Head,
+    pub tabs: Vec<Tab>,
+    /// The affordance that selects a tab.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub select: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub child: Option<Box<Component>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Tab {
+    pub id: String,
+    pub label: Text,
+    pub selected: bool,
+    pub enabled: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Relation {
+    Peers,
+    Detail,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Split {
+    #[serde(flatten)]
+    pub head: Head,
+    pub children: Vec<Component>,
+    pub relation: Relation,
+    /// The child that has the focus, by id.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Tone {
+    Good,
+    Bad,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Panel {
+    #[serde(flatten)]
+    pub head: Head,
+    pub title: Text,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subtitle: Option<Text>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stats: Option<Vec<PanelStat>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub filter: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub child: Option<Box<Component>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PanelStat {
+    pub key: String,
+    pub label: Text,
+    pub value: Text,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max: Option<Text>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unit: Option<Text>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tone: Option<Tone>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Form {
+    #[serde(flatten)]
+    pub head: Head,
+    pub fields: Vec<FormField>,
+    /// The affordance that confirms the form.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub submit: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FieldKind {
+    Text,
+    Integer,
+    Float,
+    Key,
+    Bool,
+    Select,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct FormField {
+    pub id: String,
+    pub label: Text,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<Text>,
+    /// The current value, in the form `fill` takes.
+    pub value: String,
+    #[serde(rename = "type")]
+    pub kind: FieldKind,
+    /// -1: unbounded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_length: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub printable: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub options: Option<Vec<FieldOption>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min: Option<serde_json::Number>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max: Option<serde_json::Number>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FieldOption {
+    pub id: String,
+    pub label: Text,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TextRole {
+    TerminalOutput,
+    Banner,
+}
+
+/// Text with the native colour tags in `markup`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TextBlock {
+    #[serde(flatten)]
+    pub head: Head,
+    pub markup: Text,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tone: Option<Tone>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub role: Option<TextRole>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Grid {
+    #[serde(flatten)]
+    pub head: Head,
+    pub cols: u32,
+    pub rows: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cursor: Option<GridCursor>,
+    pub cells: Vec<GridCell>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GridCursor {
+    pub x: i32,
+    pub y: i32,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GridCell {
+    pub x: u32,
+    pub y: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub glyph: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<Text>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+    /// The affordance that takes this cell as its `row`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub affordance: Option<String>,
+    pub enabled: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub denial: Option<Text>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected: Option<bool>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MapMode {
+    World,
+    Overmap,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct MapComponent {
+    #[serde(flatten)]
+    pub head: Head,
+    pub mode: MapMode,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target: Option<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub overmap: Option<OvermapWire>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CanvasComponent {
+    #[serde(flatten)]
+    pub head: Head,
+    pub cols: usize,
+    pub rows: Vec<Vec<(String, u8, u8)>>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ScreenRole {
+    /// The running game.
+    Map,
+    /// A place of its own, such as a menu or a manager.
+    Screen,
+    /// A question over another screen that the player answers and leaves.
+    Dialog,
+}
+
+/// One screen of the interaction stack.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Screen {
+    /// One native screen instance: stable while it stays open, new when it is reopened.
+    pub screen_id: String,
+    pub role: ScreenRole,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<Text>,
+    /// None: the screen is not described by components yet; the boundary's `interaction` is.
+    pub root: Option<Component>,
+    /// What the player can do here; only the top screen has any.
+    pub affordances: Vec<Affordance>,
+    /// Where the native cursor is.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub focus: Option<ScreenFocus>,
+    /// The engine redraws the screen on its own this often, in milliseconds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub refresh_ms: Option<u64>,
+    /// For diagnostics and tests; a client never branches on it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ScreenFocus {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub component_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub row_id: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AffordanceRole {
+    Confirm,
+    Cancel,
+    /// Runs on a key no affordance binds.
+    AnyKey,
+}
+
+/// Which expectation an invoke of the affordance carries; the engine assigns it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Scope {
+    /// The affordance takes no `row`, `rows`, `pos` or `text`; the invoke may queue in the engine.
+    Screen,
+    /// The engine checks the invoke's row ids against the full list.
+    Boundary,
+}
+
+/// Something the player can do now, invoked by `id`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Affordance {
+    pub id: String,
+    pub label: Text,
+    /// The player's bindings, as keybinding-file key names.
+    pub keys: Vec<String>,
+    pub enabled: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub denial: Option<Text>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub role: Option<AffordanceRole>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub args: Option<ArgShape>,
+    pub expect: Scope,
+}
+
+/// The arguments an invoke must carry: every member present, and no other.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ArgShape {
+    /// One row id of that component.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub row: Option<ComponentRef>,
+    /// Several rows of that list, each with a count where `counts`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rows: Option<RowsShape>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub count: Option<CountShape>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<TextShape>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pos: Option<PosShape>,
+    /// A `panel` id among the children of that component.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pane: Option<ComponentRef>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ComponentRef {
+    pub component_id: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RowsShape {
+    pub component_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub counts: Option<bool>,
+}
+
+/// A number within `min` and `max` where given.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CountShape {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default: Option<i64>,
+}
+
+/// A string for a form field; without `field_id` the field is the one `row` names.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TextShape {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub field_id: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PosUnit {
+    Square,
+    Overmap,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PosShape {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unit: Option<PosUnit>,
 }

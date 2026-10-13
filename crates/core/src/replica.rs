@@ -2,7 +2,7 @@
 
 use crate::protocol::{
     At, Avatar, Boundary, Cell, Changes, Coverage, Entity, Environment, EventsParams, Resync,
-    Snapshot, SnapshotPart, WorldPos,
+    Screen, Snapshot, SnapshotPart, WorldPos,
 };
 use std::collections::HashMap;
 
@@ -248,6 +248,7 @@ impl Replica {
                 readiness: next.readiness,
                 actions: next.actions.unwrap_or(kept),
                 interaction: next.interaction,
+                stack: next.stack,
             });
         }
     }
@@ -270,6 +271,11 @@ impl Replica {
 
     pub fn boundary(&self) -> Option<&Boundary> {
         self.boundary.as_ref()
+    }
+
+    /// The open screens, outermost first; empty from a 0.1 engine.
+    pub fn stack(&self) -> &[Screen] {
+        self.boundary.as_ref().map_or(&[], |b| &b.stack)
     }
 
     pub fn avatar(&self) -> Option<&Avatar> {

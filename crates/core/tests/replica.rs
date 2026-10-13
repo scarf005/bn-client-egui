@@ -269,6 +269,7 @@ fn an_event_boundary_without_actions_keeps_the_previous_actions() {
         readiness: readiness.clone(),
         actions,
         interaction: None,
+        stack: vec![],
     };
     let next = boundary("boundary:next", None);
     assert_eq!(r.events(event("41", "32", next)), Outcome::Applied);
