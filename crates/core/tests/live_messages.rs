@@ -77,7 +77,7 @@ fn live_engine_message_log_shows_native_lines_with_repeat_counts() {
     assert_eq!(log.len(), before + 1, "the repeat replaced its line");
     let line = log.last().unwrap();
     assert!(line.shown().starts_with("You can't"), "{}", line.shown());
-    assert!(line.shown().ends_with(" x2"), "{}", line.shown());
+    assert!(line.shown().ends_with(" x 2"), "{}", line.shown());
     assert!(
         line.color.is_some(),
         "the game's colour for the message type"

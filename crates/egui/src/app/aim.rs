@@ -2,43 +2,10 @@
 //! select on click and move on Enter or by dragging to the other pane, a move button with an amount,
 //! and a filter per pane. Every control is a native action; the engine owns the lists.
 use super::{App, a11y};
-use bn_client_core::{GameModel, Menu, MenuChoice, MenuPane};
+use bn_client_core::protocol::Area;
+use bn_client_core::{ActionEntry, GameModel, Menu, MenuChoice, MenuPane};
 use eframe::egui::{self, accesskit};
-use std::collections::VecDeque;
-
-type Cell = Option<(&'static str, &'static str, &'static str)>;
-
-/// The native area picker as the game lays it out: Container and Grabbed Vehicle over Surrounding area
-/// and Worn Items beside the compass, Inventory level with the middle row, Above and Below at the right edge.
-const GRID: [[Cell; 7]; 3] = [
-    [
-        Some(("ITEMS_CONTAINER", "Container", "C")),
-        Some(("ITEMS_DRAGGED_CONTAINER", "Grabbed Vehicle", "D")),
-        None,
-        Some(("ITEMS_NW", "North West", "7")),
-        Some(("ITEMS_N", "North", "8")),
-        Some(("ITEMS_NE", "North East", "9")),
-        Some(("ITEMS_UP", "Above", "<")),
-    ],
-    [
-        None,
-        Some(("ITEMS_INVENTORY", "Inventory", "I")),
-        None,
-        Some(("ITEMS_W", "West", "4")),
-        Some(("ITEMS_CE", "Directly below you", "5")),
-        Some(("ITEMS_E", "East", "6")),
-        Some(("ITEMS_DOWN", "Below", ">")),
-    ],
-    [
-        Some(("ITEMS_AROUND", "Surrounding area", "A")),
-        Some(("ITEMS_WORN", "Worn Items", "W")),
-        None,
-        Some(("ITEMS_SW", "South West", "1")),
-        Some(("ITEMS_S", "South", "2")),
-        Some(("ITEMS_SE", "South East", "3")),
-        None,
-    ],
-];
+use std::collections::{BTreeSet, VecDeque};
 
 /// Height of the item description under the panes.
 const DESCRIPTION_HEIGHT: f32 = 96.0;
@@ -141,13 +108,8 @@ impl<M: GameModel> App<M> {
             self.trapped_by_menu(),
             super::menu_forwards_keys(Some(menu)),
         );
-        let offered = self
-            .model
-            .actions()
-            .into_iter()
-            .map(|a| a.id)
-            .collect::<Vec<_>>();
-        let has = |id: &str| offered.iter().any(|a| a == id);
+        let actions = self.model.actions();
+        let find = |id: &str| actions.iter().find(|a| a.id == id);
         let mut out = Out::default();
         self.aim.editing = false;
         let mut cancel = self.palette.is_none()
@@ -170,7 +132,7 @@ impl<M: GameModel> App<M> {
                             .iter()
                             .filter(|c| c.group.as_deref() == Some(pane.id.as_str()))
                             .collect::<Vec<_>>();
-                        self.aim_pane(ui, (index, pane, &rows), &has, &mut out);
+                        self.aim_pane(ui, (index, pane, &rows), (&actions, &menu.areas), &mut out);
                     }
                 });
                 // Always the same height, so the buttons below do not move as the cursor row changes.
@@ -186,17 +148,10 @@ impl<M: GameModel> App<M> {
                     });
                 ui.separator();
                 ui.horizontal(|ui| {
-                    for (label, action, tip) in [
-                        ("Move", "MOVE_SINGLE_ITEM", "Move one of the selected item"),
-                        (
-                            "Move stack",
-                            "MOVE_ITEM_STACK",
-                            "Move the whole selected stack",
-                        ),
-                        ("Examine", "EXAMINE", "Read the selected item's description"),
-                        ("Sort", "SORT", "Change the sorting of the source pane"),
-                    ] {
-                        self.aim_button(ui, &mut out, (label, action, tip), has(action));
+                    for action in ["MOVE_SINGLE_ITEM", "MOVE_ITEM_STACK", "EXAMINE", "SORT"] {
+                        if let Some(entry) = find(action) {
+                            self.aim_button(ui, &mut out, entry);
+                        }
                     }
                     let edit = egui::TextEdit::singleline(&mut self.aim.amount)
                         .desired_width(50.0)
@@ -214,22 +169,23 @@ impl<M: GameModel> App<M> {
                         .parse::<u64>()
                         .ok()
                         .filter(|n| *n > 0);
-                    let go = ui.add_enabled(
-                        amount.is_some() && has("MOVE_VARIABLE_ITEM") && !self.model.busy(),
-                        egui::Button::new("Move amount"),
-                    );
-                    a11y::button(ui.ctx(), go.id, false);
-                    out.ids.extend(go.enabled().then_some(go.id));
-                    if let (true, Some(n)) = (go.clicked(), amount) {
-                        out.todo.push(Step::Action("MOVE_VARIABLE_ITEM".into()));
-                        out.todo.push(Step::Fill(n.to_string()));
+                    if let Some(entry) = find("MOVE_VARIABLE_ITEM") {
+                        let go = ui
+                            .add_enabled(
+                                amount.is_some() && !self.model.busy(),
+                                egui::Button::new(&entry.name),
+                            )
+                            .on_hover_text(entry.keys.join(", "));
+                        a11y::button(ui.ctx(), go.id, false);
+                        out.ids.extend(go.enabled().then_some(go.id));
+                        if let (true, Some(n)) = (go.clicked(), amount) {
+                            out.todo.push(Step::Action(entry.id.clone()));
+                            out.todo.push(Step::Fill(n.to_string()));
+                        }
                     }
-                    let all = (
-                        "Move all",
-                        "MOVE_ALL_ITEMS",
-                        "Move every item of the source pane",
-                    );
-                    self.aim_button(ui, &mut out, all, has(all.1));
+                    if let Some(entry) = find("MOVE_ALL_ITEMS") {
+                        self.aim_button(ui, &mut out, entry);
+                    }
                     if menu.can_cancel {
                         let close = ui.button("Close");
                         a11y::button(ui.ctx(), close.id, false);
@@ -247,20 +203,15 @@ impl<M: GameModel> App<M> {
         false
     }
 
-    fn aim_button(
-        &self,
-        ui: &mut egui::Ui,
-        out: &mut Out,
-        (label, action, tip): (&str, &str, &str),
-        offered: bool,
-    ) {
+    /// A button for an action the engine offers, named and keyed as the engine reports it.
+    fn aim_button(&self, ui: &mut egui::Ui, out: &mut Out, entry: &ActionEntry) {
         let b = ui
-            .add_enabled(offered && !self.model.busy(), egui::Button::new(label))
-            .on_hover_text(tip);
+            .add_enabled(!self.model.busy(), egui::Button::new(&entry.name))
+            .on_hover_text(entry.keys.join(", "));
         a11y::button(ui.ctx(), b.id, false);
         out.ids.extend(b.enabled().then_some(b.id));
         if b.clicked() {
-            out.todo.push(Step::Action(action.into()));
+            out.todo.push(Step::Action(entry.id.clone()));
         }
     }
 
@@ -268,14 +219,10 @@ impl<M: GameModel> App<M> {
         &mut self,
         ui: &mut egui::Ui,
         (index, pane, rows): (usize, &MenuPane, &[&MenuChoice]),
-        has: &dyn Fn(&str) -> bool,
+        (actions, areas): (&[ActionEntry], &[Area]),
         out: &mut Out,
     ) {
-        let name = if index == 0 {
-            "Left pane"
-        } else {
-            "Right pane"
-        };
+        let name = pane.label.as_str();
         let zone = ui.dnd_drop_zone::<Dragged, _>(egui::Frame::group(ui.style()), |ui| {
             ui.set_min_width(ui.available_width());
             // The title on the left, the area picker at the top right, as the native header draws them.
@@ -293,47 +240,53 @@ impl<M: GameModel> App<M> {
                 });
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
                     ui.vertical(|ui| {
-                        // The native grid: marker columns, the compass with Above and Below, as drawn by the game.
+                        // The engine's grid: marker columns, the compass with Above and Below, as drawn by the game.
+                        let xs = areas.iter().map(|a| a.x).collect::<BTreeSet<_>>();
+                        let ys = areas.iter().map(|a| a.y).collect::<BTreeSet<_>>();
                         egui::Grid::new(("aim_areas", index))
                             .spacing([4.0, 2.0])
                             .show(ui, |ui| {
-                                for row in GRID {
-                                    for cell in row {
-                                        let Some((action, area, mark)) = cell else {
+                                for y in &ys {
+                                    for x in &xs {
+                                        let Some(cell) =
+                                            areas.iter().find(|a| (a.x, a.y) == (*x, *y))
+                                        else {
                                             ui.label("");
                                             continue;
                                         };
-                                        let on = pane.area == area;
-                                        let blocked = pane.blocked.iter().any(|b| b == action);
+                                        let on = pane.area == cell.label;
+                                        let blocked =
+                                            pane.blocked.iter().any(|b| *b == cell.action_id);
                                         let b = ui
                                             .add_enabled(
-                                                has(action) && !self.model.busy(),
+                                                cell.available && !self.model.busy(),
                                                 egui::Button::new(
-                                                    egui::RichText::new(mark)
+                                                    egui::RichText::new(&cell.key)
                                                         .color(area_color(on, blocked)),
                                                 )
                                                 .selected(on)
                                                 .min_size(egui::vec2(24.0, 0.0)),
                                             )
-                                            .on_hover_text(area);
+                                            .on_hover_text(&cell.label);
                                         a11y::tab(ui.ctx(), b.id, on);
                                         ui.ctx().accesskit_node_builder(b.id, |n| {
-                                            n.set_label(format!("{name} area {area}"));
+                                            n.set_label(format!("{name} area {}", cell.label));
                                         });
                                         out.ids.extend(b.enabled().then_some(b.id));
                                         if b.clicked() {
                                             out.todo.push(Step::Action(side(index).into()));
-                                            out.todo.push(Step::Action(action.into()));
+                                            out.todo.push(Step::Action(cell.action_id.clone()));
                                         }
                                     }
                                     ui.end_row();
                                 }
                             });
-                        if has("TOGGLE_VEH") {
-                            let b = ui.add_enabled(!self.model.busy(), egui::Button::new("V"));
-                            b.clone().on_hover_text("Vehicle storage");
+                        if let Some(entry) = actions.iter().find(|a| a.id == "TOGGLE_VEH") {
+                            let key = entry.keys.first().map_or("", String::as_str);
+                            let b = ui.add_enabled(!self.model.busy(), egui::Button::new(key));
+                            b.clone().on_hover_text(&entry.name);
                             ui.ctx().accesskit_node_builder(b.id, |n| {
-                                n.set_label(format!("{name} area vehicle storage"));
+                                n.set_label(format!("{name} {}", entry.name));
                             });
                             out.ids.extend(b.enabled().then_some(b.id));
                             if b.clicked() {

@@ -73,10 +73,17 @@ fn install_screen() -> Value {
     let unmet = json!({"enabled": false, "denial": "The requirements are not met.",
         "highlighted": true, "color": "c_dark_gray"});
     let view = vehicle("install", |v| {
+        v["verb"] = json!("Install");
         v["tabs"] = json!({"labels": ["All", "Cargo"], "selected": 0, "filter": ""});
         v["detail"] = json!({
             "name": "wooden board", "description": "A board mounted on the frame.",
-            "time": "30 minutes", "can_do": false,
+            "time": "30 minutes", "time_heading": "Time required:", "can_do": false,
+            "groups": [
+                {"kind": "skill", "heading": "Skills required:", "empty_text": "NONE"},
+                {"kind": "component", "heading": "Components required:", "empty_text": ""},
+                {"kind": "tool", "heading": "Tools required:", "empty_text": ""},
+                {"kind": "extra", "heading": "Additional requirements:", "empty_text": ""}
+            ],
             "stats": [{"label": "Durability", "value": "120"}],
             "requirements": [
                 {"kind": "skill", "text": "mechanics 1", "met": true},
@@ -170,6 +177,24 @@ fn the_requirements_of_the_highlighted_part_are_listed_with_their_status() {
     h.get_by_label("> 2x plank");
     h.get_by_label("> hammer OR rock");
     h.get_by_label_contains("A board mounted on the frame.");
+}
+
+#[test]
+fn headings_and_the_task_verb_are_the_engines_words() {
+    let mut screen = install_screen();
+    let view = &mut screen["interaction"]["vehicle"];
+    view["verb"] = json!("설치");
+    view["detail"]["time_heading"] = json!("필요한 시간:");
+    view["detail"]["groups"][0]["heading"] = json!("필요한 기술:");
+    view["detail"]["requirements"] = json!([{"kind": "tool", "text": "망치", "met": true}]);
+    view["detail"]["groups"][0]["empty_text"] = json!("없음");
+    let (h, _) = harness(screen);
+    h.get_by_label("필요한 시간:");
+    h.get_by_label("필요한 기술:");
+    h.get_by_label("> 없음");
+    h.get_by_label("설치 wooden board");
+    assert!(h.query_by_label("Tools required:").is_some());
+    assert!(h.query_by_label("Components required:").is_none());
 }
 
 #[test]

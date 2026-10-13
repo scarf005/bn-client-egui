@@ -531,7 +531,137 @@
       }
      }
     ]
-   }
+   },
+   "areas": [
+    {
+     "action_id": "ITEMS_INVENTORY",
+     "label": "Inventory",
+     "key": "i",
+     "x": 3,
+     "y": 1,
+     "available": true
+    },
+    {
+     "action_id": "ITEMS_SW",
+     "label": "South West",
+     "key": "1",
+     "x": 8,
+     "y": 2,
+     "available": true
+    },
+    {
+     "action_id": "ITEMS_S",
+     "label": "South",
+     "key": "2",
+     "x": 11,
+     "y": 2,
+     "available": true
+    },
+    {
+     "action_id": "ITEMS_SE",
+     "label": "South East",
+     "key": "3",
+     "x": 14,
+     "y": 2,
+     "available": true
+    },
+    {
+     "action_id": "ITEMS_W",
+     "label": "West",
+     "key": "4",
+     "x": 8,
+     "y": 1,
+     "available": true
+    },
+    {
+     "action_id": "ITEMS_CE",
+     "label": "Directly below you",
+     "key": "5",
+     "x": 11,
+     "y": 1,
+     "available": true
+    },
+    {
+     "action_id": "ITEMS_E",
+     "label": "East",
+     "key": "6",
+     "x": 14,
+     "y": 1,
+     "available": true
+    },
+    {
+     "action_id": "ITEMS_NW",
+     "label": "North West",
+     "key": "7",
+     "x": 8,
+     "y": 0,
+     "available": true
+    },
+    {
+     "action_id": "ITEMS_N",
+     "label": "North",
+     "key": "8",
+     "x": 11,
+     "y": 0,
+     "available": true
+    },
+    {
+     "action_id": "ITEMS_NE",
+     "label": "North East",
+     "key": "9",
+     "x": 14,
+     "y": 0,
+     "available": true
+    },
+    {
+     "action_id": "ITEMS_UP",
+     "label": "Above",
+     "key": "<",
+     "x": 17,
+     "y": 0,
+     "available": true
+    },
+    {
+     "action_id": "ITEMS_DOWN",
+     "label": "Below",
+     "key": ">",
+     "x": 17,
+     "y": 1,
+     "available": true
+    },
+    {
+     "action_id": "ITEMS_DRAGGED_CONTAINER",
+     "label": "Grabbed Vehicle",
+     "key": "d",
+     "x": 3,
+     "y": 0,
+     "available": true
+    },
+    {
+     "action_id": "ITEMS_AROUND",
+     "label": "Surrounding area",
+     "key": "a",
+     "x": 0,
+     "y": 2,
+     "available": true
+    },
+    {
+     "action_id": "ITEMS_CONTAINER",
+     "label": "Container",
+     "key": "c",
+     "x": 0,
+     "y": 0,
+     "available": true
+    },
+    {
+     "action_id": "ITEMS_WORN",
+     "label": "Worn Items",
+     "key": "w",
+     "x": 3,
+     "y": 2,
+     "available": true
+    }
+   ]
   }
  }
 }

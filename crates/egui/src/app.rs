@@ -722,9 +722,11 @@ impl<M: GameModel> App<M> {
     }
 
     fn look(&mut self, at: Pos) {
-        let desc = self.model.cell(at).desc;
-        self.model
-            .say(format!("You see {desc} at ({}, {}).", at.x, at.y));
+        let text = self
+            .model
+            .hover_text(at)
+            .map_or_else(|| self.model.cell(at).desc, |lines| lines.join(" "));
+        self.model.say(text);
     }
 
     /// The native overmap window, glyph by glyph, with its sidebar. Hovering names the square; a click
@@ -740,9 +742,8 @@ impl<M: GameModel> App<M> {
                 ""
             };
             // The sidebar describes the square under the cursor, and only that one.
-            let what = om
-                .here()
-                .filter(|_| at == om.cursor)
+            let what = Some(&om.cursor_description)
+                .filter(|t| at == om.cursor && !t.is_empty())
                 .map_or_else(String::new, |t| format!(" {t}."));
             format!("Overmap ({}, {}, {}).{here}{what}{note}", at.0, at.1, at.2)
         };

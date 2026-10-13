@@ -267,10 +267,15 @@ fn item_rows_have_one_focusable_control_named_with_the_item() {
 }
 
 fn log_line(script: &ScriptHandle, sequence: u32, id: &str, text: &str, count: u32) {
+    let label = if count > 1 {
+        format!("{text} x {count}")
+    } else {
+        text.to_string()
+    };
     script.push(
         json!({"jsonrpc": "2.0", "method": "bn.events", "params": {"epoch": "e7f3",
         "events": [{"sequence": sequence.to_string(), "revision": "32", "type": "message.logged",
-        "data": {"id": id, "text": text, "kind": "bad", "color": "c_red", "count": count}}]}}),
+        "data": {"id": id, "text": text, "kind": "bad", "color": "c_red", "count": count, "label": label}}]}}),
     );
 }
 
@@ -293,7 +298,7 @@ fn messages_arriving_in_one_frame_are_announced_together_and_only_once() {
     h.run_steps(3);
     let live = announced(&h);
     assert!(
-        live.iter().any(|v| v == "You open the door. Bang! x2"),
+        live.iter().any(|v| v == "You open the door. Bang! x 2"),
         "{live:?}"
     );
     log_line(&script, 45, "9", "Crash!", 1);
@@ -439,14 +444,15 @@ mod overmap {
         let (mut h, script) = harness();
         h.run_steps(3);
         let mut ev: Value = common::overmap_event(100);
-        ev["params"]["events"][0]["changes"]["interaction"]["interaction"]["overmap"]["legend"] =
-            json!([
-                "│",
-                "│# lake on the northwest",
-                "│  outskirts of Bristol",
-                "│",
-                "│Use movement keys to pan."
-            ]);
+        let om = &mut ev["params"]["events"][0]["changes"]["interaction"]["interaction"]["overmap"];
+        om["legend"] = json!([
+            "│",
+            "│# lake on the northwest",
+            "│  outskirts of Bristol",
+            "│",
+            "│Use movement keys to pan."
+        ]);
+        om["cursor_description"] = json!("lake on the northwest outskirts of Bristol");
         script.push(ev);
         h.run_steps(3);
         (h, script)

@@ -353,6 +353,8 @@ pub struct InventoryItem {
     /// The condition marker `name` starts with and the colour the native lists draw it in.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub durability: Option<Durability>,
+    /// The row as the native lists word it, with its count, condition marker and slot.
+    pub label: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -438,6 +440,9 @@ pub struct Choice {
     /// The row's name with the native color tags.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub markup: Option<String>,
+    /// The registered action the row runs, such as `open_options`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub action_id: Option<String>,
     /// The color of the nesting slash drawn before a nested row.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub nest_color: Option<String>,
@@ -515,6 +520,9 @@ pub struct Interaction {
     pub allow_cancel: bool,
     pub allow_set_count: bool,
     pub choices: Vec<Choice>,
+    /// The advanced inventory's area picker, laid out and keyed as the native header draws it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub areas: Vec<Area>,
     pub choice_total: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub compat: Option<Value>,
@@ -534,6 +542,21 @@ pub struct Interaction {
     pub refresh_ms: Option<u64>,
 }
 
+/// One square of the advanced inventory's area picker.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Area {
+    /// The registered action that points the active pane at the area.
+    pub action_id: String,
+    pub label: String,
+    /// The key the player bound to the action; empty when none.
+    pub key: String,
+    /// Character cells from the picker's top-left corner.
+    pub x: u16,
+    pub y: u16,
+    /// The screen offers the action.
+    pub available: bool,
+}
+
 /// A native window as drawn: per row, `[text, foreground, background]` runs of cells that share
 /// their colors, with curses color indexes. Blank cells that end a row are left out.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -551,6 +574,9 @@ pub struct Vehicle {
     pub owned: bool,
     /// `main`, `install`, `repair`, `remove`, `mend`, `refill` or `select`.
     pub mode: String,
+    /// What the task does to the highlighted part, such as `Install`; empty on the main screen.
+    #[serde(default)]
+    pub verb: String,
     pub cursor: VehicleCursor,
     /// The cursor square cannot take a part.
     pub blocked: bool,
@@ -604,6 +630,11 @@ pub struct VehicleDetail {
     pub description: String,
     #[serde(default)]
     pub time: Option<String>,
+    #[serde(default)]
+    pub time_heading: Option<String>,
+    /// The requirement headings in the order the native pane prints them.
+    #[serde(default)]
+    pub groups: Vec<RequirementGroup>,
     pub stats: Vec<VehicleStat>,
     pub requirements: Vec<VehicleRequirement>,
     /// Every requirement is met, so choosing the part starts the task.
@@ -614,6 +645,15 @@ pub struct VehicleDetail {
 pub struct VehicleStat {
     pub label: String,
     pub value: String,
+}
+
+/// A heading of the requirement list; `kind` is `skill`, `component`, `tool` or `extra`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RequirementGroup {
+    pub kind: String,
+    pub heading: String,
+    /// Printed under the heading when no requirement has this kind; empty to leave the group out then.
+    pub empty_text: String,
 }
 
 /// `kind` is `skill`, `component`, `tool` or `extra`.
@@ -634,10 +674,13 @@ pub struct OvermapWire {
     pub rows: usize,
     pub cells: Vec<Vec<(String, u8, u8)>>,
     pub legend: Vec<String>,
+    /// What the sidebar says of the cursor square, without the window frame or its glyph.
+    #[serde(default)]
+    pub cursor_description: String,
     pub notes: Vec<OvermapNote>,
     #[serde(default)]
     pub path: Vec<WorldPos>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tiles: Option<OvermapTiles>,
 }
 
@@ -733,6 +776,8 @@ pub struct LoggedMessage {
     pub kind: String,
     pub color: String,
     pub count: u32,
+    /// The line as the native log prints it, with the repeat suffix.
+    pub label: String,
 }
 
 /// Result of `bn.subscribe`; `parts` snapshot-part notifications follow.
@@ -1247,4 +1292,6 @@ pub struct Sidebar {
     pub weapon: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub style: Option<SidebarText>,
+    /// The classic panel as the native sidebar words it, row by row.
+    pub rows: Vec<Vec<SidebarText>>,
 }

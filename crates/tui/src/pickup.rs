@@ -123,25 +123,8 @@ impl<M: GameModel> TuiApp<M> {
         };
         f.render_widget(Clear, window);
         f.render_widget(Clear, details);
-        // The native header: predicted against capacity, red where over, then the filter in effect.
-        let pane = menu.panes.first();
-        let head = match pane.and_then(|p| p.totals.as_ref()) {
-            Some(t) => {
-                let tone = |over| if over { "c_red" } else { "c_white" };
-                let carry = format!(
-                    "PICK Wgt {}/{}  Vol {}/{}",
-                    tinted(tone(t.over_weight), &t.weight),
-                    t.weight_max,
-                    tinted(tone(t.over_volume), &t.volume),
-                    t.volume_max
-                );
-                match pane.map(|p| p.filter.as_str()).filter(|f| !f.is_empty()) {
-                    Some(filter) => format!("{carry}  Filter: {filter}"),
-                    None => carry,
-                }
-            }
-            None => bn_client_core::markup::plain(&menu.message).replace('\n', "  "),
-        };
+        // The native header the engine words: predicted against capacity, red where over, then the filter.
+        let head = menu.message.replace('\n', "  ");
         let head_line = match &self.pickup.count {
             Some(text) => format!("{head}  Count: {text}_"),
             None => head,

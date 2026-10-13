@@ -1155,6 +1155,15 @@ fn finished_command(h: &mut H, script: &ScriptHandle) {
 
 #[test]
 fn options_is_in_the_action_palette_and_opens_the_native_options_through_the_main_menu() {
+    options_through_the_main_menu(Some("open_options"));
+}
+
+#[test]
+fn a_row_labelled_options_that_runs_no_options_action_is_not_chosen() {
+    options_through_the_main_menu(None);
+}
+
+fn options_through_the_main_menu(action: Option<&str>) {
     let (mut h, script) = harness();
     h.run_steps(3);
     script.push(show(
@@ -1177,6 +1186,9 @@ fn options_is_in_the_action_palette_and_opens_the_native_options_through_the_mai
     finished_command(&mut h, &script);
     let mut menu = choice("main:options", "Options");
     menu["selected"] = false.into();
+    if let Some(action) = action {
+        menu["action_id"] = action.into();
+    }
     script.push(show(
         42,
         json!([]),
@@ -1185,10 +1197,14 @@ fn options_is_in_the_action_palette_and_opens_the_native_options_through_the_mai
             "choice_total":2,"allow_set_count":false}),
     ));
     h.run_steps(5);
-    assert_eq!(
-        submits(&script).last(),
-        Some(&json!({"kind":"choose","choice_id":"main:options"}))
-    );
+    let last = submits(&script).last().cloned();
+    match action {
+        Some(_) => assert_eq!(
+            last,
+            Some(json!({"kind":"choose","choice_id":"main:options"}))
+        ),
+        None => assert_eq!(last, Some(json!({"kind":"action","action_id":"main_menu"}))),
+    }
 }
 
 #[test]

@@ -923,7 +923,13 @@ impl EngineModel {
         let ground = match avatar.and_then(|a| a.ground.as_ref()) {
             Some(stacks) => stacks
                 .iter()
-                .map(|i| row(&i.look, item_line(i), (i.id.clone(), i.count.unwrap_or(1))))
+                .map(|i| {
+                    row(
+                        &i.look,
+                        i.label.clone(),
+                        (i.id.clone(), i.count.unwrap_or(1)),
+                    )
+                })
                 .collect(),
             None => self
                 .avatar_pos()
@@ -939,7 +945,13 @@ impl EngineModel {
             a.inventory
                 .iter()
                 .flatten()
-                .map(|i| row(&i.look, item_line(i), (i.id.clone(), i.count.unwrap_or(1))))
+                .map(|i| {
+                    row(
+                        &i.look,
+                        i.label.clone(),
+                        (i.id.clone(), i.count.unwrap_or(1)),
+                    )
+                })
                 .collect()
         });
         (self.ground, self.ground_items, self.ground_cells) = unzip3(ground);
@@ -963,29 +975,6 @@ fn unzip3<A, B, C>(rows: Vec<(A, B, C)>) -> (Vec<A>, Vec<B>, Vec<C>) {
         c.push(z);
     }
     (a, b, c)
-}
-
-/// An item the way the native lists name it, with how many and where it is kept; its condition marker keeps its native colour as markup.
-fn item_line(item: &protocol::InventoryItem) -> String {
-    let name = match &item.durability {
-        Some(d) if item.name.starts_with(&d.symbol) => format!(
-            "<color_{}>{}</color>{}",
-            d.color,
-            d.symbol,
-            &item.name[d.symbol.len()..]
-        ),
-        _ => item.name.clone(),
-    };
-    let count = item
-        .count
-        .filter(|n| *n > 1)
-        .map_or(String::new(), |n| format!(" x{n}"));
-    let slot = item
-        .slot
-        .as_deref()
-        .filter(|s| *s != "carried")
-        .map_or(String::new(), |s| format!(" ({s})"));
-    format!("{name}{count}{slot}")
 }
 
 /// The engine's localized reason for a failed call: its `message` in the error data, else the RPC message.
@@ -1275,6 +1264,7 @@ impl EngineModel {
                     color: c.color.clone().unwrap_or_default(),
                     key_color: c.key_color.clone().unwrap_or_default(),
                     markup: c.markup.clone().unwrap_or_default(),
+                    action: c.action_id.clone().unwrap_or_default(),
                     nest_color: c.nest_color.clone().unwrap_or_default(),
                     mark: c.mark.clone(),
                     editor: c.editor.clone(),
@@ -1326,6 +1316,7 @@ impl EngineModel {
                     }
                 })
                 .collect(),
+            areas: i.areas.clone(),
             can_cancel: i.allow_cancel,
             pane_tabs: pane_labels
                 .iter()
@@ -1423,6 +1414,7 @@ impl GameModel for EngineModel {
                 id: line.id,
                 text: line.text,
                 count: line.count,
+                label: line.label,
             };
             // Ids only grow and are never reused. A line past the newest one is new; any other is a
             // repeat, or a line a fresh snapshot carries again, and replaces its own line.
@@ -1751,6 +1743,7 @@ impl GameModel for EngineModel {
             cursor: at(&cursor),
             player: at(&wire.player),
             legend: wire.legend.clone(),
+            cursor_description: wire.cursor_description.clone(),
             notes: wire
                 .notes
                 .iter()

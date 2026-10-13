@@ -1,7 +1,7 @@
 use crate::colors::ColorMap;
 use crate::markup::{self, Run};
 
-use crate::protocol::{Column, Editor, Mark, ModTileset, Vehicle};
+use crate::protocol::{Area, Column, Editor, Mark, ModTileset, Vehicle};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Pos {
     pub x: i32,
@@ -120,7 +120,7 @@ pub enum Shape {
 }
 
 /// One line of the game's own message log. A repeat of the newest line keeps its `id` and raises
-/// `count`; the client shows it as "text x2" in place of the earlier line.
+/// `count`; the client shows its `label` in place of the earlier line.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LogLine {
     /// The engine's identity of the line; empty when the engine sent none.
@@ -129,16 +129,13 @@ pub struct LogLine {
     /// The game's colour for the message type.
     pub color: Option<Rgb>,
     pub count: u32,
+    /// The line as the game prints it, with the repeat count.
+    pub label: String,
 }
 
 impl LogLine {
-    /// The line as the game prints it, with the repeat count.
     pub fn shown(&self) -> String {
-        if self.count > 1 {
-            format!("{} x{}", self.text, self.count)
-        } else {
-            self.text.clone()
-        }
+        self.label.clone()
     }
 }
 
@@ -214,6 +211,8 @@ pub struct MenuChoice {
     pub key_color: String,
     /// The row's name with the native color tags; empty when it is the label.
     pub markup: String,
+    /// The registered action the row runs; empty when it runs none.
+    pub action: String,
     /// The color of the nesting slash drawn before a nested row; empty for a plain row.
     pub nest_color: String,
     /// The selection mark the native list prints; none when it prints none.
@@ -307,6 +306,8 @@ pub struct Menu {
     pub choices: Vec<MenuChoice>,
     /// The panes of a two-pane menu; empty for other menus.
     pub panes: Vec<MenuPane>,
+    /// The area picker of the advanced inventory; empty for other menus.
+    pub areas: Vec<Area>,
     /// How many choices the engine has in all; more than `choices.len()` until the rest is fetched.
     pub total: usize,
     pub can_cancel: bool,
@@ -470,6 +471,8 @@ pub struct Overmap {
     pub cursor: (i32, i32, i32),
     pub player: (i32, i32, i32),
     pub legend: Vec<String>,
+    /// What the sidebar says of the cursor square.
+    pub cursor_description: String,
     pub notes: Vec<((i32, i32, i32), String)>,
     /// The planned travel route, nearest square first.
     pub path: Vec<(i32, i32, i32)>,
@@ -486,28 +489,6 @@ impl Overmap {
     /// The absolute overmap square drawn in view cell `(col, row)`.
     pub fn square(&self, col: i32, row: i32) -> (i32, i32, i32) {
         (self.origin.0 + col, self.origin.1 + row, self.origin.2)
-    }
-
-    /// The cursor square as the native sidebar describes it: its first paragraph, without the window
-    /// frame and the leading glyph of the square.
-    pub fn here(&self) -> Option<String> {
-        let lines = self
-            .legend
-            .iter()
-            .map(|l| l.trim_start_matches(['│', '|']).trim())
-            .skip_while(|l| l.is_empty())
-            .take_while(|l| !l.is_empty())
-            .collect::<Vec<_>>()
-            .join(" ");
-        let text = match lines.split_once(' ') {
-            Some((glyph, rest))
-                if glyph.chars().count() == 1 && !glyph.chars().all(char::is_alphanumeric) =>
-            {
-                rest
-            }
-            _ => &lines,
-        };
-        (!text.is_empty()).then(|| text.to_string())
     }
 
     /// Every note in view, for a reader that cannot see the markers.

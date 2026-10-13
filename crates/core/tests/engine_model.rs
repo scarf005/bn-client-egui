@@ -262,9 +262,14 @@ fn duplicate_events_do_not_resubscribe_or_duplicate_messages() {
 }
 
 fn logged(sequence: u32, id: &str, text: &str, count: u32) -> serde_json::Value {
+    let label = if count > 1 {
+        format!("{text} x {count}")
+    } else {
+        text.to_string()
+    };
     serde_json::json!({"jsonrpc": "2.0", "method": "bn.events", "params": {"epoch": "e7f3", "events": [{
         "sequence": sequence.to_string(), "revision": "32", "type": "message.logged",
-        "data": {"id": id, "text": text, "kind": "bad", "color": "c_red", "count": count}}]}})
+        "data": {"id": id, "text": text, "kind": "bad", "color": "c_red", "count": count, "label": label}}]}})
 }
 
 #[test]
@@ -277,7 +282,7 @@ fn native_log_keeps_order_colors_and_replaces_a_repeat_in_place() {
     h.push(logged(44, "8", "Bang!", 2));
     m.poll();
     let shown: Vec<_> = m.native_log().iter().map(|l| l.shown()).collect();
-    assert_eq!(shown, ["You open the door.", "Bang! x2"]);
+    assert_eq!(shown, ["You open the door.", "Bang! x 2"]);
     assert!(m.native_log().iter().all(|l| l.color.is_some()));
     assert_ne!(m.native_log()[0].color, Some(Rgb(0, 0, 0)));
 }
@@ -339,13 +344,13 @@ fn pick_up_and_drop_send_the_engines_row_id_and_count() {
         t.on("bn.command.submit", walk_reply())
             .on("bn.command.submit", walk_reply()),
     );
-    let mut ground = item("tin can", 2, None);
+    let mut ground = item("tin can", 2, None, "2 tin cans");
     ground["id"] = json!("item:g1");
-    let mut carried = item("flashlight", 1, Some("carried"));
+    let mut carried = item("flashlight", 1, Some("carried"), "flashlight");
     carried["id"] = json!("item:i1");
     h.push(avatar_event(
         json!([carried]),
-        json!([ground, item("no id", 1, None)]),
+        json!([ground, item("no id", 1, None, "no id")]),
     ));
     m.poll();
     m.pick_up(1);
@@ -1142,8 +1147,8 @@ fn avatar_event(inventory: Value, ground: Value) -> Value {
     event
 }
 
-fn item(name: &str, count: u64, slot: Option<&str>) -> Value {
-    let mut row = json!({"look": {"kind": "item", "id": "x", "glyph": "/", "color": "white"}, "name": name, "count": count});
+fn item(name: &str, count: u64, slot: Option<&str>, label: &str) -> Value {
+    let mut row = json!({"look": {"kind": "item", "id": "x", "glyph": "/", "color": "white"}, "name": name, "count": count, "label": label});
     if let Some(slot) = slot {
         row["slot"] = json!(slot);
     }
@@ -1156,31 +1161,41 @@ fn panels_list_display_names_with_counts_and_where_items_are_kept() {
     let mut m = connected(t);
     h.push(avatar_event(
         json!([
-            item("combat knife", 1, Some("wielded")),
-            item("fur scarf", 1, Some("worn")),
-            item("hammer", 2, Some("carried"))
+            item("combat knife", 1, Some("wielded"), "combat knife (wielded)"),
+            item("fur scarf", 1, Some("worn"), "fur scarf (worn)"),
+            item("hammer", 2, Some("carried"), "2 hammers")
         ]),
-        json!([item("light disposable battery (12/25)", 3, None)]),
+        json!([item(
+            "light disposable battery (12/25)",
+            3,
+            None,
+            "3 light disposable batteries (12/25)"
+        )]),
     ));
     m.poll();
     assert_eq!(
         m.inventory(),
-        ["combat knife (wielded)", "fur scarf (worn)", "hammer x2"]
+        ["combat knife (wielded)", "fur scarf (worn)", "2 hammers"]
     );
-    assert_eq!(m.ground(), ["light disposable battery (12/25) x3"]);
+    assert_eq!(m.ground(), ["3 light disposable batteries (12/25)"]);
 }
 
 #[test]
 fn a_condition_marker_keeps_its_native_colour_and_every_row_has_its_own_look() {
     let (t, h) = session();
     let mut m = connected(t);
-    let mut worn = item("||\u{a0}bra", 1, Some("worn"));
+    let mut worn = item(
+        "||\u{a0}bra",
+        1,
+        Some("worn"),
+        "<color_light_green>||</color>\u{a0}bra (worn)",
+    );
     worn["durability"] = json!({"symbol": "||", "color": "light_green"});
     worn["look"] =
         json!({"kind": "item", "id": "bra", "tile": "bra_tile", "glyph": "[", "color": "pink"});
     h.push(avatar_event(
-        json!([worn, item("hammer", 2, Some("carried"))]),
-        json!([item("rock", 1, None)]),
+        json!([worn, item("hammer", 2, Some("carried"), "2 hammers")]),
+        json!([item("rock", 1, None, "rock")]),
     ));
     m.poll();
     let runs = m.styled(&m.inventory()[0]);
@@ -2099,7 +2114,12 @@ fn subscribe_with_log(lines: &[(&str, &str, u32)]) -> Vec<serde_json::Value> {
     reply[0]["result"]["messages"] = lines
         .iter()
         .map(|(id, text, count)| {
-            json!({"id": id, "text": text, "kind": "bad", "color": "c_red", "count": count})
+            let label = if *count > 1 {
+                format!("{text} x {count}")
+            } else {
+                text.to_string()
+            };
+            json!({"id": id, "text": text, "kind": "bad", "color": "c_red", "count": count, "label": label})
         })
         .collect();
     reply
@@ -2114,7 +2134,7 @@ fn the_log_a_snapshot_carries_is_the_native_log_before_any_event() {
     );
     let m = connected(t);
     let shown: Vec<_> = m.native_log().iter().map(|l| l.shown()).collect();
-    assert_eq!(shown, ["You wake up.", "Bang! x2"]);
+    assert_eq!(shown, ["You wake up.", "Bang! x 2"]);
     assert!(m.native_log().iter().all(|l| l.color.is_some()));
 }
 

@@ -506,9 +506,14 @@ fn native_log_lines_show_with_repeat_count_and_the_new_ones_are_announced_togeth
         (43, "8", "Bang!", 1),
         (44, "8", "Bang!", 2),
     ] {
+        let label = if count > 1 {
+            format!("{text} x {count}")
+        } else {
+            text.to_string()
+        };
         script.push(json!({"jsonrpc": "2.0", "method": "bn.events", "params": {"epoch": "e7f3",
             "events": [{"sequence": sequence.to_string(), "revision": "32", "type": "message.logged",
-            "data": {"id": id, "text": text, "kind": "bad", "color": "c_red", "count": count}}]}}));
+            "data": {"id": id, "text": text, "kind": "bad", "color": "c_red", "count": count, "label": label}}]}}));
     }
     h.run_steps(3);
     h.get_by_label("You open the door.");
@@ -519,7 +524,7 @@ fn native_log_lines_show_with_repeat_count_and_the_new_ones_are_announced_togeth
         .filter_map(|n| n.accesskit_node().value())
         .collect();
     assert!(
-        live.iter().any(|v| v == "You open the door. Bang! x2"),
+        live.iter().any(|v| v == "You open the door. Bang! x 2"),
         "{live:?}"
     );
 }

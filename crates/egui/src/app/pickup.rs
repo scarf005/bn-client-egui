@@ -55,29 +55,8 @@ impl<M: GameModel> App<M> {
             .default_width(560.0)
             .frame(list_frame(ctx))
             .show(ctx, |ui| {
-                // The native header: predicted against capacity, red where over, then the filter.
-                let header = match menu.panes.first().and_then(|p| p.totals.as_ref()) {
-                    Some(t) => {
-                        let tone = |over| if over { "c_red" } else { "c_white" };
-                        format!(
-                            "PICK Wgt {}/{}  Vol {}/{}",
-                            tinted(tone(t.over_weight), &t.weight),
-                            t.weight_max,
-                            tinted(tone(t.over_volume), &t.volume),
-                            t.volume_max
-                        )
-                    }
-                    None => menu.message.clone(),
-                };
-                ui.label(self.rich(ui, &tinted("c_white", &header)));
-                if let Some(filter) = menu
-                    .panes
-                    .first()
-                    .map(|p| &p.filter)
-                    .filter(|f| !f.is_empty())
-                {
-                    ui.label(self.rich(ui, &format!("Filter: {filter}")));
-                }
+                // The native header the engine words: predicted against capacity, red where over, then the filter.
+                ui.label(self.rich(ui, &tinted("c_white", &menu.message)));
                 egui::ScrollArea::vertical()
                     .max_height(ctx.content_rect().height() * 0.45)
                     .show(ui, |ui| {
