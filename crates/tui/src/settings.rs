@@ -17,6 +17,8 @@ pub(super) struct Edit {
     submit: bool,
     /// The text last sent as a filter, so the newest is sent once, as soon as the engine can take it.
     sent: Option<String>,
+    /// Enter was pressed: the text goes out as the final value as soon as the engine can take it.
+    entered: bool,
 }
 
 impl Edit {
@@ -89,6 +91,7 @@ impl<M: GameModel> TuiApp<M> {
                         prompt: true,
                         submit: true,
                         sent: None,
+                        entered: false,
                     });
                 }
                 (Some(f), false, KeyCode::Char('/')) => {
@@ -99,6 +102,7 @@ impl<M: GameModel> TuiApp<M> {
                         prompt: false,
                         submit: false,
                         sent: None,
+                        entered: false,
                     });
                     return true;
                 }
@@ -109,7 +113,8 @@ impl<M: GameModel> TuiApp<M> {
             self.edit_key(edit, key);
             return true;
         }
-        if key.code == KeyCode::Tab {
+        // A screen that binds Tab (the next tab) gets it; the client's action list takes it otherwise.
+        if key.code == KeyCode::Tab && !self.model.key_bound("TAB") {
             self.actions_open = Some(0);
             return true;
         }
@@ -151,6 +156,7 @@ impl<M: GameModel> TuiApp<M> {
                     prompt: false,
                     submit: true,
                     sent: None,
+                    entered: false,
                 });
             }
             _ => return false,
@@ -160,9 +166,14 @@ impl<M: GameModel> TuiApp<M> {
 
     fn edit_key(&mut self, mut edit: Edit, key: KeyEvent) {
         match key.code {
+            _ if edit.entered => self.edit = Some(edit),
             KeyCode::Esc if edit.prompt => self.model.cancel_menu(),
             KeyCode::Esc => {}
-            KeyCode::Enter => self.model.fill(&edit.id, &edit.text, edit.submit),
+            // The value is sent by `send_filter`, at once or when the engine is free.
+            KeyCode::Enter => {
+                edit.entered = true;
+                self.edit = Some(edit);
+            }
             KeyCode::Backspace => {
                 edit.text.pop();
                 self.edit = Some(edit);
@@ -177,13 +188,19 @@ impl<M: GameModel> TuiApp<M> {
     }
 
     /// A filter shows the engine's state as it is typed: the newest text goes out whenever the engine is
-    /// free, and a text it was too busy for waits.
+    /// free, and a text it was too busy for waits. A value submitted with Enter waits the same way.
     pub(super) fn send_filter(&mut self) {
-        if let Some(edit) = self
+        if self.model.busy() {
+            return;
+        }
+        if self.edit.as_ref().is_some_and(|e| e.entered)
+            && let Some(edit) = self.edit.take()
+        {
+            self.model.fill(&edit.id, &edit.text, edit.submit);
+        } else if let Some(edit) = self
             .edit
             .as_mut()
             .filter(|e| !e.submit && e.sent.as_ref() != Some(&e.text))
-            && !self.model.busy()
         {
             edit.sent = Some(edit.text.clone());
             self.model.fill(&edit.id, &edit.text, false);

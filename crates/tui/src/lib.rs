@@ -267,6 +267,11 @@ impl<M: GameModel> TuiApp<M> {
         if let Some(row) = self.actions_open {
             return self.actions_key(row, key.code);
         }
+        // F2 always opens the client's action list, which Tab does only where the engine leaves Tab unbound.
+        if key.code == KeyCode::F(2) && !self.model.key_bound("F2") {
+            self.actions_open = Some(0);
+            return;
+        }
         if let Some(menu) = self.menu() {
             return match menu.context.as_str() {
                 "CRAFTING" => self.crafting_key(&menu, key),
@@ -281,11 +286,15 @@ impl<M: GameModel> TuiApp<M> {
                 _ => self.menu_key(&menu, key),
             };
         }
-        if token(key).is_some_and(|t| self.model.press(&t)) {
+        let token = token(key);
+        if token.as_ref().is_some_and(|t| self.model.press(t)) {
             return;
         }
         match key.code {
-            KeyCode::Tab => self.actions_open = Some(0),
+            // Tab is the engine's when it binds it, even while a command keeps it from running now.
+            KeyCode::Tab if !token.is_some_and(|t| self.model.key_bound(&t)) => {
+                self.actions_open = Some(0)
+            }
             KeyCode::PageUp => self.log_back += LOG_LINES,
             KeyCode::PageDown => self.log_back = self.log_back.saturating_sub(LOG_LINES),
             _ => {}

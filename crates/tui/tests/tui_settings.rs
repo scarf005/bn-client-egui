@@ -38,6 +38,15 @@ fn editor(kind: &str, value: &str) -> Value {
 
 /// An options-like menu with one row per editor kind and a plain row; `field` is the screen's field.
 fn open(field: Option<Value>, choices: Vec<Value>) -> (TuiApp<EngineModel>, ScriptHandle) {
+    let confirm = json!([{"id":"CONFIRM","name":"Confirm","keys":["RETURN"]}]);
+    open_with(field, choices, confirm)
+}
+
+fn open_with(
+    field: Option<Value>,
+    choices: Vec<Value>,
+    actions: Value,
+) -> (TuiApp<EngineModel>, ScriptHandle) {
     let (t, h) = session();
     let replies = (0..8)
         .map(|_| fixture("submit_result"))
@@ -53,8 +62,7 @@ fn open(field: Option<Value>, choices: Vec<Value>) -> (TuiApp<EngineModel>, Scri
     if let Some(field) = field {
         interaction["field"] = field;
     }
-    menu["params"]["events"][0]["changes"]["interaction"]["actions"] =
-        json!([{"id":"CONFIRM","name":"Confirm","keys":["RETURN"]}]);
+    menu["params"]["events"][0]["changes"]["interaction"]["actions"] = actions;
     h.push(menu);
     app.model.poll();
     (app, h)
@@ -204,11 +212,20 @@ fn a_prompt_submitted_while_the_engine_is_busy_is_sent_once_it_is_free() {
     let field = json!({"id":"field:value","label":"Name","description":"","value":"","type":"text",
         "max_length":-1,"printable":false});
     let (mut app, h) = open(Some(field), vec![]);
-    assert!(app.model.invoke_action("CONFIRM"), "puts the engine to work");
+    assert!(
+        app.model.invoke_action("CONFIRM"),
+        "puts the engine to work"
+    );
     app.handle_key(key(KeyCode::Char('k')));
     app.handle_key(key(KeyCode::Enter));
-    assert_eq!(operations(&h), [json!({"kind":"action","action_id":"CONFIRM"})]);
-    assert!(text(&mut app).contains("Name: k_"), "the typed name stays shown");
+    assert_eq!(
+        operations(&h),
+        [json!({"kind":"action","action_id":"CONFIRM"})]
+    );
+    assert!(
+        text(&mut app).contains("Name: k_"),
+        "the typed name stays shown"
+    );
     h.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{"epoch":"e7f3","command_id":"c:5","stage":"completed"}}));
     app.model.poll();
     app.tick();
@@ -219,20 +236,20 @@ fn a_prompt_submitted_while_the_engine_is_busy_is_sent_once_it_is_free() {
 
 #[test]
 fn tab_goes_to_the_engine_when_the_screen_binds_it() {
-    let (mut app, h) = open(None, vec![row("mode:add_local", "Add local", None)]);
-    let mut menu = fixture("events_43_menu");
-    let ev = &mut menu["params"]["events"][0]["changes"]["interaction"];
-    ev["interaction"]["title"] = "Options".into();
-    ev["interaction"]["choices"] = json!([row("mode:add_local", "Add local", None)]);
-    ev["actions"] = json!([{"id":"NEXT_TAB","name":"Next tab","keys":["TAB"]}]);
-    menu["params"]["events"][0]["sequence"] = "60".into();
-    menu["params"]["events"][0]["revision"] = "40".into();
-    h.push(menu);
-    app.model.poll();
+    let next_tab = json!([{"id":"NEXT_TAB","name":"Next tab","keys":["TAB"]}]);
+    let rows = vec![row("mode:add_local", "Add local", None)];
+    let (mut app, h) = open_with(None, rows, next_tab);
     app.handle_key(key(KeyCode::Tab));
     assert_eq!(
         operations(&h),
         [json!({"kind":"action","action_id":"NEXT_TAB"})]
+    );
+    let before = text(&mut app);
+    app.handle_key(key(KeyCode::F(2)));
+    assert_ne!(
+        before,
+        text(&mut app),
+        "F2 still opens the client's action list"
     );
 }
 
