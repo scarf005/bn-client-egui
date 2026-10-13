@@ -1,0 +1,15 @@
+# Agent guidelines
+
+## Client boundary
+
+The engine owns game rules and game text; this client only renders engine data and forwards input.
+
+- Never decide game outcomes in the client: no tile/item id string matching, no distance or range math, no row
+  hotkey/mark/colour derivation, no pathing or walk loops, no inferring which screen accepts which key.
+- Never key behaviour on display text (`label`, `title`, column labels, messages); use stable engine ids and fields.
+- Never write game text in the client (status, errors, item lines, sidebar labels); show the engine's localized text.
+- When the engine does not send what a view needs, add the field or event to the engine protocol
+  (`docs/schema/engine-client/1.0.schema.json` in the engine) and consume it here; do not approximate it.
+- Client-owned: layout, widgets, input-device mapping to engine action ids, tileset rendering, transport, and client
+  chrome strings.
+- Known violations to remove: `client-logic-audit.md` in the engine's `out/lanes/`.
