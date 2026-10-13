@@ -692,6 +692,10 @@ impl<M: GameModel> TuiApp<M> {
     /// The engine is gone or silent: its last stderr lines and how to restart.
     fn draw_failure(f: &mut Frame, failure: &Failure) {
         let mut lines = vec![Line::from(failure.message.clone()), Line::from("")];
+        if let Some(engine) = &failure.engine {
+            lines.push(Line::from(format!("Engine: {}", engine.display())));
+            lines.push(Line::from(""));
+        }
         if !failure.stderr.is_empty() {
             lines.push(Line::from("Last engine output:"));
             lines.extend(failure.stderr.iter().map(|l| Line::from(l.clone())));

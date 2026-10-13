@@ -227,5 +227,9 @@ fn a_hello_without_delivery_that_still_fails_is_reported() {
     let mut m = EngineModel::new(Box::new(t));
     m.poll();
     assert_eq!(hello_calls(&h).len(), 3, "no fourth try");
-    assert!(!m.messages().is_empty());
+    let failure = m
+        .failure()
+        .expect("an engine that takes no hello is reported");
+    assert_eq!(failure.kind, bn_client_core::FailureKind::Incompatible);
+    assert_eq!(failure.message, "unknown member");
 }

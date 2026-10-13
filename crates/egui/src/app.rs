@@ -273,6 +273,9 @@ impl<M: GameModel> App<M> {
         let heading = ui.heading(&failure.message);
         ui.ctx()
             .accesskit_node_builder(heading.id, |b| b.set_live(accesskit::Live::Assertive));
+        if let Some(engine) = &failure.engine {
+            ui.label(format!("Engine: {}", engine.display()));
+        }
         if !failure.stderr.is_empty() {
             ui.label("Last engine output:");
             egui::ScrollArea::vertical().show(ui, |ui| {
