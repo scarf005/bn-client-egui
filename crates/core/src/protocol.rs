@@ -273,6 +273,9 @@ pub struct Avatar {
     pub inventory: Option<Vec<InventoryItem>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sidebar: Option<Sidebar>,
+    /// The creatures in sight by direction, what the native compass panel lists.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub compass: Option<Vec<CompassDirection>>,
     /// The stacks on the avatar's own square; absent from engines that predate it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ground: Option<Vec<InventoryItem>>,
@@ -297,6 +300,8 @@ pub struct AvatarChange {
     pub inventory: Option<Vec<InventoryItem>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sidebar: Option<Sidebar>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub compass: Option<Vec<CompassDirection>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ground: Option<Vec<InventoryItem>>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -338,6 +343,11 @@ impl AvatarChange {
                 before.and_then(|a| a.sidebar.clone())
             } else {
                 self.sidebar.clone()
+            },
+            compass: if kept("compass") {
+                before.and_then(|a| a.compass.clone())
+            } else {
+                self.compass.clone()
             },
             ground: if kept("ground") {
                 before.and_then(|a| a.ground.clone())
@@ -1553,9 +1563,80 @@ pub struct DayTime {
     pub has_watch: bool,
 }
 
+/// A direction as the native game names it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Heading {
+    /// The horizontal part (`north`, `northeast`, ..., `center`), then `_above` or `_below`.
+    pub id: String,
+    /// The native name, in the connection's language.
+    pub name: String,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SidebarSide {
+    Left,
+    Right,
+}
+
+/// A panel of the native sidebar options.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LayoutPanel {
+    /// The panel manager's name for it, untranslated.
+    pub id: String,
+    /// The name the native panel options print, translated.
+    pub label: String,
+    /// The player has not switched the panel off.
+    pub enabled: bool,
+    /// Rows; absent for the panel that takes the rest of the column.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub height: Option<u32>,
+}
+
+/// The native sidebar options: where it sits, how wide, and its panels top to bottom.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SidebarLayout {
+    pub id: String,
+    pub side: SidebarSide,
+    /// Columns the sidebar takes.
+    pub width: u32,
+    pub panels: Vec<LayoutPanel>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Attitude {
+    Hostile,
+    Friendly,
+    Neutral,
+    Any,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct CompassCreature {
+    pub id: String,
+    pub look: Look,
+    pub name: String,
+    pub attitude: Attitude,
+    /// Squares from the avatar.
+    pub distance: u32,
+}
+
+/// The creatures the native compass panel lists toward one direction, nearest first.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct CompassDirection {
+    pub toward: Heading,
+    /// The heading the native panel prints for it (`North:`); absent for `center`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    pub creatures: Vec<CompassCreature>,
+}
+
 /// The native classic sidebar of the avatar: values and the labels its panels print. The client lays it out.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Sidebar {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub layout: Option<SidebarLayout>,
     pub limbs: Vec<SidebarLimb>,
     pub pain: SidebarText,
     pub hunger: SidebarText,
