@@ -244,7 +244,7 @@ impl<M: GameModel> App<M> {
                                     list_row_style(ui);
                                 }
                                 let text = if choice.id == "acknowledge" {
-                                    dismiss_text(&choice.label).into()
+                                    choice.label.clone().into()
                                 } else if whole_row {
                                     // Label, values and key share the row, so its highlight covers them.
                                     let hint = choice
@@ -577,27 +577,5 @@ fn is_prose(description: &str) -> bool {
         .any(|c| !(c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_'))
 }
 
-/// What a popup's dismiss button shows: the any-key prompt as the engine words it, otherwise "OK" in
-/// place of the engine's action name ("Cancel popup"), which the native popup never shows.
-fn dismiss_text(engine_label: &str) -> &str {
-    if engine_label == "Press any key" {
-        engine_label
-    } else {
-        "OK"
-    }
-}
-
 /// A list this short is read at a glance; the engine's filter is offered from here on.
 const FILTER_MIN_ROWS: usize = 10;
-
-#[cfg(test)]
-mod tests {
-    use super::dismiss_text;
-
-    #[test]
-    fn a_popup_button_says_ok_and_the_any_key_prompt_keeps_its_words() {
-        assert_eq!(dismiss_text("Cancel popup"), "OK");
-        assert_eq!(dismiss_text("Exit screen"), "OK");
-        assert_eq!(dismiss_text("Press any key"), "Press any key");
-    }
-}
