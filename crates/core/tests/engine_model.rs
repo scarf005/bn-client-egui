@@ -991,6 +991,23 @@ fn tiled_session() -> EngineModel {
         json!({"at": {"dim": "", "x": 11, "y": 8, "z": 0}, "known": "visible", "light": 3,
             "fields": [{"look": {"kind": "field", "id": "fd_acid_water", "glyph": "~", "color": "green",
                 "tint": {"bg": "#00aa00", "fg": "#00aa00"}}, "intensity": 1}]}),
+        json!({"at": {"dim": "", "x": 9, "y": 6, "z": 0}, "known": "visible", "below": 1}),
+        json!({"at": {"dim": "", "x": 10, "y": 6, "z": 0}, "known": "visible", "below": 1}),
+        json!({"at": {"dim": "", "x": 9, "y": 5, "z": 0}, "known": "visible", "below": 1}),
+        json!({"at": {"dim": "", "x": 12, "y": 6, "z": 0}, "known": "visible", "below": 1,
+            "terrain": {"kind": "terrain", "id": "t_open_air", "glyph": " ", "color": "c_dark_gray"},
+            "fields": [{"look": {"kind": "field", "id": "fd_smoke", "glyph": "8", "color": "c_dark_gray"},
+                "intensity": 1, "hides_items": true}]}),
+        json!({"at": {"dim": "", "x": 12, "y": 6, "z": -1}, "known": "visible", "light": 3,
+            "terrain": {"kind": "terrain", "id": "t_dirt", "glyph": ".", "color": "brown"}}),
+        json!({"at": {"dim": "", "x": 14, "y": 6, "z": 0}, "known": "visible", "below": 2}),
+        json!({"at": {"dim": "", "x": 14, "y": 6, "z": -1}, "known": "visible", "light": 2,
+            "fields": [{"look": {"kind": "field", "id": "fd_smoke", "name": "smoke", "glyph": "8",
+                "color": "c_dark_gray"}, "intensity": 1, "hides_items": true}]}),
+        json!({"at": {"dim": "", "x": 14, "y": 6, "z": -2}, "known": "visible", "light": 3,
+            "terrain": {"kind": "terrain", "id": "t_rock_floor", "glyph": ".", "color": "light_gray"}}),
+        json!({"at": {"dim": "", "x": 13, "y": 6, "z": -1}, "known": "visible", "light": 3,
+            "terrain": {"kind": "terrain", "id": "t_dirt", "glyph": ".", "color": "brown"}}),
         json!({"at": {"dim": "", "x": 9, "y": 5, "z": -1}, "known": "remembered",
             "memory": {"terrain": {"kind": "terrain", "id": "t_grass", "glyph": "\"", "color": "green"}}}),
         json!({"at": {"dim": "", "x": 9, "y": 7, "z": 0}, "known": "remembered",
@@ -1138,6 +1155,46 @@ fn creatures_and_the_avatar_draw_over_the_terrain_with_their_overlays() {
     // A square without sprite facts keeps its ASCII look.
     let plain = at(2, 2);
     assert_eq!((plain.glyph, plain.layers.len()), ('.', 1));
+}
+
+#[test]
+fn a_field_that_hides_items_draws_no_items_or_highlight_under_it() {
+    let (t, h) = session();
+    let mut m = connected(t);
+    let at = json!({"dim":"","x":5,"y":4,"z":0});
+    let floor = json!({"kind":"terrain","id":"t_floor","glyph":".","color":"c_cyan"});
+    let rock = json!({"kind":"item","id":"rock","glyph":"*","color":"c_light_gray","stack":2});
+    let field = |id: &str, hides: bool| {
+        let mut f = json!({"look": {"kind":"field","id":id,"glyph":"8","color":"c_dark_gray"}, "intensity": 1});
+        if hides {
+            f["hides_items"] = json!(true);
+        }
+        f
+    };
+    let ids = |m: &EngineModel| {
+        m.cell(Pos { x: 22, y: 12 })
+            .layers
+            .iter()
+            .map(|l| l.id.clone())
+            .collect::<Vec<_>>()
+    };
+    h.push(cell_event(
+        41,
+        json!({"at": at, "known": "visible", "terrain": floor, "items": [rock],
+            "fields": [field("fd_smoke", true)]}),
+    ));
+    m.poll();
+    assert_eq!(ids(&m), ["t_floor", "fd_smoke"]);
+    h.push(cell_event(
+        42,
+        json!({"at": at, "known": "visible", "terrain": floor, "items": [rock],
+            "fields": [field("fd_acid_water", false)]}),
+    ));
+    m.poll();
+    assert_eq!(
+        ids(&m),
+        ["t_floor", "fd_acid_water", "rock", "highlight_item"]
+    );
 }
 
 #[test]
@@ -1882,7 +1939,7 @@ fn explosion_and_floating_text_facts_carry_their_colors() {
 }
 
 #[test]
-fn a_square_in_sight_below_open_air_is_drawn_with_its_depth_and_only_when_in_sight() {
+fn open_air_draws_the_square_the_engine_names_below_with_its_depth() {
     let m = tiled_session();
     let origin = m.origin();
     let at = |x: i32, y: i32| {
@@ -1891,7 +1948,7 @@ fn a_square_in_sight_below_open_air_is_drawn_with_its_depth_and_only_when_in_sig
             y: y - origin.y,
         })
     };
-    // Nothing is published on the avatar's level at (9, 6), but the level below is in sight there.
+    // Open air on the avatar's level at (9, 6) names the level below the game draws there.
     let open = at(9, 6);
     let layers = open
         .layers
@@ -1907,8 +1964,33 @@ fn a_square_in_sight_below_open_air_is_drawn_with_its_depth_and_only_when_in_sig
         .map(|l| l.id.as_str())
         .collect::<Vec<_>>();
     assert_eq!((layers, roof.depth), (vec!["vp_roof"], 1));
-    // A level below that is only remembered stays hidden, and the avatar's own level has no depth.
-    assert!(at(9, 5).layers.is_empty());
+    // A remembered square below draws its memory, as memory, when the engine names it.
+    let grass = at(9, 5);
+    assert_eq!((grass.layers[0].id.as_str(), grass.depth), ("t_grass", 1));
+    assert!(grass.remembered);
+    // Smoke on the open air draws over the level below, but the open air itself does not.
+    let smoke = at(12, 6);
+    let layers = smoke
+        .layers
+        .iter()
+        .map(|l| l.id.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!((layers, smoke.light), (vec!["t_dirt", "fd_smoke"], Some(3)));
+    // A square in sight below that the engine does not name is not drawn, and the avatar's own level has
+    // no depth.
+    assert!(at(13, 6).layers.is_empty());
+    // Two levels down, the smoke on the open air between draws over the floor and describes the square.
+    let deep = at(14, 6);
+    let layers = deep
+        .layers
+        .iter()
+        .map(|l| l.id.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        (layers, deep.depth, deep.light),
+        (vec!["t_rock_floor", "fd_smoke"], 2, Some(3))
+    );
+    assert_eq!(deep.desc, "smoke");
     assert_eq!(at(9, 8).depth, 0);
     assert_eq!(at(3, 4).depth, 0);
 }

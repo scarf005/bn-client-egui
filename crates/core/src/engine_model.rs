@@ -183,6 +183,14 @@ fn top_look(c: &WorldCell) -> Option<&Look> {
             .map(|m| m.overlay.as_ref().unwrap_or(&m.terrain)))
 }
 
+/// The topmost thing on a level the game draws without its ground: vehicle part, item, field.
+fn on_top(c: &WorldCell) -> Option<&Look> {
+    c.vehicle
+        .as_ref()
+        .or(c.items.last())
+        .or(c.fields.last().map(|f| &f.look))
+}
+
 /// One channel of a look's paint.
 fn paint(look: &Look, pick: impl Fn(&protocol::Tint) -> Option<&str>) -> Option<Rgb> {
     let [r, g, b] = parse_hex(pick(look.tint.as_ref()?)?)?;
@@ -195,9 +203,6 @@ fn parse_hex(text: &str) -> Option<[u8; 3]> {
     let channel = |i: usize| u8::from_str_radix(digits.get(i..i + 2)?, 16).ok();
     Some([channel(0)?, channel(2)?, channel(4)?])
 }
-
-/// How many levels down open air is looked through.
-const MAX_DEPTH: u8 = 10;
 
 /// The game's per-tile seed for weighted sprite variants: the square's coordinates mixed into an integer.
 fn square_seed(p: &WorldPos) -> u32 {
@@ -1124,11 +1129,21 @@ impl EngineModel {
             return unknown;
         };
         let world = self.replica.cell(&p.dim, p.x, p.y, p.z);
-        // Nothing published here but a square in sight below: open air, through which the game draws it.
-        let lower = (world.is_none()).then(|| self.below(&p)).flatten();
-        let mut layers = world
-            .or(lower.map(|(c, _)| c))
-            .map_or(vec![], |c| self.layers(c));
+        // A square without a floor, through which the game draws the square the engine names below.
+        let below = world.and_then(|c| c.below);
+        let level = |z: i32| self.replica.cell(&p.dim, p.x, p.y, z);
+        let lower = below.and_then(|d| level(p.z - i32::from(d)));
+        // The levels from above the drawn square up to this one draw only what is on them, no ground.
+        let over = below.map_or(vec![], |d| {
+            (p.z - i32::from(d) + 1..=p.z).filter_map(level).collect()
+        });
+        let mut layers = match below {
+            Some(_) => lower.map_or(vec![], |c| self.layers(c, true)),
+            None => world.map_or(vec![], |c| self.layers(c, true)),
+        };
+        layers.extend(over.iter().flat_map(|c| self.layers(c, false)));
+        // The square drawn there: the level below through open air.
+        let shown = lower.or(world);
         if self.avatar_pos() == Some(&p)
             && let Some(avatar) = self.replica.avatar()
             && let Some(look) = &avatar.look
@@ -1137,28 +1152,50 @@ impl EngineModel {
             layers.push(self.layer(look, seed));
             layers.extend(self.overlays(look, &avatar.overlays, &avatar.traits, seed));
         }
-        let entity = self
-            .replica
-            .entities()
-            .find(|e| e.at == p && e.look.is_some());
+        // A creature here, else the nearest one on the levels seen through.
+        let on = |at: &WorldPos| {
+            self.replica
+                .entities()
+                .find(|e| &e.at == at && e.look.is_some())
+        };
+        let entity = on(&p).or_else(|| {
+            over.iter()
+                .rev()
+                .copied()
+                .chain(lower)
+                .find_map(|c| on(&c.at))
+        });
         if let Some(e) = entity {
             let look = e.look.as_ref().expect("filtered on look");
             let desc = e.name.clone().unwrap_or_else(|| look_name(look));
             layers.push(self.layer(look, id_seed(&e.id)));
             layers.extend(self.overlays(look, &e.overlays, &e.traits, id_seed(&e.id)));
             layers.extend(self.attitude(e));
-            layers.extend(self.revival(world));
+            layers.extend(
+                lower
+                    .iter()
+                    .chain(&over)
+                    .filter_map(|c| self.revival(Some(*c))),
+            );
+            layers.extend(self.revival(world.filter(|_| below.is_none())));
             return Cell {
                 layers,
                 remembered: false,
-                light: world
+                light: shown
                     .and_then(|c| c.light.as_ref()?.as_u64())
                     .map(|l| l as u8),
+                depth: below.unwrap_or(0),
                 ..self.styled(look, desc)
             };
         }
-        layers.extend(self.revival(world));
-        match world {
+        layers.extend(
+            lower
+                .iter()
+                .chain(&over)
+                .filter_map(|c| self.revival(Some(*c))),
+        );
+        layers.extend(self.revival(world.filter(|_| below.is_none())));
+        match world.filter(|_| below.is_none()) {
             Some(c) => match top_look(c) {
                 Some(l) => Cell {
                     layers,
@@ -1173,28 +1210,40 @@ impl EngineModel {
                     ..Cell::default()
                 },
             },
-            None => Cell {
-                layers,
-                depth: lower.map_or(0, |(_, depth)| depth),
-                light: lower.and_then(|(c, _)| c.light.as_ref()?.as_u64().map(|l| l as u8)),
-                ..unknown
-            },
+            None => {
+                // What is on the levels seen through, else the square drawn below, describes it.
+                let look = over
+                    .iter()
+                    .rev()
+                    .find_map(|c| on_top(c))
+                    .or_else(|| lower.and_then(top_look));
+                Cell {
+                    layers,
+                    remembered: lower.is_some_and(|c| c.known == Known::Remembered),
+                    depth: below.unwrap_or(0),
+                    light: lower.and_then(|c| c.light.as_ref()?.as_u64().map(|l| l as u8)),
+                    ..look.map_or(unknown, |l| self.styled(l, look_name(l)))
+                }
+            }
         }
     }
 
     /// What a cell draws, bottom first, in the order of the native view: terrain, furniture, trap,
     /// field, item, vehicle part; a cell only remembered draws its memorized terrain and overlay.
-    fn layers(&self, c: &WorldCell) -> Vec<Layer> {
+    fn layers(&self, c: &WorldCell, ground: bool) -> Vec<Layer> {
         let seed = square_seed(&c.at);
+        // The displayed field may hide the items under it, and so their highlight.
+        let hidden = c.fields.last().is_some_and(|f| f.hides_items);
         let live = [
-            c.terrain.as_ref(),
-            c.furniture.as_ref(),
-            c.traps.last(),
+            c.terrain.as_ref().filter(|_| ground),
+            c.furniture.as_ref().filter(|_| ground),
+            c.traps.last().filter(|_| ground),
             c.fields.last().map(|f| &f.look),
-            c.items.last(),
+            c.items.last().filter(|_| !hidden),
             c.vehicle.as_ref(),
         ];
-        let looks = match live.iter().any(Option::is_some) {
+        // A level drawn without its ground draws no memory either.
+        let looks = match live.iter().any(Option::is_some) || !ground {
             true => live.into_iter().flatten().collect::<Vec<_>>(),
             false => c
                 .memory
@@ -1222,18 +1271,6 @@ impl EngineModel {
             id: id.into(),
             ..Layer::default()
         }
-    }
-
-    /// The nearest square in sight under `p`, with how far down it is.
-    fn below(&self, p: &WorldPos) -> Option<(&WorldCell, u8)> {
-        (1..=MAX_DEPTH).find_map(|depth| {
-            let cell = self
-                .replica
-                .cell(&p.dim, p.x, p.y, p.z - i32::from(depth))?;
-            // A roof seen from above a vehicle has no terrain published, only the part.
-            (cell.known == Known::Visible && (cell.terrain.is_some() || cell.vehicle.is_some()))
-                .then_some((cell, depth))
-        })
     }
 
     /// The mark over a square holding a corpse that can rise: the last thing the native view draws.
