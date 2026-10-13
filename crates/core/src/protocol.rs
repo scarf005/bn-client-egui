@@ -123,6 +123,9 @@ pub struct Tint {
 pub struct FieldLook {
     pub look: Look,
     pub intensity: u32,
+    /// Its type hides the items under it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub hides_items: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -166,6 +169,10 @@ pub struct Cell {
     pub light: Option<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub memory: Option<Memory>,
+    /// Open air in sight on the avatar's level: how many levels down the square is that the native
+    /// tiles view draws here.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub below: Option<u8>,
 }
 
 impl Cell {
@@ -677,6 +684,15 @@ pub struct OvermapWire {
     /// What the sidebar says of the cursor square, without the window frame or its glyph.
     #[serde(default)]
     pub cursor_description: String,
+    /// `You are here.`, localized, while the cursor is on the player's square.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cursor_here: Option<String>,
+    /// The note the native window prints for the cursor square, as one localized line.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cursor_note: Option<String>,
+    /// The length of `path` as one localized line.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub route_text: Option<String>,
     pub notes: Vec<OvermapNote>,
     #[serde(default)]
     pub path: Vec<WorldPos>,

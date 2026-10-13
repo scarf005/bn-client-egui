@@ -113,7 +113,7 @@ pub fn overmap_event(cursor_x: i32) -> Value {
                 "player":{{"dim":"","x":98,"y":200,"z":0}},
                 "cols":4,"rows":3,
                 "cells":[{rows}],
-                "legend":["Overmap","  forest"],"cursor_description":"Overmap forest",
+                "legend":["Overmap","  forest"],"cursor_description":"Overmap forest","route_text":"Route of 2 squares.",
                 "notes":[{{"pos":{{"dim":"","x":{note_x},"y":200,"z":0}},"text":"cache"}}],
                 "path":[{{"dim":"","x":{p1},"y":200,"z":0}},{{"dim":"","x":{p2},"y":200,"z":0}}]
             }},

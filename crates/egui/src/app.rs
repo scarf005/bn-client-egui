@@ -732,26 +732,48 @@ impl<M: GameModel> App<M> {
     /// The native overmap window, glyph by glyph, with its sidebar. Hovering names the square; a click
     /// moves the cursor there, and a click on the cursor travels there, like the map's route and go.
     fn overmap(&mut self, ui: &mut egui::Ui, om: &Overmap) {
-        let status = |at: (i32, i32, i32)| {
-            let note = om
-                .note(at)
-                .map_or_else(String::new, |t| format!(" Note: {t}."));
-            let here = if at == om.player {
-                " You are here."
-            } else {
-                ""
-            };
-            // The sidebar describes the square under the cursor, and only that one.
-            let what = Some(&om.cursor_description)
-                .filter(|t| at == om.cursor && !t.is_empty())
-                .map_or_else(String::new, |t| format!(" {t}."));
-            format!("Overmap ({}, {}, {}).{here}{what}{note}", at.0, at.1, at.2)
+        // The engine's title and lines for the cursor square; the coordinates, the click hint and the
+        // sentence breaks are ours.
+        let (x, y, z) = om.cursor;
+        let what = Some(om.cursor_description.clone()).filter(|t| !t.is_empty());
+        let hint = om
+            .route_text
+            .as_ref()
+            .map(|_| "Click the cursor to go".to_string());
+        let parts = [
+            Some(format!("{} ({x}, {y}, {z})", om.title)),
+            om.cursor_here.clone(),
+            what,
+            om.cursor_note.clone(),
+            om.route_text.clone(),
+            hint,
+        ];
+        let sentences = |parts: &[Option<String>]| {
+            parts
+                .iter()
+                .flatten()
+                .map(|p| {
+                    if p.ends_with(['.', '!', '?', '。', '！', '？']) {
+                        p.clone()
+                    } else {
+                        format!("{p}.")
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join(" ")
         };
-        let route = match om.path.len() {
-            0 => String::new(),
-            n => format!(" Route of {n} squares; click the cursor to go."),
+        let overmap_status = sentences(&parts);
+        // Hovering another square names it and its note; the engine describes only the cursor square.
+        let square_status = |at: (i32, i32, i32)| {
+            if at == om.cursor {
+                return overmap_status.clone();
+            }
+            sentences(&[
+                Some(format!("{} ({}, {}, {})", om.title, at.0, at.1, at.2)),
+                om.note(at).map(str::to_owned),
+            ])
         };
-        let status_label = ui.label(status(om.cursor) + &route);
+        let status_label = ui.label(&overmap_status);
         ui.ctx()
             .accesskit_node_builder(status_label.id, |b| b.set_live(accesskit::Live::Polite));
         self.display.update(ui.ctx());
@@ -770,7 +792,7 @@ impl<M: GameModel> App<M> {
             ui.ctx().accesskit_node_builder(response.id, |b| {
                 b.set_role(accesskit::Role::Canvas);
                 b.set_description(
-                    [Some(status(om.cursor)), om.notes_text()]
+                    [Some(overmap_status.clone()), om.notes_text()]
                         .into_iter()
                         .flatten()
                         .collect::<Vec<_>>()
@@ -850,7 +872,7 @@ impl<M: GameModel> App<M> {
             response.clone().on_hover_ui_at_pointer(|ui| {
                 if let Some(p) = response.hover_pos() {
                     ui.add(
-                        egui::Label::new(status(square_at(p)))
+                        egui::Label::new(square_status(square_at(p)))
                             .wrap_mode(egui::TextWrapMode::Extend),
                     );
                 }

@@ -1,4 +1,4 @@
-//! The zone manager's key rows and the target screens that tell a zone's area step or the map editor's square.
+//! The zone manager's key rows and the target screens (look around, a zone's area step, the map editor's square).
 mod common;
 use bn_client_core::transport::ScriptHandle;
 use bn_client_core::{EngineModel, GameModel};
@@ -353,4 +353,26 @@ fn enter_confirms_a_zone_point_after_a_click_moved_the_engines_cursor() {
         !shown.contains("Look ("),
         "no client look note over the engine's\n{shown}"
     );
+}
+
+#[test]
+fn native_look_shows_the_engines_description_and_its_keys_move_the_engines_cursor() {
+    let (mut app, h) = engine();
+    text(&mut app);
+    let mut look = screen("target", "LOOK", "Look Around", "", vec![]);
+    look["target"]["status"] = "look".into();
+    look["target"]["description"] = json!(["Grass; Lighting: bright", "There is a tree here."]);
+    show(
+        &mut app,
+        &h,
+        look,
+        json!([{"id":"RIGHT","name":"Move right","keys":["RIGHT"]}]),
+    );
+    let shown = text(&mut app);
+    assert!(
+        shown.contains("Look Around: Grass; Lighting: bright / There is a tree here."),
+        "the engine's look text beside the cursor\n{shown}"
+    );
+    app.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
+    assert_eq!(invoked(&h), ["RIGHT"], "the engine moves its own cursor");
 }

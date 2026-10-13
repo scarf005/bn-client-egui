@@ -28,8 +28,6 @@ pub struct TuiApp<M: GameModel> {
     /// Identity of the menu `selected` refers to; a different menu resets the selection.
     menu_sig: Option<(String, usize, Option<String>)>,
     quit: bool,
-    /// The look cursor in absolute map coordinates; `Some` while looking around.
-    cursor: Option<Pos>,
     /// Where the map cells were last drawn, for mouse clicks.
     map_cells: Rect,
     /// Where the overmap's cells were last drawn, and the overmap they show.
@@ -133,7 +131,6 @@ impl<M: GameModel> TuiApp<M> {
             menu_sig: None,
             terminal: Default::default(),
             quit: false,
-            cursor: None,
             map_cells: Rect::default(),
             overmap_cells: Rect::default(),
             overmap_notes: Rect::default(),
@@ -217,11 +214,8 @@ impl<M: GameModel> TuiApp<M> {
             return;
         }
         if key.code == KeyCode::Esc {
-            // Esc stops a running activity and leaves look mode, whichever applies.
+            // Esc stops a running activity, else closes the overmap or a menu.
             let stopped = self.model.interrupt();
-            if self.cursor.take().is_some() {
-                return;
-            }
             if stopped {
                 return;
             }
@@ -246,14 +240,6 @@ impl<M: GameModel> TuiApp<M> {
                 _ if !menu.screen && self.settings_key(&menu, key) => {}
                 _ => self.menu_key(&menu, key),
             };
-        }
-        if self.cursor.is_some() {
-            return self.look_key(key);
-        }
-        // Look mode starts with whatever keys the engine binds to its look action.
-        if self.is_look_key(key) {
-            self.cursor = Some(self.absolute(self.model.player()));
-            return;
         }
         if token(key).is_some_and(|t| self.model.press(&t)) {
             return;
@@ -374,84 +360,14 @@ impl<M: GameModel> TuiApp<M> {
         }
     }
 
-    /// The one-square step of the movement action the engine binds to `token`.
-    fn direction(&self, token: &str) -> Option<(i32, i32)> {
-        let action = self
-            .model
-            .actions()
-            .into_iter()
-            .find(|a| a.keys.iter().any(|k| k == token))?;
-        Some(match action.id.as_str() {
-            "UP" => (0, -1),
-            "DOWN" => (0, 1),
-            "LEFT" => (-1, 0),
-            "RIGHT" => (1, 0),
-            "LEFTUP" => (-1, -1),
-            "RIGHTUP" => (1, -1),
-            "LEFTDOWN" => (-1, 1),
-            "RIGHTDOWN" => (1, 1),
-            _ => return None,
-        })
-    }
-
-    /// Whether the engine binds `key` to its look action.
-    fn is_look_key(&self, key: KeyEvent) -> bool {
-        token(key).is_some_and(|t| {
-            self.model
-                .actions()
-                .iter()
-                .any(|a| a.id == "look" && a.keys.contains(&t))
-        })
-    }
-
-    /// The look cursor moves with arrows and vi keys (five cells with Shift); Enter plans a route to it
-    /// and, pressed again, walks it; Esc leaves.
-    fn look_key(&mut self, key: KeyEvent) {
-        let Some(at) = self.cursor else {
-            return;
-        };
-        let shifted = key.modifiers.contains(KeyModifiers::SHIFT)
-            || matches!(key.code, KeyCode::Char(c) if c.is_uppercase());
-        let step = if shifted { 5 } else { 1 };
-        // The directions are whatever keys the engine binds to its movement actions; an upper case
-        // letter without a binding of its own is the five-cell move of its lower case twin.
-        let named = token(key);
-        let delta = named
-            .as_deref()
-            .and_then(|t| self.direction(t))
-            .or_else(|| named.and_then(|t| self.direction(&t.to_lowercase())));
-        if let Some((dx, dy)) = delta {
-            let size = self.model.size();
-            let view = self.view(at);
-            self.cursor = Some(self.absolute(Pos {
-                x: (view.x + dx * step).clamp(0, (size.x - 1).max(0)),
-                y: (view.y + dy * step).clamp(0, (size.y - 1).max(0)),
-            }));
-            return;
-        }
-        match key.code {
-            KeyCode::Enter => {
-                if self.view(at) == self.model.player() {
-                    self.cursor = None;
-                } else {
-                    self.go_to(self.view(at));
-                }
-            }
-            _ if key.code == KeyCode::Esc || self.is_look_key(key) => {
-                self.cursor = None;
-            }
-            _ => {}
-        }
-    }
-
-    /// A look-mode or mouse click on a map square: the engine plans the route, a repeat walks it.
+    /// A mouse click on a map square: the engine plans the route, a repeat walks it.
     fn go_to(&mut self, view: Pos) {
         self.model.travel(view);
     }
 
     /// The mouse as the game reads it: the wheel steps an engine menu, hovering a map cell asks for its
-    /// native description (or moves the engine's own cursor), the left click moves the look cursor there
-    /// and travels (the first click shows the route), the right click is the engine's context click.
+    /// native description (or moves the engine's own cursor), the left click travels there (the first
+    /// click shows the route), the right click is the engine's context click.
     pub fn handle_mouse(&mut self, ev: MouseEvent) {
         if self.model.loading().is_some() {
             return;
@@ -532,7 +448,6 @@ impl<M: GameModel> TuiApp<M> {
             }
             MouseEventKind::Down(MouseButton::Left) => {
                 if !self.model.aim(view, true) {
-                    self.cursor = Some(self.absolute(view));
                     self.go_to(view);
                 }
             }
@@ -647,18 +562,17 @@ impl<M: GameModel> TuiApp<M> {
             Line::from(spans.collect::<Vec<_>>())
         });
         f.render_widget(Paragraph::new(lines.collect::<Vec<_>>()), cells);
-        let mut sidebar = vec![Line::from(format!(
-            "Overmap ({}, {}, {})",
-            om.cursor.0, om.cursor.1, om.cursor.2
-        ))];
-        if let Some(note) = om.note(om.cursor) {
-            sidebar.push(Line::from(format!("Note: {note}")));
-        }
-        if !om.path.is_empty() {
-            sidebar.push(Line::from(format!(
-                "Route of {} squares: click the cursor to go",
-                om.path.len()
-            )));
+        // The engine's title and lines for the cursor square; the coordinates and the click hint are ours.
+        let (x, y, z) = om.cursor;
+        let mut sidebar = vec![Line::from(format!("{} ({x}, {y}, {z})", om.title))];
+        sidebar.extend(
+            [&om.cursor_here, &om.cursor_note]
+                .into_iter()
+                .flatten()
+                .map(|line| Line::from(line.clone())),
+        );
+        if let Some(route) = &om.route_text {
+            sidebar.push(Line::from(format!("{route} Click the cursor to go.")));
         }
         sidebar.extend(om.legend.iter().map(|l| Line::from(l.clone())));
         let listed = om.notes.len().min(usize::from(legend.height) / 3);
@@ -748,7 +662,8 @@ impl<M: GameModel> TuiApp<M> {
         }
     }
 
-    /// The pressed command and its stage, then what the look cursor points at.
+    /// The pressed command and its stage, then what the engine says of the hovered square and of the
+    /// square under its own cursor.
     fn status_line(&mut self) -> String {
         let command = self
             .model
@@ -764,27 +679,14 @@ impl<M: GameModel> TuiApp<M> {
             .and_then(|at| self.model.hover_text(self.view(at)))
             .map(|lines| format!(" | {}", lines.join(" / ")))
             .unwrap_or_default();
-        // What a target screen of the engine says: a zone's area step, the map editor's square and keys.
+        // What a target screen of the engine says: a zone's area step, the map editor's square and keys,
+        // the look window's description of the square under the cursor.
         let note = self
             .model
             .aiming()
             .map(|note| format!(" | {note}"))
             .unwrap_or_default();
-        let command = format!("{command}{hover}{note}");
-        let Some(at) = self.cursor else {
-            return command;
-        };
-        let view = self.view(at);
-        let route = self.model.route();
-        let hint = match route.is_empty() {
-            true => "Enter: route",
-            false => "Enter: walk",
-        };
-        let desc = self.model.cell(view).desc;
-        format!(
-            "{command} | Look ({}, {}): {desc} [{hint}, Esc]",
-            view.x, view.y
-        )
+        format!("{command}{hover}{note}")
     }
 
     /// The engine is gone or silent: its last stderr lines and how to restart.
@@ -873,11 +775,8 @@ impl<M: GameModel> TuiApp<M> {
         self.map_cells = cells;
         self.map_first = Pos { x: x0, y: y0 };
         let route = self.model.route();
-        // The engine's own cursor (look, aiming, a zone's area) when it owns one, else the client's.
-        let cursor = self
-            .model
-            .focus()
-            .or_else(|| self.cursor.map(|c| self.view(c)));
+        // The engine's own cursor (look, aiming, a zone's area) when it owns one.
+        let cursor = self.model.focus();
         let lines = (y0..y0 + h)
             .map(|y| {
                 let mut spans = vec![];

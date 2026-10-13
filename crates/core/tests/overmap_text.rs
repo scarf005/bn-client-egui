@@ -3,6 +3,7 @@ use bn_client_core::Overmap;
 
 fn overmap(notes: &[((i32, i32, i32), &str)]) -> Overmap {
     Overmap {
+        title: "Overmap".into(),
         cols: 0,
         rows: 0,
         cells: vec![],
@@ -11,6 +12,9 @@ fn overmap(notes: &[((i32, i32, i32), &str)]) -> Overmap {
         player: (50, 50, 0),
         legend: vec![],
         cursor_description: String::new(),
+        cursor_here: None,
+        cursor_note: None,
+        route_text: None,
         notes: notes.iter().map(|(p, t)| (*p, t.to_string())).collect(),
         path: vec![],
         tiles: vec![],

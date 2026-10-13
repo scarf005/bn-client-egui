@@ -462,6 +462,8 @@ pub struct OvermapTile {
 /// The overmap screen (`m`): the native window's cells and sidebar, with the cursor.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Overmap {
+    /// The screen's localized title.
+    pub title: String,
     pub cols: i32,
     pub rows: i32,
     /// Row-major, `cols * rows` cells.
@@ -473,6 +475,12 @@ pub struct Overmap {
     pub legend: Vec<String>,
     /// What the sidebar says of the cursor square.
     pub cursor_description: String,
+    /// `You are here.`, localized, while the cursor is on the player's square.
+    pub cursor_here: Option<String>,
+    /// The note on the cursor square as one localized line.
+    pub cursor_note: Option<String>,
+    /// The engine's localized line for the length of `path`.
+    pub route_text: Option<String>,
     pub notes: Vec<((i32, i32, i32), String)>,
     /// The planned travel route, nearest square first.
     pub path: Vec<(i32, i32, i32)>,
