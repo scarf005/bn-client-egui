@@ -194,9 +194,7 @@ impl View {
         };
         let outcome = match described(model.screens()) {
             Some(screen) => {
-                let outcome = self
-                    .ui
-                    .press(screen, &name, PAGE, &|l| l.rows.iter().collect());
+                let outcome = self.ui.press(screen, &name, PAGE, &|list| model.rows(list));
                 if !outcome.consumed {
                     self.scroll_text(screen, &name);
                 }

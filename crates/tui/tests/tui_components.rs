@@ -183,6 +183,16 @@ fn a_list_draws_headings_columns_and_the_state_of_its_pages() {
     // The row allows only set_count, which is off: the core sends nothing and the engine's reason shows.
     press(&mut app, KeyCode::Enter);
     assert!(submits(&h).is_empty());
+    // The next row came in with the second page: the keyboard reaches it and chooses it.
+    press(&mut app, KeyCode::Down);
+    assert!(modifier(&render(&mut app), "saw").contains(Modifier::REVERSED));
+    press(&mut app, KeyCode::Enter);
+    assert_eq!(
+        operations(&h),
+        [
+            json!({"kind": "invoke", "affordance_id": "bn:choose:list:npc", "args": {"row": "item:saw"}})
+        ]
+    );
 }
 
 #[test]
@@ -426,6 +436,11 @@ fn a_grid_draws_its_cells_and_the_focus_moves_between_them_before_one_is_chosen(
     assert!(modifier(&t, "H").contains(Modifier::REVERSED));
     assert!(lines(&t).join("\n").contains("Hood"), "the cell's label");
     assert!(submits(&h).is_empty(), "moving the focus sends nothing");
+    press(&mut app, KeyCode::Enter);
+    assert_eq!(
+        operations(&h),
+        [json!({"kind": "invoke", "affordance_id": "pick", "args": {"row": "cell:h"}})]
+    );
 }
 
 #[test]
