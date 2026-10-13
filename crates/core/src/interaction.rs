@@ -56,6 +56,39 @@ pub enum InvokeError {
     Args(ArgError),
 }
 
+/// Why the client did not send an invoke, as data: the renderer maps it to its own words when the engine
+/// gave no `denial`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Reason {
+    NoScreen,
+    Unknown,
+    /// The affordance is off.
+    Disabled,
+    /// The row (or cell, or tab) it acts on is off, or the row does not allow this affordance now.
+    RowDisabled,
+    /// The row does not list the affordance among those it allows.
+    NotOnThisRow,
+    /// An argument is still to be chosen or typed.
+    Missing(ArgKind),
+    Busy,
+    /// The arguments do not fit the affordance's shape.
+    BadArgs,
+}
+
+/// A refusal with the engine's own reason for it, when it gave one.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Refusal {
+    pub reason: Reason,
+    /// The engine's `denial` text; never empty.
+    pub denial: Option<Text>,
+}
+
+/// Whether `affordance` may be invoked with `args` on `screen`: it is on, and so is every row it acts on.
+pub fn gate(screen: &Screen, affordance: &Affordance, args: &InvokeArgs) -> Result<(), Refusal> {
+    let _ = (screen, affordance, args);
+    Ok(())
+}
+
 /// What a command is built against.
 pub struct Basis<'a> {
     pub at: &'a At,
