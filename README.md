@@ -53,7 +53,8 @@ Live integration tests (ignored by default, need an engine build; the TUI one dr
     BN_ENGINE=... cargo test --release -p bn-client-core --test live_latency -- --ignored --nocapture   # timings
 
 `crates/core/schema/0.2.schema.json` and `tests/fixtures/0.2.examples/` are verbatim copies of the engine's
-`docs/schema/engine-client/` files; the schema's SHA-256 prefix is what the hello names, and a mismatch fails the
+`docs/schema/engine-client/` files (`deno run --allow-read --allow-write tools/sync_contract.ts <engine checkout>`;
+`--check` verifies it, read-only); the schema's SHA-256 prefix is what the hello names, and a mismatch fails the
 connection with the engine's error. `tests/fixtures/design.json` is a hand-written session, not captured from an engine;
 `tests/fixtures/menu-interaction.json` is the 0.2 menu examples with the `interaction` the bespoke menus still read.
 
