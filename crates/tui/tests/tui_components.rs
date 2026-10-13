@@ -3,7 +3,7 @@
 mod common;
 use bn_client_core::colors::ColorMap;
 use bn_client_core::transport::{ScriptHandle, ScriptedTransport};
-use bn_client_core::{ConnectOptions, EngineModel, GameModel, Rgb, Wire};
+use bn_client_core::{ConnectOptions, EngineModel, GameModel, Rgb};
 use bn_client_tui::TuiApp;
 use common::fixture;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -60,10 +60,7 @@ fn open_with(screen: Value, extra: Script) -> (TuiApp<EngineModel>, ScriptHandle
             ],
         )
         .on("bn.command.submit", vec![fixture("submit_result")]);
-    let options = ConnectOptions {
-        wire: Wire::V02,
-        ..ConnectOptions::default()
-    };
+    let options = ConnectOptions::default();
     let mut model = EngineModel::open(Box::new(extra(t)), options);
     model.poll();
     (TuiApp::new(model), h)
