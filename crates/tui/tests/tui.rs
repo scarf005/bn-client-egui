@@ -532,55 +532,14 @@ fn status_line_shows_ready_then_the_command_and_its_stage() {
 }
 
 #[test]
-fn look_cursor_moves_without_acting_and_describes_the_cell_under_it() {
+fn the_look_key_runs_the_engines_own_look_action() {
     let (mut app, h) = engine_with_look();
     app.handle_key(ch('x'));
-    let me = app.model.player();
-    app.handle_key(key(KeyCode::Right));
-    app.handle_key(ch('j'));
-    assert!(submits(&h).is_empty(), "cursor keys do not walk");
-    assert_eq!(app.model.player(), me);
-    let s = text(&render(&mut app));
-    let want = format!("Look ({}, {})", me.x + 1, me.y + 1);
-    assert!(s.contains(&want), "{want} in:\n{s}");
-}
-
-#[test]
-fn shift_moves_the_look_cursor_five_cells_and_it_stays_inside_the_view() {
-    let (mut app, _h) = engine_with_look();
-    let me = app.model.player();
-    app.handle_key(ch('x'));
-    app.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::SHIFT));
-    assert!(text(&render(&mut app)).contains(&format!("Look ({}, {})", me.x + 5, me.y)));
-    for _ in 0..40 {
-        app.handle_key(KeyEvent::new(KeyCode::Up, KeyModifiers::SHIFT));
-    }
-    assert!(text(&render(&mut app)).contains(&format!("Look ({}, 0)", me.x + 5)));
-}
-
-#[test]
-fn enter_in_look_mode_travels_to_the_cursor_and_esc_returns_to_walking() {
-    let (mut app, h) = engine_with_look();
-    app.handle_key(ch('x'));
-    let me = app.model.player();
-    for _ in 0..2 {
-        app.handle_key(key(KeyCode::Right));
-    }
-    app.handle_key(key(KeyCode::Enter));
-    let op = &submits(&h)[0]["params"]["operation"];
-    assert_eq!(op["kind"], "travel");
-    app.handle_key(key(KeyCode::Esc));
-    assert!(!text(&render(&mut app)).contains("Look ("));
-    assert_eq!(app.model.player(), me);
-}
-
-#[test]
-fn enter_on_the_players_own_square_leaves_look_mode_without_travelling() {
-    let (mut app, h) = engine();
-    app.handle_key(ch('x'));
-    app.handle_key(key(KeyCode::Enter));
-    assert!(submits(&h).is_empty());
-    assert!(!text(&render(&mut app)).contains("Look ("));
+    assert_eq!(sent_actions(&h), [json!("look")]);
+    assert!(
+        !text(&render(&mut app)).contains("Look ("),
+        "no client look note"
+    );
 }
 
 #[test]
@@ -624,14 +583,21 @@ fn clicks_outside_the_map_or_under_a_menu_do_nothing() {
 }
 
 #[test]
-fn fake_model_walks_to_the_look_cursor_one_step_per_tick() {
+fn fake_model_walks_to_a_clicked_square_one_step_per_tick() {
     let mut app = TuiApp::new(FakeModel::default());
     let start = app.model.player();
-    app.handle_key(ch('x'));
-    for _ in 0..3 {
-        app.handle_key(key(KeyCode::Right));
-    }
-    app.handle_key(key(KeyCode::Enter));
+    let t = render(&mut app);
+    let buf = t.backend().buffer();
+    let (px, py) = (0..buf.area.height)
+        .flat_map(|y| (0..buf.area.width).map(move |x| (x, y)))
+        .find(|&(x, y)| buf[(x, y)].symbol() == "@")
+        .unwrap();
+    app.handle_mouse(MouseEvent {
+        kind: MouseEventKind::Down(MouseButton::Left),
+        column: px + 3,
+        row: py,
+        modifiers: KeyModifiers::NONE,
+    });
     assert!(app.walking());
     app.tick();
     assert_eq!(app.model.player().x, start.x + 1);
@@ -897,6 +863,27 @@ mod overmap {
         app.model.poll();
         app.handle_key(key(KeyCode::Esc));
         assert_eq!(last_operation(&h), json!({"kind":"cancel"}));
+    }
+
+    #[test]
+    fn the_sidebar_shows_the_engines_lines_for_the_cursor_square_and_its_route() {
+        let (mut app, h) = engine();
+        let mut event = common::overmap_event(100);
+        let om =
+            &mut event["params"]["events"][0]["changes"]["interaction"]["interaction"]["overmap"];
+        om["cursor_here"] = "You are here.".into();
+        om["cursor_note"] = "Note: cache".into();
+        h.push(event);
+        app.model.poll();
+        let screen = text(&render(&mut app));
+        for line in [
+            "Overmap (100, 200, 0)",
+            "You are here.",
+            "Note: cache",
+            "Route of 2 squares. Click the cursor to go.",
+        ] {
+            assert!(screen.contains(line), "{line} in\n{screen}");
+        }
     }
 }
 

@@ -10,9 +10,6 @@ use std::collections::{BTreeSet, VecDeque};
 /// Height of the item description under the panes.
 const DESCRIPTION_HEIGHT: f32 = 96.0;
 
-/// How long a typed answer waits for the prompt it is meant for.
-const PROMPT_WAIT: std::time::Duration = std::time::Duration::from_secs(5);
-
 /// One input for the engine, sent once the previous one has finished.
 pub enum Step {
     Choose(String),
@@ -27,8 +24,6 @@ pub struct Aim {
     /// The filter box text of each pane, and the filter the engine last reported for it.
     filters: [(String, String); 2],
     amount: String,
-    /// When the front step began waiting for a prompt.
-    waiting: Option<std::time::Duration>,
     /// A text box of the screen has the keyboard, so typed keys are text and not game keys.
     pub(super) editing: bool,
 }
@@ -60,7 +55,6 @@ impl<M: GameModel> App<M> {
             return;
         }
         let Some(step) = self.aim.steps.front() else {
-            self.aim.waiting = None;
             return;
         };
         let sent = match step {
@@ -79,17 +73,11 @@ impl<M: GameModel> App<M> {
                     self.model.fill(&field.id, &text, true);
                     true
                 }
-                None => {
-                    // The prompt an earlier action opens can arrive after that action completed.
-                    let since = *self.aim.waiting.get_or_insert_with(|| self.clock.now());
-                    if self.clock.now().saturating_sub(since) < PROMPT_WAIT {
-                        return;
-                    }
-                    false
-                }
+                // The engine publishes the prompt an action opens before it reports the action done,
+                // so with the engine free and no prompt up, none opened (the destination was full).
+                None => false,
             },
         };
-        self.aim.waiting = None;
         if sent {
             self.aim.steps.pop_front();
         } else {
@@ -255,8 +243,7 @@ impl<M: GameModel> App<M> {
                                             continue;
                                         };
                                         let on = pane.area == cell.label;
-                                        let blocked =
-                                            pane.blocked.iter().any(|b| *b == cell.action_id);
+                                        let blocked = pane.blocked.contains(&cell.action_id);
                                         let b = ui
                                             .add_enabled(
                                                 cell.available && !self.model.busy(),

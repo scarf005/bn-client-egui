@@ -678,6 +678,15 @@ pub struct OvermapWire {
     /// What the sidebar says of the cursor square, without the window frame or its glyph.
     #[serde(default)]
     pub cursor_description: String,
+    /// `You are here.`, localized, while the cursor is on the player's square.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cursor_here: Option<String>,
+    /// The note the native window prints for the cursor square, as one localized line.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cursor_note: Option<String>,
+    /// The length of `path` as one localized line.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub route_text: Option<String>,
     pub notes: Vec<OvermapNote>,
     #[serde(default)]
     pub path: Vec<WorldPos>,
