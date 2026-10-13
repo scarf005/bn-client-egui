@@ -721,3 +721,17 @@ fn left_and_right_stay_the_engines_on_a_popup() {
         Some("LEFT")
     );
 }
+
+#[test]
+fn return_stays_the_engines_when_it_names_no_cursor() {
+    let mut screen = query_popup("option:0");
+    screen.focus = None;
+    let mut ui = Interaction::default();
+    ui.sync(std::slice::from_ref(&screen));
+    press(&mut ui, &screen, "DOWN");
+    assert_eq!(
+        invoked(&press(&mut ui, &screen, "RETURN")).map(|(id, _)| id),
+        Some("CONFIRM"),
+        "a focus of the client's own is no cursor the engine lost"
+    );
+}

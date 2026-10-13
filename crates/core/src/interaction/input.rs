@@ -130,8 +130,8 @@ fn typed(key: &str) -> Option<&str> {
 }
 
 impl Interaction {
-    /// One key pressed on the top screen. In order: an open ask takes it; an affordance the engine binds to
-    /// it runs; Escape and Return run the `cancel` and `confirm` affordances, or a list's `activate` on its
+    /// One key pressed on the top screen. In order: an open ask takes it; Return on a focus the player moved
+    /// runs its row; an affordance the engine binds to it runs; Escape and Return run the `cancel` and `confirm` affordances, or a list's `activate` on its
     /// focused row; a row's hotkey chooses the row; the arrows, Home, End, Page keys and Tab move the focus
     /// (or the tab, or the grid cursor); else the `any_key` affordance runs. `page` is the rows a page key
     /// moves; `rows` gives the rows of a list that are loaded.
@@ -144,6 +144,15 @@ impl Interaction {
     ) -> Outcome {
         if self.ask.is_some() {
             return self.press_ask(screen, key);
+        }
+        // A focus the player moved off the engine's cursor is what Return confirms; the engine's own Confirm
+        // acts on its cursor, which the move did not touch.
+        if key == "RETURN"
+            && self.native != ScreenFocus::default()
+            && self.focus != self.native
+            && let Some(outcome) = self.activate_focused(screen)
+        {
+            return outcome;
         }
         let bound = screen
             .affordances

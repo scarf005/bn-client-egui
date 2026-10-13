@@ -347,6 +347,25 @@ fn an_unbound_arrow_moves_the_focus_locally_and_the_confirm_key_takes_the_focuse
 }
 
 #[test]
+fn down_then_enter_on_a_query_popup_chooses_the_option_the_focus_moved_to() {
+    let mut popup = pick_list(vec![
+        affordance("LEFT", &["LEFT"], json!({})),
+        affordance("CONFIRM", &["RETURN"], json!({})),
+    ]);
+    popup["affordances"][0]["keys"] = json!([]);
+    popup["focus"] = json!({"component_id": "list", "row_id": "a"});
+    let (mut h, script) = harness(popup);
+    h.key_press(egui::Key::ArrowDown);
+    h.run_steps(2);
+    h.key_press(egui::Key::Enter);
+    h.run_steps(3);
+    assert_eq!(
+        submits(&script),
+        [boundary_invoke("pick", json!({"row": "b"}))]
+    );
+}
+
+#[test]
 fn the_focus_stops_at_the_last_row() {
     let (mut h, script) = harness(pick_list(vec![]));
     for _ in 0..5 {
