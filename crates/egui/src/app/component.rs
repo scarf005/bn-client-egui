@@ -161,31 +161,6 @@ fn canvas_of(canvas: &CanvasComponent, colors: &ColorMap) -> Canvas {
     }
 }
 
-/// The rows of `list` that its own screen holds.
-fn held(list: &List) -> Vec<&Row> {
-    list.rows.iter().collect()
-}
-
-/// The screen with the rows fetched past each list's first page folded in, which is what the core's key
-/// entry takes: its row lookup cannot borrow them from the model.
-fn loaded<M: GameModel>(model: &M, screen: &Screen) -> Screen {
-    fn fold<M: GameModel>(model: &M, component: &mut Component) {
-        match component {
-            Component::List(list) => {
-                let rows = model.rows(list).into_iter().cloned().collect();
-                list.rows = rows;
-            }
-            Component::Tabs(t) => t.child.iter_mut().for_each(|c| fold(model, c)),
-            Component::Panel(p) => p.child.iter_mut().for_each(|c| fold(model, c)),
-            Component::Split(s) => s.children.iter_mut().for_each(|c| fold(model, c)),
-            _ => {}
-        }
-    }
-    let mut screen = screen.clone();
-    screen.root.iter_mut().for_each(|root| fold(model, root));
-    screen
-}
-
 /// The client's words for a refusal the engine gave no reason for.
 fn reason_words(reason: Reason) -> String {
     match reason {
@@ -244,8 +219,11 @@ impl<M: GameModel> App<M> {
             let Some(top) = sliced(self.model.screens()) else {
                 return;
             };
-            let known = loaded(&self.model, top);
-            let out = self.screens.interaction.press(&known, &key, page, &held);
+            let model = &self.model;
+            let out = self
+                .screens
+                .interaction
+                .press(top, &key, page, &|list| model.rows(list));
             self.settle(out);
         }
     }
