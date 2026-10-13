@@ -232,3 +232,58 @@ fn a_component_that_is_not_a_list_asks_for_nothing() {
             .contains(&"bn.interaction.choices".to_string())
     );
 }
+
+fn accepted(command_id: &str) -> Vec<Value> {
+    vec![
+        json!({"jsonrpc": "2.0", "result": {"epoch": "e7f3", "command_id": command_id,
+        "stage": "received"}}),
+    ]
+}
+
+fn notice(command_id: &str, stage: &str, text: Option<&str>) -> Value {
+    let mut params = json!({"epoch": "e7f3", "command_id": command_id, "stage": stage});
+    if let Some(text) = text {
+        params["error"] = json!("stale_screen");
+        params["error_text"] = json!(text);
+    }
+    json!({"jsonrpc": "2.0", "method": "bn.command", "params": params})
+}
+
+#[test]
+fn a_rejected_queued_command_is_reported_while_a_later_one_runs() {
+    let (mut m, h) = model(Wire::V02, 1, |t| {
+        t.on("bn.command.submit", accepted("c:5"))
+            .on("bn.command.submit", accepted("c:6"))
+    });
+    m.invoke_affordance("UP", InvokeArgs::default()).unwrap();
+    m.invoke_affordance("UP", InvokeArgs::default()).unwrap();
+    m.poll();
+    h.push(notice("c:5", "rejected", Some("The screen changed.")));
+    m.poll();
+    assert!(
+        m.messages().iter().any(|x| x == "The screen changed."),
+        "{:?}",
+        m.messages()
+    );
+    assert!(m.busy(), "c:6 still runs");
+    h.push(notice("c:6", "completed", None));
+    m.poll();
+    assert!(!m.busy());
+}
+
+#[test]
+fn the_last_of_the_queued_commands_ends_the_busy_state_in_any_order() {
+    let (mut m, h) = model(Wire::V02, 1, |t| {
+        t.on("bn.command.submit", accepted("c:5"))
+            .on("bn.command.submit", accepted("c:6"))
+    });
+    m.invoke_affordance("UP", InvokeArgs::default()).unwrap();
+    m.invoke_affordance("UP", InvokeArgs::default()).unwrap();
+    m.poll();
+    h.push(notice("c:6", "completed", None));
+    m.poll();
+    assert!(m.busy(), "c:5 still runs");
+    h.push(notice("c:5", "completed", None));
+    m.poll();
+    assert!(!m.busy());
+}
