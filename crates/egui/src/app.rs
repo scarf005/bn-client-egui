@@ -78,7 +78,6 @@ pub struct App<M: GameModel> {
     pub model: M,
     cursor: Pos,
     menu_cell: Pos,
-    destination: Option<Pos>,
     /// Absolute square of the last map click, marked until its command finishes.
     marker: Option<Pos>,
     /// When the command now in flight was first seen; short ones never change the controls.
@@ -168,7 +167,6 @@ impl<M: GameModel> App<M> {
             model,
             cursor,
             menu_cell: cursor,
-            destination: None,
             marker: None,
             pending_since: None,
             clock: bn_client_core::Clock::default(),
@@ -373,8 +371,8 @@ impl<M: GameModel> App<M> {
             ui.ctx().request_repaint_after(SETTLE);
         }
         if self.model.menu().is_some_and(|m| m.context == "MAIN_MENU") {
-            // The game is over: the next one starts with the cursor on its player and no walk pending.
-            (self.cursor_placed, self.destination, self.marker) = (false, None, None);
+            // The game is over: the next one starts with the cursor on its player and and no travel marker.
+            (self.cursor_placed, self.marker) = (false, None);
         }
         self.run_queued();
         self.run_aim_steps();
@@ -382,7 +380,6 @@ impl<M: GameModel> App<M> {
         // (leaves look mode, acknowledges a popup, else opens the main menu).
         let interrupted =
             ui.ctx().input(|i| i.key_pressed(egui::Key::Escape)) && self.model.interrupt();
-        self.walk(ui.ctx());
         self.palette_keys(ui.ctx());
         self.game_keys(ui.ctx(), interrupted);
         let open = self.model.menu();
@@ -714,43 +711,11 @@ impl<M: GameModel> App<M> {
         button
     }
 
-    /// One step per frame toward the destination.
-    fn walk(&mut self, ctx: &egui::Context) {
-        let Some(dest) = self.destination else {
-            return;
-        };
-        // The destination is stored in model coordinates, which the view may have scrolled since.
-        let origin = self.model.origin();
-        let target = Pos {
-            x: dest.x - origin.x,
-            y: dest.y - origin.y,
-        };
-        let moved = self.model.step_toward(target);
-        if !moved {
-            self.model.say("Something blocks the way.".into());
-        }
-        if !moved || self.model.player() == target {
-            self.destination = None;
-        } else if !self.model.busy() {
-            ctx.request_repaint();
-        }
-    }
-
-    /// The model's own travel if it has one (engine: first click plans, second walks), else our walk.
+    /// A click on a map square: the engine plans the route, a repeat walks it.
     fn go_to(&mut self, view: Pos) {
-        if !self.model.travel(view) {
-            self.walk_to(view);
-        }
+        self.model.travel(view);
         let origin = self.model.origin();
         self.marker = self.model.busy().then_some(Pos {
-            x: view.x + origin.x,
-            y: view.y + origin.y,
-        });
-    }
-
-    fn walk_to(&mut self, view: Pos) {
-        let origin = self.model.origin();
-        self.destination = Some(Pos {
             x: view.x + origin.x,
             y: view.y + origin.y,
         });

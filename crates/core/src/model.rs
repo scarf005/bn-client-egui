@@ -550,11 +550,8 @@ pub trait GameModel {
     fn press(&mut self, _key: &str) -> bool {
         false
     }
-    /// Left click on view cell `at`: the model's own travel (plan a route, repeat to walk it).
-    /// False when the model has none, so the UI walks by itself.
-    fn travel(&mut self, _at: Pos) -> bool {
-        false
-    }
+    /// Left click on view cell `at`: the engine plans a route, a repeat walks it.
+    fn travel(&mut self, _at: Pos) {}
     /// The planned route in view coordinates, nearest first; empty when none.
     fn route(&self) -> Vec<Pos> {
         vec![]
@@ -654,8 +651,6 @@ pub trait GameModel {
     fn size(&self) -> Pos;
     fn cell(&self, at: Pos) -> Cell;
     fn player(&self) -> Pos;
-    /// Moves the player one step toward `target` (diagonals allowed); false if blocked.
-    fn step_toward(&mut self, target: Pos) -> bool;
     fn ground(&self) -> &[String];
     fn inventory(&self) -> &[String];
     /// How each row of `ground` is drawn (sprite layers, else glyph and colour); empty for a model without looks.
@@ -769,16 +764,17 @@ impl GameModel for FakeModel {
         self.player
     }
 
-    fn step_toward(&mut self, target: Pos) -> bool {
-        let next = Pos {
-            x: self.player.x + (target.x - self.player.x).signum(),
-            y: self.player.y + (target.y - self.player.y).signum(),
-        };
-        let blocked = self.cell(next).glyph == '#';
-        if !blocked {
+    fn travel(&mut self, target: Pos) {
+        while self.player != target {
+            let next = Pos {
+                x: self.player.x + (target.x - self.player.x).signum(),
+                y: self.player.y + (target.y - self.player.y).signum(),
+            };
+            if self.cell(next).glyph == '#' {
+                break;
+            }
             self.player = next;
         }
-        !blocked
     }
 
     fn ground(&self) -> &[String] {

@@ -35,3 +35,18 @@ pub fn connected(script: ScriptedTransport) -> EngineModel {
     assert!(m.live());
     m
 }
+
+/// One step of the avatar by the engine's move action for the direction `(dx, dy)`.
+pub fn step(model: &mut EngineModel, dx: i32, dy: i32) -> bool {
+    let id = match (dx, dy) {
+        (0, -1) => "UP",
+        (1, -1) => "RIGHTUP",
+        (1, 0) => "RIGHT",
+        (1, 1) => "RIGHTDOWN",
+        (0, 1) => "DOWN",
+        (-1, 1) => "LEFTDOWN",
+        (-1, 0) => "LEFT",
+        _ => "LEFTUP",
+    };
+    model.invoke_action(id)
+}

@@ -103,13 +103,10 @@ pub struct EngineModel {
     /// A submitted command has not reached a terminal stage yet.
     busy: bool,
     command_id: Option<String>,
-    rejected: bool,
     /// The command in flight and the boundary it was sent against; a resend is not recorded.
     sent: Option<(Operation, String)>,
     /// A command a timed screen's redraw made stale: it goes once to the next boundary.
     resend: Option<(Operation, String)>,
-    /// The command in flight was a walking step; only its failure stops the walk.
-    walking: bool,
     origin: Option<(i32, i32)>,
     /// Map cells the UI can show; the engine is told, and the shown map never exceeds them.
     wanted: Pos,
@@ -123,13 +120,14 @@ pub struct EngineModel {
     inventory: Vec<String>,
     ground_cells: Vec<Cell>,
     inventory_cells: Vec<Cell>,
-    /// The engine's own names for the same rows; the native menus list items by these.
-    ground_names: Vec<String>,
+    /// The engine's row id and item count of each `ground` row, for `Pickup`; empty id when it names none.
+    ground_items: Vec<ItemRow>,
     /// Pages of a long menu fetched after the first, for the interaction they belong to.
     paged: Paged,
     /// The tile each running explosion is drawn with, from its `explosion.started`.
     explosion_tiles: HashMap<String, String>,
-    inventory_names: Vec<String>,
+    /// The same for the rows of `inventory`, for `Drop`.
+    inventory_items: Vec<ItemRow>,
     trace: Vec<(Instant, &'static str)>,
     received: u64,
     colors: ColorMap,
@@ -137,8 +135,6 @@ pub struct EngineModel {
     /// Actions on show: between auto-move steps the engine offers none, which must not flicker the list.
     shown: Vec<ActionEntry>,
     status: Option<CommandStatus>,
-    /// An item picked or dropped from the panels: the native menu opens, this finishes it.
-    chore: Option<Chore>,
     /// The main menu was showing at the last poll; coming back to it ends the game whose lines are kept.
     at_main_menu: bool,
     /// The square whose description was asked for or received, the revision it is valid for and its lines.
@@ -152,13 +148,8 @@ struct Hover {
     lines: Option<Vec<String>>,
 }
 
-/// One panel button press, carried through the native selection menu it opens.
-struct Chore {
-    /// The item as the panel shows it.
-    name: String,
-    /// The menu's choice was marked; the next step confirms.
-    marked: bool,
-}
+/// The engine's id of an item row and how many items it stands for.
+type ItemRow = (String, u64);
 
 fn look_name(l: &Look) -> String {
     (l.name.clone().or_else(|| l.id.clone())).unwrap_or_else(|| l.glyph.clone())
@@ -211,20 +202,6 @@ fn id_seed(id: &str) -> u32 {
 }
 
 /// Native registered-action id for a one-square move.
-fn direction(dx: i32, dy: i32) -> Option<&'static str> {
-    Some(match (dx, dy) {
-        (0, -1) => "UP",
-        (1, -1) => "RIGHTUP",
-        (1, 0) => "RIGHT",
-        (1, 1) => "RIGHTDOWN",
-        (0, 1) => "DOWN",
-        (-1, 1) => "LEFTDOWN",
-        (-1, 0) => "LEFT",
-        (-1, -1) => "LEFTUP",
-        _ => return None,
-    })
-}
-
 impl EngineModel {
     /// The engine's window with its curses colors resolved.
     fn canvas(&self, wire: &CanvasWire) -> Canvas {
@@ -359,10 +336,8 @@ impl EngineModel {
             connected: true,
             busy: false,
             command_id: None,
-            rejected: false,
             sent: None,
             resend: None,
-            walking: false,
             origin: None,
             wanted: VIEW,
             declared: VIEW,
@@ -374,17 +349,16 @@ impl EngineModel {
             inventory: vec![],
             ground_cells: vec![],
             inventory_cells: vec![],
-            ground_names: vec![],
+            ground_items: vec![],
             paged: Paged::default(),
             explosion_tiles: HashMap::new(),
-            inventory_names: vec![],
+            inventory_items: vec![],
             trace: vec![],
             received: 0,
             colors: ColorMap::default(),
             loading: None,
             shown: vec![],
             status: None,
-            chore: None,
             at_main_menu: false,
             hovered: None,
         };
@@ -550,8 +524,8 @@ impl EngineModel {
                 "validated" => "accepted".into(),
                 "completed" => "done".into(),
                 _ if swap => "done".into(),
-                "rejected" | "interrupted" => match reason.as_deref() {
-                    Some(why) => format!("{}: {}", n.stage, explain(why)),
+                "rejected" | "interrupted" => match &n.error_text {
+                    Some(why) => format!("{}: {why}", n.stage),
                     None => n.stage.clone(),
                 },
                 other => other.into(),
@@ -567,10 +541,9 @@ impl EngineModel {
             let swap =
                 n.stage == "interrupted" && n.error.as_ref().is_some_and(|e| e == "stale_epoch");
             if n.stage != "completed" && !swap {
-                self.rejected = self.walking;
                 let reason = n.error.as_ref().map(error_kind);
                 if !self.stale_resend(reason.as_deref()) {
-                    self.report_failure(&n.stage, reason.as_deref());
+                    self.report_failure(n.error_text.as_deref().unwrap_or(&n.stage));
                 }
             }
         }
@@ -591,7 +564,7 @@ impl EngineModel {
             let kind = e.data.as_ref().map_or(e.message.clone(), error_kind);
             self.stale_resend(Some(&kind));
             if let Some(s) = &mut self.status {
-                s.set_stage(format!("rejected: {}", explain(&kind)), true);
+                s.set_stage(format!("rejected: {}", reason_of(&e)), true);
             }
         }
         if matches!(kind, Pending::Describe) {
@@ -619,11 +592,8 @@ impl EngineModel {
         }
         if matches!(kind, Pending::Interrupt) {
             // The engine had no activity running; say so once, not per key press.
-            if result.is_err() {
-                let text = "There is nothing to interrupt.".to_string();
-                if self.messages.last() != Some(&text) {
-                    self.messages.push(text);
-                }
+            if let Err(e) = &result {
+                self.report_failure(&reason_of(e));
                 // An engine with nothing to interrupt may have finished the command without our hearing of it.
                 if let (Some(at), Some(command_id)) = (self.replica.at(), self.command_id.clone()) {
                     let params = protocol::ResultParams {
@@ -656,9 +626,7 @@ impl EngineModel {
         let value = match result {
             Ok(v) => v,
             Err(e) => {
-                let why = e.data.as_ref().map_or(e.message.clone(), error_kind);
-                self.messages.push(format!("Engine error: {why}."));
-                self.rejected = matches!(kind, Pending::Submit) && self.walking;
+                self.report_failure(&reason_of(&e));
                 return;
             }
         };
@@ -736,18 +704,10 @@ impl EngineModel {
         }
     }
 
-    /// Logs a failed command; a repeat of the last line (a click held on an unreachable square) adds none.
-    fn report_failure(&mut self, stage: &str, reason: Option<&str>) {
-        let travel = self.status.as_ref().is_some_and(|s| s.label == "Travel");
-        let text = match reason {
-            Some("validation_failed") if travel => {
-                "Travel rejected: that square is outside the map window the engine can resolve."
-                    .to_string()
-            }
-            _ => format!("Command {stage}: {}.", reason.map_or(stage, explain)),
-        };
-        if self.messages.last() != Some(&text) {
-            self.messages.push(text);
+    /// Logs a failed command's reason; a repeat of the last line (a click held on an unreachable square) adds none.
+    fn report_failure(&mut self, text: &str) {
+        if self.messages.last().map(String::as_str) != Some(text) {
+            self.messages.push(text.to_string());
         }
     }
 
@@ -802,8 +762,6 @@ impl EngineModel {
         self.status = Some(self.describe(&submit.operation));
         self.sent = Some((submit.operation.clone(), b.boundary_id.clone()));
         self.busy = true;
-        self.rejected = false;
-        self.walking = false;
         let params = serde_json::to_value(submit).expect("submit serializes");
         self.mark("submit");
         self.call("bn.command.submit", params, Pending::Submit);
@@ -845,19 +803,17 @@ impl EngineModel {
         }
     }
 
-    /// Submits a registered action whose id is one of `ids`; reports when the engine has none.
+    /// Submits a registered action whose id is one of `ids`; false when the engine offers none.
     fn invoke(&mut self, ids: &[String]) -> bool {
         let found = self.replica.boundary().and_then(|b| {
             b.actions
                 .iter()
                 .find(|a| ids.iter().any(|i| a.id.eq_ignore_ascii_case(i)))
         });
-        let Some(action) = found.map(|a| a.id.clone()) else {
-            self.messages
-                .push(format!("The engine offers no {} action.", ids[0]));
+        let Some(action_id) = found.map(|a| a.id.clone()) else {
             return false;
         };
-        self.submit(Operation::Action { action_id: action })
+        self.submit(Operation::Action { action_id })
     }
 
     fn avatar_pos(&self) -> Option<&WorldPos> {
@@ -963,11 +919,11 @@ impl EngineModel {
 
     fn refresh_items(&mut self) {
         let avatar = self.replica.avatar();
-        let row = |look: &Look, line: String, name: String| (line, name, self.item_cell(look));
+        let row = |look: &Look, line: String, item: ItemRow| (line, item, self.item_cell(look));
         let ground = match avatar.and_then(|a| a.ground.as_ref()) {
             Some(stacks) => stacks
                 .iter()
-                .map(|i| row(&i.look, item_line(i), i.name.clone()))
+                .map(|i| row(&i.look, item_line(i), (i.id.clone(), i.count.unwrap_or(1))))
                 .collect(),
             None => self
                 .avatar_pos()
@@ -975,7 +931,7 @@ impl EngineModel {
                 .map_or(vec![], |c| {
                     c.items
                         .iter()
-                        .map(|l| row(l, look_name(l), look_name(l)))
+                        .map(|l| row(l, look_name(l), (String::new(), 1)))
                         .collect()
                 }),
         };
@@ -983,11 +939,11 @@ impl EngineModel {
             a.inventory
                 .iter()
                 .flatten()
-                .map(|i| row(&i.look, item_line(i), i.name.clone()))
+                .map(|i| row(&i.look, item_line(i), (i.id.clone(), i.count.unwrap_or(1))))
                 .collect()
         });
-        (self.ground, self.ground_names, self.ground_cells) = unzip3(ground);
-        (self.inventory, self.inventory_names, self.inventory_cells) = unzip3(carried);
+        (self.ground, self.ground_items, self.ground_cells) = unzip3(ground);
+        (self.inventory, self.inventory_items, self.inventory_cells) = unzip3(carried);
     }
 
     /// How a list row draws its item: the same layers a map square gets for it.
@@ -995,31 +951,6 @@ impl EngineModel {
         Cell {
             layers: vec![self.layer(look, 0)],
             ..self.styled(look, look_name(look))
-        }
-    }
-
-    /// Marks the chore's item in the native menu it opened, then confirms; ends it when the menu is gone.
-    fn advance_chore(&mut self) {
-        if self.busy {
-            return;
-        }
-        let Some(Chore { name, marked }) = self.chore.take() else {
-            return;
-        };
-        let target = self.menu().and_then(|m| {
-            m.choices
-                .into_iter()
-                .find(|c| c.enabled && c.label.contains(&name))
-        });
-        match target {
-            Some(c) if !marked && !c.selected => {
-                self.chore = Some(Chore { name, marked: true });
-                self.choose(&c.id);
-            }
-            Some(_) => {
-                self.invoke_action("CONFIRM");
-            }
-            None => {}
         }
     }
 }
@@ -1057,17 +988,12 @@ fn item_line(item: &protocol::InventoryItem) -> String {
     format!("{name}{count}{slot}")
 }
 
-/// Engine command errors in words a player can act on.
-fn explain(kind: &str) -> &str {
-    match kind {
-        "stale_epoch" => "the world changed",
-        "stale_revision" | "stale_boundary" | "stale_interaction_schema" => {
-            "the screen changed, try again"
-        }
-        "validation_failed" => "not possible here",
-        "not_ready" => "the game is not ready",
-        other => other,
-    }
+/// The engine's localized reason for a failed call: its `message` in the error data, else the RPC message.
+fn reason_of(e: &protocol::RpcError) -> String {
+    e.data
+        .as_ref()
+        .and_then(|d| d["message"].as_str())
+        .map_or_else(|| e.message.clone(), String::from)
 }
 
 fn error_kind(e: &Value) -> String {
@@ -1525,7 +1451,6 @@ impl GameModel for EngineModel {
         self.refresh_view();
         self.refresh_items();
         self.refresh_actions();
-        self.advance_chore();
     }
 
     fn set_waker(&mut self, waker: crate::transport::Waker) {
@@ -1636,24 +1561,6 @@ impl GameModel for EngineModel {
         }
     }
 
-    fn step_toward(&mut self, target: Pos) -> bool {
-        if self.rejected {
-            self.rejected = false;
-            return false;
-        }
-        let me = self.player();
-        let (dx, dy) = ((target.x - me.x).signum(), (target.y - me.y).signum());
-        if self.busy || (dx, dy) == (0, 0) {
-            return true;
-        }
-        let Some(id) = direction(dx, dy) else {
-            return false;
-        };
-        let sent = self.invoke(&[id.into()]);
-        self.walking = sent;
-        sent
-    }
-
     fn ground(&self) -> &[String] {
         &self.ground
     }
@@ -1671,24 +1578,19 @@ impl GameModel for EngineModel {
     }
 
     fn pick_up(&mut self, index: usize) {
-        let name = self.ground_names.get(index).cloned();
-        if let (false, Some(name)) = (self.busy, name) {
-            self.chore = self
-                .invoke(&["pickup_all".into(), "pickup".into()])
-                .then_some(Chore {
-                    name,
-                    marked: false,
-                });
+        if let (false, Some((item_id, count))) = (self.busy, self.ground_items.get(index).cloned())
+            && !item_id.is_empty()
+        {
+            self.submit(Operation::Pickup { item_id, count });
         }
     }
 
     fn drop_item(&mut self, index: usize) {
-        let name = self.inventory_names.get(index).cloned();
-        if let (false, Some(name)) = (self.busy, name) {
-            self.chore = self.invoke(&["drop".into()]).then_some(Chore {
-                name,
-                marked: false,
-            });
+        if let (false, Some((item_id, count))) =
+            (self.busy, self.inventory_items.get(index).cloned())
+            && !item_id.is_empty()
+        {
+            self.submit(Operation::Drop { item_id, count });
         }
     }
 
@@ -1757,30 +1659,14 @@ impl GameModel for EngineModel {
         }
     }
 
-    fn travel(&mut self, at: Pos) -> bool {
-        // Like Tiles, walking into a closed door next to you opens it; the engine plans no route to one.
-        let (me, id) = (self.player(), self.cell(at).id);
-        let step = (at.x - me.x, at.y - me.y);
-        if id.contains("door") && id.ends_with("_c") && step.0.abs().max(step.1.abs()) == 1 {
-            if let (false, Some(id)) = (self.busy, direction(step.0, step.1)) {
-                self.invoke(&[id.into()]);
-            }
-            return true;
-        }
-        // A square outside the engine's window cannot be selected by a click; ignore it quietly.
-        let reachable = |p: &WorldPos| {
-            self.replica.view().is_none_or(|v| {
-                (v.min.x..=v.max.x).contains(&p.x) && (v.min.y..=v.max.y).contains(&p.y)
-            })
-        };
+    fn travel(&mut self, at: Pos) {
         let free = self
             .replica
             .boundary()
             .is_some_and(|b| b.interaction.is_none());
-        if let (false, true, Some(pos)) = (self.busy, free, self.abs(at).filter(reachable)) {
+        if let (false, true, Some(pos)) = (self.busy, free, self.abs(at)) {
             self.submit(Operation::Travel { pos });
         }
-        true
     }
 
     fn route(&self) -> Vec<Pos> {
@@ -1813,19 +1699,12 @@ impl GameModel for EngineModel {
         if let Some(row) = self.row_for(key) {
             return !self.busy && self.submit(Operation::Choose { choice_id: row.id });
         }
-        // A "press any key" popup or terminal prompt has no key to bind: whatever is pressed continues it.
+        // A "press any key" screen has no key to bind: whatever is pressed takes the choice the engine names.
         let any_key = self
             .replica
             .boundary()
             .and_then(|b| b.interaction.as_ref())
-            .and_then(|i| {
-                let popup =
-                    |c: &protocol::Choice| c.id == "acknowledge" && c.description == "ANY_INPUT";
-                let terminal =
-                    |c: &protocol::Choice| i.context == "COMPUTER_TERMINAL" && c.id == "continue";
-                i.choices.iter().find(|c| popup(c) || terminal(c))
-            })
-            .map(|c| c.id.clone());
+            .and_then(|i| i.any_key_choice_id.clone());
         any_key.is_some_and(|choice_id| !self.busy && self.submit(Operation::Choose { choice_id }))
     }
 
@@ -1972,23 +1851,8 @@ impl GameModel for EngineModel {
         if i.context != "TARGET" {
             return target_note(i);
         }
-        let t = i.target.as_ref()?;
-        let at = |k: &str| serde_json::from_value::<WorldPos>(t[k].clone()).ok();
-        let (from, to, range) = (at("source")?, at("current")?, t["range"].as_i64()?);
-        let (dx, dy) = (f64::from(to.x - from.x), f64::from(to.y - from.y));
-        let distance = if t["distance_metric"] == "trig" {
-            dx.hypot(dy).round()
-        } else {
-            dx.abs().max(dy.abs())
-        };
-        let status = match t["status"].as_str()? {
-            "good" => "ready to fire",
-            "out_of_range" => "out of range",
-            "out_of_ammo" => "out of ammo",
-            _ => "no valid target",
-        };
-        let title = markup::plain(&i.title);
-        Some(format!("{title}: range {distance}/{range}, {status}"))
+        let status = i.target.as_ref()?["status_text"].as_str()?;
+        Some(format!("{}: {status}", markup::plain(&i.title)))
     }
 
     fn styled(&self, text: &str) -> Vec<Run> {
