@@ -310,10 +310,10 @@ fn an_area_the_engine_does_not_offer_stays_in_its_place_dimmed() {
     );
 }
 
-/// A prompt the engine opens only after its command finished (the interaction event can trail the
-/// completion notice) must still receive the text that was typed for it.
+/// The engine publishes the prompt an action opens before it reports the action done; the text typed
+/// for it fills that prompt.
 #[test]
-fn a_filter_typed_before_the_prompt_arrives_is_still_filled_when_it_does() {
+fn a_filter_typed_before_its_prompt_opens_fills_the_prompt_the_filter_action_opens() {
     let (mut h, script) = harness();
     h.get_by_label("Left pane filter").focus();
     h.run_steps(2);
@@ -323,8 +323,6 @@ fn a_filter_typed_before_the_prompt_arrives_is_still_filled_when_it_does() {
     h.run_steps(3);
     finished(&mut h, &script);
     assert_eq!(operations(&script).last(), Some(&action("FILTER")));
-    finished(&mut h, &script);
-    h.run_steps(4);
     let mut prompt = aim();
     prompt["interaction"]["context"] = json!("STRING_INPUT");
     prompt["interaction"]["kind"] = json!("field");
@@ -334,7 +332,7 @@ fn a_filter_typed_before_the_prompt_arrives_is_still_filled_when_it_does() {
     prompt["interaction"]["field"] = json!({"id":"field:value","label":"Filter:","description":"",
         "value":"","type":"text","max_length":10,"printable":false});
     script.push(event(42, prompt));
-    h.run_steps(4);
+    finished(&mut h, &script);
     assert_eq!(
         operations(&script).last(),
         Some(&json!({"kind":"fill","field_id":"field:value","value":"can","submit":true}))
