@@ -9,9 +9,9 @@
 //! - `OVERRIDES` lists the bespoke screen modules that still draw a screen themselves.
 
 use crate::protocol::{
-    Affordance, AffordanceRole, ArgShape, At, Boundary, BoundaryExpect, Expect, InteractionExpect,
-    InvokeArgs, List, Operation, PAGE_ROWS, Row, RowPick, RowsResult, Scope, Screen, ScreenExpect,
-    ScreenFocus, Submit, Text, WorldPos,
+    Affordance, AffordanceRole, ArgShape, At, Boundary, BoundaryExpect, Component, Expect,
+    InteractionExpect, InvokeArgs, List, Operation, PAGE_ROWS, Row, RowPick, RowsResult, Scope,
+    Screen, ScreenExpect, ScreenFocus, Submit, Text, WorldPos,
 };
 use std::collections::HashMap;
 
@@ -83,10 +83,120 @@ pub struct Refusal {
     pub denial: Option<Text>,
 }
 
+/// Whether an affordance may run now, and the engine's reason when not.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Availability {
+    pub enabled: bool,
+    pub denial: Option<Text>,
+    /// Why it may not, as data; none when it may.
+    pub reason: Option<Reason>,
+}
+
+impl Availability {
+    const ON: Self = Self {
+        enabled: true,
+        denial: None,
+        reason: None,
+    };
+
+    fn off(reason: Reason, denial: Option<Text>) -> Self {
+        Self {
+            enabled: false,
+            denial: denial.filter(|text| !text.shown().is_empty()),
+            reason: Some(reason),
+        }
+    }
+}
+
+/// Whether `affordance` may run on `row`: it is on, the row is on, and the row allows it. Without a row,
+/// only the affordance itself counts.
+pub fn row_availability(affordance: &Affordance, row: Option<&Row>) -> Availability {
+    if !affordance.enabled {
+        return Availability::off(Reason::Disabled, affordance.denial.clone());
+    }
+    let Some(row) = row else {
+        return Availability::ON;
+    };
+    if !row.enabled {
+        return Availability::off(Reason::RowDisabled, Some(row.denial.clone()));
+    }
+    match row
+        .affordances
+        .as_ref()
+        .map(|allowed| allowed.iter().find(|a| a.id == affordance.id))
+    {
+        Some(None) => Availability::off(Reason::NotOnThisRow, None),
+        Some(Some(allowed)) if !allowed.enabled => {
+            Availability::off(Reason::RowDisabled, allowed.denial.clone().map(Text::Plain))
+        }
+        _ => Availability::ON,
+    }
+}
+
+/// Whether the affordance may run on the row, cell or tab `row_id` of the component.
+fn available_on(
+    screen: &Screen,
+    affordance: &Affordance,
+    component_id: &str,
+    row_id: &str,
+) -> Availability {
+    match screen
+        .root
+        .as_ref()
+        .and_then(|root| root.find(component_id))
+    {
+        Some(Component::List(list)) => {
+            row_availability(affordance, list.rows.iter().find(|row| row.id == row_id))
+        }
+        Some(Component::Grid(grid)) => grid
+            .cells
+            .iter()
+            .find(|cell| cell.id.as_deref() == Some(row_id))
+            .filter(|cell| !cell.enabled)
+            .map_or(Availability::ON, |cell| {
+                Availability::off(Reason::RowDisabled, cell.denial.clone())
+            }),
+        Some(Component::Tabs(tabs)) => tabs
+            .tabs
+            .iter()
+            .find(|tab| tab.id == row_id)
+            .filter(|tab| !tab.enabled)
+            .map_or(Availability::ON, |_| {
+                Availability::off(Reason::RowDisabled, None)
+            }),
+        _ => Availability::ON,
+    }
+}
+
 /// Whether `affordance` may be invoked with `args` on `screen`: it is on, and so is every row it acts on.
 pub fn gate(screen: &Screen, affordance: &Affordance, args: &InvokeArgs) -> Result<(), Refusal> {
-    let _ = (screen, affordance, args);
-    Ok(())
+    let shape = affordance.args.as_ref();
+    let one = shape
+        .and_then(|shape| shape.row.as_ref())
+        .zip(args.row.as_ref())
+        .map(|(of, id)| (of.component_id.as_str(), id.as_str()));
+    let many = shape
+        .and_then(|shape| shape.rows.as_ref())
+        .zip(args.rows.as_ref())
+        .into_iter()
+        .flat_map(|(of, picks)| {
+            picks
+                .iter()
+                .map(move |pick| (of.component_id.as_str(), pick.id.as_str()))
+        });
+    std::iter::once(row_availability(affordance, None))
+        .chain(
+            one.into_iter().chain(many).map(|(component_id, row_id)| {
+                available_on(screen, affordance, component_id, row_id)
+            }),
+        )
+        .find(|check| !check.enabled)
+        .map_or(Ok(()), |check| {
+            Err(Refusal {
+                reason: check.reason.unwrap_or(Reason::Disabled),
+                denial: check.denial,
+            })
+        })
 }
 
 /// What a command is built against.
@@ -235,6 +345,8 @@ pub struct Window {
 struct Draft {
     affordance: Option<String>,
     count: Option<String>,
+    /// The count is the shape's default, which the first digit typed replaces.
+    fresh: bool,
     text: Option<String>,
     pos: Option<WorldPos>,
     pane: Option<String>,
@@ -243,6 +355,7 @@ struct Draft {
 static NO_DRAFT: Draft = Draft {
     affordance: None,
     count: None,
+    fresh: false,
     text: None,
     pos: None,
     pane: None,
@@ -397,11 +510,26 @@ impl Interaction {
     /// Starts collecting the arguments of `affordance` and returns what the client must still ask the player
     /// for: the focus and the marked rows already answer `row` and `rows`.
     pub fn begin(&mut self, affordance: &Affordance) -> Vec<ArgKind> {
+        let count = affordance
+            .args
+            .as_ref()
+            .and_then(|shape| shape.count.as_ref());
+        let default = count.and_then(|bounds| bounds.default);
         self.draft = Draft {
             affordance: Some(affordance.id.clone()),
+            count: default.map(|n| n.to_string()),
+            fresh: default.is_some(),
             ..Draft::default()
         };
-        self.args(affordance).err().unwrap_or_default()
+        let mut ask = self.args(affordance).err().unwrap_or_default();
+        // A count is always the player's to confirm, even with a default to start from.
+        if count.is_some() && !ask.contains(&ArgKind::Count) {
+            let at = ask
+                .iter()
+                .position(|kind| matches!(kind, ArgKind::Text | ArgKind::Pos | ArgKind::Pane));
+            ask.insert(at.unwrap_or(ask.len()), ArgKind::Count);
+        }
+        ask
     }
 
     /// The draft of the affordance being collected, if any.
@@ -414,6 +542,9 @@ impl Interaction {
         let Some(draft) = self.draft_mut() else {
             return false;
         };
+        if std::mem::take(&mut draft.fresh) {
+            draft.count = None;
+        }
         let typed = draft.count.get_or_insert_default();
         let fits = c.is_ascii_digit() || (c == '-' && typed.is_empty());
         if fits {
@@ -423,8 +554,9 @@ impl Interaction {
     }
 
     pub fn pop_count(&mut self) {
-        if let Some(typed) = self.draft_mut().and_then(|d| d.count.as_mut()) {
-            typed.pop();
+        if let Some(draft) = self.draft_mut() {
+            draft.fresh = false;
+            draft.count.as_mut().map(String::pop);
         }
     }
 

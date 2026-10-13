@@ -444,7 +444,7 @@ fn a_count_is_typed_held_to_the_bounds_and_defaults() {
         .unwrap();
     let mut ui = Interaction::default();
     ui.focus_row("list", "r");
-    assert_eq!(ui.begin(batch), Vec::<ArgKind>::new());
+    assert_eq!(ui.begin(batch), [ArgKind::Count], "a default is still confirmed");
     assert_eq!(
         ui.args(batch).unwrap().count,
         Some(1),
