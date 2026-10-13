@@ -1701,6 +1701,18 @@ mod failures {
     }
 
     #[test]
+    fn an_engine_that_refuses_the_protocol_version_is_a_failure_with_its_reason() {
+        let (t, _h) = ScriptedTransport::new();
+        let refused = json!({"jsonrpc": "2.0", "error": {"code": 1000, "message": "application error",
+            "data": {"kind": "negotiation_failed", "action": "hello",
+                "message": "The protocol version is not supported."}}});
+        let mut m = EngineModel::new(Box::new(t.on("bn.hello", vec![refused])));
+        m.poll();
+        let failure = m.failure().expect("the refusal is reported");
+        assert_eq!(failure.message, "The protocol version is not supported.");
+    }
+
+    #[test]
     fn silence_with_a_command_in_flight_is_a_stall_that_a_message_clears() {
         let (t, h) = session();
         let (mut m, clock) = with_clock(t.on("bn.command.submit", walk_reply()));
