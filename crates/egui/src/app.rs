@@ -757,9 +757,11 @@ impl<M: GameModel> App<M> {
     }
 
     fn look(&mut self, at: Pos) {
-        let desc = self.model.cell(at).desc;
-        self.model
-            .say(format!("You see {desc} at ({}, {}).", at.x, at.y));
+        let text = self
+            .model
+            .hover_text(at)
+            .map_or_else(|| self.model.cell(at).desc, |lines| lines.join(" "));
+        self.model.say(text);
     }
 
     /// The native overmap window, glyph by glyph, with its sidebar. Hovering names the square; a click
