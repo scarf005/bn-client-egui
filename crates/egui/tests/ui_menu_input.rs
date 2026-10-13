@@ -125,6 +125,88 @@ fn typing_in_a_text_prompt_fills_the_field_and_enter_submits_it() {
     );
 }
 
+/// The engine takes the command asked for as request `id` and finishes it.
+fn finish(script: &ScriptHandle, id: u64, command: &str) {
+    script.push(json!({"jsonrpc":"2.0","id":id,"result":
+        {"epoch":"e7f3","command_id":command,"stage":"received"}}));
+    script.push(json!({"jsonrpc":"2.0","method":"bn.command","params":
+        {"epoch":"e7f3","command_id":command,"stage":"completed"}}));
+}
+
+/// The prompt interaction with the engine's `value`, as revision `revision`.
+fn prompt(value: &str, revision: u32) -> Value {
+    let mut menu = menu_event(|i| {
+        i["field"] = json!({"id":"field:value","label":"Filter","description":"","value":value,
+            "type":"text","max_length":-1,"printable":true});
+        i["choices"] = json!([]);
+        i["choice_total"] = json!(0);
+    });
+    menu["params"]["events"][0]["sequence"] = (revision + 10).to_string().into();
+    menu["params"]["events"][0]["revision"] = revision.to_string().into();
+    menu
+}
+
+fn filled(script: &ScriptHandle) -> Vec<String> {
+    sent(script, "bn.command.submit")
+        .iter()
+        .map(|m| m["params"]["operation"]["value"].as_str().unwrap().into())
+        .collect()
+}
+
+#[test]
+fn a_text_prompt_keeps_what_is_typed_while_the_engine_echoes_an_older_value() {
+    let (mut h, script) = harness(vec![]);
+    open(&mut h, &script, prompt("", 33));
+    h.get_by_label("Filter").focus();
+    h.run_steps(2);
+    h.get_by_label("Filter").type_text("m");
+    h.run_steps(2);
+    h.get_by_label("Filter").type_text("od");
+    h.run_steps(2);
+    // The first fill is done and the engine shows the text it had then, while "mod" waits to go out.
+    script.push(prompt("m", 34));
+    finish(&script, 4, "c:5");
+    h.run_steps(3);
+    h.get_by_label("Filter").type_text("e");
+    h.run_steps(2);
+    script.push(prompt("mod", 35));
+    finish(&script, 5, "c:6");
+    h.run_steps(3);
+    finish(&script, 6, "c:7");
+    script.push(prompt("mode", 36));
+    h.run_steps(3);
+    assert_eq!(filled(&script), ["m", "mod", "mode"]);
+}
+
+#[test]
+fn a_composition_is_committed_after_the_engine_echoes_an_older_value() {
+    let (mut h, script) = harness(vec![]);
+    open(&mut h, &script, prompt("", 33));
+    h.get_by_label("Filter").focus();
+    h.run_steps(2);
+    h.get_by_label("Filter").type_text("a");
+    h.run_steps(2);
+    h.get_by_label("Filter").type_text("b");
+    h.event(egui::Event::Ime(egui::ImeEvent::Preedit {
+        text: "\u{314e}".into(),
+        active_range_chars: None,
+    }));
+    h.run_steps(2);
+    script.push(prompt("a", 34));
+    finish(&script, 4, "c:5");
+    h.run_steps(3);
+    h.event(egui::Event::Ime(egui::ImeEvent::Preedit {
+        text: "\u{d55c}".into(),
+        active_range_chars: None,
+    }));
+    h.run_steps(2);
+    h.event(egui::Event::Ime(egui::ImeEvent::Commit("\u{d55c}".into())));
+    h.run_steps(3);
+    finish(&script, 5, "c:6");
+    h.run_steps(3);
+    assert_eq!(filled(&script), ["a", "ab", "ab\u{d55c}"]);
+}
+
 #[test]
 fn a_long_described_list_keeps_its_load_more_row_and_description_inside_the_window() {
     let (mut h, script) = harness(vec![]);
