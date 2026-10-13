@@ -321,3 +321,45 @@ fn a_hello_the_engine_refuses_for_its_schema_fails_with_the_engines_error_and_as
     assert_eq!(failure.message, "The schema does not match.");
     assert_eq!(h.sent_methods(), ["bn.hello"], "no fallback to 0.1");
 }
+
+/// A model at the map: its stack is the map screen, whose registered actions are screen-scoped affordances.
+fn map_model(queue: u64) -> (EngineModel, ScriptHandle) {
+    let mut hello = fixture("hello_result");
+    hello["result"]["limits"]["screen_queue"] = json!(queue);
+    let mut subscribe = subscribe_with_stack(1);
+    subscribe[0]["result"]["interaction"]["stack"] = json!([{
+        "screen_id": "screen:map:e1", "role": "map",
+        "root": {"id": "map:world", "kind": "map", "affordances": [], "mode": "world"},
+        "affordances": [
+            {"id": "UP", "label": "Move North", "keys": ["UP", "k"], "enabled": true, "expect": "screen"},
+            {"id": "open_options", "label": "Options", "keys": [], "enabled": true, "expect": "screen"}]}]);
+    let (t, h) = ScriptedTransport::new();
+    let t = (0..12).fold(
+        t.on("bn.hello", vec![hello]).on("bn.subscribe", subscribe),
+        |t, n| t.on("bn.command.submit", accepted(&format!("c:{n}"))),
+    );
+    let mut m = EngineModel::open(Box::new(t), ConnectOptions::default());
+    m.poll();
+    (m, h)
+}
+
+#[test]
+fn a_held_key_at_the_map_queues_screen_scoped_invokes_up_to_the_engines_depth() {
+    let (mut m, h) = map_model(8);
+    let held = (0..12).filter(|_| m.press("UP")).count();
+    assert_eq!(held, 9, "the running move and eight waiting behind it");
+    let sent = submits(&h);
+    assert_eq!(sent.len(), 9);
+    assert!(sent.iter().all(|s| s["expect"] == json!({"screen_id": "screen:map:e1"})
+        && s["operation"]["kind"] == "invoke"
+        && s["operation"]["affordance_id"] == "UP"));
+}
+
+#[test]
+fn a_registered_action_the_map_offers_runs_as_its_affordance_while_a_command_runs() {
+    let (mut m, h) = map_model(8);
+    assert!(m.invoke_action("UP"));
+    assert!(m.invoke_action("open_options"), "queued behind the move");
+    assert_eq!(submits(&h)[1]["operation"]["affordance_id"], "open_options");
+    assert!(!m.invoke_action("pickup"), "an action the map does not offer is not sent");
+}
