@@ -27,25 +27,6 @@ const VIEW: Pos = Pos { x: 40, y: 25 };
 const MAX_VIEWPORT: i32 = 512;
 const RESIZE_DEBOUNCE: std::time::Duration = std::time::Duration::from_millis(250);
 
-/// The protocol version the client speaks.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum Wire {
-    /// The default, until the engine's 0.2 wire has merged.
-    #[default]
-    V01,
-    V02,
-}
-
-impl Wire {
-    /// `BN_WIRE=0.2` switches the client to 0.2; anything else leaves it on 0.1.
-    pub fn from_env() -> Self {
-        match std::env::var("BN_WIRE").as_deref() {
-            Ok("0.2") => Wire::V02,
-            _ => Wire::V01,
-        }
-    }
-}
-
 /// How a session starts.
 #[derive(Clone, Copy, Debug)]
 pub struct ConnectOptions {
@@ -53,7 +34,6 @@ pub struct ConnectOptions {
     pub tiles: bool,
     /// The most frames per second the client can show while an activity runs.
     pub max_hz: u16,
-    pub wire: Wire,
 }
 
 impl Default for ConnectOptions {
@@ -61,7 +41,6 @@ impl Default for ConnectOptions {
         Self {
             tiles: false,
             max_hz: DEFAULT_MAX_HZ,
-            wire: Wire::default(),
         }
     }
 }
@@ -110,8 +89,6 @@ pub struct EngineModel {
     tiles_told: bool,
     /// The most frames per second the client shows, asked of the engine in every hello.
     max_hz: u16,
-    /// The protocol version the hello asks for.
-    wire: Wire,
     /// The ids of the tints the client's tileset has, and what the engine was last told.
     tint_ids: Vec<String>,
     tints_told: Vec<String>,
@@ -360,29 +337,16 @@ impl EngineModel {
         Self::connect_with(transport, tiles, DEFAULT_MAX_HZ)
     }
 
-    /// Like `connect`, with the most frames per second the client can show while an activity runs. The
-    /// protocol version is 0.1 unless `BN_WIRE=0.2`.
+    /// Like `connect`, with the most frames per second the client can show while an activity runs.
     pub fn connect_with(transport: Box<dyn Transport>, tiles: bool, max_hz: u16) -> Self {
-        Self::open(
-            transport,
-            ConnectOptions {
-                tiles,
-                max_hz,
-                wire: Wire::from_env(),
-            },
-        )
+        Self::open(transport, ConnectOptions { tiles, max_hz })
     }
 
     /// Starts the session as `options` say.
     pub fn open(transport: Box<dyn Transport>, options: ConnectOptions) -> Self {
-        let ConnectOptions {
-            tiles,
-            max_hz,
-            wire,
-        } = options;
+        let ConnectOptions { tiles, max_hz } = options;
         let mut m = Self {
             max_hz,
-            wire,
             tiles,
             tiles_told: tiles,
             tint_ids: vec![],
@@ -449,13 +413,9 @@ impl EngineModel {
         self.call("bn.hello", json!(self.with_session(params)), Pending::Hello);
     }
 
-    /// A hello with the delivery this client needs, in the form of the version it speaks.
+    /// A hello with the delivery this client needs.
     fn with_session(&self, params: protocol::HelloParams) -> protocol::HelloParams {
-        let params = params.with_delivery(crate::transport::CREDIT_WINDOW, Some(self.max_hz));
-        match self.wire {
-            Wire::V01 => params,
-            Wire::V02 => params.into_v02(protocol::SCHEMA_HASH),
-        }
+        params.with_delivery(crate::transport::CREDIT_WINDOW, Some(self.max_hz))
     }
 
     /// Times the resize debounce with `clock`, so tests can advance it instead of sleeping.
@@ -1656,7 +1616,6 @@ impl GameModel for EngineModel {
                 let options = ConnectOptions {
                     tiles: self.tiles,
                     max_hz: self.max_hz,
-                    wire: self.wire,
                 };
                 let mut fresh = EngineModel::open(transport, options)
                     .with_clock(self.clock.clone())

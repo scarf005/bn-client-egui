@@ -685,7 +685,7 @@ pub trait GameModel {
         static DEFAULT: std::sync::OnceLock<ColorMap> = std::sync::OnceLock::new();
         DEFAULT.get_or_init(ColorMap::default)
     }
-    /// The open screens of the interaction stack, outermost first; empty from a 0.1 engine.
+    /// The open screens of the interaction stack, outermost first; empty while the boundary has only the `interaction`.
     fn screens(&self) -> &[Screen] {
         &[]
     }

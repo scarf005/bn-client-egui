@@ -142,6 +142,12 @@ const REJECTED: &[&str] = &[
     "vehicle grid cell without its availability",
     "position without a dimension",
     "hello request with a malformed schema hash",
+    "hello delivery without credits",
+    "hello delivery with zero credits",
+    "hello frame rate of zero",
+    "hello frame rate beyond a display",
+    "hello frame rate without credits",
+    "credit request beyond the window",
 ];
 
 #[test]
@@ -234,24 +240,16 @@ fn an_invoke_is_refused_by_its_own_arguments_under_a_screen_expectation() {
 }
 
 #[test]
-fn a_0_2_hello_names_the_schema_and_folds_the_loose_members_into_capabilities() {
-    let v01 = protocol::HelloParams::new("bn-client")
-        .with_viewport(protocol::Viewport { cols: 40, rows: 25 })
-        .with_tiles(true)
-        .with_tint_ids(vec!["hair_black".into()])
-        .with_delivery(256, Some(60));
-    let v02 = serde_json::to_value(v01.clone().into_v02(protocol::SCHEMA_HASH)).unwrap();
-    assert_eq!(v02["versions"], json!(["0.2"]));
-    assert_eq!(v02["schema"], json!(protocol::SCHEMA_HASH));
-    assert_eq!(
-        v02["capabilities"],
-        json!({"tiles": true, "tint_ids": ["hair_black"], "viewport": {"cols": 40, "rows": 25},
-            "delivery": {"credits": 256, "max_hz": 60}})
-    );
-    ["viewport", "tiles", "tint_ids", "delivery"]
-        .iter()
-        .for_each(|loose| assert!(v02.get(loose).is_none(), "{loose}"));
-    let v01 = serde_json::to_value(v01).unwrap();
-    assert_eq!(v01["versions"], json!(["0.1"]));
-    assert!(v01.get("schema").is_none() && v01.get("capabilities").is_none());
+fn a_hello_offers_only_0_2_and_names_the_schema_it_was_built_with() {
+    let hello = serde_json::to_value(
+        protocol::HelloParams::new("bn-client")
+            .with_viewport(protocol::Viewport { cols: 40, rows: 25 })
+            .with_tiles(true)
+            .with_delivery(256, Some(60)),
+    )
+    .unwrap();
+    assert_eq!(hello["versions"], json!(["0.2"]));
+    assert_eq!(hello["schema"], json!(protocol::SCHEMA_HASH));
+    assert_eq!(hello["viewport"], json!({"cols": 40, "rows": 25}));
+    assert_eq!(hello["delivery"], json!({"credits": 256, "max_hz": 60}));
 }

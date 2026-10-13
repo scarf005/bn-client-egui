@@ -3,7 +3,7 @@
 Prototype of a mouse-first, screen-reader-accessible desktop client for
 Cataclysm: Bright Nights, built on egui/eframe (AccessKit). The UI talks to a
 `GameModel` trait with two implementations: `FakeModel` (in-memory, used by most tests) and
-`EngineModel` (unified engine protocol 0.1 over the engine's stdio, newline-delimited JSON-RPC).
+`EngineModel` (unified engine protocol 0.2 over the engine's stdio, newline-delimited JSON-RPC).
 
 License: undecided (no LICENSE file yet).
 
@@ -52,11 +52,10 @@ Live integration tests (ignored by default, need an engine build; the TUI one dr
     BN_ENGINE=/path/to/cataclysm-bn-tiles cargo test -p bn-client-tui --test live_tui -- --ignored
     BN_ENGINE=... cargo test --release -p bn-client-core --test live_latency -- --ignored --nocapture   # timings
 
-`tests/fixtures/0.1.examples.json` is the contract lane's file (round-trip tested exactly);
-`tests/fixtures/design-0.1.json` is a hand-written session from the design doc, not captured from an engine;
-replace it with a recorded session once an engine can produce one.
-`crates/core/schema/0.2.schema.json` and `tests/fixtures/0.2.examples/` are verbatim copies of the engine's 0.2 schema
-and examples; the schema's SHA-256 prefix is what a 0.2 hello names. The client speaks 0.1 unless `BN_WIRE=0.2`.
+`crates/core/schema/0.2.schema.json` and `tests/fixtures/0.2.examples/` are verbatim copies of the engine's
+`docs/schema/engine-client/` files; the schema's SHA-256 prefix is what the hello names, and a mismatch fails the
+connection with the engine's error. `tests/fixtures/design.json` is a hand-written session, not captured from an engine;
+`tests/fixtures/menu-interaction.json` is the 0.2 menu examples with the `interaction` the bespoke menus still read.
 
 Mouse: left-click walks, right-click opens Look / Move here, hover shows a tooltip,
 items drag between Ground and Inventory. Keyboard: focus the map, arrows move the

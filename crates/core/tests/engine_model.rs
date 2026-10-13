@@ -22,7 +22,7 @@ fn connects_with_hello_then_subscribe_and_exposes_the_map() {
     let (t, h) = session();
     let m = connected(t);
     assert_eq!(h.sent_methods(), ["bn.hello", "bn.subscribe"]);
-    assert_eq!(h.sent()[0]["params"]["versions"], json!(["0.1"]));
+    assert_eq!(h.sent()[0]["params"]["versions"], json!(["0.2"]));
     assert_eq!(m.size(), Pos { x: 40, y: 25 });
     assert_eq!(m.player(), Pos { x: 20, y: 12 });
     assert_eq!(m.cell(Pos { x: 21, y: 11 }).glyph, '#');
@@ -378,21 +378,19 @@ fn unknown_notifications_are_ignored() {
     assert!(m.live(), "unknown notifications are ignored");
 }
 
-#[test]
-fn main_menu_snapshot_without_a_world_shows_the_menu_and_no_map() {
+/// A subscribe result at a menu: the 0.2 example with the `interaction` the bespoke menus still read.
+fn menu_snapshot(name: &str) -> Value {
     let text = std::fs::read_to_string(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/tests/fixtures/0.1.examples.json"
+        "/tests/fixtures/menu-interaction.json"
     ))
     .unwrap();
-    let examples: Value = serde_json::from_str(&text).unwrap();
-    let menu = examples["valid"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|e| e["name"] == "subscribe result at a menu")
-        .unwrap()["value"]
-        .clone();
+    serde_json::from_str::<Value>(&text).unwrap()[name].clone()
+}
+
+#[test]
+fn main_menu_snapshot_without_a_world_shows_the_menu_and_no_map() {
+    let menu = menu_snapshot("subscribe result at a menu");
     let (t, _h) = ScriptedTransport::new();
     let t = t.on("bn.hello", vec![fixture("hello_result")]).on(
         "bn.subscribe",
@@ -407,19 +405,7 @@ fn main_menu_snapshot_without_a_world_shows_the_menu_and_no_map() {
 
 #[test]
 fn tabbed_main_menu_separates_tab_rows_from_the_selected_tabs_entries() {
-    let text = std::fs::read_to_string(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/tests/fixtures/0.1.examples.json"
-    ))
-    .unwrap();
-    let examples: Value = serde_json::from_str(&text).unwrap();
-    let menu = examples["valid"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|e| e["name"] == "subscribe result at the main menu")
-        .unwrap()["value"]
-        .clone();
+    let menu = menu_snapshot("subscribe result at the main menu");
     let (t, _h) = ScriptedTransport::new();
     let t = t.on("bn.hello", vec![fixture("hello_result")]).on(
         "bn.subscribe",

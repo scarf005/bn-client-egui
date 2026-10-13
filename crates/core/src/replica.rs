@@ -273,7 +273,7 @@ impl Replica {
         self.boundary.as_ref()
     }
 
-    /// The open screens, outermost first; empty from a 0.1 engine.
+    /// The open screens, outermost first; empty while the boundary has only the `interaction`.
     pub fn stack(&self) -> &[Screen] {
         self.boundary.as_ref().map_or(&[], |b| &b.stack)
     }

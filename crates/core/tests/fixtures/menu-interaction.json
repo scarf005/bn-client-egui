@@ -1,0 +1,427 @@
+{
+ "subscribe result at a menu": {
+  "at": {
+   "epoch": "epoch:e7f3",
+   "sequence": "0",
+   "revision": "0"
+  },
+  "interaction": {
+   "boundary_id": "boundary:12",
+   "readiness": {
+    "phase": "menu",
+    "game_ready": false,
+    "accepts_interaction_commands": true,
+    "accepts_registered_actions": true
+   },
+   "actions": [
+    {
+     "id": "UP",
+     "name": "Move up",
+     "keys": [
+      "UP",
+      "k"
+     ]
+    }
+   ],
+   "interaction": {
+    "schema_id": "schema:ab",
+    "context": "MAIN_MENU",
+    "kind": "choices",
+    "allow_cancel": true,
+    "allow_set_count": false,
+    "title": "Cataclysm: Bright Nights",
+    "message": "",
+    "choices": [
+     {
+      "id": "root:0",
+      "label": "New Game",
+      "description": "",
+      "denial": "",
+      "enabled": true,
+      "selectable": true,
+      "selected": true,
+      "columns": []
+     },
+     {
+      "id": "root:1",
+      "label": "Load Game",
+      "description": "",
+      "denial": "",
+      "hotkey": "l",
+      "enabled": true,
+      "selectable": true,
+      "selected": false,
+      "columns": [
+       {
+        "key": "worlds",
+        "label": "Worlds",
+        "value": "2",
+        "color": "c_light_gray"
+       }
+      ],
+      "color": "c_white",
+      "key_color": "c_yellow",
+      "mark": {
+       "glyph": "-"
+      }
+     }
+    ],
+    "choice_total": 2,
+    "compat": {
+     "focus": {
+      "choice_id": "root:0"
+     },
+     "panes": []
+    }
+   },
+   "stack": [
+    {
+     "screen_id": "screen:9",
+     "role": "dialog",
+     "title": "Cataclysm: Bright Nights",
+     "root": {
+      "id": "list",
+      "kind": "list",
+      "affordances": [
+       "bn:choose:list"
+      ],
+      "columns": [
+       {
+        "key": "worlds",
+        "label": "Worlds"
+       }
+      ],
+      "rows": [
+       {
+        "id": "root:0",
+        "label": "New Game",
+        "description": "",
+        "denial": "",
+        "enabled": true,
+        "selectable": true,
+        "selected": true,
+        "columns": []
+       },
+       {
+        "id": "root:1",
+        "label": "Load Game",
+        "description": "",
+        "denial": "",
+        "enabled": true,
+        "selectable": true,
+        "selected": false,
+        "columns": [
+         {
+          "key": "worlds",
+          "label": "Worlds",
+          "value": "2",
+          "color": "c_light_gray"
+         }
+        ],
+        "hotkey": "l",
+        "color": "c_white",
+        "key_color": "c_yellow",
+        "mark": {
+         "glyph": "-"
+        }
+       }
+      ],
+      "total": 2,
+      "selection": "multi",
+      "activate": "bn:choose:list"
+     },
+     "affordances": [
+      {
+       "id": "bn:choose:list",
+       "label": "Choose",
+       "keys": [],
+       "enabled": true,
+       "args": {
+        "row": {
+         "component_id": "list"
+        }
+       },
+       "expect": "boundary"
+      },
+      {
+       "id": "bn:cancel",
+       "label": "Cancel",
+       "keys": [],
+       "enabled": true,
+       "role": "cancel",
+       "expect": "screen"
+      },
+      {
+       "id": "UP",
+       "label": "Move up",
+       "keys": [
+        "UP",
+        "k"
+       ],
+       "enabled": true,
+       "expect": "screen"
+      }
+     ],
+     "focus": {
+      "component_id": "list",
+      "row_id": "root:0"
+     },
+     "context": "MAIN_MENU"
+    }
+   ]
+  },
+  "entities": [],
+  "parts": 0
+ },
+ "subscribe result at the main menu": {
+  "at": {
+   "epoch": "epoch:e7f3",
+   "sequence": "0",
+   "revision": "0"
+  },
+  "interaction": {
+   "boundary_id": "boundary:12",
+   "readiness": {
+    "phase": "menu",
+    "game_ready": false,
+    "accepts_interaction_commands": true,
+    "accepts_registered_actions": true
+   },
+   "actions": [
+    {
+     "id": "UP",
+     "name": "Move up",
+     "keys": [
+      "UP",
+      "k"
+     ]
+    }
+   ],
+   "interaction": {
+    "schema_id": "schema:ab",
+    "context": "MAIN_MENU",
+    "kind": "choices",
+    "allow_cancel": true,
+    "allow_set_count": false,
+    "title": "Cataclysm: Bright Nights",
+    "message": "",
+    "choices": [
+     {
+      "id": "tab:new_game",
+      "label": "New Game",
+      "description": "",
+      "denial": "",
+      "enabled": true,
+      "selectable": true,
+      "selected": true,
+      "columns": []
+     },
+     {
+      "id": "tab:load",
+      "label": "Load",
+      "description": "",
+      "denial": "",
+      "enabled": true,
+      "selectable": true,
+      "selected": false,
+      "columns": []
+     },
+     {
+      "id": "tab:quit",
+      "label": "Quit",
+      "description": "",
+      "denial": "",
+      "enabled": true,
+      "selectable": true,
+      "selected": false,
+      "columns": []
+     },
+     {
+      "id": "new_game:custom",
+      "label": "Custom Character",
+      "description": "Allows you to fully customize the character.",
+      "denial": "",
+      "pane_id": "new_game",
+      "enabled": true,
+      "selectable": true,
+      "selected": false,
+      "columns": []
+     },
+     {
+      "id": "new_game:tutorial",
+      "label": "Tutorial",
+      "description": "",
+      "denial": "",
+      "pane_id": "new_game",
+      "enabled": true,
+      "selectable": true,
+      "selected": false,
+      "columns": []
+     }
+    ],
+    "choice_total": 5,
+    "compat": {
+     "focus": {
+      "choice_id": "tab:new_game"
+     },
+     "panes": [
+      {
+       "id": "new_game",
+       "label": "New Game",
+       "role": "focused",
+       "area_id": "",
+       "area_label": "",
+       "area_description": "",
+       "filter": "",
+       "storage_kind": ""
+      },
+      {
+       "id": "load",
+       "label": "Load",
+       "role": "category",
+       "area_id": "",
+       "area_label": "",
+       "area_description": "",
+       "filter": "",
+       "storage_kind": ""
+      },
+      {
+       "id": "quit",
+       "label": "Quit",
+       "role": "category",
+       "area_id": "",
+       "area_label": "",
+       "area_description": "",
+       "filter": "",
+       "storage_kind": ""
+      }
+     ]
+    }
+   },
+   "stack": [
+    {
+     "screen_id": "screen:7",
+     "role": "dialog",
+     "title": "Cataclysm: Bright Nights",
+     "root": {
+      "id": "tabs",
+      "kind": "tabs",
+      "affordances": [
+       "bn:choose:tabs"
+      ],
+      "tabs": [
+       {
+        "id": "tab:new_game",
+        "label": "New Game",
+        "selected": true,
+        "enabled": true
+       },
+       {
+        "id": "tab:load",
+        "label": "Load",
+        "selected": false,
+        "enabled": true
+       },
+       {
+        "id": "tab:quit",
+        "label": "Quit",
+        "selected": false,
+        "enabled": true
+       }
+      ],
+      "select": "bn:choose:tabs",
+      "child": {
+       "id": "panel:new_game",
+       "kind": "panel",
+       "title": "New Game",
+       "child": {
+        "id": "list:new_game",
+        "kind": "list",
+        "affordances": [
+         "bn:choose:list:new_game"
+        ],
+        "columns": [],
+        "rows": [
+         {
+          "id": "new_game:custom",
+          "label": "Custom Character",
+          "description": "Allows you to fully customize the character.",
+          "denial": "",
+          "enabled": true,
+          "selectable": true,
+          "selected": false,
+          "columns": []
+         },
+         {
+          "id": "new_game:tutorial",
+          "label": "Tutorial",
+          "description": "",
+          "denial": "",
+          "enabled": true,
+          "selectable": true,
+          "selected": false,
+          "columns": []
+         }
+        ],
+        "total": 2,
+        "selection": "single",
+        "activate": "bn:choose:list:new_game"
+       }
+      }
+     },
+     "affordances": [
+      {
+       "id": "bn:choose:list:new_game",
+       "label": "Choose",
+       "keys": [],
+       "enabled": true,
+       "args": {
+        "row": {
+         "component_id": "list:new_game"
+        }
+       },
+       "expect": "boundary"
+      },
+      {
+       "id": "bn:choose:tabs",
+       "label": "Switch tab",
+       "keys": [],
+       "enabled": true,
+       "args": {
+        "row": {
+         "component_id": "tabs"
+        }
+       },
+       "expect": "boundary"
+      },
+      {
+       "id": "bn:cancel",
+       "label": "Cancel",
+       "keys": [],
+       "enabled": true,
+       "role": "cancel",
+       "expect": "screen"
+      },
+      {
+       "id": "UP",
+       "label": "Move up",
+       "keys": [
+        "UP",
+        "k"
+       ],
+       "enabled": true,
+       "expect": "screen"
+      }
+     ],
+     "focus": {
+      "component_id": "tabs",
+      "row_id": "tab:new_game"
+     },
+     "context": "MAIN_MENU"
+    }
+   ]
+  },
+  "entities": [],
+  "parts": 0
+ }
+}

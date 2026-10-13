@@ -1,11 +1,10 @@
-//! Serde types for the unified engine protocol 0.1 (newline-delimited JSON-RPC 2.0).
+//! Serde types for the unified engine protocol 0.2 (newline-delimited JSON-RPC 2.0).
 //! Shapes follow protocol-unification.md rev 2 (methods §1, clock §2, values §3).
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-pub const VERSION: &str = "0.1";
-pub const VERSION_02: &str = "0.2";
+pub const VERSION: &str = "0.2";
 /// The raw-byte SHA-256 prefix of the vendored `schema/0.2.schema.json`, computed by `build.rs`: what a 0.2 hello
 /// tells the engine this client was built against.
 pub const SCHEMA_HASH: &str = env!("BN_SCHEMA_HASH");
@@ -730,7 +729,7 @@ pub struct Boundary {
     pub readiness: Readiness,
     pub actions: Vec<Action>,
     pub interaction: Option<Interaction>,
-    /// The open screens, outermost first; the last takes the input. Empty from a 0.1 engine.
+    /// The open screens, outermost first; the last takes the input. Empty while the boundary has only the `interaction`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub stack: Vec<Screen>,
 }
@@ -1241,29 +1240,9 @@ impl HelloParams {
             tiles: false,
             tint_ids: vec![],
             delivery: None,
-            schema: None,
+            schema: Some(SCHEMA_HASH.into()),
             locale: None,
             capabilities: None,
-        }
-    }
-
-    /// The same hello for a 0.2 engine: the version, the schema hash this client was built with, and
-    /// what the client can do under `capabilities` instead of loose members.
-    pub fn into_v02(self, schema: &str) -> Self {
-        Self {
-            versions: vec![VERSION_02.into()],
-            schema: Some(schema.into()),
-            capabilities: Some(Capabilities {
-                tiles: self.tiles.then_some(true),
-                tint_ids: (!self.tint_ids.is_empty()).then_some(self.tint_ids),
-                viewport: self.viewport,
-                delivery: self.delivery,
-            }),
-            viewport: None,
-            tiles: false,
-            tint_ids: vec![],
-            delivery: None,
-            ..self
         }
     }
 

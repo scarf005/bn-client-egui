@@ -7,7 +7,7 @@ use serde_json::{Value, json};
 pub fn fixture(name: &str) -> Value {
     let text = std::fs::read_to_string(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../core/tests/fixtures/design-0.1.json"
+        "/../core/tests/fixtures/design.json"
     ))
     .unwrap();
     serde_json::from_str::<Value>(&text).unwrap()[name].clone()

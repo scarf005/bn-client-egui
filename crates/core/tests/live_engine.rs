@@ -658,3 +658,30 @@ fn live_engine_overmap_gains_and_loses_tile_ids_when_the_client_switches() {
     });
     assert!(model.failure().is_none());
 }
+
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn live_engine_says_hello_with_0_2_and_shows_the_main_menu() {
+    let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
+    let transport = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
+    let mut model = EngineModel::new(Box::new(transport));
+
+    wait_for(&mut model, "subscription", |m| m.live());
+    wait_for(&mut model, "the main menu", |m| {
+        m.menu().is_some() || !m.screens().is_empty()
+    });
+    assert!(model.failure().is_none(), "{:?}", model.failure());
+    let menu = model.menu();
+    println!(
+        "menu: {:?} with {:?}; screens: {:?}",
+        menu.as_ref().map(|m| m.title.clone()),
+        menu.as_ref().map(|m| m.choices.len()),
+        model
+            .screens()
+            .iter()
+            .map(|s| (s.role, s.context.clone()))
+            .collect::<Vec<_>>()
+    );
+    let menu = menu.expect("the main menu is drawn");
+    assert!(menu.choices.iter().any(|c| c.label.contains("New Game")));
+}

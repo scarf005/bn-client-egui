@@ -5,7 +5,7 @@ mod common;
 use bn_client_core::interaction::InvokeError;
 use bn_client_core::protocol::{self, Component, InvokeArgs};
 use bn_client_core::transport::{ScriptHandle, ScriptedTransport};
-use bn_client_core::{ConnectOptions, EngineModel, GameModel, Wire};
+use bn_client_core::{ConnectOptions, EngineModel, GameModel};
 use common::fixture;
 use serde_json::{Value, json};
 
@@ -41,7 +41,6 @@ fn subscribe_with_stack(total: u64) -> Vec<Value> {
 }
 
 fn model(
-    wire: Wire,
     total: u64,
     extra: impl FnOnce(ScriptedTransport) -> ScriptedTransport,
 ) -> (EngineModel, ScriptHandle) {
@@ -50,11 +49,7 @@ fn model(
         t.on("bn.hello", vec![fixture("hello_result")])
             .on("bn.subscribe", subscribe_with_stack(total)),
     );
-    let options = ConnectOptions {
-        wire,
-        ..ConnectOptions::default()
-    };
-    let mut m = EngineModel::open(Box::new(t), options);
+    let mut m = EngineModel::open(Box::new(t), ConnectOptions::default());
     m.poll();
     (m, h)
 }
@@ -68,34 +63,18 @@ fn submits(h: &ScriptHandle) -> Vec<Value> {
 }
 
 #[test]
-fn the_default_hello_speaks_0_1_with_its_loose_members() {
-    let (_, h) = model(Wire::default(), 1, |t| t);
-    let hello = &h.sent()[0]["params"];
-    assert_eq!(hello["versions"], json!(["0.1"]));
-    assert_eq!(hello["delivery"], json!({"credits": 256, "max_hz": 60}));
-    assert!(hello.get("schema").is_none() && hello.get("capabilities").is_none());
-}
-
-#[test]
-fn the_0_2_hello_names_the_schema_and_its_capabilities() {
-    let (_, h) = model(Wire::V02, 1, |t| t);
+fn the_hello_names_0_2_the_schema_and_what_the_client_can_do_the_schema_and_its_capabilities() {
+    let (_, h) = model(1, |t| t);
     let hello = &h.sent()[0]["params"];
     assert_eq!(hello["versions"], json!(["0.2"]));
     assert_eq!(hello["schema"], json!(protocol::SCHEMA_HASH));
-    assert_eq!(
-        hello["capabilities"]["delivery"],
-        json!({"credits": 256, "max_hz": 60})
-    );
-    assert!(hello.get("delivery").is_none() && hello.get("viewport").is_none());
-    assert_eq!(
-        hello["capabilities"]["viewport"],
-        json!({"cols": 40, "rows": 25})
-    );
+    assert_eq!(hello["delivery"], json!({"credits": 256, "max_hz": 60}));
+    assert_eq!(hello["viewport"], json!({"cols": 40, "rows": 25}));
 }
 
 #[test]
 fn the_stack_of_the_boundary_is_the_models_screens() {
-    let (m, _) = model(Wire::V02, 1, |t| t);
+    let (m, _) = model(1, |t| t);
     let [screen] = m.screens() else {
         panic!("one screen: {:?}", m.screens())
     };
@@ -105,7 +84,7 @@ fn the_stack_of_the_boundary_is_the_models_screens() {
 
 #[test]
 fn a_screen_scoped_invoke_goes_out_expecting_the_screen_and_queues_while_busy() {
-    let (mut m, h) = model(Wire::V02, 1, |t| {
+    let (mut m, h) = model(1, |t| {
         t.on("bn.command.submit", vec![fixture("submit_result")])
     });
     m.invoke_affordance("UP", InvokeArgs::default()).unwrap();
@@ -124,7 +103,7 @@ fn a_screen_scoped_invoke_goes_out_expecting_the_screen_and_queues_while_busy() 
 
 #[test]
 fn a_boundary_scoped_invoke_waits_for_the_running_command() {
-    let (mut m, h) = model(Wire::V02, 1, |t| t);
+    let (mut m, h) = model(1, |t| t);
     let args = InvokeArgs {
         row: Some("a".into()),
         ..InvokeArgs::default()
@@ -140,7 +119,7 @@ fn a_boundary_scoped_invoke_waits_for_the_running_command() {
 
 #[test]
 fn an_invoke_the_screen_does_not_offer_is_not_sent() {
-    let (mut m, h) = model(Wire::V02, 1, |t| t);
+    let (mut m, h) = model(1, |t| t);
     assert_eq!(
         m.invoke_affordance("nope", InvokeArgs::default()),
         Err(InvokeError::Unknown("nope".into()))
@@ -164,7 +143,7 @@ fn page_reply(ids: &[&str], total: u64) -> Vec<Value> {
 
 #[test]
 fn the_rows_past_the_first_page_are_asked_for_by_component_id() {
-    let (mut m, h) = model(Wire::V02, 3, |t| {
+    let (mut m, h) = model(3, |t| {
         t.on("bn.interaction.choices", page_reply(&["b", "c"], 3))
     });
     assert_eq!(m.rows(rows_list(&m)).len(), 1);
@@ -205,7 +184,7 @@ fn the_rows_past_the_first_page_are_asked_for_by_component_id() {
 fn a_refused_page_is_not_asked_again_in_the_same_boundary() {
     let refusal = json!({"jsonrpc": "2.0", "error": {"code": 1000, "message": "x",
         "data": {"kind": "stale_boundary"}}});
-    let (mut m, h) = model(Wire::V02, 3, |t| {
+    let (mut m, h) = model(3, |t| {
         t.on("bn.interaction.choices", vec![refusal])
             .on("bn.interaction.choices", page_reply(&["b", "c"], 3))
     });
@@ -225,7 +204,7 @@ fn a_refused_page_is_not_asked_again_in_the_same_boundary() {
 
 #[test]
 fn a_component_that_is_not_a_list_asks_for_nothing() {
-    let (mut m, h) = model(Wire::V02, 3, |t| t);
+    let (mut m, h) = model(3, |t| t);
     m.more_rows("missing");
     assert!(
         !h.sent_methods()
@@ -251,7 +230,7 @@ fn notice(command_id: &str, stage: &str, text: Option<&str>) -> Value {
 
 #[test]
 fn a_rejected_queued_command_is_reported_while_a_later_one_runs() {
-    let (mut m, h) = model(Wire::V02, 1, |t| {
+    let (mut m, h) = model(1, |t| {
         t.on("bn.command.submit", accepted("c:5"))
             .on("bn.command.submit", accepted("c:6"))
     });
@@ -273,7 +252,7 @@ fn a_rejected_queued_command_is_reported_while_a_later_one_runs() {
 
 #[test]
 fn the_last_of_the_queued_commands_ends_the_busy_state_in_any_order() {
-    let (mut m, h) = model(Wire::V02, 1, |t| {
+    let (mut m, h) = model(1, |t| {
         t.on("bn.command.submit", accepted("c:5"))
             .on("bn.command.submit", accepted("c:6"))
     });
@@ -302,10 +281,7 @@ fn model_with_queue(queue: Option<u64>) -> EngineModel {
                 .on("bn.command.submit", accepted("c:2"))
                 .on("bn.command.submit", accepted("c:3")),
         ),
-        ConnectOptions {
-            wire: Wire::V02,
-            ..ConnectOptions::default()
-        },
+        ConnectOptions::default(),
     );
     m.poll();
     m
@@ -338,10 +314,7 @@ fn a_hello_the_engine_refuses_for_its_schema_fails_with_the_engines_error_and_as
     let (t, h) = ScriptedTransport::new();
     let mut m = EngineModel::open(
         Box::new(t.on("bn.hello", vec![refused])),
-        ConnectOptions {
-            wire: Wire::V02,
-            ..ConnectOptions::default()
-        },
+        ConnectOptions::default(),
     );
     m.poll();
     let failure = m.failure().expect("the refusal is reported");
