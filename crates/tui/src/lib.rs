@@ -2,6 +2,7 @@
 
 mod aim;
 mod canvas;
+mod component;
 mod crafting;
 mod pickup;
 mod settings;
@@ -58,6 +59,8 @@ pub struct TuiApp<M: GameModel> {
     /// The action row of the open menu the keyboard focus is on (Alt+Down, Alt+Up), where Enter sends it.
     action_focus: Option<usize>,
     footer: Footer,
+    /// The state of the engine's 0.2 screens, which the components draw.
+    components: component::View,
 }
 
 /// What a click on the open menu can reach: the row ids from the first drawn one, and the tab ids.
@@ -147,6 +150,7 @@ impl<M: GameModel> TuiApp<M> {
             menu_hits: Default::default(),
             action_focus: None,
             footer: Footer::default(),
+            components: Default::default(),
         }
     }
 
@@ -212,6 +216,9 @@ impl<M: GameModel> TuiApp<M> {
         }
         if self.model.loading().is_some() {
             return;
+        }
+        if component::placement(self.model.screens()).is_some() {
+            return self.components.key(&mut self.model, key);
         }
         if key.code == KeyCode::Esc {
             // Esc stops a running activity, else closes the overmap or a menu.
@@ -369,6 +376,9 @@ impl<M: GameModel> TuiApp<M> {
     /// native description (or moves the engine's own cursor), the left click travels there (the first
     /// click shows the route), the right click is the engine's context click.
     pub fn handle_mouse(&mut self, ev: MouseEvent) {
+        if component::placement(self.model.screens()).is_some() {
+            return;
+        }
         if self.model.loading().is_some() {
             return;
         }
@@ -596,6 +606,12 @@ impl<M: GameModel> TuiApp<M> {
         if let Some(failure) = self.model.failure() {
             return Self::draw_failure(f, &failure);
         }
+        let placement = component::placement(self.model.screens());
+        if placement == Some(component::Placement::Full) {
+            return self
+                .components
+                .draw(f, &mut self.model, component::Placement::Full);
+        }
         if let Some(om) = self.model.overmap() {
             return self.draw_overmap(f, &om);
         }
@@ -659,6 +675,10 @@ impl<M: GameModel> TuiApp<M> {
         }
         if let Some(row) = self.actions_open {
             self.draw_action_list(f, row);
+        }
+        if placement == Some(component::Placement::Over) {
+            self.components
+                .draw(f, &mut self.model, component::Placement::Over);
         }
     }
 
