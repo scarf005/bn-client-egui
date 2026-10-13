@@ -26,6 +26,10 @@ const PAGE: usize = 10;
 pub struct TuiApp<M: GameModel> {
     pub model: M,
     selected: usize,
+    /// Where the engine's own cursor was in the menu, and the row Up or Down moved the highlight to when the
+    /// engine binds neither; the engine's cursor moving takes the highlight back.
+    engine_at: Option<usize>,
+    moved: Option<usize>,
     /// Identity of the menu `selected` refers to; a different menu resets the selection.
     menu_sig: Option<(String, usize, Option<String>)>,
     quit: bool,
@@ -131,6 +135,8 @@ impl<M: GameModel> TuiApp<M> {
         Self {
             model,
             selected: 0,
+            engine_at: None,
+            moved: None,
             menu_sig: None,
             terminal: Default::default(),
             quit: false,
@@ -177,6 +183,7 @@ impl<M: GameModel> TuiApp<M> {
                 self.edit = None;
             }
             self.selected = 0;
+            self.moved = None;
             self.action_focus = None;
             self.menu_sig = sig;
         }
@@ -189,7 +196,11 @@ impl<M: GameModel> TuiApp<M> {
                 .iter()
                 .position(|c| menu.focus.as_deref() == Some(c.id.as_str()))
                 .or_else(|| entries.iter().position(|c| c.selected));
-            self.selected = at.unwrap_or(self.selected);
+            if at != self.engine_at {
+                self.moved = None;
+            }
+            self.engine_at = at;
+            self.selected = self.moved.or(at).unwrap_or(self.selected);
             // The rest of a long list comes in pages as the cursor nears the end of what is listed.
             if menu.total > menu.choices.len() && self.selected + PAGE >= entries.len() {
                 self.model.more_choices();
@@ -332,6 +343,41 @@ impl<M: GameModel> TuiApp<M> {
     /// A menu is an engine input context: its keys (navigation, paging, confirm, cancel, tab switch)
     /// are whatever the player bound in it, and the engine moves its own cursor.
     fn menu_key(&mut self, menu: &Menu, key: KeyEvent) {
+        let step = match key.code {
+            KeyCode::Up => -1,
+            KeyCode::Down => 1,
+            _ => 0,
+        };
+        // Up and Down the engine does not bind in this menu move the highlight among its rows, and Return
+        // then chooses the row the highlight is on; the engine's own cursor stays where it was.
+        if step != 0 && !token(key).is_some_and(|t| self.model.key_bound(&t)) {
+            let rows = menu
+                .entries()
+                .iter()
+                .enumerate()
+                .filter(|(_, c)| c.enabled)
+                .map(|(i, _)| i)
+                .collect::<Vec<_>>();
+            let at = rows.iter().position(|i| *i == self.selected);
+            let to = match at {
+                Some(at) => at
+                    .saturating_add_signed(step)
+                    .min(rows.len().saturating_sub(1)),
+                None if step > 0 => 0,
+                None => rows.len().saturating_sub(1),
+            };
+            self.moved = rows.get(to).copied();
+            return;
+        }
+        if key.code == KeyCode::Enter
+            && let Some(row) = self
+                .moved
+                .filter(|moved| Some(*moved) != self.engine_at)
+                .and_then(|moved| menu.entries().get(moved).filter(|c| c.enabled).copied())
+        {
+            self.model.choose(&row.id);
+            return;
+        }
         if token(key).is_some_and(|t| self.model.press(&t)) {
             return;
         }
