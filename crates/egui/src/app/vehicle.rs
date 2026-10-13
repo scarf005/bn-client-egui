@@ -154,8 +154,15 @@ impl<M: GameModel> App<M> {
                 .map(|c| axis(c).abs())
                 .fold(least, i32::max)
         };
-        let (rx, ry) = (reach(|c| c.dx, 6), reach(|c| c.dy, 3));
         let font = egui::TextStyle::Monospace.resolve(ui.style());
+        let cell_size = ui
+            .painter()
+            .layout_no_wrap("0".into(), font.clone(), egui::Color32::WHITE)
+            .size();
+        // The grid stays centred on the cursor and is cut at the column, as the native window cuts it.
+        let fits = |room: f32, size: f32| ((room / size).floor() as i32 - 1).max(0) / 2;
+        let rx = reach(|c| c.dx, 6).min(fits(ui.available_width(), cell_size.x));
+        let ry = reach(|c| c.dy, 3).min(fits(ui.ctx().content_rect().height() * 0.4, cell_size.y));
         let dark = egui::Color32::DARK_GRAY;
         let mut job = egui::text::LayoutJob::default();
         for y in -ry..=ry {
@@ -194,13 +201,15 @@ impl<M: GameModel> App<M> {
             }
             job.append("\n", 0.0, egui::TextFormat::simple(font.clone(), dark));
         }
-        ui.label(job);
+        ui.add(egui::Label::new(job).wrap_mode(egui::TextWrapMode::Extend));
         ui.horizontal(|ui| {
             for (action, glyph) in ARROWS {
                 let id = format!("action:{action}");
-                let row = menu.choices.iter().find(|c| c.id == id);
-                let button = self.control(ui, glyph, &id, row.is_some(), false);
-                let name = row.map_or(action, |c| c.label.as_str()).to_string();
+                let Some(row) = menu.choices.iter().find(|c| c.id == id) else {
+                    continue;
+                };
+                let button = self.control(ui, glyph, &id, true, false);
+                let name = row.label.clone();
                 ui.ctx()
                     .accesskit_node_builder(button.id, |b| b.set_label(name));
                 out.ids.extend(button.enabled().then_some(button.id));
@@ -218,9 +227,6 @@ impl<M: GameModel> App<M> {
             };
             let text = format!("{}{}{}", part.open, part.name, part.close);
             ui.label(egui::RichText::new(text).monospace().color(color));
-        }
-        if vehicle.parts.is_empty() {
-            ui.weak("No part here");
         }
     }
 
@@ -295,7 +301,7 @@ impl<M: GameModel> App<M> {
                 }
             });
             if !tabs.filter.is_empty() {
-                ui.weak(format!("Filter: {}", tabs.filter));
+                ui.weak(&tabs.filter);
             }
         }
         egui::ScrollArea::vertical()
@@ -324,9 +330,6 @@ impl<M: GameModel> App<M> {
                     if response.clicked() && !self.model.busy() {
                         out.chosen = Some(row.id.clone());
                     }
-                }
-                if rows.is_empty() {
-                    ui.weak("Nothing to choose");
                 }
             });
         let Some(row) = rows.iter().find(|r| r.highlighted) else {
@@ -359,7 +362,6 @@ impl<M: GameModel> App<M> {
         });
         let owner = if vehicle.owned { GREEN } else { RED };
         ui.horizontal(|ui| {
-            ui.label("Name:");
             ui.colored_label(owner, format!("{} ({})", vehicle.name, vehicle.owner));
         });
     }
