@@ -1407,8 +1407,9 @@ impl EngineModel {
     }
 }
 
-/// What a target screen other than a shot says: the step of a zone's area (`message`), and for the
-/// map editor the rows of the square under its cursor and the keys of its edit actions.
+/// What a target screen other than a shot says: the step of a zone's area (`message`), for the map
+/// editor the rows of the square under its cursor and the keys of its edit actions, and what the
+/// native look window prints of the square under the cursor.
 fn target_note(i: &protocol::Interaction) -> Option<String> {
     i.target.as_ref().filter(|_| i.overmap.is_none())?;
     let rows = |pane: &str| {
@@ -1428,7 +1429,15 @@ fn target_note(i: &protocol::Interaction) -> Option<String> {
         .map(|c| format!("{} {}", c.hotkey.as_deref().unwrap_or_default(), c.label))
         .collect::<Vec<_>>()
         .join(", ");
-    let note = [markup::plain(&i.message), tile, keys]
+    let described = i
+        .target
+        .as_ref()
+        .and_then(|t| t["description"].as_array())
+        .map_or_else(String::new, |lines| {
+            let lines = lines.iter().filter_map(Value::as_str).map(markup::plain);
+            lines.collect::<Vec<_>>().join(" / ")
+        });
+    let note = [markup::plain(&i.message), tile, keys, described]
         .into_iter()
         .filter(|part| !part.is_empty())
         .collect::<Vec<_>>()
