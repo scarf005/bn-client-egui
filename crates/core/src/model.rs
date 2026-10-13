@@ -271,7 +271,7 @@ pub struct MenuPane {
     /// The name of the area the pane shows, as the native screen prints it.
     pub area: String,
     pub storage: String,
-    /// The line under the pane's title, such as a trade pane's free capacity; empty when none.
+    /// The line under the pane's title, such as a pane's free capacity; empty when none.
     pub description: String,
     pub filter: String,
     /// Where the native pickup list sits (`PICKUP_POSITION`: `left`, `right`, `overlapping` or `cursor`); empty otherwise.
