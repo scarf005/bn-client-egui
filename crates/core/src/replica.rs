@@ -21,7 +21,6 @@ pub enum Outcome {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Sound {
     pub text: String,
-    pub volume: u64,
 }
 
 /// A `message.logged` event: a new line, or a repeat that replaces the line with the same `id`.
@@ -181,7 +180,6 @@ impl Replica {
                     // A sound the engine also wrote to the message log is already shown there.
                     "sound.heard" if data["logged"] != true => self.sounds.push(Sound {
                         text: text.to_string(),
-                        volume: data["volume"].as_u64().unwrap_or(0),
                     }),
                     _ => {}
                 }

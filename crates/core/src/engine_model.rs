@@ -1552,7 +1552,6 @@ impl GameModel for EngineModel {
         self.sounds
             .extend(self.replica.take_sounds().into_iter().map(|s| Heard {
                 text: s.text,
-                volume: s.volume,
                 at: now,
             }));
         self.sounds
@@ -1747,8 +1746,8 @@ impl GameModel for EngineModel {
         &self.messages
     }
 
-    fn sounds(&self) -> &[Heard] {
-        &self.sounds
+    fn sounds(&self) -> Vec<crate::sounds::SoundLine> {
+        crate::sounds::grouped(&self.sounds, self.clock.now())
     }
 
     fn sidebar(&self) -> Vec<crate::sidebar::Line> {

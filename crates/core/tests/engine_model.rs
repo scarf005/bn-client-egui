@@ -2595,6 +2595,10 @@ fn heard(sequence: u32, text: &str, logged: Option<bool>) -> serde_json::Value {
         "sequence": sequence.to_string(), "revision": "32", "type": "sound.heard", "data": data}]}})
 }
 
+fn sound_texts(m: &EngineModel) -> Vec<String> {
+    m.sounds().into_iter().map(|s| s.text).collect()
+}
+
 #[test]
 fn a_heard_sound_the_engine_logged_is_not_repeated_as_a_sound_line() {
     let (t, h) = session();
@@ -2621,13 +2625,8 @@ fn a_heard_sound_the_engine_did_not_log_is_a_sound_not_a_command_line() {
     h.push(heard(42, "Tick.", Some(false)));
     h.push(heard(43, "Tock.", None));
     m.poll();
-    let texts = m
-        .sounds()
-        .iter()
-        .map(|s| s.text.as_str())
-        .collect::<Vec<_>>();
+    let texts = sound_texts(&m);
     assert_eq!(texts, ["Tick.", "Tock."]);
-    assert_eq!(m.sounds()[0].volume, 52);
     assert!(m.messages().is_empty(), "{:?}", m.messages());
 }
 
@@ -2639,10 +2638,6 @@ fn a_logged_sound_is_judged_by_its_flag_not_by_matching_native_text() {
     h.push(heard(42, "Tick.", Some(false)));
     h.push(logged(43, "7", "Tick. Tick. You open the door.", 1));
     m.poll();
-    let texts = m
-        .sounds()
-        .iter()
-        .map(|s| s.text.as_str())
-        .collect::<Vec<_>>();
+    let texts = sound_texts(&m);
     assert_eq!(texts, ["Tick."]);
 }

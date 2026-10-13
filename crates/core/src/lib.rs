@@ -10,6 +10,7 @@ pub mod model;
 pub mod protocol;
 pub mod replica;
 pub mod sidebar;
+pub mod sounds;
 pub mod transport;
 pub mod watchdog;
 

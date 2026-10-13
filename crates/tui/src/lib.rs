@@ -653,7 +653,12 @@ impl<M: GameModel> TuiApp<M> {
             .messages()
             .iter()
             .map(|m| Line::styled(m.as_str(), Style::new().fg(Color::DarkGray)));
-        let all = native.chain(commands).collect::<Vec<_>>();
+        // Sounds the game did not log fade from light to dark gray as they age.
+        let sounds = self.model.sounds().into_iter().map(|s| {
+            let shade = (190.0 * s.alpha) as u8;
+            Line::styled(s.text, Style::new().fg(Color::Rgb(shade, shade, shade)))
+        });
+        let all = native.chain(commands).chain(sounds).collect::<Vec<_>>();
         let end = all.len().saturating_sub(self.log_back.min(all.len()));
         let lines = all[end.saturating_sub(LOG_LINES)..end].to_vec();
         f.render_widget(

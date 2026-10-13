@@ -141,8 +141,6 @@ pub struct LogLine {
 pub struct Heard {
     /// What the game says it heard, localized.
     pub text: String,
-    /// The engine's decibels.
-    pub volume: u64,
     /// When the client received it, on the model's clock.
     pub at: std::time::Duration,
 }
@@ -742,9 +740,9 @@ pub trait GameModel {
     fn drop_item(&mut self, index: usize);
     /// Client-side lines: command results and errors.
     fn messages(&self) -> &[String];
-    /// Sounds heard that the game's message log does not hold, oldest first.
-    fn sounds(&self) -> &[Heard] {
-        &[]
+    /// Sounds heard that the game's message log does not hold: grouped, oldest first, faded by age.
+    fn sounds(&self) -> Vec<crate::sounds::SoundLine> {
+        vec![]
     }
     /// The avatar's sidebar as coloured lines; empty before the engine reports one.
     fn sidebar(&self) -> Vec<crate::sidebar::Line> {
