@@ -21,7 +21,6 @@ mod sounds;
 mod spells;
 mod target;
 mod terminal;
-mod trade;
 mod vehicle;
 
 /// A command must outlast this before the controls show it; keeps short commands from blinking the UI.
@@ -165,7 +164,6 @@ pub struct App<M: GameModel> {
     /// The left edge of the sidebar as last drawn: what the pickup list at the right docks against.
     sidebar_left: Option<f32>,
     inventory: inventory::Inventory,
-    trade: trade::Trade,
     /// The engine's selected row of the open menu, to keep it in view when the wheel moves it.
     menu_cursor: Option<String>,
     /// The text prompt that already took the keyboard focus when it opened.
@@ -217,7 +215,6 @@ impl<M: GameModel> App<M> {
             pickup: Default::default(),
             sidebar_left: None,
             inventory: Default::default(),
-            trade: Default::default(),
             menu_cursor: None,
             prompt_focused: None,
             scrolled_to: None,

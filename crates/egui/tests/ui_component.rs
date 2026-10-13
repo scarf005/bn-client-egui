@@ -214,7 +214,14 @@ fn split_draws_every_child_side_by_side() {
 
 #[test]
 fn panel_shows_title_subtitle_and_stats_with_their_maximum_and_unit() {
-    let panel = example("trade.json", "trade pane with carried against capacity");
+    let panel = json!({
+        "id": "panel:pane-player", "kind": "panel", "title": "You", "subtitle": "Player items",
+        "stats": [
+            {"key": "weight", "label": "Weight", "value": "1.17", "max": "45.00", "unit": "kg"},
+            {"key": "volume", "label": "Volume", "value": "0.03", "max": "15.00", "unit": "L"}
+        ],
+        "child": {"id": "text:pane-player", "kind": "text", "markup": "Free capacity: 43.83 kg, 14.97 L"}
+    });
     let (h, _) = harness(dialog(panel, vec![]));
     h.get_by_label("You");
     h.get_by_label("Player items");
@@ -272,7 +279,8 @@ fn key_field_takes_the_next_key_as_the_text_of_its_fill() {
 
 #[test]
 fn text_draws_its_markup_without_the_tags_and_its_tone() {
-    let text = example("trade.json", "trade balance in the trader's favour");
+    let text =
+        json!({"id": "message", "kind": "text", "markup": "You'll owe $12.00", "tone": "bad"});
     let (h, _) = harness(dialog(text, vec![]));
     h.get_by_label("You'll owe $12.00");
     let marked =

@@ -371,7 +371,8 @@ fn a_key_field_takes_the_next_key_as_its_value() {
 
 #[test]
 fn a_text_takes_the_tone_the_markup_colours_and_wraps_at_the_width() {
-    let mut owed = example("trade.json", "trade balance in the trader's favour");
+    let mut owed =
+        json!({"id": "message", "kind": "text", "markup": "You'll owe $12.00", "tone": "bad"});
     let (mut app, _) = open(screen(owed.clone(), json!([])));
     assert_eq!(fg(&render(&mut app), "You'll owe"), Color::Red, "bad tone");
     owed["tone"] = json!(null);
@@ -388,7 +389,8 @@ fn a_text_takes_the_tone_the_markup_colours_and_wraps_at_the_width() {
 
 #[test]
 fn a_text_taller_than_its_area_scrolls_and_stops_at_its_end() {
-    let mut body = example("trade.json", "trade balance in the trader's favour");
+    let mut body =
+        json!({"id": "message", "kind": "text", "markup": "You'll owe $12.00", "tone": "bad"});
     body["markup"] = json!(
         (1..=30)
             .map(|n| format!("line {n}"))
@@ -470,7 +472,8 @@ fn a_canvas_is_drawn_in_the_colours_the_engine_drew_it_with_and_its_keys_are_the
 
 #[test]
 fn the_bar_shows_keys_and_a_denial_and_a_denied_key_sends_nothing_while_any_key_runs_the_rest() {
-    let body = example("trade.json", "trade balance in the trader's favour");
+    let body =
+        json!({"id": "message", "kind": "text", "markup": "You'll owe $12.00", "tone": "bad"});
     let affordances = json!([
         example(
             "interaction.json",

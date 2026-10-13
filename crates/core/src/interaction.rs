@@ -952,11 +952,6 @@ pub const OVERRIDES: &[Override] = &[
         slice: "S10",
     },
     Override {
-        module: "crates/egui/src/app/trade.rs",
-        screen: "NPC_TRADE",
-        slice: "S4",
-    },
-    Override {
         module: "crates/egui/src/app/vehicle.rs",
         screen: "VEH_INTERACT",
         slice: "S8",
@@ -1000,10 +995,5 @@ pub const OVERRIDES: &[Override] = &[
         module: "crates/tui/src/terminal.rs",
         screen: "COMPUTER_TERMINAL and the extended description",
         slice: "S10",
-    },
-    Override {
-        module: "crates/tui/src/trade.rs",
-        screen: "NPC_TRADE",
-        slice: "S4",
     },
 ];

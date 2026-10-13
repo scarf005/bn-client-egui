@@ -7,7 +7,6 @@ mod crafting;
 mod pickup;
 mod settings;
 mod terminal;
-mod trade;
 
 use bn_client_core::markup::plain;
 use bn_client_core::protocol::SidebarSide;
@@ -56,8 +55,6 @@ pub struct TuiApp<M: GameModel> {
     edit: Option<settings::Edit>,
     /// The advanced inventory's drawn rows and queued inputs.
     aim: aim::Aim,
-    /// The trade window's drawn rows and typed count.
-    trade: trade::Trade,
     pickup: pickup::Pickup,
     terminal: terminal::Terminal,
     /// Where the open menu's rows and tabs were last drawn, for mouse clicks.
@@ -172,7 +169,6 @@ impl<M: GameModel> TuiApp<M> {
             edit: None,
             hovered: None,
             aim: Default::default(),
-            trade: Default::default(),
             pickup: Default::default(),
             menu_hits: Default::default(),
             action_focus: None,
@@ -277,7 +273,6 @@ impl<M: GameModel> TuiApp<M> {
                 "CRAFTING" => self.crafting_key(&menu, key),
                 // Every key of the advanced inventory is the engine's, Tab included (it swaps panes).
                 "ADVANCED_INVENTORY" => self.menu_key(&menu, key),
-                "NPC_TRADE" => self.trade_key(&menu, key),
                 "PICKUP" => self.pickup_key(&menu, key),
                 _ if (menu.terminal() || menu.description()) && self.terminal_key(key) => {}
                 _ if self.footer_key(key) => {}
@@ -465,12 +460,6 @@ impl<M: GameModel> TuiApp<M> {
             .filter(|m| m.context == "ADVANCED_INVENTORY")
         {
             return self.aim_mouse(&menu, ev);
-        }
-        if ev.kind == MouseEventKind::Down(MouseButton::Left)
-            && self.model.menu().is_some_and(|m| m.context == "NPC_TRADE")
-        {
-            self.trade_click(ev.column, ev.row);
-            return;
         }
         if ev.kind == MouseEventKind::Down(MouseButton::Left)
             && self.model.menu().is_some_and(|m| m.context == "PICKUP")
@@ -774,7 +763,6 @@ impl<M: GameModel> TuiApp<M> {
             match menu.context.as_str() {
                 "CRAFTING" => self.draw_crafting(f, &menu),
                 "ADVANCED_INVENTORY" => self.draw_aim(f, &menu),
-                "NPC_TRADE" => self.draw_trade(f, &menu),
                 "PICKUP" => self.draw_pickup(f, &menu),
                 _ if menu.terminal() || menu.description() => self.draw_terminal(f, &menu),
                 _ if menu.canvas.is_some() => {
