@@ -3,26 +3,11 @@
 //!
 //! Drawing reads the engine's data and collects what the player did as `Intent`s. Applying an intent only
 //! calls the interaction core (`bn_client_core::interaction`), which decides what is sent.
-//!
-//! Core API assumed from lane K1 (placeholders until phase 2), all on `Interaction` unless free:
-//! - `press(&mut self, screen, key, page, rows: &dyn Fn(&List) -> Vec<&Row>) -> Outcome`: the one key entry
-//!   (bound keys, roles, hotkeys, Tab, tabs, grids, moving the focus, answering a question being asked).
-//! - `activate(&mut self, screen, affordance_id) -> Outcome`: a click on a button, row or cell; gates on
-//!   disabled affordances and rows, begins the argument collection.
-//! - `fill(&mut self, screen, affordance_id, form_id, field_id, value) -> Outcome`.
-//! - `ask(&self) -> Option<&Ask>` with `Ask { affordance_id, count: Option<i64>, text: Option<String>,
-//!   panes: Vec<String> }` (the draft being collected; panes are ids of the candidate `panel`s);
-//!   `answer_text(&str)`, `answer_pane(screen, &str) -> Outcome`, `confirm(screen) -> Outcome`, `cancel()`.
-//! - `Outcome { invoke: Option<(String, InvokeArgs)>, denial: Option<Text>, revealed: Option<String>,
-//!   consumed: bool }`; the renderer sends `invoke` through `GameModel::invoke_affordance`.
-//! - free `row_availability(&Affordance, Option<&Row>) -> Availability { enabled, denial: Option<Text> }` and
-//!   `form_fill(&Screen, &Form, field_id) -> Option<&Affordance>`.
-//! - `sync` also seeds the focus from the row a list marks selected when the screen names no cursor.
 
 use super::App;
 use crate::{a11y, editor, text};
 use bn_client_core::colors::ColorMap;
-use bn_client_core::interaction::{self, InvokeError};
+use bn_client_core::interaction::{self, ArgKind, InvokeError, Reason};
 use bn_client_core::protocol::{
     Affordance, CanvasComponent, Component, Editor, EditorValue, FieldKind, Form, FormField, Grid,
     List, MapComponent, MapMode, PanelStat, Row, Screen, ScreenRole, Selection, Text, TextBlock,
@@ -157,8 +142,7 @@ fn editor_of(field: &FormField) -> Editor {
 }
 
 /// The engine's window with its curses colours resolved from the built-in palette.
-fn canvas_of(canvas: &CanvasComponent) -> Canvas {
-    let colors = ColorMap::default();
+fn canvas_of(canvas: &CanvasComponent, colors: &ColorMap) -> Canvas {
     Canvas {
         cols: canvas.cols,
         rows: canvas
@@ -175,6 +159,42 @@ fn canvas_of(canvas: &CanvasComponent) -> Canvas {
             })
             .collect(),
     }
+}
+
+/// The rows of `list` that its own screen holds.
+fn held(list: &List) -> Vec<&Row> {
+    list.rows.iter().collect()
+}
+
+/// The screen with the rows fetched past each list's first page folded in, which is what the core's key
+/// entry takes: its row lookup cannot borrow them from the model.
+fn loaded<M: GameModel>(model: &M, screen: &Screen) -> Screen {
+    fn fold<M: GameModel>(model: &M, component: &mut Component) {
+        match component {
+            Component::List(list) => {
+                let rows = model.rows(list).into_iter().cloned().collect();
+                list.rows = rows;
+            }
+            Component::Tabs(t) => t.child.iter_mut().for_each(|c| fold(model, c)),
+            Component::Panel(p) => p.child.iter_mut().for_each(|c| fold(model, c)),
+            Component::Split(s) => s.children.iter_mut().for_each(|c| fold(model, c)),
+            _ => {}
+        }
+    }
+    let mut screen = screen.clone();
+    screen.root.iter_mut().for_each(|root| fold(model, root));
+    screen
+}
+
+/// The client's words for a refusal the engine gave no reason for.
+fn reason_words(reason: Reason) -> String {
+    match reason {
+        Reason::NoScreen | Reason::Unknown | Reason::BadArgs => "Not available.",
+        Reason::Disabled | Reason::RowDisabled | Reason::NotOnThisRow => "Not available now.",
+        Reason::Missing(_) => "Choose something first.",
+        Reason::Busy => "Busy.",
+    }
+    .into()
 }
 
 /// `text` in the game colour, as the native markup writes it.
@@ -219,18 +239,13 @@ impl<M: GameModel> App<M> {
                 .collect::<Vec<_>>()
         });
         // A text box has the typing; its keys are not the screen's.
-        let keys = keys
-            .into_iter()
-            .filter(|_| !ctx.egui_wants_keyboard_input());
+        let keys = keys.into_iter().filter(|_| !ctx.text_edit_focused());
         for key in keys {
             let Some(top) = sliced(self.model.screens()) else {
                 return;
             };
-            let model = &self.model;
-            let out = self
-                .screens
-                .interaction
-                .press(top, &key, page, &|list| model.rows(list));
+            let known = loaded(&self.model, top);
+            let out = self.screens.interaction.press(&known, &key, page, &held);
             self.settle(out);
         }
     }
@@ -238,7 +253,11 @@ impl<M: GameModel> App<M> {
     /// Shows what the core decided and sends the call it built.
     fn settle(&mut self, out: interaction::Outcome) {
         self.keys_consumed |= out.consumed;
-        self.screens.denial = out.denial.as_ref().map(Text::shown);
+        self.screens.denial = out
+            .denial
+            .as_ref()
+            .map(Text::shown)
+            .or_else(|| out.reason.map(reason_words));
         if out.revealed.is_some() {
             self.screens.reveal = out.revealed;
         }
@@ -339,8 +358,7 @@ impl<M: GameModel> App<M> {
 
     /// The game colour as a colour of the screen.
     fn tint(&self, name: &str) -> Option<egui::Color32> {
-        let runs = self.model.styled(&tagged(Some(name), "x"));
-        runs.first().and_then(|r| r.color).map(super::rgb)
+        Some(super::rgb(self.model.colors().resolve(name).0))
     }
 
     /// Buttons for the affordances: enabled as the affordance (and the row, when it overrides) says, with the
@@ -461,7 +479,7 @@ impl<M: GameModel> App<M> {
             Component::Text(block) => self.text_block(ui, block),
             Component::Grid(grid) => self.grid(ui, grid, out),
             Component::Map(map) => self.map_slot(ui, map),
-            Component::Canvas(canvas) => self.canvas(ui, &canvas_of(canvas)),
+            Component::Canvas(canvas) => self.canvas(ui, &canvas_of(canvas, self.model.colors())),
         }
         if !matches!(c, Component::List(_)) {
             self.component_buttons(ui, screen, c, None, out);
@@ -790,10 +808,22 @@ impl<M: GameModel> App<M> {
         };
         ui.group(|ui| {
             ui.label(egui::RichText::new(markup::plain(&aff.label.shown())).strong());
-            if let Some(count) = ask.count {
+            if let (Some(count), Some(ArgKind::Count)) = (ask.count, ask.asking) {
                 ui.label(egui::RichText::new(count.to_string()).monospace());
             }
-            if let Some(typed) = &ask.text {
+            if let Some(select) = &ask.select {
+                ui.horizontal_wrapped(|ui| {
+                    for option in &select.options {
+                        let label = markup::plain(&option.label.shown());
+                        if ui.button(label).clicked() {
+                            out.push(Intent::Text(option.id.clone()));
+                            out.push(Intent::Confirm);
+                        }
+                    }
+                });
+            } else if ask.capture {
+                ui.label("Press the new key");
+            } else if let (Some(typed), Some(ArgKind::Text)) = (&ask.text, ask.asking) {
                 let mut shown = typed.clone();
                 let edit = ui.text_edit_singleline(&mut shown);
                 if edit.changed() {

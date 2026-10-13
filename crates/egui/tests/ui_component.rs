@@ -134,10 +134,13 @@ fn list_draws_header_rows_columns_values_and_a_rows_own_denial() {
     h.get_by_label("$12.00");
     h.get_by_label("hammer").click();
     h.run_steps(3);
-    assert!(!disabled(&h, "bn:choose:list:npc"));
     assert!(
         disabled(&h, "bn:set_count:list:npc"),
-        "the row allows the other affordance only"
+        "the row turns this one off"
+    );
+    assert!(
+        disabled(&h, "bn:choose:list:npc"),
+        "the row lists only the other affordance"
     );
 }
 
@@ -228,8 +231,8 @@ fn form_field_set_by_the_player_runs_the_forms_affordance_with_the_field_and_tex
     let screen = example("menu.json", "options page with each editor type");
     let (mut h, script) = harness(screen);
     let field = h
-        .get_all_by_label("Safe mode proximity distance")
-        .find(|n| n.accesskit_node().role() == egui::accesskit::Role::TextInput)
+        .get_all_by_role(egui::accesskit::Role::TextInput)
+        .find(|n| n.accesskit_node().value().as_deref() == Some("7"))
         .unwrap();
     field.focus();
     field.type_text("5");
