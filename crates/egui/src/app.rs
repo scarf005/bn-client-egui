@@ -8,6 +8,7 @@ use std::collections::VecDeque;
 
 mod aim;
 mod character;
+mod component;
 mod construction;
 mod crafting;
 mod inventory;
@@ -129,6 +130,8 @@ pub struct App<M: GameModel> {
     effects: Effects,
     /// The engine's look cursor was up at the last frame.
     was_looking: bool,
+    /// The client-local state of the top screen when the engine describes it by components.
+    screens: component::Screens,
     crafting: crafting::Crafting,
     construction: construction::Construction,
     aim: aim::Aim,
@@ -196,6 +199,7 @@ impl<M: GameModel> App<M> {
             native_live: a11y::Announcer::new(" "),
             command_live: a11y::Announcer::new(" "),
             status_live: a11y::Announcer::new(", "),
+            screens: Default::default(),
             crafting: Default::default(),
             construction: Default::default(),
             aim: Default::default(),
@@ -384,7 +388,10 @@ impl<M: GameModel> App<M> {
         let interrupted =
             ui.ctx().input(|i| i.key_pressed(egui::Key::Escape)) && self.model.interrupt();
         self.palette_keys(ui.ctx());
-        self.game_keys(ui.ctx(), interrupted);
+        match component::sliced(self.model.screens()) {
+            Some(_) => self.component_keys(ui.ctx()),
+            None => self.game_keys(ui.ctx(), interrupted),
+        }
         let open = self.model.menu();
         if menu_forwards_keys(open.as_ref()) && !self.aim.editing {
             // Arrow keys belong to the game, whichever widget was clicked last; Tab still moves focus,
@@ -408,7 +415,7 @@ impl<M: GameModel> App<M> {
         egui::Panel::top("bar").show(ui, |ui| self.bar(ui));
         if self.model.menu().is_some_and(|m| m.context == "MAIN_MENU") {
             // The title screen is only its menu: no map, sidebar or log of a game that is not running.
-            self.menu(ui.ctx());
+            self.menu_or_screen(ui.ctx());
             return;
         }
         let room = ui.available_width();
@@ -435,7 +442,7 @@ impl<M: GameModel> App<M> {
                 }
             });
         self.palette(ui.ctx());
-        self.menu(ui.ctx());
+        self.menu_or_screen(ui.ctx());
         self.target_panel(ui.ctx());
     }
 
@@ -443,50 +450,6 @@ impl<M: GameModel> App<M> {
     /// Named like the engine's key names (`SPACE`, `ESC`, `RETURN`, `UP`, `PPAGE`).
     fn game_keys(&mut self, ctx: &egui::Context, interrupted: bool) {
         use egui::Key;
-        const NAMED: [(Key, &str); 13] = [
-            (Key::ArrowUp, "UP"),
-            (Key::ArrowDown, "DOWN"),
-            (Key::ArrowLeft, "LEFT"),
-            (Key::ArrowRight, "RIGHT"),
-            (Key::Escape, "ESC"),
-            (Key::Enter, "RETURN"),
-            (Key::Tab, "TAB"),
-            (Key::Backspace, "BACKSPACE"),
-            (Key::Delete, "DELETE"),
-            (Key::Home, "HOME"),
-            (Key::End, "END"),
-            (Key::PageUp, "PPAGE"),
-            (Key::PageDown, "NPAGE"),
-        ];
-        const FUNCTION: [Key; 12] = [
-            Key::F1,
-            Key::F2,
-            Key::F3,
-            Key::F4,
-            Key::F5,
-            Key::F6,
-            Key::F7,
-            Key::F8,
-            Key::F9,
-            Key::F10,
-            Key::F11,
-            Key::F12,
-        ];
-        // The engine's name for a pressed key, with Ctrl and Shift folded in (`CTRL+S`, `BACKTAB`).
-        let name = |key: Key, mods: egui::Modifiers| {
-            let base = NAMED
-                .iter()
-                .find(|(k, _)| *k == key)
-                .map(|(_, n)| n.to_string())
-                .or_else(|| {
-                    FUNCTION
-                        .iter()
-                        .position(|k| *k == key)
-                        .map(|n| keys::function(n as u8 + 1))
-                })
-                .or_else(|| mods.ctrl.then(|| key.name().to_string()))?;
-            Some(keys::chord(&base, mods.ctrl, mods.shift))
-        };
         let typed = ctx.input(|i| {
             i.events
                 .iter()
@@ -536,7 +499,7 @@ impl<M: GameModel> App<M> {
                             // Alt with an arrow moves the focus among the action rows, not the engine's cursor.
                             && !(modifiers.alt && matches!(key, Key::ArrowUp | Key::ArrowDown)) =>
                         {
-                            name(*key, *modifiers)
+                            key_name(*key, *modifiers)
                         }
                         _ => None,
                     })
@@ -588,7 +551,7 @@ impl<M: GameModel> App<M> {
                 modifiers,
                 ..
             } = event
-                && let Some(name) = name(key, modifiers)
+                && let Some(name) = key_name(key, modifiers)
             {
                 match (pressed, repeat) {
                     (true, true) => self.held = Some(name),
@@ -1224,6 +1187,53 @@ impl<M: GameModel> App<M> {
             ui.ctx().request_repaint();
         }
     }
+}
+
+/// The engine's name for a pressed key, with Ctrl and Shift folded in (`CTRL+S`, `BACKTAB`). Named like the
+/// engine's key names (`SPACE`, `ESC`, `RETURN`, `UP`, `PPAGE`); typed characters arrive as text instead.
+fn key_name(key: egui::Key, mods: egui::Modifiers) -> Option<String> {
+    use egui::Key;
+    const NAMED: [(Key, &str); 13] = [
+        (Key::ArrowUp, "UP"),
+        (Key::ArrowDown, "DOWN"),
+        (Key::ArrowLeft, "LEFT"),
+        (Key::ArrowRight, "RIGHT"),
+        (Key::Escape, "ESC"),
+        (Key::Enter, "RETURN"),
+        (Key::Tab, "TAB"),
+        (Key::Backspace, "BACKSPACE"),
+        (Key::Delete, "DELETE"),
+        (Key::Home, "HOME"),
+        (Key::End, "END"),
+        (Key::PageUp, "PPAGE"),
+        (Key::PageDown, "NPAGE"),
+    ];
+    const FUNCTION: [Key; 12] = [
+        Key::F1,
+        Key::F2,
+        Key::F3,
+        Key::F4,
+        Key::F5,
+        Key::F6,
+        Key::F7,
+        Key::F8,
+        Key::F9,
+        Key::F10,
+        Key::F11,
+        Key::F12,
+    ];
+    let base = NAMED
+        .iter()
+        .find(|(k, _)| *k == key)
+        .map(|(_, n)| n.to_string())
+        .or_else(|| {
+            FUNCTION
+                .iter()
+                .position(|k| *k == key)
+                .map(|n| keys::function(n as u8 + 1))
+        })
+        .or_else(|| mods.ctrl.then(|| key.name().to_string()))?;
+    Some(keys::chord(&base, mods.ctrl, mods.shift))
 }
 
 /// Whether Tab and Shift+Tab are the engine's: its screen has tabs and no text box takes the keyboard.
