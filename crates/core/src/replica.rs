@@ -17,6 +17,13 @@ pub enum Outcome {
     Resubscribe(&'static str),
 }
 
+/// A `sound.heard` event the message log has no line for.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Sound {
+    pub text: String,
+    pub volume: u64,
+}
+
 /// A `message.logged` event: a new line, or a repeat that replaces the line with the same `id`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LoggedLine {
@@ -52,7 +59,7 @@ pub struct Replica {
     cells: HashMap<String, HashMap<(i32, i32, i32), Cell>>,
     /// `(parts expected, next part index)` while a snapshot is loading.
     loading: Option<(u32, u32)>,
-    log: Vec<String>,
+    sounds: Vec<Sound>,
     lines: Vec<LoggedLine>,
     facts: Vec<Fact>,
 }
@@ -172,7 +179,10 @@ impl Replica {
                             .map_or(1, |n| n.clamp(1, 1 << 31) as u32),
                     }),
                     // A sound the engine also wrote to the message log is already shown there.
-                    "sound.heard" if data["logged"] != true => self.log.push(text.to_string()),
+                    "sound.heard" if data["logged"] != true => self.sounds.push(Sound {
+                        text: text.to_string(),
+                        volume: data["volume"].as_u64().unwrap_or(0),
+                    }),
                     _ => {}
                 }
             }
@@ -309,8 +319,8 @@ impl Replica {
         std::mem::take(&mut self.lines)
     }
 
-    /// Sounds since the last call.
-    pub fn take_log(&mut self) -> Vec<String> {
-        std::mem::take(&mut self.log)
+    /// Sounds the message log does not hold, since the last call.
+    pub fn take_sounds(&mut self) -> Vec<Sound> {
+        std::mem::take(&mut self.sounds)
     }
 }

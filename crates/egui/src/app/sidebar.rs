@@ -190,6 +190,8 @@ impl<M: GameModel> App<M> {
             self.model.messages(),
             [&native_live, &command_live],
         );
+        let now = self.clock.now();
+        super::sounds::show(ui, &super::sounds::grouped(self.model.sounds(), now));
     }
 }
 

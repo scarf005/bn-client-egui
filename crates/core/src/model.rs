@@ -136,6 +136,17 @@ pub struct LogLine {
     pub label: String,
 }
 
+/// A sound the avatar heard that the game did not write to its message log.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Heard {
+    /// What the game says it heard, localized.
+    pub text: String,
+    /// The engine's decibels.
+    pub volume: u64,
+    /// When the client received it, on the model's clock.
+    pub at: std::time::Duration,
+}
+
 impl LogLine {
     pub fn shown(&self) -> String {
         self.label.clone()
@@ -731,6 +742,10 @@ pub trait GameModel {
     fn drop_item(&mut self, index: usize);
     /// Client-side lines: command results and errors.
     fn messages(&self) -> &[String];
+    /// Sounds heard that the game's message log does not hold, oldest first.
+    fn sounds(&self) -> &[Heard] {
+        &[]
+    }
     /// The avatar's sidebar as coloured lines; empty before the engine reports one.
     fn sidebar(&self) -> Vec<crate::sidebar::Line> {
         vec![]

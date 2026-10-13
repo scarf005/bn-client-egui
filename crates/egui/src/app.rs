@@ -16,6 +16,7 @@ mod menu;
 mod palette;
 mod pickup;
 mod sidebar;
+mod sounds;
 mod spells;
 mod target;
 mod terminal;

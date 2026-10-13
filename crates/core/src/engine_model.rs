@@ -7,8 +7,8 @@ use crate::keys;
 use crate::markup::{self, Run};
 use crate::model::{
     ActionEntry, Canvas, CanvasRun, Cell, CommandStatus, Effect, Failure, FailureKind, GameModel,
-    Layer, Loading, LogLine, Menu, MenuChoice, MenuField, MenuPane, Mutation, Overmap, OvermapCell,
-    OvermapTile, PaneTotals, Pos, Rgb, Shape,
+    Heard, Layer, Loading, LogLine, Menu, MenuChoice, MenuField, MenuPane, Mutation, Overmap,
+    OvermapCell, OvermapTile, PaneTotals, Pos, Rgb, Shape,
 };
 use crate::protocol::{
     self, CanvasWire, Cell as WorldCell, Entity, Incoming, InvokeArgs, Known, LoadingNotice, Look,
@@ -25,6 +25,8 @@ const VIEW: Pos = Pos { x: 40, y: 25 };
 /// A resized panel is sent to the engine once it has stayed this size for this long.
 /// The engine takes up to this many cells on a side.
 const MAX_VIEWPORT: i32 = 512;
+/// Heard sounds kept; older ones have long faded.
+const MAX_SOUNDS: usize = 50;
 const RESIZE_DEBOUNCE: std::time::Duration = std::time::Duration::from_millis(250);
 
 /// How a session starts.
@@ -132,6 +134,7 @@ pub struct EngineModel {
     resized: Option<Duration>,
     clock: Clock,
     messages: Vec<String>,
+    sounds: Vec<Heard>,
     native: Vec<LogLine>,
     ground: Vec<String>,
     inventory: Vec<String>,
@@ -378,6 +381,7 @@ impl EngineModel {
             resized: None,
             clock: Clock::default(),
             messages: vec![],
+            sounds: vec![],
             native: vec![],
             ground: vec![],
             inventory: vec![],
@@ -1544,7 +1548,15 @@ impl GameModel for EngineModel {
                 engine: None,
             });
         }
-        self.messages.extend(self.replica.take_log());
+        let now = self.clock.now();
+        self.sounds
+            .extend(self.replica.take_sounds().into_iter().map(|s| Heard {
+                text: s.text,
+                volume: s.volume,
+                at: now,
+            }));
+        self.sounds
+            .drain(..self.sounds.len().saturating_sub(MAX_SOUNDS));
         for line in self.replica.take_lines() {
             let line = LogLine {
                 color: line.color.map(|name| self.colors.resolve(&name).0),
@@ -1573,6 +1585,7 @@ impl GameModel for EngineModel {
         let at_main_menu = self.menu().is_some_and(|m| m.context == "MAIN_MENU");
         if at_main_menu && !std::mem::replace(&mut self.at_main_menu, true) {
             self.messages.clear();
+            self.sounds.clear();
             self.native.clear();
         }
         self.at_main_menu = at_main_menu;
@@ -1732,6 +1745,10 @@ impl GameModel for EngineModel {
 
     fn messages(&self) -> &[String] {
         &self.messages
+    }
+
+    fn sounds(&self) -> &[Heard] {
+        &self.sounds
     }
 
     fn sidebar(&self) -> Vec<crate::sidebar::Line> {

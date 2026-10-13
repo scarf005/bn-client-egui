@@ -647,6 +647,7 @@ fn files_under(dir: &str) -> Vec<String> {
 const CLIENT_OWNED: &[&str] = &[
     "crates/egui/src/app/component.rs",
     "crates/egui/src/app/sidebar.rs",
+    "crates/egui/src/app/sounds.rs",
     "crates/tui/src/component.rs",
     "crates/tui/src/main.rs",
 ];

@@ -122,7 +122,7 @@ fn gap_requests_resubscribe_and_applies_nothing() {
         Outcome::Resubscribe(_)
     ));
     assert_eq!(r.at().unwrap().sequence, "40");
-    assert!(r.take_log().is_empty());
+    assert!(r.take_sounds().is_empty());
 }
 
 #[test]
