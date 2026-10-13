@@ -127,7 +127,7 @@ fn context_menu_look_logs_cell_description() {
     h.run_steps(3);
     let desc = h.state().model.cell(Pos { x: 3, y: 3 }).desc;
     let last = h.state().model.messages().last().cloned().unwrap();
-    assert_eq!(last, format!("You see {desc} at (3, 3)."));
+    assert_eq!(last, desc);
 }
 
 #[test]

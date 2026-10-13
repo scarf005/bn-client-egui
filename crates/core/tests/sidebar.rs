@@ -34,16 +34,17 @@ fn texts(avatar: &Avatar) -> Vec<String> {
 }
 
 #[test]
-fn limbs_sit_beside_needs_and_stats_in_the_native_order() {
+fn rows_read_as_the_engine_words_them_in_its_order() {
     let rows = texts(&avatar());
-    assert_eq!(rows[0], "HEAD 55/55 Pain 3 Str 8");
+    assert_eq!(rows[0], "HEAD ||||| Pain 3 Str 8");
     assert!(rows.contains(&"Location: field".to_string()));
     assert!(rows.contains(&"Spring, Day 1 Around noon".to_string()));
+    assert!(rows.contains(&"Weather : Clear".to_string()));
     assert!(rows.contains(&"Weapon: fists".to_string()));
 }
 
 #[test]
-fn spans_use_the_native_colour_and_an_unfelt_need_keeps_its_place_but_prints_nothing() {
+fn spans_use_the_native_colour_and_an_empty_span_keeps_its_place_but_prints_nothing() {
     let a = avatar();
     let rows = lines(&a, &ColorMap::default());
     assert_eq!(rows[0][2].color, ColorMap::default().resolve("light_red").0);
@@ -54,9 +55,9 @@ fn spans_use_the_native_colour_and_an_unfelt_need_keeps_its_place_but_prints_not
         rows.iter()
             .find_map(|r| r.iter().position(|s| s.text == ":)"))
     };
-    let mut hungry = a.clone();
-    hungry.sidebar.as_mut().unwrap().hunger.text = "Hungry".into();
-    assert_eq!(face_at(&a), face_at(&hungry));
+    let mut calm = a.clone();
+    calm.sidebar.as_mut().unwrap().rows[1][0].text = String::new();
+    assert_eq!(face_at(&a), face_at(&calm));
     assert!(face_at(&a).is_some());
 }
 
