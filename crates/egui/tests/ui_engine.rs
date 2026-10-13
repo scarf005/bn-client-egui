@@ -809,12 +809,12 @@ mod overmap {
         let mut event = common::overmap_event(100);
         let om = &mut event["params"]["events"][0]["changes"]["interaction"]["interaction"];
         om["title"] = "オーバーマップ".into();
-        om["overmap"]["cursor_here"] = "You are here.".into();
-        om["overmap"]["cursor_note"] = "Note: cache".into();
+        om["overmap"]["cursor_here"] = "現在地。".into();
+        om["overmap"]["cursor_note"] = "Note: cache...".into();
         script.push(event);
         h.run_steps(3);
         h.get_by_label_contains(
-            "オーバーマップ (100, 200, 0). You are here. Overmap forest. Note: cache. Route of 2 squares. Click the cursor to go.",
+            "オーバーマップ (100, 200, 0). 現在地。 Overmap forest. Note: cache... Route of 2 squares. Click the cursor to go.",
         );
     }
 

@@ -783,10 +783,15 @@ impl<M: GameModel> App<M> {
         let status = parts
             .into_iter()
             .flatten()
-            .map(|p| p.trim_end_matches('.').to_string())
+            .map(|p| {
+                if p.ends_with(['.', '!', '?', '。', '！', '？']) {
+                    p
+                } else {
+                    p + "."
+                }
+            })
             .collect::<Vec<_>>()
-            .join(". ")
-            + ".";
+            .join(" ");
         let status_label = ui.label(&status);
         ui.ctx()
             .accesskit_node_builder(status_label.id, |b| b.set_live(accesskit::Live::Polite));
