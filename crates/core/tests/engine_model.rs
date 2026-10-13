@@ -1702,14 +1702,36 @@ mod failures {
 
     #[test]
     fn an_engine_that_refuses_the_protocol_version_is_a_failure_with_its_reason() {
-        let (t, _h) = ScriptedTransport::new();
+        let (t, h) = ScriptedTransport::new();
         let refused = json!({"jsonrpc": "2.0", "error": {"code": 1000, "message": "application error",
             "data": {"kind": "negotiation_failed", "action": "hello",
                 "message": "The protocol version is not supported."}}});
-        let mut m = EngineModel::new(Box::new(t.on("bn.hello", vec![refused])));
+        let engine = std::path::PathBuf::from("/opt/bn/cataclysm-bn-tiles");
+        let mut m =
+            EngineModel::new(Box::new(t.on("bn.hello", vec![refused]))).with_engine(engine.clone());
         m.poll();
         let failure = m.failure().expect("the refusal is reported");
+        assert_eq!(failure.kind, FailureKind::Incompatible);
         assert_eq!(failure.message, "The protocol version is not supported.");
+        assert_eq!(failure.engine, Some(engine));
+        assert_eq!(
+            h.sent_methods(),
+            ["bn.hello"],
+            "nothing follows a refused hello"
+        );
+    }
+
+    #[test]
+    fn an_engine_without_bn_hello_is_incompatible() {
+        let (t, h) = ScriptedTransport::new();
+        let unknown =
+            json!({"jsonrpc": "2.0", "error": {"code": -32601, "message": "Method not found"}});
+        let mut m = EngineModel::new(Box::new(t.on("bn.hello", vec![unknown])));
+        m.poll();
+        let failure = m.failure().expect("the refusal is reported");
+        assert_eq!(failure.kind, FailureKind::Incompatible);
+        assert_eq!(failure.message, "Method not found");
+        assert_eq!(h.sent_methods(), ["bn.hello"]);
     }
 
     #[test]

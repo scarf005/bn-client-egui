@@ -70,6 +70,8 @@ pub type Respawn = Box<dyn FnMut() -> std::io::Result<Box<dyn Transport>>>;
 pub const DEFAULT_MAX_HZ: u16 = 60;
 /// JSON-RPC code of a request whose params the engine does not accept.
 const INVALID_PARAMS: i64 = -32602;
+/// JSON-RPC code of a method the engine does not know.
+const METHOD_NOT_FOUND: i64 = -32601;
 const STALL: Duration = Duration::from_secs(120);
 
 pub struct EngineModel {
@@ -89,6 +91,8 @@ pub struct EngineModel {
     tiles_retry: Duration,
     transport: Box<dyn Transport>,
     respawn: Option<Respawn>,
+    /// The engine binary the client started, shown when the engine turns out to be incompatible.
+    engine: Option<std::path::PathBuf>,
     waker: Option<crate::transport::Waker>,
     failure: Option<Failure>,
     /// When the engine last said anything, on the model's clock.
@@ -330,6 +334,7 @@ impl EngineModel {
             tiles_retry: Duration::ZERO,
             transport,
             respawn: None,
+            engine: None,
             waker: None,
             failure: None,
             heard: Duration::ZERO,
@@ -400,6 +405,12 @@ impl EngineModel {
     /// How to start the engine again, for `restart`.
     pub fn with_respawn(mut self, respawn: Respawn) -> Self {
         self.respawn = Some(respawn);
+        self
+    }
+
+    /// The engine binary the client started, for a failure that is about which engine it is.
+    pub fn with_engine(mut self, engine: std::path::PathBuf) -> Self {
+        self.engine = Some(engine);
         self
     }
 
@@ -509,6 +520,7 @@ impl EngineModel {
                     kind: FailureKind::Exited,
                     message,
                     stderr: self.transport.stderr_tail(),
+                    engine: None,
                 });
             }
         }
@@ -626,6 +638,18 @@ impl EngineModel {
                 _ => Ask::Nothing,
             };
             self.hello();
+            return;
+        }
+        if matches!(kind, Pending::Hello)
+            && let Err(e) = &result
+            && incompatible(e)
+        {
+            self.failure = Some(Failure {
+                kind: FailureKind::Incompatible,
+                message: reason_of(e),
+                stderr: self.transport.stderr_tail(),
+                engine: self.engine.clone(),
+            });
             return;
         }
         let value = match result {
@@ -988,6 +1012,13 @@ fn reason_of(e: &protocol::RpcError) -> String {
         .as_ref()
         .and_then(|d| d["message"].as_str())
         .map_or_else(|| e.message.clone(), String::from)
+}
+
+/// A hello the engine cannot accept from this client at all: another protocol version, or none.
+fn incompatible(e: &protocol::RpcError) -> bool {
+    e.code == METHOD_NOT_FOUND
+        || e.code == INVALID_PARAMS
+        || e.data.as_ref().map(error_kind).as_deref() == Some("negotiation_failed")
 }
 
 fn error_kind(e: &Value) -> String {
@@ -1451,6 +1482,7 @@ impl GameModel for EngineModel {
                     self.stall.as_secs()
                 ),
                 stderr: self.transport.stderr_tail(),
+                engine: None,
             });
         }
         self.messages.extend(self.replica.take_log());
@@ -1526,6 +1558,7 @@ impl GameModel for EngineModel {
                     .with_clock(self.clock.clone())
                     .with_colors(self.colors.clone())
                     .with_stall(self.stall);
+                fresh.engine = self.engine.clone();
                 fresh.heard = self.clock.now();
                 fresh.respawn = Some(respawn);
                 if let Some(waker) = self.waker.take() {

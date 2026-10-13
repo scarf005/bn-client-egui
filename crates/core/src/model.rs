@@ -535,6 +535,8 @@ pub enum FailureKind {
     Exited,
     /// A request has been outstanding longer than the watchdog allows.
     Stalled,
+    /// The engine refused the protocol this client speaks: another engine build is needed.
+    Incompatible,
 }
 
 /// The engine's failure, with its last stderr lines, for an error screen with a Restart button.
@@ -543,6 +545,8 @@ pub struct Failure {
     pub kind: FailureKind,
     pub message: String,
     pub stderr: Vec<String>,
+    /// The engine binary the client started, when the failure is about which engine it is.
+    pub engine: Option<std::path::PathBuf>,
 }
 
 /// What the UI needs from the game: `FakeModel` in tests, `EngineModel` against a real engine.

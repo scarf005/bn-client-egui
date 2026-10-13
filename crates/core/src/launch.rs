@@ -184,13 +184,14 @@ pub fn open_engine(
     let colors = root
         .as_deref()
         .map_or_else(ColorMap::default, ColorMap::load);
-    let (engine, profile) = (engine.to_path_buf(), profile.clone());
+    let (spawned, profile) = (engine.to_path_buf(), profile.clone());
     let respawn = Box::new(move || {
-        StdioTransport::spawn_with(&engine, &profile).map(|t| Box::new(t) as Box<dyn Transport>)
+        StdioTransport::spawn_with(&spawned, &profile).map(|t| Box::new(t) as Box<dyn Transport>)
     });
     let model = EngineModel::connect_with(Box::new(transport), tiles, max_hz)
         .with_colors(colors)
-        .with_respawn(respawn);
+        .with_respawn(respawn)
+        .with_engine(engine.to_path_buf());
     Ok(Opened { model, root })
 }
 
