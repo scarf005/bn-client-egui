@@ -1141,6 +1141,46 @@ fn creatures_and_the_avatar_draw_over_the_terrain_with_their_overlays() {
 }
 
 #[test]
+fn a_field_that_hides_items_draws_no_items_or_highlight_under_it() {
+    let (t, h) = session();
+    let mut m = connected(t);
+    let at = json!({"dim":"","x":5,"y":4,"z":0});
+    let floor = json!({"kind":"terrain","id":"t_floor","glyph":".","color":"c_cyan"});
+    let rock = json!({"kind":"item","id":"rock","glyph":"*","color":"c_light_gray","stack":2});
+    let field = |id: &str, hides: bool| {
+        let mut f = json!({"look": {"kind":"field","id":id,"glyph":"8","color":"c_dark_gray"}, "intensity": 1});
+        if hides {
+            f["hides_items"] = json!(true);
+        }
+        f
+    };
+    let ids = |m: &EngineModel| {
+        m.cell(Pos { x: 22, y: 12 })
+            .layers
+            .iter()
+            .map(|l| l.id.clone())
+            .collect::<Vec<_>>()
+    };
+    h.push(cell_event(
+        41,
+        json!({"at": at, "known": "visible", "terrain": floor, "items": [rock],
+            "fields": [field("fd_smoke", true)]}),
+    ));
+    m.poll();
+    assert_eq!(ids(&m), ["t_floor", "fd_smoke"]);
+    h.push(cell_event(
+        42,
+        json!({"at": at, "known": "visible", "terrain": floor, "items": [rock],
+            "fields": [field("fd_acid_water", false)]}),
+    ));
+    m.poll();
+    assert_eq!(
+        ids(&m),
+        ["t_floor", "fd_acid_water", "rock", "highlight_item"]
+    );
+}
+
+#[test]
 fn a_look_with_a_display_name_is_described_by_it_instead_of_its_id() {
     let (t, h) = session();
     let mut m = connected(t);

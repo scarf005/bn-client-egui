@@ -123,6 +123,9 @@ pub struct Tint {
 pub struct FieldLook {
     pub look: Look,
     pub intensity: u32,
+    /// Its type hides the items under it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub hides_items: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]

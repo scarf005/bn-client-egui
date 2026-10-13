@@ -1186,12 +1186,14 @@ impl EngineModel {
     /// field, item, vehicle part; a cell only remembered draws its memorized terrain and overlay.
     fn layers(&self, c: &WorldCell) -> Vec<Layer> {
         let seed = square_seed(&c.at);
+        // The displayed field may hide the items under it, and so their highlight.
+        let hidden = c.fields.last().is_some_and(|f| f.hides_items);
         let live = [
             c.terrain.as_ref(),
             c.furniture.as_ref(),
             c.traps.last(),
             c.fields.last().map(|f| &f.look),
-            c.items.last(),
+            c.items.last().filter(|_| !hidden),
             c.vehicle.as_ref(),
         ];
         let looks = match live.iter().any(Option::is_some) {
