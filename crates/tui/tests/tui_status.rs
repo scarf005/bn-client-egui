@@ -58,7 +58,7 @@ fn the_status_panel_shows_the_clock_of_each_event_pushed_mid_command() {
         .enumerate()
     {
         let mut a = avatar();
-        a["sidebar"]["rows"][8][1]["text"] = json!(clock);
+        a["sidebar"]["time"]["clock"] = json!(clock);
         push(&mut app.model, &h, n as u32 + 1, a);
         let shown = screen(&mut app, 40);
         assert!(shown.contains("Status"), "{shown}");

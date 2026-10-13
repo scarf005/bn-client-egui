@@ -246,6 +246,9 @@ pub struct Stat {
     /// Native colour name, when the sidebar colours the stat.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color: Option<String>,
+    /// The abbreviation the native sidebar prints before the value.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub short_label: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -1226,10 +1229,15 @@ pub fn parse_message(msg: &Value) -> Result<Incoming, serde_json::Error> {
     Ok(Incoming::Response { id, result })
 }
 
-/// Text the engine's sidebar prints, in a native colour name.
+/// A value the engine's sidebar prints, after the panel label it prints before it.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SidebarText {
+    /// The translated panel label; absent where the panel prints none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
     pub text: String,
+    /// Native colour name where the colour carries meaning; empty otherwise.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub color: String,
 }
 
@@ -1244,6 +1252,12 @@ pub struct SidebarLimb {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Focus {
+    pub label: String,
+    pub value: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Morale {
     pub level: i64,
     pub face: String,
@@ -1252,6 +1266,7 @@ pub struct Morale {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Stamina {
+    pub label: String,
     pub current: i64,
     pub max: i64,
     pub color: String,
@@ -1259,6 +1274,7 @@ pub struct Stamina {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Speed {
+    pub label: String,
     pub value: i64,
     pub color: String,
 }
@@ -1268,11 +1284,14 @@ pub struct Movement {
     pub counter: i64,
     /// `walk`, `run`, `crouch` or `prone`.
     pub mode: String,
+    /// The translated one-letter name of the mode.
+    pub mode_text: String,
     pub color: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SafeMode {
+    pub label: String,
     pub enabled: bool,
     pub color: String,
 }
@@ -1280,13 +1299,14 @@ pub struct SafeMode {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DayTime {
     pub season: String,
+    pub day_label: String,
     pub day: i64,
-    /// The watch time, else the approximate time of day; empty underground.
+    /// The watch time, else the approximate time of day, else the engine's unknown-time text.
     pub clock: String,
     pub has_watch: bool,
 }
 
-/// The native classic sidebar of the avatar, as the engine reports it.
+/// The native classic sidebar of the avatar: values and the labels its panels print. The client lays it out.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Sidebar {
     pub limbs: Vec<SidebarLimb>,
@@ -1294,7 +1314,7 @@ pub struct Sidebar {
     pub hunger: SidebarText,
     pub thirst: SidebarText,
     pub fatigue: SidebarText,
-    pub focus: i64,
+    pub focus: Focus,
     pub morale: Morale,
     pub stamina: Stamina,
     pub speed: Speed,
@@ -1306,10 +1326,8 @@ pub struct Sidebar {
     pub weather: SidebarText,
     pub time: DayTime,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub ambient_temperature: Option<String>,
-    pub weapon: String,
+    pub ambient_temperature: Option<SidebarText>,
+    pub weapon: SidebarText,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub style: Option<SidebarText>,
-    /// The classic panel as the native sidebar words it, row by row.
-    pub rows: Vec<Vec<SidebarText>>,
 }

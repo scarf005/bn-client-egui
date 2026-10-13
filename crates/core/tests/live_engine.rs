@@ -436,7 +436,7 @@ fn live_engine_reports_the_native_sidebar_of_the_tutorial_avatar() {
     println!("{}", rows.join("\n"));
     assert!(rows.iter().any(|r| r.starts_with("HEAD")), "{rows:?}");
     assert!(rows.iter().any(|r| r.starts_with("Location:")), "{rows:?}");
-    assert!(rows.iter().any(|r| r.starts_with("Weapon:")), "{rows:?}");
+    assert!(rows.iter().any(|r| r.starts_with("Weapon")), "{rows:?}");
 }
 
 #[test]
