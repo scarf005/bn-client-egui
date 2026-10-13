@@ -1145,38 +1145,64 @@ fn list_menu_rows_fill_the_window_like_the_native_highlight_bar() {
     assert!(alpha.width() >= 500.0, "{alpha:?}");
 }
 
-#[test]
-fn options_in_the_action_palette_is_the_engines_own_options_action() {
-    let (mut h, script) = palette_with(json!([
-        {"id":"main_menu","name":"Main Menu","keys":["ESC"]},
-        {"id":"open_options","name":"Options","keys":[]}
-    ]));
-    h.get_by_label("Options").click();
-    h.run_steps(3);
-    assert_eq!(
-        submits(&script),
-        [json!({"kind":"action","action_id":"open_options"})]
-    );
+fn finished_command(h: &mut H, script: &ScriptHandle) {
+    script.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{
+        "epoch":"e7f3","command_id":"c:5","stage":"completed"}}));
+    h.run_steps(4);
 }
 
 #[test]
-fn the_action_palette_offers_no_options_entry_the_engine_does_not() {
-    let (h, _script) = palette_with(json!([{"id":"main_menu","name":"Main Menu","keys":["ESC"]}]));
-    assert!(h.query_by_label("Options").is_none());
+fn options_is_in_the_action_palette_and_opens_the_native_options_through_the_main_menu() {
+    options_through_the_main_menu(Some("open_options"));
 }
 
-/// The action palette searched for "option" over a map whose boundary offers `actions`.
-fn palette_with<'a>(actions: Value) -> (H<'a>, ScriptHandle) {
+#[test]
+fn a_row_labelled_options_that_runs_no_options_action_is_not_chosen() {
+    options_through_the_main_menu(None);
+}
+
+fn options_through_the_main_menu(action: Option<&str>) {
     let (mut h, script) = harness();
     h.run_steps(3);
-    script.push(show(41, actions, Value::Null));
+    script.push(show(
+        41,
+        json!([{"id":"main_menu","name":"Main Menu","keys":["ESC"]}]),
+        Value::Null,
+    ));
     h.run_steps(3);
     open_palette(&mut h);
     h.get_by_label("Search actions").focus();
     h.run_steps(2);
     h.get_by_label("Search actions").type_text("option");
     h.run_steps(2);
-    (h, script)
+    h.get_by_label("Options").click();
+    h.run_steps(3);
+    assert_eq!(
+        submits(&script),
+        [json!({"kind":"action","action_id":"main_menu"})]
+    );
+    finished_command(&mut h, &script);
+    let mut menu = choice("main:options", "Options");
+    menu["selected"] = false.into();
+    if let Some(action) = action {
+        menu["action_id"] = action.into();
+    }
+    script.push(show(
+        42,
+        json!([]),
+        json!({"schema_id":"s:mm","kind":"choices","context":"UILIST","title":"",
+            "message":"MAIN MENU","allow_cancel":true,"choices":[choice("main:wiki","Open Wiki"), menu],
+            "choice_total":2,"allow_set_count":false}),
+    ));
+    h.run_steps(5);
+    let last = submits(&script).last().cloned();
+    match action {
+        Some(_) => assert_eq!(
+            last,
+            Some(json!({"kind":"choose","choice_id":"main:options"}))
+        ),
+        None => assert_eq!(last, Some(json!({"kind":"action","action_id":"main_menu"}))),
+    }
 }
 
 #[test]

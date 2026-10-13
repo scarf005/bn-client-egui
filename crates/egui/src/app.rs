@@ -144,6 +144,8 @@ pub struct App<M: GameModel> {
     queued: VecDeque<Queued>,
     /// The key whose OS repeats are arriving, until it is released.
     held: Option<String>,
+    /// The palette's Options entry went through the main menu; when it opens, its Options row is chosen.
+    open_options: Option<std::time::Duration>,
     /// The text prompt that already took the keyboard focus when it opened.
     prompt_focused: Option<String>,
     /// The loading step the list was last scrolled to; scrolling again every frame would repaint forever.
@@ -206,6 +208,7 @@ impl<M: GameModel> App<M> {
             menu_cursor: None,
             queued: VecDeque::new(),
             held: None,
+            open_options: None,
             prompt_focused: None,
             scrolled_to: None,
         }

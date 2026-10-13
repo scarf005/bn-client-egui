@@ -21,6 +21,7 @@ impl<M: GameModel> App<M> {
             }
             return;
         };
+        self.follow_options(&menu);
         // A popup follows another with the same empty title, so its text tells them apart.
         let shown = format!(
             "{}\n{}",
