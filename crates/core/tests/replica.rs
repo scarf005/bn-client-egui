@@ -5,7 +5,7 @@ use serde_json::Value;
 fn fixture(name: &str) -> Value {
     let text = std::fs::read_to_string(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/tests/fixtures/design-1.0.json"
+        "/tests/fixtures/design-0.1.json"
     ))
     .unwrap();
     serde_json::from_str::<Value>(&text).unwrap()[name].clone()
@@ -343,7 +343,7 @@ fn an_event_avatar_keeps_the_members_it_names_and_clears_the_others() {
     let examples: Value = serde_json::from_str(
         &std::fs::read_to_string(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/tests/fixtures/1.0.examples.json"
+            "/tests/fixtures/0.1.examples.json"
         ))
         .unwrap(),
     )

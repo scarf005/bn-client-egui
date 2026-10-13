@@ -4,7 +4,7 @@ use serde_json::{Value, json};
 fn fixtures() -> serde_json::Map<String, Value> {
     let text = std::fs::read_to_string(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/tests/fixtures/design-1.0.json"
+        "/tests/fixtures/design-0.1.json"
     ))
     .unwrap();
     serde_json::from_str(&text).unwrap()
@@ -112,7 +112,7 @@ fn operations_serialize_with_the_kind_tag() {
 fn examples() -> Value {
     let text = std::fs::read_to_string(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/tests/fixtures/1.0.examples.json"
+        "/tests/fixtures/0.1.examples.json"
     ))
     .unwrap();
     serde_json::from_str(&text).unwrap()

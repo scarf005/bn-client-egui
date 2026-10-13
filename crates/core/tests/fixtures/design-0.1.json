@@ -3,7 +3,7 @@
   "jsonrpc": "2.0",
   "id": 1,
   "result": {
-   "version": "1.0",
+   "version": "0.1",
    "epoch": "e7f3",
    "engine": {
     "build": "0.9.1-1234-gabc",

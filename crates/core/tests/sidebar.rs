@@ -7,7 +7,7 @@ use serde_json::Value;
 fn avatar() -> Avatar {
     let text = std::fs::read_to_string(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/tests/fixtures/1.0.examples.json"
+        "/tests/fixtures/0.1.examples.json"
     ))
     .unwrap();
     let all: Value = serde_json::from_str(&text).unwrap();

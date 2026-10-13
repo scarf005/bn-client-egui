@@ -1,10 +1,10 @@
-//! Serde types for the unified engine protocol 1.0 (newline-delimited JSON-RPC 2.0).
+//! Serde types for the unified engine protocol 0.1 (newline-delimited JSON-RPC 2.0).
 //! Shapes follow protocol-unification.md rev 2 (methods §1, clock §2, values §3).
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-pub const VERSION: &str = "1.0";
+pub const VERSION: &str = "0.1";
 
 fn is_default<T: Default + PartialEq>(v: &T) -> bool {
     *v == T::default()
