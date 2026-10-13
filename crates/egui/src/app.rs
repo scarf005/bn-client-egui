@@ -775,9 +775,8 @@ impl<M: GameModel> App<M> {
                 ""
             };
             // The sidebar describes the square under the cursor, and only that one.
-            let what = om
-                .here()
-                .filter(|_| at == om.cursor)
+            let what = Some(&om.cursor_description)
+                .filter(|t| at == om.cursor && !t.is_empty())
                 .map_or_else(String::new, |t| format!(" {t}."));
             format!("Overmap ({}, {}, {}).{here}{what}{note}", at.0, at.1, at.2)
         };

@@ -203,6 +203,10 @@ fn with_pane(position: &str, over_weight: bool) -> Value {
     let rows = b["interaction"]["choices"].as_array_mut().unwrap();
     rows[0]["markup"] = json!("<color_light_red>!</color> 2 lighter");
     rows[0]["color"] = json!("c_light_green");
+    let tone = if over_weight { "red" } else { "white" };
+    b["interaction"]["message"] = json!(format!(
+        "PICK Wgt <color_{tone}>50.0</color>/45.0  Vol <color_white>0.30</color>/2.00"
+    ));
     b["interaction"]["compat"] = json!({"panes": [{
         "id": "p", "label": "Pick up", "role": "pickup", "area_id": position,
         "area_label": "Pick up", "area_description": "", "filter": "", "storage_kind": "",

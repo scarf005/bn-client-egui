@@ -28,7 +28,7 @@
    "kind": "inventory",
    "context": "PICKUP",
    "title": "Pick up",
-   "message": "PICK Wgt 0.2/45.0  Vol 0.30/0.00",
+   "message": "PICK Wgt <color_white>0.2</color>/45.0  Vol <color_white>0.30</color>/0.00",
    "allow_cancel": true,
    "allow_set_count": true,
    "choice_total": 2,

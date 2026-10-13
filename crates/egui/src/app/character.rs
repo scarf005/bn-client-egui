@@ -469,6 +469,7 @@ mod tests {
             color: String::new(),
             key_color: String::new(),
             markup: String::new(),
+            action: String::new(),
             nest_color: String::new(),
             mark: None,
             editor: None,

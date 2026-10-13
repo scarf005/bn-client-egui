@@ -156,6 +156,9 @@ impl<M: GameModel> App<M> {
 /// The palette's own entry for the native Options screen.
 const OPTIONS: &str = "palette:options";
 
+/// The engine's action id of the main menu's Options row.
+const OPTIONS_ACTION: &str = "open_options";
+
 /// How long the palette waits for the main menu it asked for.
 const OPTIONS_WAIT: std::time::Duration = std::time::Duration::from_secs(5);
 
@@ -172,13 +175,8 @@ impl<M: GameModel> App<M> {
         let row = menu
             .choices
             .iter()
-            .find(|c| c.label == "Options" && c.enabled);
-        // The native screen names itself in its header text, not in a title.
-        let is_main_menu = menu.context != "MAIN_MENU"
-            && [&menu.title, &menu.message]
-                .iter()
-                .any(|t| bn_client_core::markup::plain(t) == "MAIN MENU");
-        if let (true, Some(row), false) = (is_main_menu, row, self.model.busy()) {
+            .find(|c| c.action == OPTIONS_ACTION && c.enabled);
+        if let (Some(row), false) = (row, self.model.busy()) {
             self.open_options = None;
             self.model.choose(&row.id.clone());
         }
