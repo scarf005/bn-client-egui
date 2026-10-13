@@ -74,7 +74,9 @@ fn popup(allow_cancel: bool, message: &str, ack: Value) -> Value {
 fn any_key_popup() -> Value {
     let mut ack = choice("acknowledge", "Press any key");
     ack["description"] = "ANY_INPUT".into();
-    popup(false, "You have nothing to wield.", ack)
+    let mut popup = popup(false, "You have nothing to wield.", ack);
+    popup["any_key_choice_id"] = "acknowledge".into();
+    popup
 }
 
 #[test]

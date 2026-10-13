@@ -215,6 +215,7 @@ fn notice(stage: &str, error: Option<&str>) -> serde_json::Value {
     let mut params = json!({"epoch":"e7f3","command_id":"c:5","stage":stage});
     if let Some(e) = error {
         params["error"] = e.into();
+        params["error_text"] = "The game is not ready.".into();
     }
     json!({"jsonrpc":"2.0","method":"bn.command","params":params})
 }
@@ -252,7 +253,7 @@ fn pressed_choice_is_highlighted_and_others_wait_once_the_command_outlasts_a_bli
 }
 
 #[test]
-fn status_line_names_the_stage_and_explains_a_rejection_in_words() {
+fn status_line_names_the_stage_and_shows_the_engines_reason_for_a_rejection() {
     let (mut h, script) = harness();
     open_menu(&mut h, &script);
     h.get_by_label("Ready");
@@ -268,7 +269,7 @@ fn status_line_names_the_stage_and_explains_a_rejection_in_words() {
     h.get_by_label("combat knife: executing");
     script.push(notice("interrupted", Some("not_ready")));
     h.run_steps(2);
-    h.get_by_label("combat knife: interrupted: the game is not ready");
+    h.get_by_label("combat knife: interrupted: The game is not ready.");
 }
 
 #[test]

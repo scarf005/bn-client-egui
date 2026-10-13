@@ -272,20 +272,6 @@ fn arrow_keys_are_the_game_direction_keys() {
 }
 
 #[test]
-fn arrows_walk_the_fake_model() {
-    let mut app = TuiApp::new(FakeModel::default());
-    let before = app.model.player();
-    app.handle_key(key(KeyCode::Right));
-    assert_eq!(
-        app.model.player(),
-        Pos {
-            x: before.x + 1,
-            ..before
-        }
-    );
-}
-
-#[test]
 fn ctrl_c_quits_and_plain_keys_do_not() {
     let mut app = TuiApp::new(FakeModel::default());
     app.handle_key(ch('c'));
@@ -624,7 +610,7 @@ fn clicks_outside_the_map_or_under_a_menu_do_nothing() {
 }
 
 #[test]
-fn fake_model_walks_to_the_look_cursor_one_step_per_tick() {
+fn enter_in_look_mode_hands_the_cursor_square_to_the_models_travel() {
     let mut app = TuiApp::new(FakeModel::default());
     let start = app.model.player();
     app.handle_key(ch('x'));
@@ -632,14 +618,7 @@ fn fake_model_walks_to_the_look_cursor_one_step_per_tick() {
         app.handle_key(key(KeyCode::Right));
     }
     app.handle_key(key(KeyCode::Enter));
-    assert!(app.walking());
-    app.tick();
-    assert_eq!(app.model.player().x, start.x + 1);
-    for _ in 0..5 {
-        app.tick();
-    }
     assert_eq!(app.model.player().x, start.x + 3);
-    assert!(!app.walking());
 }
 
 #[test]
@@ -684,9 +663,6 @@ fn wide_map_glyphs_do_not_shift_the_rest_of_the_row() {
         }
         fn player(&self) -> Pos {
             self.0.player()
-        }
-        fn step_toward(&mut self, t: Pos) -> bool {
-            self.0.step_toward(t)
         }
         fn ground(&self) -> &[String] {
             self.0.ground()
@@ -1016,9 +992,6 @@ fn item_lists_beside_the_map_show_colour_tags_as_colour_not_text() {
         }
         fn player(&self) -> Pos {
             self.0.player()
-        }
-        fn step_toward(&mut self, t: Pos) -> bool {
-            self.0.step_toward(t)
         }
         fn ground(&self) -> &[String] {
             &self.1

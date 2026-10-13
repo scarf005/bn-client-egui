@@ -333,19 +333,34 @@ fn cancel_menu_submits_cancel_only_when_allowed() {
 }
 
 #[test]
-fn pick_up_and_drop_invoke_registered_actions() {
+fn pick_up_and_drop_send_the_engines_row_id_and_count() {
     let (t, h) = session();
-    let mut m = connected(t.on("bn.command.submit", walk_reply()));
-    m.drop_item(0);
-    assert!(
-        m.messages().last().unwrap().contains("drop"),
-        "missing action is reported"
+    let mut m = connected(
+        t.on("bn.command.submit", walk_reply())
+            .on("bn.command.submit", walk_reply()),
     );
-    assert!(submits(&h).is_empty());
+    let mut ground = item("tin can", 2, None);
+    ground["id"] = json!("item:g1");
+    let mut carried = item("flashlight", 1, Some("carried"));
+    carried["id"] = json!("item:i1");
+    h.push(avatar_event(
+        json!([carried]),
+        json!([ground, item("no id", 1, None)]),
+    ));
+    m.poll();
+    m.pick_up(1);
+    assert!(submits(&h).is_empty(), "a row without an id names nothing");
     m.pick_up(0);
     assert_eq!(
         submits(&h)[0]["params"]["operation"],
-        json!({"kind":"action","action_id":"pickup"})
+        json!({"kind":"pickup","item_id":"item:g1","count":2})
+    );
+    h.push(fixture("command_completed"));
+    m.poll();
+    m.drop_item(0);
+    assert_eq!(
+        submits(&h)[1]["params"]["operation"],
+        json!({"kind":"drop","item_id":"item:i1","count":1})
     );
 }
 
@@ -602,7 +617,7 @@ fn interrupted_by(error: &str) -> (EngineModel, Vec<String>) {
     let mut m = connected(t.on("bn.command.submit", walk_reply()));
     m.travel(Pos { x: 22, y: 12 });
     h.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{
-        "epoch":"e7f3","command_id":"c:5","stage":"interrupted","error":error}}));
+        "epoch":"e7f3","command_id":"c:5","stage":"interrupted","error":error,"error_text":"The game is not ready."}}));
     m.poll();
     assert!(!m.busy());
     let messages = m.messages().to_vec();
@@ -612,10 +627,7 @@ fn interrupted_by(error: &str) -> (EngineModel, Vec<String>) {
 #[test]
 fn interrupted_command_shows_the_engine_error_reason() {
     let (_, messages) = interrupted_by("not_ready");
-    assert_eq!(
-        messages.last().unwrap(),
-        "Command interrupted: the game is not ready."
-    );
+    assert_eq!(messages.last().unwrap(), "The game is not ready.");
 }
 
 #[test]
@@ -631,16 +643,11 @@ fn with_door(h: &bn_client_core::transport::ScriptHandle, x: i32) {
 }
 
 #[test]
-fn clicking_an_adjacent_closed_door_bumps_it_open_like_tiles() {
+fn clicking_an_adjacent_closed_door_sends_the_same_travel_as_any_square() {
     let (t, h) = session();
     let mut m = connected(t.on("bn.command.submit", walk_reply()));
-    with_door(&h, 4);
-    m.poll();
     m.travel(Pos { x: 21, y: 12 });
-    assert_eq!(
-        submits(&h)[0]["params"]["operation"],
-        json!({"kind":"action","action_id":"RIGHT"})
-    );
+    assert_eq!(submits(&h)[0]["params"]["operation"]["kind"], "travel");
 }
 
 #[test]
@@ -732,14 +739,12 @@ fn travel_to_a_square_the_engine_cannot_resolve_is_reported_once_in_words() {
     for id in ["c:5", "c:5"] {
         m.travel(Pos { x: 39, y: 12 });
         h.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{
-            "epoch":"e7f3","command_id":id,"stage":"rejected","error":"validation_failed"}}));
+            "epoch":"e7f3","command_id":id,"stage":"rejected","error":"validation_failed",
+            "error_text":"Travel rejected: outside the map window."}}));
         m.poll();
         assert!(!m.busy());
     }
-    assert_eq!(
-        m.messages(),
-        ["Travel rejected: that square is outside the map window the engine can resolve."]
-    );
+    assert_eq!(m.messages(), ["Travel rejected: outside the map window."]);
 }
 
 fn view_event(sequence: u64, min_x: i32, max_x: i32) -> Value {
@@ -821,22 +826,8 @@ fn the_shown_map_is_the_middle_of_the_engines_view_and_never_larger() {
     );
 }
 
-#[test]
-fn a_click_outside_the_engines_view_is_ignored_without_a_message() {
-    let (t, h) = session();
-    let mut m = connected(t.on("bn.command.submit", walk_reply()));
-    h.push(view_event(41, -15, 20));
-    m.poll();
-    // View column 36 would be absolute x 21, one past the window; column 35 is its last square.
-    m.travel(Pos { x: 39, y: 12 });
-    assert!(submits(&h).is_empty());
-    assert!(m.messages().is_empty(), "{:?}", m.messages());
-    m.travel(Pos { x: 35, y: 12 });
-    assert_eq!(submits(&h).len(), 1);
-}
-
 fn not_ready() -> Value {
-    json!({"jsonrpc":"2.0","id":null,"error":{"code":1000,"message":"x","data":{"kind":"not_ready"}}})
+    json!({"jsonrpc":"2.0","id":null,"error":{"code":1000,"message":"x","data":{"kind":"not_ready","message":"There is nothing to interrupt."}}})
 }
 
 #[test]
@@ -1230,48 +1221,6 @@ fn an_avatar_that_carries_nothing_empties_the_inventory_panel() {
     assert!(m.inventory().is_empty());
 }
 
-#[test]
-fn picking_up_a_ground_item_marks_that_item_in_the_native_menu_and_confirms() {
-    let (t, h) = session();
-    let mut m = connected(
-        t.on("bn.command.submit", walk_reply())
-            .on("bn.command.submit", walk_reply())
-            .on("bn.command.submit", walk_reply()),
-    );
-    h.push(avatar_event(
-        json!([]),
-        json!([item("combat knife", 1, None), item("tin can", 1, None)]),
-    ));
-    m.poll();
-    m.pick_up(1);
-    let mut menu = fixture("events_43_menu");
-    menu["params"]["events"][0]["sequence"] = json!("42");
-    let interaction = &mut menu["params"]["events"][0]["changes"]["interaction"];
-    interaction["actions"] =
-        json!([{"id": "pickup_all", "name": "x"}, {"id": "CONFIRM", "name": "Confirm"}]);
-    interaction["interaction"]["choices"][1]["enabled"] = json!(true);
-    interaction["interaction"]["choices"][1]["selectable"] = json!(true);
-    interaction["interaction"]["choices"][1]["denial"] = json!("");
-    interaction["interaction"]["choices"][1]["label"] = json!("tin can");
-    // The engine publishes the menu before it reports the command done.
-    h.push(menu);
-    h.push(fixture("command_completed"));
-    m.poll();
-    let operations = submits(&h)
-        .into_iter()
-        .map(|s| s["params"]["operation"].clone())
-        .collect::<Vec<_>>();
-    assert_eq!(
-        operations[0]["action_id"], "pickup",
-        "the fixture offers no pickup_all"
-    );
-    assert_eq!(
-        operations[1],
-        json!({"kind": "choose", "choice_id": "c:2"}),
-        "the clicked item, not the first row"
-    );
-}
-
 fn crafting(name: &str) -> Value {
     let text = std::fs::read_to_string(concat!(
         env!("CARGO_MANIFEST_DIR"),
@@ -1382,7 +1331,8 @@ fn any_key_acknowledges_a_press_any_key_popup_and_only_that() {
             "denial":"","enabled":true,"selectable":true,"selected":true,"columns":[]});
         ack["label"] = "Press any key".into();
         json!({"schema_id":"s:p","kind":"choices","context":"POPUP_WAIT","title":"","message":"Nothing.",
-            "allow_cancel":false,"choices":[ack],"choice_total":1,"allow_set_count":false})
+            "allow_cancel":false,"choices":[ack],"choice_total":1,"allow_set_count":false,
+            "any_key_choice_id": if anykey {json!("acknowledge")} else {Value::Null}})
     };
     for (anykey, sent) in [(true, 1), (false, 0)] {
         let (t, h) = session();
@@ -1411,7 +1361,8 @@ fn any_key_continues_a_terminal_prompt_but_does_not_answer_its_security_query() 
         };
         json!({"schema_id":"s:term","kind":"choices","context":context,"title":"Evac shelter computer",
             "message":"Login successful.  Press any key…","allow_cancel":false,"choices":choices,
-            "choice_total":ids.len(),"allow_set_count":false})
+            "choice_total":ids.len(),"allow_set_count":false,
+            "any_key_choice_id": if ids == ["continue"] {json!("continue")} else {Value::Null}})
     };
     for (ids, sent) in [(&["continue"][..], 1), (&["yes", "no", "quit"][..], 0)] {
         let (t, h) = session();
@@ -1476,7 +1427,8 @@ fn aiming_reports_the_cursor_distance_against_the_range_and_the_shot_status_only
         json!({"schema_id":"s:a","kind":"target","context":context,"title":"Firing Uzi 9mm","message":"",
             "allow_cancel":true,"choices":[],"choice_total":0,"allow_set_count":false,
             "target":{"source":{"dim":"","x":2,"y":4,"z":0},"current":{"dim":"","x":x,"y":6,"z":0},
-                "range":8,"distance_metric":"square","status":status,"candidates":[]}})
+                "range":8,"distance_metric":"square","status":status,"candidates":[],
+                "status_text": format!("range {}/8, {}", (x - 2).abs().max(2), match status { "good" => "ready to fire", "out_of_range" => "out of range", _ => "out of ammo" })}})
     };
     let (t, h) = session();
     let mut m = connected(t);
@@ -2275,9 +2227,9 @@ fn a_rejected_command_is_logged_in_words_not_as_the_engines_error_name() {
     let mut m = connected(t.on("bn.command.submit", walk_reply()));
     assert!(m.invoke_action("RIGHT"));
     h.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{
-        "epoch":"e7f3","command_id":"c:5","stage":"rejected","error":"validation_failed"}}));
+        "epoch":"e7f3","command_id":"c:5","stage":"rejected","error":"validation_failed","error_text":"Not possible here."}}));
     m.poll();
-    assert_eq!(m.messages(), ["Command rejected: not possible here."]);
+    assert_eq!(m.messages(), ["Not possible here."]);
 }
 
 /// The walk fixture moved to `to`, with the engine's window of `window` squares around `to` when it has one.
@@ -2446,7 +2398,7 @@ fn snake_boundary(id: &str, refresh: bool) -> Value {
 }
 
 fn stale_boundary() -> Value {
-    json!({"jsonrpc":"2.0","id":null,"error":{"code":1000,"message":"stale","data":{"kind":"stale_boundary"}}})
+    json!({"jsonrpc":"2.0","id":null,"error":{"code":1000,"message":"stale","data":{"kind":"stale_boundary","message":"The screen changed, try again."}}})
 }
 
 #[test]
@@ -2501,7 +2453,10 @@ fn a_key_rejected_stale_on_a_screen_without_refresh_is_not_resent() {
     ));
     m.poll();
     assert_eq!(submits(&h).len(), 1);
-    assert!(m.messages().last().unwrap().contains("stale_boundary"));
+    assert_eq!(
+        m.messages().last().unwrap(),
+        "The screen changed, try again."
+    );
 }
 
 fn heard(sequence: u32, text: &str, logged: Option<bool>) -> serde_json::Value {
