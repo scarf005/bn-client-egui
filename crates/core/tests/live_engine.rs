@@ -685,3 +685,42 @@ fn live_engine_says_hello_with_0_2_and_shows_the_main_menu() {
     let menu = menu.expect("the main menu is drawn");
     assert!(menu.choices.iter().any(|c| c.label.contains("New Game")));
 }
+
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn live_engine_debug_menu_filter_matches_tele_in_any_case() {
+    let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
+    let transport = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
+    let mut model = EngineModel::new(Box::new(transport));
+    wait_for(&mut model, "subscription", |m| m.live());
+    choose_label(&mut model, "New Game");
+    choose_label(&mut model, "Tutorial");
+    wait_for(&mut model, "the tutorial map", |m| m.size().x > 0);
+    wait_for(&mut model, "idle", |m| !m.busy());
+    dismiss_popups(&mut model);
+    assert!(model.invoke_action("debug"), "the debug action is offered");
+    wait_for(&mut model, "the debug menu", |m| m.menu().is_some());
+    wait_for(&mut model, "idle", |m| !m.busy());
+    for text in ["tele", "Tele", "TELE"] {
+        assert!(model.invoke_action("FILTER"), "the list offers its filter");
+        wait_for(&mut model, "the filter prompt", |m| {
+            !m.busy() && m.menu().is_some_and(|menu| menu.field.is_some())
+        });
+        let field = model.menu().unwrap().field.clone().unwrap();
+        model.fill(&field.id, text, true);
+        wait_for(&mut model, "the filtered list", |m| {
+            !m.busy() && m.menu().is_some_and(|menu| menu.field.is_none())
+        });
+        let menu = model.menu().unwrap();
+        let labels = menu
+            .choices
+            .iter()
+            .map(|c| c.label.as_str())
+            .collect::<Vec<_>>();
+        assert!(
+            labels.iter().all(|l| l.contains("Teleport")),
+            "{text}: {labels:?}"
+        );
+        assert!(!labels.is_empty(), "{text}: nothing matched");
+    }
+}
