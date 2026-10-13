@@ -1034,6 +1034,8 @@ impl<M: GameModel> App<M> {
                 m.set_focus_lock_filter(
                     response.id,
                     egui::EventFilter {
+                        // Tab is the engine's here (auto-fight); it must not walk the focus over the sidebar.
+                        tab: true,
                         horizontal_arrows: true,
                         vertical_arrows: true,
                         ..Default::default()
