@@ -25,6 +25,8 @@ pub struct LoggedLine {
     /// The game's colour name for the message type.
     pub color: Option<String>,
     pub count: u32,
+    /// The line as the native log prints it, with the repeat suffix.
+    pub label: String,
 }
 
 /// A native animation fact (`projectile.moved`, `explosion.*`, `combat_text.shown`), kept as published.
@@ -88,6 +90,7 @@ impl Replica {
                     text: m.text,
                     color: Some(m.color),
                     count: m.count.max(1),
+                    label: m.label,
                 })
                 .collect(),
             ..Self::default()
@@ -161,6 +164,7 @@ impl Replica {
                 match e.kind.as_str() {
                     "message.logged" => self.lines.push(LoggedLine {
                         id: data["id"].as_str().unwrap_or_default().to_string(),
+                        label: data["label"].as_str().unwrap_or(text).to_string(),
                         text: text.to_string(),
                         color: data["color"].as_str().map(str::to_string),
                         count: data["count"]

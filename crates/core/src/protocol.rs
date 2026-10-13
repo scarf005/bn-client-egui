@@ -350,6 +350,8 @@ pub struct InventoryItem {
     /// The condition marker `name` starts with and the colour the native lists draw it in.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub durability: Option<Durability>,
+    /// The row as the native lists word it, with its count, condition marker and slot.
+    pub label: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -727,6 +729,8 @@ pub struct LoggedMessage {
     pub kind: String,
     pub color: String,
     pub count: u32,
+    /// The line as the native log prints it, with the repeat suffix.
+    pub label: String,
 }
 
 /// Result of `bn.subscribe`; `parts` snapshot-part notifications follow.
@@ -1225,4 +1229,6 @@ pub struct Sidebar {
     pub weapon: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub style: Option<SidebarText>,
+    /// The classic panel as the native sidebar words it, row by row.
+    pub rows: Vec<Vec<SidebarText>>,
 }

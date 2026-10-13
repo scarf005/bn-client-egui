@@ -120,7 +120,7 @@ pub enum Shape {
 }
 
 /// One line of the game's own message log. A repeat of the newest line keeps its `id` and raises
-/// `count`; the client shows it as "text x2" in place of the earlier line.
+/// `count`; the client shows its `label` in place of the earlier line.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LogLine {
     /// The engine's identity of the line; empty when the engine sent none.
@@ -129,16 +129,13 @@ pub struct LogLine {
     /// The game's colour for the message type.
     pub color: Option<Rgb>,
     pub count: u32,
+    /// The line as the game prints it, with the repeat count.
+    pub label: String,
 }
 
 impl LogLine {
-    /// The line as the game prints it, with the repeat count.
     pub fn shown(&self) -> String {
-        if self.count > 1 {
-            format!("{} x{}", self.text, self.count)
-        } else {
-            self.text.clone()
-        }
+        self.label.clone()
     }
 }
 

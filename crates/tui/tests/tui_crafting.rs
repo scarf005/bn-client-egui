@@ -175,15 +175,16 @@ fn a_colored_native_log_line_shows_its_repeat_count() {
     let (t, h) = session();
     let mut app = TuiApp::new(connected(t));
     let logged = |sequence: u32, count: u32| {
+        let label = if count > 1 { "Bang! x 2" } else { "Bang!" };
         json!({"jsonrpc": "2.0", "method": "bn.events", "params": {"epoch": "e7f3", "events": [{
             "sequence": sequence.to_string(), "revision": "32", "type": "message.logged",
-            "data": {"id": "8", "text": "Bang!", "kind": "bad", "color": "c_red", "count": count}}]}})
+            "data": {"id": "8", "text": "Bang!", "kind": "bad", "color": "c_red", "count": count, "label": label}}]}})
     };
     h.push(logged(41, 1));
     h.push(logged(42, 2));
     app.model.poll();
     let t = render(&mut app);
-    assert!(text(&t).contains("Bang! x2"));
+    assert!(text(&t).contains("Bang! x 2"));
     let cell = t
         .backend()
         .buffer()
@@ -198,9 +199,9 @@ fn a_colored_native_log_line_shows_its_repeat_count() {
 fn inventory_and_ground_names_keep_their_slot_suffix_even_when_long() {
     let (t, h) = session();
     let mut app = TuiApp::new(connected(t));
-    let item = |name: &str, count: u64, slot: Option<&str>| {
+    let item = |name: &str, count: u64, slot: Option<&str>, label: &str| {
         let mut row = json!({"look": {"kind": "item", "id": "x", "glyph": "/", "color": "white"},
-            "name": name, "count": count});
+            "name": name, "count": count, "label": label});
         if let Some(slot) = slot {
             row["slot"] = json!(slot);
         }
@@ -209,18 +210,19 @@ fn inventory_and_ground_names_keep_their_slot_suffix_even_when_long() {
     let mut event = fixture("events_41_walk");
     let avatar = &mut event["params"]["events"][0]["changes"]["avatar"];
     avatar["inventory"] = json!([
-        item("combat knife", 1, Some("wielded")),
+        item("combat knife", 1, Some("wielded"), "combat knife (wielded)"),
         item(
             "reinforced hazmat suit with integrated filtration",
             1,
-            Some("worn")
+            Some("worn"),
+            "reinforced hazmat suit with integrated filtration (worn)"
         ),
     ]);
-    avatar["ground"] = json!([item("hammer", 2, None)]);
+    avatar["ground"] = json!([item("hammer", 2, None, "2 hammers")]);
     h.push(event);
     app.model.poll();
     let s = text(&render(&mut app));
-    for want in ["combat knife (wielded)", "(worn)", "hammer x2"] {
+    for want in ["combat knife (wielded)", "(worn)", "2 hammers"] {
         assert!(s.contains(want), "{want} missing in\n{s}");
     }
 }

@@ -25,6 +25,7 @@ fn crowded<'a>() -> H<'a> {
             json!({
                 "look": {"kind": "item", "id": "rock", "glyph": "*", "color": "light_gray"},
                 "name": format!("item{n}"),
+                "label": format!("item{n}"),
                 "slot": "carried"
             })
         })
@@ -120,11 +121,12 @@ fn dressed<'a>(tag: &str, tiles: bool) -> H<'a> {
         {
             "look": {"kind": "item", "id": "bra", "tile": "mon_a", "glyph": "[", "color": "pink"},
             "name": "||\u{a0}bra", "slot": "worn",
+            "label": "<color_light_green>||</color>\u{a0}bra (worn)",
             "durability": {"symbol": "||", "color": "c_light_green"}
         },
         {
             "look": {"kind": "item", "id": "rock", "glyph": "*", "color": "light_gray"},
-            "name": "rock", "slot": "carried"
+            "name": "rock", "slot": "carried", "label": "rock"
         }
     ]);
     avatar["ground"] = json!([]);

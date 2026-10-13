@@ -21,7 +21,7 @@ fn credited_session(grant: Option<u64>) -> (ScriptedTransport, ScriptHandle) {
 fn frame(sequence: u32) -> Value {
     json!({"jsonrpc": "2.0", "method": "bn.events", "params": {"epoch": "e7f3", "events": [{
         "sequence": (40 + sequence).to_string(), "revision": "32", "type": "message.logged",
-        "data": {"id": format!("m{sequence}"), "text": "tick", "kind": "bad", "color": "c_red", "count": 1}}]}})
+        "data": {"id": format!("m{sequence}"), "text": "tick", "kind": "bad", "color": "c_red", "count": 1, "label": "tick"}}]}})
 }
 
 fn credits(h: &ScriptHandle) -> Vec<u64> {
