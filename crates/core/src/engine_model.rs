@@ -1854,6 +1854,7 @@ impl GameModel for EngineModel {
             })
             .collect();
         Some(Overmap {
+            title: markup::plain(&i.title),
             cols: wire.cols as i32,
             rows: wire.rows as i32,
             cells,
@@ -1862,6 +1863,9 @@ impl GameModel for EngineModel {
             player: at(&wire.player),
             legend: wire.legend.clone(),
             cursor_description: wire.cursor_description.clone(),
+            cursor_here: wire.cursor_here.clone(),
+            cursor_note: wire.cursor_note.clone(),
+            route_text: wire.route_text.clone(),
             notes: wire
                 .notes
                 .iter()

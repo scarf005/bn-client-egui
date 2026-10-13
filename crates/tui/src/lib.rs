@@ -611,18 +611,17 @@ impl<M: GameModel> TuiApp<M> {
             Line::from(spans.collect::<Vec<_>>())
         });
         f.render_widget(Paragraph::new(lines.collect::<Vec<_>>()), cells);
-        let mut sidebar = vec![Line::from(format!(
-            "Overmap ({}, {}, {})",
-            om.cursor.0, om.cursor.1, om.cursor.2
-        ))];
-        if let Some(note) = om.note(om.cursor) {
-            sidebar.push(Line::from(format!("Note: {note}")));
-        }
-        if !om.path.is_empty() {
-            sidebar.push(Line::from(format!(
-                "Route of {} squares: click the cursor to go",
-                om.path.len()
-            )));
+        // The engine's title and lines for the cursor square; the coordinates and the click hint are ours.
+        let (x, y, z) = om.cursor;
+        let mut sidebar = vec![Line::from(format!("{} ({x}, {y}, {z})", om.title))];
+        sidebar.extend(
+            [&om.cursor_here, &om.cursor_note]
+                .into_iter()
+                .flatten()
+                .map(|line| Line::from(line.clone())),
+        );
+        if let Some(route) = &om.route_text {
+            sidebar.push(Line::from(format!("{route} Click the cursor to go.")));
         }
         sidebar.extend(om.legend.iter().map(|l| Line::from(l.clone())));
         let listed = om.notes.len().min(usize::from(legend.height) / 3);

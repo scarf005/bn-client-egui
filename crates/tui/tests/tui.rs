@@ -864,6 +864,27 @@ mod overmap {
         app.handle_key(key(KeyCode::Esc));
         assert_eq!(last_operation(&h), json!({"kind":"cancel"}));
     }
+
+    #[test]
+    fn the_sidebar_shows_the_engines_lines_for_the_cursor_square_and_its_route() {
+        let (mut app, h) = engine();
+        let mut event = common::overmap_event(100);
+        let om =
+            &mut event["params"]["events"][0]["changes"]["interaction"]["interaction"]["overmap"];
+        om["cursor_here"] = "You are here.".into();
+        om["cursor_note"] = "Note: cache".into();
+        h.push(event);
+        app.model.poll();
+        let screen = text(&render(&mut app));
+        for line in [
+            "Overmap (100, 200, 0)",
+            "You are here.",
+            "Note: cache",
+            "Route of 2 squares. Click the cursor to go.",
+        ] {
+            assert!(screen.contains(line), "{line} in\n{screen}");
+        }
+    }
 }
 
 #[test]
