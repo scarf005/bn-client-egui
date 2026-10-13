@@ -614,3 +614,54 @@ fn a_new_screen_starts_with_the_focus_on_the_row_the_list_marks_selected() {
     ui.sync(std::slice::from_ref(&screen));
     assert_eq!(ui.focus().row_id.as_deref(), Some("b"));
 }
+
+/// Rows held outside the screen, as a model holds the pages it fetched.
+struct Held(Vec<Row>);
+
+impl Held {
+    fn rows<'a>(&'a self, list: &'a List) -> Vec<&'a Row> {
+        list.rows.iter().chain(self.0.iter()).collect()
+    }
+}
+
+#[test]
+fn keyboard_navigation_reaches_rows_the_model_holds_past_the_first_page() {
+    let screen = menu(&["a", "b"], vec![pick()]);
+    let held = Held(vec![
+        serde_json::from_value(row("c", json!({}))).unwrap(),
+        serde_json::from_value(row("d", json!({}))).unwrap(),
+    ]);
+    let mut ui = Interaction::default();
+    let rows = |list: &List| held.rows(list);
+    assert_eq!(
+        ui.press(&screen, "END", 3, &rows).revealed.as_deref(),
+        Some("d")
+    );
+    ui.press(&screen, "UP", 3, &rows);
+    let out = ui.press(&screen, "RETURN", 3, &rows);
+    assert_eq!(invoked(&out), Some(("pick", json!({"row": "c"}))));
+}
+
+#[test]
+fn return_on_a_grid_cell_runs_the_affordance_the_cell_names() {
+    let grid = json!({"id": "grid", "kind": "grid", "cols": 2, "rows": 1, "cursor": {"x": 0, "y": 0},
+        "cells": [
+            {"x": 0, "y": 0, "id": "c0", "enabled": true, "affordance": "take"},
+            {"x": 1, "y": 0, "id": "c1", "enabled": false, "denial": "Blocked",
+                "affordance": "take"}]});
+    let screen = screen_with(
+        grid,
+        json!([{"id": "take", "label": "Take", "keys": [], "enabled": true, "expect": "boundary",
+            "args": {"row": {"component_id": "grid"}}}]),
+    );
+    let mut ui = Interaction::default();
+    press(&mut ui, &screen, "RIGHT");
+    assert_eq!(
+        invoked(&press(&mut ui, &screen, "RETURN")),
+        Some(("take", json!({"row": "c0"})))
+    );
+    press(&mut ui, &screen, "RIGHT");
+    let out = press(&mut ui, &screen, "RETURN");
+    assert_eq!(out.invoke, None);
+    assert_eq!(out.denial, Some(Text::Plain("Blocked".into())));
+}
