@@ -352,6 +352,8 @@ pub struct InventoryItem {
     pub id: String,
     pub look: Look,
     pub name: String,
+    /// How much the row holds in native units (charges of a charges item, else items): the most a
+    /// `Pickup` or `Drop` of the row takes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub count: Option<u64>,
     /// `wielded`, `worn` or `carried`; absent for items on the ground.
@@ -972,12 +974,12 @@ pub enum Operation {
     Travel {
         pos: WorldPos,
     },
-    /// Picks up `count` items of the `avatar.ground` row `item_id`.
+    /// Picks up `count` of the `avatar.ground` row `item_id`, in the row's native units.
     Pickup {
         item_id: String,
         count: u64,
     },
-    /// Drops `count` items of the `avatar.inventory` row `item_id`.
+    /// Drops `count` of the `avatar.inventory` row `item_id`, in the row's native units.
     Drop {
         item_id: String,
         count: u64,
