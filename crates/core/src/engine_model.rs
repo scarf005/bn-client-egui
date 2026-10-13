@@ -1552,6 +1552,8 @@ impl GameModel for EngineModel {
         self.sounds
             .extend(self.replica.take_sounds().into_iter().map(|s| Heard {
                 text: s.text,
+                direction: s.direction,
+                distance: s.distance,
                 at: now,
             }));
         self.sounds
@@ -1754,6 +1756,11 @@ impl GameModel for EngineModel {
         self.replica
             .avatar()
             .map_or(vec![], |a| crate::sidebar::lines(a, &self.colors))
+    }
+
+    fn sidebar_layout(&self) -> Option<crate::sidebar::Layout> {
+        let avatar = self.replica.avatar()?;
+        crate::sidebar::layout(avatar, &self.colors, |look| self.item_cell(look))
     }
 
     fn native_log(&self) -> &[LogLine] {

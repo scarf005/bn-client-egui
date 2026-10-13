@@ -1,10 +1,16 @@
+use bn_client_core::Cell;
 use bn_client_core::Rgb;
 use bn_client_core::colors::ColorMap;
 use bn_client_core::protocol::Avatar;
-use bn_client_core::sidebar::lines;
+use bn_client_core::protocol::{LayoutPanel, SidebarSide};
+use bn_client_core::sidebar::{Body, layout, lines};
 use serde_json::Value;
 
 fn avatar() -> Avatar {
+    example("avatar with sidebar")
+}
+
+fn example(name: &str) -> Avatar {
     let text = std::fs::read_to_string(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/tests/fixtures/0.2.examples/world.json"
@@ -15,7 +21,7 @@ fn avatar() -> Avatar {
         .as_array()
         .unwrap()
         .iter()
-        .find(|e| e["name"] == "avatar with sidebar")
+        .find(|e| e["name"] == name)
         .unwrap();
     serde_json::from_value(example["value"].clone()).unwrap()
 }
@@ -102,4 +108,149 @@ fn underground_weather_has_no_label() {
     side.weather.label = None;
     side.weather.text = "Underground".into();
     assert!(texts(&a).contains(&"Underground".to_string()));
+}
+
+fn with_compass() -> Avatar {
+    let mut a = example("avatar with creatures on the compass");
+    for p in &mut a.sidebar.as_mut().unwrap().layout.as_mut().unwrap().panels {
+        p.enabled = true;
+    }
+    a
+}
+
+fn shown(a: &Avatar) -> bn_client_core::sidebar::Layout {
+    let cell = |look: &bn_client_core::protocol::Look| Cell {
+        glyph: look.glyph.chars().next().unwrap(),
+        desc: look.id.clone().unwrap_or_default(),
+        ..Cell::default()
+    };
+    layout(a, &ColorMap::default(), cell).unwrap()
+}
+
+#[test]
+fn the_layout_gives_the_side_the_width_and_the_enabled_panels_in_the_engines_order_and_words() {
+    let mut a = with_compass();
+    let panels = &mut a.sidebar.as_mut().unwrap().layout.as_mut().unwrap().panels;
+    *panels = ["Weather", "Health", "Log", "Compass", "Location"]
+        .iter()
+        .map(|id| LayoutPanel {
+            id: id.to_string(),
+            label: format!("<{id}>"),
+            enabled: *id != "Location",
+            height: (*id != "Log").then_some(3),
+        })
+        .collect();
+    let layout = shown(&a);
+    assert_eq!((layout.side, layout.width), (SidebarSide::Right, 44));
+    let labels = layout.panels.iter().map(|p| p.label.as_str());
+    assert_eq!(
+        labels.collect::<Vec<_>>(),
+        ["<Weather>", "<Health>", "<Log>", "<Compass>"]
+    );
+    assert_eq!(layout.panels[2].body, Body::Log);
+    assert_eq!(layout.panels[2].height, None);
+    assert_eq!(layout.panels[0].height, Some(3));
+}
+
+#[test]
+fn a_panel_the_client_cannot_draw_or_the_player_switched_off_is_not_shown() {
+    let layout = shown(&with_compass());
+    // The fixture names a Messages panel and a Compass panel; only Health and the compass have a renderer.
+    let labels = layout.panels.iter().map(|p| p.label.as_str());
+    assert_eq!(labels.collect::<Vec<_>>(), ["Health", "Compass"]);
+    let mut off = with_compass();
+    for p in &mut off
+        .sidebar
+        .as_mut()
+        .unwrap()
+        .layout
+        .as_mut()
+        .unwrap()
+        .panels
+    {
+        p.enabled = p.id == "Health";
+    }
+    assert_eq!(shown(&off).panels.len(), 1);
+}
+
+#[test]
+fn a_sidebar_without_a_layout_has_none() {
+    let mut a = avatar();
+    a.sidebar.as_mut().unwrap().layout = None;
+    assert!(layout(&a, &ColorMap::default(), |_| Cell::default()).is_none());
+}
+
+#[test]
+fn the_compass_lists_each_direction_by_its_heading_and_keeps_the_engines_nearest_first_order() {
+    let layout = shown(&with_compass());
+    let Body::Compass(directions) = &layout.panels[1].body else {
+        panic!("the compass panel");
+    };
+    let labels = directions.iter().map(|d| d.label.as_str());
+    assert_eq!(labels.collect::<Vec<_>>(), ["East:", "center"]);
+    let east = directions[0]
+        .creatures
+        .iter()
+        .map(|c| (c.name.as_str(), c.distance))
+        .collect::<Vec<_>>();
+    assert_eq!(east, [("zombie", 4), ("Rae", 9)]);
+}
+
+#[test]
+fn an_npc_glyph_takes_the_attitude_colour_and_a_monster_keeps_its_own() {
+    let colors = ColorMap::default();
+    let layout = shown(&with_compass());
+    let Body::Compass(directions) = &layout.panels[1].body else {
+        panic!("the compass panel");
+    };
+    let (zombie, rae) = (&directions[0].creatures[0], &directions[0].creatures[1]);
+    assert_eq!(rae.cell.color, colors.resolve("light_green").0);
+    assert_eq!(zombie.cell.color, Cell::default().color);
+    let mut hostile = with_compass();
+    hostile.compass.as_mut().unwrap()[0].creatures[1].attitude =
+        bn_client_core::protocol::Attitude::Hostile;
+    let layout = shown(&hostile);
+    let Body::Compass(directions) = &layout.panels[1].body else {
+        panic!("the compass panel");
+    };
+    assert_eq!(
+        directions[0].creatures[1].cell.color,
+        colors.resolve("red").0
+    );
+}
+
+#[test]
+fn the_labels_layouts_split_the_health_rows_into_limbs_needs_stats_and_movement_panels() {
+    let mut a = with_compass();
+    let panels = &mut a.sidebar.as_mut().unwrap().layout.as_mut().unwrap().panels;
+    *panels = ["Limbs", "Needs", "Stats", "Movement"]
+        .iter()
+        .map(|id| LayoutPanel {
+            id: id.to_string(),
+            label: id.to_string(),
+            enabled: true,
+            height: None,
+        })
+        .collect();
+    let rows = |p: &bn_client_core::sidebar::Panel| {
+        let Body::Status(lines) = &p.body else {
+            panic!("status rows");
+        };
+        lines
+            .iter()
+            .map(|l| {
+                let spans = l.iter().map(|s| s.text.as_str());
+                spans
+                    .filter(|t| !t.is_empty())
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            })
+            .collect::<Vec<_>>()
+    };
+    let layout = shown(&a);
+    let by_id = |id: &str| rows(layout.panels.iter().find(|p| p.id == id).unwrap());
+    assert_eq!(by_id("Limbs"), ["HEAD |||||"]);
+    assert_eq!(by_id("Needs"), ["Pain 3", "Tired Hungry", "Comfortable"]);
+    assert_eq!(by_id("Stats"), ["Str 8 POWER --", "SAFE"]);
+    assert_eq!(by_id("Movement"), [":) Focus 100", "Stm ||||| Spd 100 0 W"]);
 }

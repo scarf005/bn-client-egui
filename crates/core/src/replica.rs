@@ -21,6 +21,10 @@ pub enum Outcome {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Sound {
     pub text: String,
+    /// The native name of where it comes from; absent at the avatar's square or from a source in view.
+    pub direction: Option<String>,
+    /// Squares between the avatar and the source.
+    pub distance: Option<u32>,
 }
 
 /// A `message.logged` event: a new line, or a repeat that replaces the line with the same `id`.
@@ -180,6 +184,10 @@ impl Replica {
                     // A sound the engine also wrote to the message log is already shown there.
                     "sound.heard" if data["logged"] != true => self.sounds.push(Sound {
                         text: text.to_string(),
+                        direction: data["direction"]["name"].as_str().map(str::to_string),
+                        distance: data["distance"]
+                            .as_u64()
+                            .map(|n| n.min(u32::MAX as u64) as u32),
                     }),
                     _ => {}
                 }

@@ -2,6 +2,8 @@
 
 use super::App;
 use crate::a11y;
+use crate::display::Display;
+use bn_client_core::sidebar::{Body, Direction, Layout, Panel};
 use bn_client_core::{Cell, GameModel, LogLine, markup};
 use eframe::egui::{self, accesskit};
 
@@ -29,8 +31,13 @@ struct Dragged {
 }
 
 impl<M: GameModel> App<M> {
-    /// The whole sidebar: the message log pinned to its bottom, `sidebar` filling the rest.
-    pub(super) fn sidebar_panel(&mut self, ui: &mut egui::Ui) {
+    /// The whole sidebar: the message log pinned to its bottom, the panels of `layout` (all of the status
+    /// without one) filling the rest.
+    pub(super) fn sidebar_panel(&mut self, ui: &mut egui::Ui, layout: Option<&Layout>) {
+        let log = layout.is_none_or(|l| l.panels.iter().any(|p| p.body == Body::Log));
+        if !log {
+            return self.sidebar_panels(ui, layout);
+        }
         let room = ui.available_height();
         let height = self.log_height.unwrap_or(room * LOG_SHARE);
         let height = height.clamp(room * LOG_RANGE.0, room * LOG_RANGE.1);
@@ -55,19 +62,56 @@ impl<M: GameModel> App<M> {
         if handle.dragged() {
             self.log_height = Some(height - handle.drag_delta().y);
         }
-        egui::CentralPanel::no_frame().show(ui, |ui| {
-            egui::ScrollArea::vertical().show(ui, |ui| self.sidebar(ui));
+        egui::CentralPanel::no_frame().show(ui, |ui| self.sidebar_panels(ui, layout));
+    }
+
+    fn sidebar_panels(&mut self, ui: &mut egui::Ui, layout: Option<&Layout>) {
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            match layout {
+                Some(layout) => {
+                    for panel in &layout.panels {
+                        self.panel(ui, panel);
+                    }
+                }
+                None => {
+                    // Without an avatar there is no status to show.
+                    let status = self.model.sidebar();
+                    if !status.is_empty() {
+                        crate::sidebar::show(ui, &status);
+                    }
+                }
+            }
+            self.items(ui);
         });
     }
 
-    /// Slot for the status contents; the item lists stay below them.
-    fn sidebar(&mut self, ui: &mut egui::Ui) {
-        // Without an avatar there is no status to show.
-        let status = self.model.sidebar();
-        if !status.is_empty() {
-            crate::sidebar::show(ui, &status);
+    /// One panel of the layout under the engine's label. The message log is pinned below, not here.
+    fn panel(&mut self, ui: &mut egui::Ui, panel: &Panel) {
+        match &panel.body {
+            Body::Status(rows) => {
+                ui.strong(&panel.label);
+                crate::sidebar::rows(ui, &panel.id, rows, panel.id == "Health");
+            }
+            Body::Compass(directions) => {
+                ui.strong(&panel.label);
+                self.compass(ui, directions);
+            }
+            Body::Log => {}
         }
-        self.items(ui);
+    }
+
+    /// Per direction its heading, then its creatures nearest first, each with its sprite and distance.
+    fn compass(&mut self, ui: &mut egui::Ui, directions: &[Direction]) {
+        let season = self.model.season();
+        for direction in directions {
+            ui.label(&direction.label);
+            for creature in &direction.creatures {
+                ui.horizontal(|ui| {
+                    icon(ui, &mut self.display, &creature.cell, season.as_deref());
+                    ui.label(format!("{} {}", creature.name, creature.distance));
+                });
+            }
+        }
     }
 
     fn items(&mut self, ui: &mut egui::Ui) {
@@ -93,7 +137,6 @@ impl<M: GameModel> App<M> {
                 .enumerate()
                 .map(|(i, name)| (name, self.rich(ui, name), cells.get(i)))
                 .collect::<Vec<_>>();
-            let tiles = self.display.tiles();
             // The heading is part of the drop zone, so dropping on it works too.
             // Only a drag in progress gives the zone a fill; idle zones are bare.
             let (_, dropped) = ui
@@ -120,21 +163,7 @@ impl<M: GameModel> App<M> {
                                 for (index, (name, label, cell)) in rows.into_iter().enumerate() {
                                     ui.horizontal(|ui| {
                                         if let Some(cell) = cell {
-                                            let (rect, _) = ui.allocate_exact_size(
-                                                egui::Vec2::splat(ICON),
-                                                egui::Sense::hover(),
-                                            );
-                                            let painter = ui.painter_at(rect);
-                                            let sprite = tiles
-                                                && self.display.paint_icon(
-                                                    &painter,
-                                                    rect,
-                                                    cell,
-                                                    season.as_deref(),
-                                                );
-                                            if !sprite {
-                                                glyph_icon(&painter, rect, cell);
-                                            }
+                                            icon(ui, &mut self.display, cell, season.as_deref());
                                         }
                                         let grip = ui
                                             .add(egui::Label::new(label).sense(egui::Sense::DRAG));
@@ -191,6 +220,16 @@ impl<M: GameModel> App<M> {
             [&native_live, &command_live],
         );
         super::sounds::show(ui, &self.model.sounds());
+    }
+}
+
+/// The cell as its sprite when the tileset has one, else as its glyph, in a square of `ICON`.
+fn icon(ui: &mut egui::Ui, display: &mut Display, cell: &Cell, season: Option<&str>) {
+    let (rect, _) = ui.allocate_exact_size(egui::Vec2::splat(ICON), egui::Sense::hover());
+    let painter = ui.painter_at(rect);
+    let sprite = display.tiles() && display.paint_icon(&painter, rect, cell, season);
+    if !sprite {
+        glyph_icon(&painter, rect, cell);
     }
 }
 

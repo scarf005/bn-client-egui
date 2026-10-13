@@ -440,6 +440,26 @@ fn live_engine_reports_the_native_sidebar_of_the_tutorial_avatar() {
 }
 
 #[test]
+#[ignore = "requires BN_ENGINE that reports the sidebar layout and the compass"]
+fn live_engine_reports_the_sidebar_layout_and_the_compass_of_the_tutorial_avatar() {
+    let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
+    let transport = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
+    let mut model = EngineModel::new(Box::new(transport));
+    wait_for(&mut model, "subscription", |m| m.live());
+    choose_label(&mut model, "New Game");
+    choose_label(&mut model, "Tutorial");
+    wait_for(&mut model, "the sidebar layout", |m| {
+        m.sidebar_layout().is_some()
+    });
+    let layout = model.sidebar_layout().expect("layout");
+    for panel in &layout.panels {
+        println!("{} {:?} {:?}", panel.label, panel.height, panel.body);
+    }
+    println!("side {:?} width {}", layout.side, layout.width);
+    assert!(layout.width > 0 && !layout.panels.is_empty(), "{layout:?}");
+}
+
+#[test]
 #[ignore = "requires BN_ENGINE pointing at an engine binary"]
 fn live_engine_killed_mid_game_shows_the_failure_and_restart_brings_the_menu_back() {
     let engine = std::path::PathBuf::from(std::env::var_os("BN_ENGINE").expect("set BN_ENGINE"));

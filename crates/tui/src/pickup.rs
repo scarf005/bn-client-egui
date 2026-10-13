@@ -3,7 +3,7 @@
 //! row's description in a bordered window below. Rows, the header and the keys are the engine's;
 //! the client only types a count (digits, then Enter, the mark key or a row key applies it).
 
-use super::{SIDE_WIDTH, TuiApp, color};
+use super::{TuiApp, color, side_of};
 use bn_client_core::{GameModel, Menu, MenuChoice};
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::Frame;
@@ -106,11 +106,13 @@ impl<M: GameModel> TuiApp<M> {
         let list_height = (shown + 3).min(screen.height);
         // PICKUP_POSITION: the list is docked against the sidebar at the right, otherwise at the left.
         let placement = menu.panes.first().map_or("", |p| p.placement.as_str());
+        let (side, left) = side_of(self.model.sidebar_layout().as_ref());
         let window = Rect {
-            x: if placement == "right" {
-                screen.width.saturating_sub(SIDE_WIDTH + width)
-            } else {
-                0
+            x: match (placement == "right", left) {
+                (true, false) => screen.width.saturating_sub(side + width),
+                (true, true) => screen.width.saturating_sub(width),
+                (false, false) => 0,
+                (false, true) => side,
             },
             y: 0,
             width,

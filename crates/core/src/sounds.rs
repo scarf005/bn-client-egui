@@ -16,22 +16,23 @@ pub struct SoundLine {
     pub alpha: f32,
 }
 
-/// The sounds younger than `LIFETIME` at `now`, one line per distinct text in the order each last
+/// The sounds younger than `LIFETIME` at `now`, one line per distinct text and place in the order each last
 /// came, faded by the age of its newest occurrence.
 pub fn grouped(sounds: &[Heard], now: Duration) -> Vec<SoundLine> {
-    let mut lines: Vec<(&str, usize, Duration)> = vec![];
+    let mut lines: Vec<(String, usize, Duration)> = vec![];
     for sound in sounds
         .iter()
         .filter(|s| now.saturating_sub(s.at) < LIFETIME)
     {
-        let (count, newest) = match lines.iter().position(|l| l.0 == sound.text) {
+        let shown = sound.shown();
+        let (count, newest) = match lines.iter().position(|l| l.0 == shown) {
             Some(i) => {
                 let old = lines.remove(i);
                 (old.1 + 1, sound.at)
             }
             None => (1, sound.at),
         };
-        lines.push((&sound.text, count, newest));
+        lines.push((shown, count, newest));
     }
     lines
         .into_iter()
@@ -39,7 +40,7 @@ pub fn grouped(sounds: &[Heard], now: Duration) -> Vec<SoundLine> {
             let age = now.saturating_sub(at).as_secs_f32() / LIFETIME.as_secs_f32();
             SoundLine {
                 text: match count {
-                    1 => text.to_string(),
+                    1 => text,
                     n => format!("{text} ×{n}"),
                 },
                 alpha: 1.0 - age * (1.0 - LEAST),
@@ -55,8 +56,44 @@ mod tests {
     fn heard(text: &str, secs: u64) -> Heard {
         Heard {
             text: text.into(),
+            direction: None,
+            distance: None,
             at: Duration::from_secs(secs),
         }
+    }
+
+    fn placed(text: &str, direction: Option<&str>, distance: Option<u32>) -> Heard {
+        Heard {
+            direction: direction.map(str::to_string),
+            distance,
+            ..heard(text, 0)
+        }
+    }
+
+    #[test]
+    fn a_sound_shows_the_engines_direction_name_and_distance_when_it_sends_them() {
+        let shown = |h: Heard| grouped(&[h], Duration::ZERO)[0].text.clone();
+        assert_eq!(
+            shown(placed("Boom", Some("southeast"), Some(12))),
+            "Boom (southeast, 12)"
+        );
+        assert_eq!(shown(placed("Tick.", None, Some(3))), "Tick. (3)");
+        assert_eq!(shown(placed("Hm", Some("north"), None)), "Hm (north)");
+        assert_eq!(shown(placed("Plain", None, None)), "Plain");
+    }
+
+    #[test]
+    fn the_same_sound_from_two_places_is_two_lines() {
+        let sounds = [
+            placed("Boom", Some("north"), Some(5)),
+            placed("Boom", Some("south"), Some(5)),
+            placed("Boom", Some("north"), Some(5)),
+        ];
+        let texts = grouped(&sounds, Duration::ZERO)
+            .into_iter()
+            .map(|l| l.text)
+            .collect::<Vec<_>>();
+        assert_eq!(texts, ["Boom (south, 5)", "Boom (north, 5) ×2"]);
     }
 
     #[test]

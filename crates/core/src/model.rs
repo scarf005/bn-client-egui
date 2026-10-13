@@ -58,7 +58,7 @@ pub struct Mutation {
     pub traits: std::sync::Arc<std::collections::BTreeMap<String, Vec<String>>>,
 }
 
-#[derive(Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct Cell {
     pub glyph: char,
     pub color: Rgb,
@@ -141,8 +141,26 @@ pub struct LogLine {
 pub struct Heard {
     /// What the game says it heard, localized.
     pub text: String,
+    /// The game's name for where it came from, when it names one.
+    pub direction: Option<String>,
+    /// Squares between the avatar and its source.
+    pub distance: Option<u32>,
     /// When the client received it, on the model's clock.
     pub at: std::time::Duration,
+}
+
+impl Heard {
+    /// The text with where it came from: `text (direction, distance)`.
+    pub fn shown(&self) -> String {
+        let place = [self.direction.clone(), self.distance.map(|n| n.to_string())]
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>();
+        match place.is_empty() {
+            true => self.text.clone(),
+            false => format!("{} ({})", self.text, place.join(", ")),
+        }
+    }
 }
 
 impl LogLine {
@@ -747,6 +765,10 @@ pub trait GameModel {
     /// The avatar's sidebar as coloured lines; empty before the engine reports one.
     fn sidebar(&self) -> Vec<crate::sidebar::Line> {
         vec![]
+    }
+    /// The sidebar as the game's panel options arrange it; none before the engine reports them.
+    fn sidebar_layout(&self) -> Option<crate::sidebar::Layout> {
+        None
     }
     /// The game's own message log, oldest first.
     fn native_log(&self) -> &[LogLine] {

@@ -50,7 +50,7 @@ fn the_status_panel_shows_the_clock_of_each_event_pushed_mid_command() {
     model.poll();
     let mut app = TuiApp::new(model);
     assert!(
-        !screen(&mut app, 40).contains("Status"),
+        !screen(&mut app, 40).contains("Health"),
         "no avatar, no status"
     );
     for (n, clock) in ["Around noon", "Mid-afternoon", "Dusk"]
@@ -58,10 +58,17 @@ fn the_status_panel_shows_the_clock_of_each_event_pushed_mid_command() {
         .enumerate()
     {
         let mut a = avatar();
+        a["sidebar"]["layout"]["panels"] = json!([
+            {"id": "Health", "label": "Health", "enabled": true},
+            {"id": "Time", "label": "Time", "enabled": true}
+        ]);
         a["sidebar"]["time"]["clock"] = json!(clock);
         push(&mut app.model, &h, n as u32 + 1, a);
         let shown = screen(&mut app, 40);
-        assert!(shown.contains("Status"), "{shown}");
+        assert!(
+            shown.contains("Health") && shown.contains("Time"),
+            "{shown}"
+        );
         assert!(shown.contains(&format!("Spring, Day 1 {clock}")), "{shown}");
         assert!(shown.contains("HEAD |||||"), "{shown}");
     }

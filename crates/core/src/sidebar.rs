@@ -1,8 +1,8 @@
 //! The engine's classic sidebar values, laid out by the client as coloured lines.
 
 use crate::colors::ColorMap;
-use crate::model::Rgb;
-use crate::protocol::{Avatar, SidebarText};
+use crate::model::{Cell, Rgb};
+use crate::protocol::{Attitude, Avatar, Look, SidebarSide, SidebarText};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Span {
@@ -30,12 +30,42 @@ fn bar(current: i64, max: i64) -> String {
     "|".repeat(filled as usize) + &".".repeat((BAR - filled) as usize)
 }
 
-/// The classic layout: a limb beside a need and a stat on the first six rows, then temperature and
-/// power, location, weather, date and time, and the weapon. A row with nothing to print is left out.
-pub fn lines(avatar: &Avatar, colors: &ColorMap) -> Vec<Line> {
-    let Some(side) = &avatar.sidebar else {
-        return vec![];
-    };
+/// The rows of the panels the client draws. The classic health panel puts a limb beside a need and a stat on
+/// its first six rows, then temperature and power; the other layouts split it into limbs, needs, stats and
+/// movement. A row with nothing to print is left out.
+struct Panels {
+    health: Vec<Line>,
+    limbs: Vec<Line>,
+    needs: Vec<Line>,
+    stats: Vec<Line>,
+    movement: Vec<Line>,
+    location: Vec<Line>,
+    weather: Vec<Line>,
+    time: Vec<Line>,
+    weapon: Vec<Line>,
+}
+
+impl Panels {
+    /// The rows of the panel the engine's panel manager calls `id`, taken out of `self`.
+    fn take(&mut self, id: &str) -> Option<Vec<Line>> {
+        let rows = match id {
+            "Health" => &mut self.health,
+            "Limbs" => &mut self.limbs,
+            "Needs" => &mut self.needs,
+            "Stats" => &mut self.stats,
+            "Movement" => &mut self.movement,
+            "Location" => &mut self.location,
+            "Weather" => &mut self.weather,
+            "Time" => &mut self.time,
+            "Weapon" => &mut self.weapon,
+            _ => return None,
+        };
+        Some(std::mem::take(rows))
+    }
+}
+
+fn panels(avatar: &Avatar, colors: &ColorMap) -> Option<Panels> {
+    let side = avatar.sidebar.as_ref()?;
     let span = |text: String, color: &str| Span {
         text,
         color: colors
@@ -70,48 +100,53 @@ pub fn lines(avatar: &Avatar, colors: &ColorMap) -> Vec<Line> {
         )
     };
     let (stamina, movement, safe) = (&side.stamina, &side.movement, &side.safe_mode);
+    let face = span(side.morale.face.clone(), &side.morale.color);
+    let focus = labelled(&side.focus.label, &side.focus.value.to_string(), "white");
+    let safe = span(
+        safe.enabled.then(|| safe.label.clone()).unwrap_or_default(),
+        &safe.color,
+    );
+    let speed = labelled(
+        &side.speed.label,
+        &side.speed.value.to_string(),
+        &side.speed.color,
+    );
+    let moving = span(
+        format!("{} {}", movement.counter, movement.mode_text),
+        &movement.color,
+    );
+    let stamina = labelled(
+        &stamina.label,
+        &bar(stamina.current, stamina.max),
+        &stamina.color,
+    );
+    let power = labelled(
+        side.power.label.as_deref().unwrap_or_default(),
+        &side.power.text,
+        &side.power.color,
+    );
     let beside: [Line; 6] = [
         vec![value(&side.pain), stat("strength")],
-        vec![
-            value(&side.hunger),
-            span(side.morale.face.clone(), &side.morale.color),
-            stat("dexterity"),
-        ],
+        vec![value(&side.hunger), face.clone(), stat("dexterity")],
         vec![value(&side.thirst), stat("intelligence")],
         vec![value(&side.fatigue), stat("perception")],
-        vec![
-            labelled(&side.focus.label, &side.focus.value.to_string(), "white"),
-            span(
-                safe.enabled.then(|| safe.label.clone()).unwrap_or_default(),
-                &safe.color,
-            ),
-        ],
-        vec![
-            labelled(
-                &side.speed.label,
-                &side.speed.value.to_string(),
-                &side.speed.color,
-            ),
-            span(
-                format!("{} {}", movement.counter, movement.mode_text),
-                &movement.color,
-            ),
-            labelled(
-                &stamina.label,
-                &bar(stamina.current, stamina.max),
-                &stamina.color,
-            ),
-        ],
+        vec![focus.clone(), safe.clone()],
+        vec![speed.clone(), moving.clone(), stamina.clone()],
     ];
-    let rows = side.limbs.len().max(beside.len());
-    let mut result = (0..rows)
+    let limbs = side
+        .limbs
+        .iter()
+        .map(|limb| {
+            vec![
+                value(&limb.label),
+                span(bar(limb.hp, limb.hp_max), &limb.color),
+            ]
+        })
+        .collect::<Vec<_>>();
+    let rows = limbs.len().max(beside.len());
+    let mut health = (0..rows)
         .map(|i| {
-            let mut row = side.limbs.get(i).map_or_else(Vec::new, |limb| {
-                vec![
-                    value(&limb.label),
-                    span(bar(limb.hp, limb.hp_max), &limb.color),
-                ]
-            });
+            let mut row = limbs.get(i).cloned().unwrap_or_default();
             row.extend(beside.get(i).cloned().unwrap_or_default());
             row
         })
@@ -133,20 +168,153 @@ pub fn lines(avatar: &Avatar, colors: &ColorMap) -> Vec<Line> {
     );
     let mut weapon = vec![label(&side.weapon), value(&side.weapon)];
     weapon.extend(side.style.as_ref().map(value));
-    result.extend([
-        vec![
-            value(&side.temperature),
-            labelled(
-                side.power.label.as_deref().unwrap_or_default(),
-                &side.power.text,
-                &side.power.color,
-            ),
+    health.push(vec![value(&side.temperature), power.clone()]);
+    let one = |row: Line| vec![row];
+    let mut result = Panels {
+        health,
+        limbs,
+        needs: vec![
+            vec![value(&side.pain), value(&side.thirst)],
+            vec![value(&side.fatigue), value(&side.hunger)],
+            vec![value(&side.temperature)],
         ],
-        vec![label(&side.location), value(&side.location)],
-        vec![label(&side.weather), value(&side.weather)],
-        time,
-        weapon,
-    ]);
-    result.retain(|row| row.iter().any(|s| !s.text.is_empty()));
-    result
+        stats: vec![
+            vec![stat("strength"), stat("dexterity"), power],
+            vec![stat("intelligence"), stat("perception"), safe],
+        ],
+        movement: vec![vec![face, focus], vec![stamina, speed, moving]],
+        location: one(vec![label(&side.location), value(&side.location)]),
+        weather: one(vec![label(&side.weather), value(&side.weather)]),
+        time: one(time),
+        weapon: one(weapon),
+    };
+    [
+        &mut result.health,
+        &mut result.limbs,
+        &mut result.needs,
+        &mut result.stats,
+        &mut result.movement,
+        &mut result.location,
+        &mut result.weather,
+        &mut result.time,
+        &mut result.weapon,
+    ]
+    .into_iter()
+    .for_each(|rows| rows.retain(|row| row.iter().any(|s| !s.text.is_empty())));
+    Some(result)
+}
+
+/// All panels' rows in the classic order; empty before the engine reports a sidebar.
+pub fn lines(avatar: &Avatar, colors: &ColorMap) -> Vec<Line> {
+    panels(avatar, colors).map_or(vec![], |p| {
+        [p.health, p.location, p.weather, p.time, p.weapon].concat()
+    })
+}
+
+/// What a panel of the sidebar shows.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Body {
+    /// Coloured rows.
+    Status(Vec<Line>),
+    /// The message log.
+    Log,
+    /// The creatures in sight, by direction.
+    Compass(Vec<Direction>),
+}
+
+/// The creatures toward one direction, nearest first.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Direction {
+    /// The heading the game prints (`North:`), else the direction's name.
+    pub label: String,
+    pub creatures: Vec<Creature>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Creature {
+    pub name: String,
+    /// Squares from the avatar.
+    pub distance: u32,
+    /// Its sprite or glyph; an NPC's glyph is coloured by attitude as the native compass does.
+    pub cell: Cell,
+}
+
+/// One enabled panel the client can draw.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Panel {
+    /// The panel manager's name for it (`Health`).
+    pub id: String,
+    pub label: String,
+    /// Rows the native panel takes; absent for the one that takes the rest of the column.
+    pub height: Option<u32>,
+    pub body: Body,
+}
+
+/// The sidebar as the game's panel options arrange it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Layout {
+    pub side: SidebarSide,
+    /// Columns the native sidebar takes.
+    pub width: u32,
+    /// The enabled panels the client has a renderer for, top to bottom, labelled by the engine.
+    pub panels: Vec<Panel>,
+}
+
+/// The colour the native compass gives an NPC's glyph by its attitude.
+fn npc_color(attitude: Attitude) -> &'static str {
+    match attitude {
+        Attitude::Hostile => "red",
+        Attitude::Friendly => "light_green",
+        Attitude::Neutral | Attitude::Any => "pink",
+    }
+}
+
+/// The avatar's sidebar laid out by its `layout`, or `None` from an engine that sends none. Panels the
+/// player switched off or the client cannot draw are left out. `cell` draws a creature's look.
+pub fn layout(avatar: &Avatar, colors: &ColorMap, cell: impl Fn(&Look) -> Cell) -> Option<Layout> {
+    let arrangement = avatar.sidebar.as_ref()?.layout.as_ref()?;
+    let mut rows = panels(avatar, colors)?;
+    let compass = || {
+        avatar.compass.iter().flatten().map(|d| Direction {
+            label: d.label.clone().unwrap_or_else(|| d.toward.name.clone()),
+            creatures: d
+                .creatures
+                .iter()
+                .map(|c| {
+                    let mut cell = cell(&c.look);
+                    if c.look.kind == "npc" {
+                        cell.color = colors.resolve(npc_color(c.attitude)).0;
+                    }
+                    Creature {
+                        name: c.name.clone(),
+                        distance: c.distance,
+                        cell,
+                    }
+                })
+                .collect(),
+        })
+    };
+    let panels = arrangement
+        .panels
+        .iter()
+        .filter(|p| p.enabled)
+        .filter_map(|p| {
+            let body = match p.id.as_str() {
+                "Log" => Body::Log,
+                "Compass" | "Comp.Compass" => Body::Compass(compass().collect()),
+                id => Body::Status(rows.take(id)?),
+            };
+            Some(Panel {
+                id: p.id.clone(),
+                label: p.label.clone(),
+                height: p.height,
+                body,
+            })
+        })
+        .collect();
+    Some(Layout {
+        side: arrangement.side,
+        width: arrangement.width,
+        panels,
+    })
 }

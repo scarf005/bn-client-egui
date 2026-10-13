@@ -14,30 +14,47 @@ const MIN_COLUMNS: [usize; 5] = [5, 7, 7, 8, 15];
 /// The indent of a line continued after a break, in characters.
 const INDENT: usize = 2;
 
-/// One label per sidebar line, each span in its native colour and at a fixed column, so a value changing
-/// never moves another one; a screen reader reads the line as one text.
-/// A line too wide for the panel loses its padding first, then breaks between spans, never inside one,
-/// so a label stays with its value.
+/// The width in points of `columns` native sidebar columns, in the sidebar's font.
+pub fn width_of(ui: &egui::Ui, columns: u32) -> f32 {
+    columns as f32 * char_width(ui)
+}
+
+fn char_width(ui: &egui::Ui) -> f32 {
+    ui.painter()
+        .layout_no_wrap("0".into(), FontId::monospace(14.0), Color32::WHITE)
+        .size()
+        .x
+}
+
+/// The sidebar lines under a "Status" heading.
 pub fn show(ui: &mut egui::Ui, lines: &[Line]) {
     ui.heading("Status");
+    rows(ui, "status", lines, true);
+}
+
+/// One label per sidebar line, each span in its native colour and at a fixed column, so a value changing
+/// never moves another one; a screen reader reads the line as one text. The rows of a panel share their
+/// columns, `panel` keeping those of each apart; `table` marks the classic health panel, whose first rows
+/// alone share them, at least as wide as the widest value that panel holds.
+/// A line too wide for the panel loses its padding first, then breaks between spans, never inside one,
+/// so a label stays with its value.
+pub fn rows(ui: &mut egui::Ui, panel: &str, lines: &[Line], table: bool) {
     let width = ui.available_width();
-    let font = FontId::monospace(14.0);
-    let char_width = ui
-        .painter()
-        .layout_no_wrap("0".into(), font, Color32::WHITE)
-        .size()
-        .x;
+    let char_width = char_width(ui);
     // Columns only widen, so a value that once needed more room keeps it.
-    let key = egui::Id::new("sidebar_columns");
+    let key = egui::Id::new(("sidebar_columns", panel));
     let mut groups: Vec<Vec<usize>> = ui.data(|d| d.get_temp(key)).unwrap_or_default();
-    let group_of = |row: usize| row.saturating_sub(TABLE_ROWS - 1);
+    let group_of = |row: usize| match table {
+        true => row.saturating_sub(TABLE_ROWS - 1),
+        false => 0,
+    };
     for (row, line) in lines.iter().enumerate() {
         let group = group_of(row);
         groups.resize(groups.len().max(group + 1), vec![]);
         let columns = &mut groups[group];
         columns.resize(columns.len().max(line.len()), 0);
         for (i, span) in line.iter().enumerate() {
-            let floor = MIN_COLUMNS.get(i).filter(|_| group == 0).copied();
+            let floor = MIN_COLUMNS.get(i).filter(|_| table && group == 0).copied();
             columns[i] = columns[i]
                 .max(floor.unwrap_or(0))
                 .max(span.text.chars().count());

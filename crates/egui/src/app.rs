@@ -3,6 +3,7 @@ use crate::display::Display;
 use crate::effects::Effects;
 use crate::text;
 use crate::windows::{Origin, Shown, WindowSpec};
+use bn_client_core::protocol::SidebarSide;
 use bn_client_core::{Failure, GameModel, Loading, Overmap, Pos, keys};
 use eframe::egui::{self, accesskit};
 use std::collections::VecDeque;
@@ -33,6 +34,8 @@ const SIDEBAR_SHARE: f32 = 0.28;
 const SIDEBAR_WIDTH: (f32, f32) = (430.0, 600.0);
 /// The most of the window width the sidebar's minimum may take.
 const SIDEBAR_MIN_SHARE: f32 = 0.4;
+/// Points around the columns of a native sidebar: panel margins and the scroll bar.
+const SIDEBAR_CHROME: f32 = 28.0;
 /// The most of the window width the sidebar may be dragged to; a saved wider size shrinks to it.
 const SIDEBAR_MAX_SHARE: f32 = 0.4;
 
@@ -452,19 +455,37 @@ impl<M: GameModel> App<M> {
             return;
         }
         let room = ui.available_width();
+        let layout = self.model.sidebar_layout();
         let narrowest = SIDEBAR_WIDTH.0.min(room * SIDEBAR_MIN_SHARE);
+        // The game's panel options set the width and the side; a changed width is a new panel, which starts
+        // at the new width. The sidebar's chrome (margins, scroll bar) takes SIDEBAR_CHROME on top of its columns.
+        let native = layout.as_ref().map(|l| {
+            let width = crate::sidebar::width_of(ui, l.width) + SIDEBAR_CHROME;
+            (l.side, l.width, width)
+        });
+        let narrowest = native.map_or(narrowest, |(_, _, w)| narrowest.min(w));
         // Never narrower than its minimum, and never more than the share that leaves the map most of the window.
         let widest = (room * SIDEBAR_MAX_SHARE).clamp(narrowest, SIDEBAR_WIDTH.1);
-        let sidebar = egui::Panel::right("sidebar")
-            .default_size((room * SIDEBAR_SHARE).clamp(narrowest, widest))
+        let initial = native.map_or(room * SIDEBAR_SHARE, |(_, _, w)| w);
+        let name = native.map_or("sidebar".to_string(), |(side, cols, _)| {
+            format!("sidebar-{side:?}-{cols}")
+        });
+        let panel = match native {
+            Some((SidebarSide::Left, ..)) => egui::Panel::left(egui::Id::new(&name)),
+            _ => egui::Panel::right(egui::Id::new(&name)),
+        };
+        let sidebar = panel
+            .default_size(initial.clamp(narrowest, widest))
             .size_range(narrowest..=widest)
             .show(ui, |ui| {
                 profiling::scope!("sidebar");
                 ui.set_min_width(ui.available_width());
-                self.sidebar_panel(ui)
+                self.sidebar_panel(ui, layout.as_ref())
             });
-        self.sidebar_left = Some(sidebar.response.rect.left());
-        label_resize_handle(ui.ctx(), "sidebar", "Resize sidebar");
+        // The pickup list docks against the sidebar's inner edge when it is on the right.
+        self.sidebar_left = (!matches!(native, Some((SidebarSide::Left, ..))))
+            .then(|| sidebar.response.rect.left());
+        label_resize_handle(ui.ctx(), &name, "Resize sidebar");
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE.fill(egui::Color32::BLACK))
             .show(ui, |ui| {

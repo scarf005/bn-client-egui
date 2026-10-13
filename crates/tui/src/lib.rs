@@ -10,6 +10,8 @@ mod terminal;
 mod trade;
 
 use bn_client_core::markup::plain;
+use bn_client_core::protocol::SidebarSide;
+use bn_client_core::sidebar::{self as native, Body};
 use bn_client_core::{ActionEntry, Failure, GameModel, Loading, Menu, Overmap, Pos, Rgb, keys};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::Frame;
@@ -93,6 +95,25 @@ impl Footer {
     fn scroll_by(&mut self, lines: isize) {
         let last = self.total.saturating_sub(self.shown);
         self.scroll = self.scroll.saturating_add_signed(lines).min(last);
+    }
+}
+
+/// The sidebar's width in columns and whether it sits on the left: the game's panel options, else a default.
+pub(crate) fn side_of(layout: Option<&native::Layout>) -> (u16, bool) {
+    layout.map_or((SIDE_WIDTH, false), |l| {
+        (
+            l.width.min(u16::MAX as u32) as u16,
+            l.side == SidebarSide::Left,
+        )
+    })
+}
+
+/// The rows a panel's contents take.
+fn panel_lines(panel: &native::Panel) -> usize {
+    match &panel.body {
+        Body::Status(rows) => rows.len(),
+        Body::Compass(directions) => directions.iter().map(|d| 1 + d.creatures.len()).sum(),
+        Body::Log => 0,
     }
 }
 
@@ -665,24 +686,52 @@ impl<M: GameModel> TuiApp<M> {
         if let Some(loading) = self.model.loading() {
             return Self::draw_loading(f, &loading);
         }
+        let layout = self.model.sidebar_layout();
+        let log_shown = layout
+            .as_ref()
+            .is_none_or(|l| l.panels.iter().any(|p| p.body == Body::Log));
         let [main, status, log] = Layout::vertical([
             Constraint::Min(5),
             Constraint::Length(1),
-            Constraint::Length(LOG_LINES as u16 + 2),
+            Constraint::Length(if log_shown { LOG_LINES as u16 + 2 } else { 0 }),
         ])
         .areas(f.area());
-        let [map, side] =
-            Layout::horizontal([Constraint::Min(10), Constraint::Length(SIDE_WIDTH)]).areas(main);
-        let rows = self.model.sidebar();
-        let [vitals, actions, items] = Layout::vertical([
-            Constraint::Max(rows.len() as u16 + 2),
-            Constraint::Min(3),
-            Constraint::Length(12),
-        ])
-        .areas(side);
+        let (width, left) = side_of(layout.as_ref());
+        let width = width.min(main.width / 2);
+        let [map, side] = match left {
+            true => {
+                let [side, map] =
+                    Layout::horizontal([Constraint::Length(width), Constraint::Min(10)])
+                        .areas(main);
+                [map, side]
+            }
+            false => {
+                Layout::horizontal([Constraint::Min(10), Constraint::Length(width)]).areas(main)
+            }
+        };
+        // The game's panels, else the status rows alone.
+        let panels = match &layout {
+            Some(l) => l.panels.clone(),
+            None => vec![native::Panel {
+                id: String::new(),
+                label: "Status".into(),
+                height: None,
+                body: Body::Status(self.model.sidebar()),
+            }],
+        };
+        let panels = panels
+            .into_iter()
+            .filter(|p| p.body != Body::Log && p.body != Body::Status(vec![]))
+            .collect::<Vec<_>>();
+        let heights = panels
+            .iter()
+            .map(|p| Constraint::Max(panel_lines(p) as u16 + 2));
+        let areas = Layout::vertical(heights.chain([Constraint::Min(3), Constraint::Length(12)]))
+            .split(side);
+        let (actions, items) = (areas[panels.len()], areas[panels.len() + 1]);
         self.draw_map(f, map);
-        if !rows.is_empty() {
-            Self::draw_status(f, vitals, &rows);
+        for (panel, area) in panels.iter().zip(areas.iter()) {
+            Self::draw_panel(f, *area, panel);
         }
         match self.model.target_panel() {
             Some(panel) => self.draw_target_panel(f, actions, &panel),
@@ -708,10 +757,12 @@ impl<M: GameModel> TuiApp<M> {
         let all = native.chain(commands).chain(sounds).collect::<Vec<_>>();
         let end = all.len().saturating_sub(self.log_back.min(all.len()));
         let lines = all[end.saturating_sub(LOG_LINES)..end].to_vec();
-        f.render_widget(
-            Paragraph::new(lines).block(Block::bordered().title("Message log")),
-            log,
-        );
+        if log_shown {
+            f.render_widget(
+                Paragraph::new(lines).block(Block::bordered().title("Message log")),
+                log,
+            );
+        }
         if let Some(menu) = self.menu() {
             match menu.context.as_str() {
                 "CRAFTING" => self.draw_crafting(f, &menu),
@@ -890,8 +941,36 @@ impl<M: GameModel> TuiApp<M> {
         f.render_widget(Paragraph::new(lines), cells);
     }
 
+    /// One panel of the sidebar under the engine's label.
+    fn draw_panel(f: &mut Frame, area: Rect, panel: &native::Panel) {
+        match &panel.body {
+            Body::Status(rows) => Self::draw_status(f, area, &panel.label, rows),
+            Body::Compass(directions) => {
+                let lines = directions.iter().flat_map(|d| {
+                    let creatures = d.creatures.iter().map(|c| {
+                        let glyph = Span::styled(
+                            c.cell.glyph.to_string(),
+                            Style::new().fg(color(c.cell.color)),
+                        );
+                        Line::from(vec![
+                            glyph,
+                            Span::raw(format!(" {} {}", c.name, c.distance)),
+                        ])
+                    });
+                    std::iter::once(Line::raw(d.label.as_str())).chain(creatures)
+                });
+                f.render_widget(
+                    Paragraph::new(lines.collect::<Vec<_>>())
+                        .block(Block::bordered().title(panel.label.as_str())),
+                    area,
+                );
+            }
+            Body::Log => {}
+        }
+    }
+
     /// The engine's sidebar rows, each span in its native colour.
-    fn draw_status(f: &mut Frame, area: Rect, rows: &[bn_client_core::sidebar::Line]) {
+    fn draw_status(f: &mut Frame, area: Rect, title: &str, rows: &[bn_client_core::sidebar::Line]) {
         let lines = rows.iter().map(|row| {
             let spans = row.iter().filter(|s| !s.text.is_empty());
             let spans = spans.flat_map(|s| {
@@ -903,7 +982,7 @@ impl<M: GameModel> TuiApp<M> {
             Line::from(spans.skip(1).collect::<Vec<_>>())
         });
         f.render_widget(
-            Paragraph::new(lines.collect::<Vec<_>>()).block(Block::bordered().title("Status")),
+            Paragraph::new(lines.collect::<Vec<_>>()).block(Block::bordered().title(title)),
             area,
         );
     }
