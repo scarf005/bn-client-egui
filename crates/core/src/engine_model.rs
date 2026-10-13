@@ -1349,6 +1349,7 @@ impl EngineModel {
                     color: c.color.clone().unwrap_or_default(),
                     key_color: c.key_color.clone().unwrap_or_default(),
                     markup: c.markup.clone().unwrap_or_default(),
+                    action: c.action_id.clone().unwrap_or_default(),
                     nest_color: c.nest_color.clone().unwrap_or_default(),
                     mark: c.mark.clone(),
                     editor: c.editor.clone(),
@@ -1400,6 +1401,7 @@ impl EngineModel {
                     }
                 })
                 .collect(),
+            areas: i.areas.clone(),
             can_cancel: i.allow_cancel,
             pane_tabs: pane_labels
                 .iter()
@@ -1872,6 +1874,7 @@ impl GameModel for EngineModel {
             cursor: at(&cursor),
             player: at(&wire.player),
             legend: wire.legend.clone(),
+            cursor_description: wire.cursor_description.clone(),
             notes: wire
                 .notes
                 .iter()

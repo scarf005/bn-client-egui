@@ -157,6 +157,7 @@ fn by_def(def: &str, v: &Value) -> Result<Value, String> {
         "interaction" => round_trip::<Interaction>(v),
         "canvas" => round_trip::<CanvasWire>(v),
         "vehicle" => round_trip::<protocol::Vehicle>(v),
+        "overmap" => round_trip::<protocol::OvermapWire>(v),
         // The world values are typed by the replica tests; here they only have to be valid JSON.
         "environment" => round_trip::<protocol::Environment>(v),
         "entity" => round_trip::<protocol::Entity>(v),

@@ -23,7 +23,7 @@ fn overmap_event(cursor_x: i32) -> Value {
             "player":{"dim":"","x":98,"y":200,"z":0},
             "cols":4,"rows":3,
             "cells":[row("F"), row("f"), row("r")],
-            "legend":["Overmap","  forest"],
+            "legend":["Overmap","  forest"],"cursor_description":"forest on the west edge",
             "notes":[{"pos":{"dim":"","x":cursor_x - 1,"y":200,"z":0},"text":"cache"}],
                 "path":[{"dim":"","x":cursor_x + 1,"y":200,"z":0},{"dim":"","x":cursor_x + 2,"y":200,"z":0}]
         },
@@ -70,6 +70,7 @@ fn the_overmap_interaction_becomes_a_grid_with_colours_cursor_and_notes() {
     assert_eq!(om.player, (98, 200, 0));
     assert_eq!(om.square(2, 1), (100, 200, 0), "cell (2, 1) is the cursor");
     assert_eq!(om.legend, ["Overmap", "  forest"]);
+    assert_eq!(om.cursor_description, "forest on the west edge");
     assert_eq!(om.note((99, 200, 0)), Some("cache"));
     assert!(om.cell(4, 0).is_none() && om.cell(0, 3).is_none());
     assert!(m.menu().is_none(), "the overmap is not a list menu");

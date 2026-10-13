@@ -18,6 +18,15 @@ fn aim() -> Value {
     serde_json::from_str::<Value>(&text).unwrap()["aim"].clone()
 }
 
+/// The area the engine says does not exist now.
+fn without(boundary: &mut Value, action: &str) {
+    for area in boundary["interaction"]["areas"].as_array_mut().unwrap() {
+        if area["action_id"] == action {
+            area["available"] = false.into();
+        }
+    }
+}
+
 fn event(sequence: u32, boundary: Value) -> Value {
     json!({"jsonrpc":"2.0","method":"bn.events","params":{"epoch":"e7f3","events":[{
         "sequence": sequence.to_string(), "revision": (sequence - 9).to_string(),
@@ -143,18 +152,15 @@ fn a_pane_over_capacity_is_red_under_the_top_message_box() {
 #[test]
 fn area_markers_follow_the_native_grid_and_dim_the_areas_the_engine_does_not_offer() {
     let mut boundary = aim();
-    boundary["actions"]
-        .as_array_mut()
-        .unwrap()
-        .retain(|a| a["id"] != "ITEMS_NW");
+    without(&mut boundary, "ITEMS_NW");
     let (mut app, _) = open(boundary);
     let t = render(&mut app);
     let rows = lines(&t);
-    let (_, first) = find(&t, "[C][D]");
+    let (_, first) = find(&t, "[c][d]");
     for (row, grid) in [
-        "[C][D]  [7][8][9][<]",
-        "[I]  [4][5][6][>]",
-        "[A][W]  [1][2][3]",
+        "[c][d]  [7][8][9][<]",
+        "[i]  [4][5][6][>]",
+        "[a][w]  [1][2][3]",
     ]
     .into_iter()
     .enumerate()
@@ -169,17 +175,14 @@ fn area_markers_follow_the_native_grid_and_dim_the_areas_the_engine_does_not_off
     // The pane's own area is white and one it cannot put items in is red.
     let (x, y) = find(&t, "[5]");
     assert_eq!(t.backend().buffer()[(x, y)].fg, Color::White);
-    let (x, y) = find(&t, "[C]");
+    let (x, y) = find(&t, "[c]");
     assert_eq!(t.backend().buffer()[(x, y)].fg, Color::Red);
 }
 
 #[test]
 fn clicking_an_area_marker_is_a_native_area_action_and_a_dimmed_one_does_nothing() {
     let mut boundary = aim();
-    boundary["actions"]
-        .as_array_mut()
-        .unwrap()
-        .retain(|a| a["id"] != "ITEMS_NW");
+    without(&mut boundary, "ITEMS_NW");
     let (mut app, h) = open(boundary);
     let t = render(&mut app);
     let (x, y) = find(&t, "[7]");
@@ -258,4 +261,21 @@ fn the_wheel_moves_the_engine_cursor_three_rows_in_the_pane_under_it() {
         &ops[3..],
         [action("RIGHT"), action("UP"), action("UP"), action("UP")]
     );
+}
+
+#[test]
+fn a_marker_shows_the_key_the_engine_reports_for_its_area() {
+    let mut boundary = aim();
+    for area in boundary["interaction"]["areas"].as_array_mut().unwrap() {
+        if area["action_id"] == "ITEMS_N" {
+            area["key"] = "z".into();
+        }
+    }
+    let (mut app, h) = open(boundary);
+    let t = render(&mut app);
+    assert!(!lines(&t).join("\n").contains("[8]"));
+    let (x, y) = find(&t, "[z]");
+    app.handle_mouse(mouse(MouseEventKind::Down(MouseButton::Left), x + 1, y));
+    app.tick();
+    assert_eq!(operations(&h), [action("ITEMS_N")]);
 }

@@ -140,3 +140,30 @@ fn live_pickup_list_has_the_carry_header_a_cursor_row_marks_and_the_confirm_acti
     assert!(model.actions().iter().any(|a| a.id == "CONFIRM"));
     assert!(model.invoke_action("CONFIRM"));
 }
+
+#[test]
+#[ignore = "needs a real engine"]
+fn live_advanced_inventory_areas_carry_the_players_keys_and_the_main_menu_names_options() {
+    let mut model = start_tutorial();
+    assert!(model.invoke_action("advinv"));
+    settle(&mut model);
+    let menu = model.menu().expect("the advanced inventory");
+    assert_eq!(menu.context, "ADVANCED_INVENTORY");
+    let area = |action: &str| menu.areas.iter().find(|a| a.action_id == action);
+    let north = area("ITEMS_N").expect("the north area");
+    assert_eq!((north.label.as_str(), north.key.as_str()), ("North", "8"));
+    assert!(area("ITEMS_INVENTORY").is_some_and(|a| a.available && (a.x, a.y) == (3, 1)));
+    assert!(area("ITEMS_DRAGGED_CONTAINER").is_some_and(|a| !a.available));
+    let entry = |id: &str| model.actions().into_iter().find(|a| a.id == id);
+    assert_eq!(
+        entry("MOVE_SINGLE_ITEM").map(|a| a.name).as_deref(),
+        Some("Move a single item")
+    );
+    model.cancel_menu();
+    wait_for(&mut model, "the screen to close", |m| m.menu().is_none());
+    assert!(model.invoke_action("main_menu"));
+    settle(&mut model);
+    let menu = model.menu().expect("the in-game main menu");
+    let options = menu.choices.iter().find(|c| c.action == "open_options");
+    assert_eq!(options.map(|c| c.label.as_str()), Some("Options"));
+}

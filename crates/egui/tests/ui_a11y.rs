@@ -439,14 +439,15 @@ mod overmap {
         let (mut h, script) = harness();
         h.run_steps(3);
         let mut ev: Value = common::overmap_event(100);
-        ev["params"]["events"][0]["changes"]["interaction"]["interaction"]["overmap"]["legend"] =
-            json!([
-                "│",
-                "│# lake on the northwest",
-                "│  outskirts of Bristol",
-                "│",
-                "│Use movement keys to pan."
-            ]);
+        let om = &mut ev["params"]["events"][0]["changes"]["interaction"]["interaction"]["overmap"];
+        om["legend"] = json!([
+            "│",
+            "│# lake on the northwest",
+            "│  outskirts of Bristol",
+            "│",
+            "│Use movement keys to pan."
+        ]);
+        om["cursor_description"] = json!("lake on the northwest outskirts of Bristol");
         script.push(ev);
         h.run_steps(3);
         (h, script)

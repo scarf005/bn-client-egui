@@ -18,6 +18,15 @@ fn aim() -> Value {
     serde_json::from_str::<Value>(&text).unwrap()["aim"].clone()
 }
 
+/// The area the engine says does not exist now.
+fn without(boundary: &mut Value, action: &str) {
+    for area in boundary["interaction"]["areas"].as_array_mut().unwrap() {
+        if area["action_id"] == action {
+            area["available"] = false.into();
+        }
+    }
+}
+
 fn event(sequence: u32, boundary: Value) -> Value {
     json!({"jsonrpc":"2.0","method":"bn.events","params":{"epoch":"e7f3","events":[{
         "sequence": sequence.to_string(), "revision": (sequence - 9).to_string(),
@@ -111,7 +120,7 @@ fn clicking_a_row_selects_it_and_enter_moves_it() {
 #[test]
 fn the_move_button_moves_the_engines_selected_row() {
     let (mut h, script) = harness();
-    h.get_by_label("Move").click();
+    h.get_by_label("Move a single item").click();
     h.run_steps(3);
     assert_eq!(operations(&script), [action("MOVE_SINGLE_ITEM")]);
 }
@@ -152,7 +161,7 @@ fn a_count_moves_that_many_through_the_native_amount_prompt() {
     h.run_steps(2);
     h.get_by_label("Amount to move").type_text("2");
     h.run_steps(2);
-    h.get_by_label("Move amount").click();
+    h.get_by_label("Move an amount of item").click();
     h.run_steps(3);
     assert_eq!(
         operations(&script).last(),
@@ -258,10 +267,7 @@ fn an_area_the_engine_does_not_offer_stays_in_its_place_dimmed() {
         );
     h.run_steps(3);
     let mut boundary = aim();
-    boundary["actions"]
-        .as_array_mut()
-        .unwrap()
-        .retain(|a| a["id"] != "ITEMS_NW");
+    without(&mut boundary, "ITEMS_NW");
     script.push(event(41, boundary));
     h.run_steps(4);
     let node = h.get_by_label("Left pane area North West");

@@ -29,14 +29,6 @@ struct Out {
     focused: bool,
 }
 
-/// The requirement groups in the order the native pane prints them, with their headings.
-const GROUPS: [(&str, &str); 4] = [
-    ("skill", "Skills required:"),
-    ("component", "Components required:"),
-    ("tool", "Tools required:"),
-    ("extra", "Additional requirements:"),
-];
-
 fn is_task_row(choice: &&MenuChoice) -> bool {
     choice.id.starts_with("part:")
 }
@@ -246,21 +238,21 @@ impl<M: GameModel> App<M> {
             .show(ui, |ui| {
                 ui.label(egui::RichText::new(&detail.name).color(LIGHT_GREEN));
                 if let Some(time) = &detail.time {
-                    ui.label("Time required:");
+                    ui.label(detail.time_heading.as_deref().unwrap_or_default());
                     ui.label(format!("> {time}"));
                 }
-                for (kind, heading) in GROUPS {
+                for group in &detail.groups {
                     let rows = detail
                         .requirements
                         .iter()
-                        .filter(|r| r.kind == kind)
+                        .filter(|r| r.kind == group.kind)
                         .collect::<Vec<_>>();
-                    if rows.is_empty() && kind != "skill" {
+                    if rows.is_empty() && group.empty_text.is_empty() {
                         continue;
                     }
-                    ui.label(heading);
+                    ui.label(&group.heading);
                     if rows.is_empty() {
-                        ui.colored_label(GREEN, "> NONE");
+                        ui.colored_label(GREEN, format!("> {}", group.empty_text));
                     }
                     for row in rows {
                         ui.colored_label(status(row), format!("> {}", row.text));
@@ -340,17 +332,15 @@ impl<M: GameModel> App<M> {
         let Some(row) = rows.iter().find(|r| r.highlighted) else {
             return;
         };
-        let task = match vehicle.mode.as_str() {
-            "install" => "Install",
-            "repair" => "Repair",
-            "remove" => "Remove",
-            "mend" => "Mend",
-            "refill" => "Refill",
-            _ => "Select",
-        };
         let usable = row.enabled && vehicle.detail.as_ref().is_none_or(|d| d.can_do);
         let name = bn_client_core::markup::plain(&row.label);
-        let button = self.control(ui, format!("{task} {name}"), &row.id, usable, false);
+        let button = self.control(
+            ui,
+            format!("{} {name}", vehicle.verb),
+            &row.id,
+            usable,
+            false,
+        );
         out.ids.extend(button.enabled().then_some(button.id));
         if button.clicked() {
             out.chosen = Some(row.id.clone());
