@@ -632,7 +632,7 @@ fn keyboard_navigation_reaches_rows_the_model_holds_past_the_first_page() {
         serde_json::from_value(row("d", json!({}))).unwrap(),
     ]);
     let mut ui = Interaction::default();
-    let rows = |list: &List| held.rows(list);
+    let rows = |list| held.rows(list);
     assert_eq!(
         ui.press(&screen, "END", 3, &rows).revealed.as_deref(),
         Some("d")

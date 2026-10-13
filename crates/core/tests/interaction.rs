@@ -444,7 +444,11 @@ fn a_count_is_typed_held_to_the_bounds_and_defaults() {
         .unwrap();
     let mut ui = Interaction::default();
     ui.focus_row("list", "r");
-    assert_eq!(ui.begin(batch), [ArgKind::Count], "a default is still confirmed");
+    assert_eq!(
+        ui.begin(batch),
+        [ArgKind::Count],
+        "a default is still confirmed"
+    );
     assert_eq!(
         ui.args(batch).unwrap().count,
         Some(1),
@@ -628,9 +632,14 @@ fn files_under(dir: &str) -> Vec<String> {
     found
 }
 
-/// Files that are client chrome, not a screen: the sidebar lays out values the engine labels, and the
-/// binary only parses arguments.
-const CLIENT_OWNED: &[&str] = &["crates/egui/src/app/sidebar.rs", "crates/tui/src/main.rs"];
+/// Files that are client chrome, not a screen: the sidebar lays out values the engine labels, the component
+/// renderers draw what the core decides, and the binary only parses arguments.
+const CLIENT_OWNED: &[&str] = &[
+    "crates/egui/src/app/component.rs",
+    "crates/egui/src/app/sidebar.rs",
+    "crates/tui/src/component.rs",
+    "crates/tui/src/main.rs",
+];
 
 #[test]
 fn every_bespoke_screen_module_is_in_the_override_list() {

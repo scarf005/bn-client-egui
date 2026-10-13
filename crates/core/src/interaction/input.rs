@@ -135,12 +135,12 @@ impl Interaction {
     /// focused row; a row's hotkey chooses the row; the arrows, Home, End, Page keys and Tab move the focus
     /// (or the tab, or the grid cursor); else the `any_key` affordance runs. `page` is the rows a page key
     /// moves; `rows` gives the rows of a list that are loaded.
-    pub fn press(
+    pub fn press<'r>(
         &mut self,
-        screen: &Screen,
+        screen: &'r Screen,
         key: &str,
         page: usize,
-        rows: &dyn Fn(&List) -> Vec<&Row>,
+        rows: &dyn Fn(&'r List) -> Vec<&'r Row>,
     ) -> Outcome {
         if self.ask.is_some() {
             return self.press_ask(screen, key);
@@ -359,7 +359,8 @@ impl Interaction {
         Outcome::handled()
     }
 
-    /// Return on the focused row: runs its list's `activate`, or starts editing the focused form field.
+    /// Return on the focused row: runs its list's `activate`, the affordance the focused grid cell names, or
+    /// starts editing the focused form field.
     fn activate_focused(&mut self, screen: &Screen) -> Option<Outcome> {
         let parts = components(screen);
         let focused = self.focus.component_id.as_deref()?;
@@ -374,16 +375,22 @@ impl Interaction {
                 let fill = form_fill(screen, form, &field)?.id.clone();
                 Some(self.activate(screen, &fill))
             }
+            Component::Grid(grid) => {
+                let id = self.focused_in(&grid.head.id)?;
+                let cell = grid.cells.iter().find(|c| c.id.as_deref() == Some(id))?;
+                let affordance = cell.affordance.as_deref()?;
+                Some(self.activate(screen, affordance))
+            }
             _ => None,
         }
     }
 
     /// A key that is a row's hotkey chooses that row.
-    fn press_hotkey(
+    fn press_hotkey<'r>(
         &mut self,
-        screen: &Screen,
+        screen: &'r Screen,
         key: &str,
-        rows: &dyn Fn(&List) -> Vec<&Row>,
+        rows: &dyn Fn(&'r List) -> Vec<&'r Row>,
     ) -> Option<Outcome> {
         let focused = self.focus.component_id.clone();
         let mut lists = components(screen)
@@ -418,12 +425,12 @@ impl Interaction {
 
     /// The arrows, Home, End and the Page keys move the focus in the list, form or grid that has it; Left
     /// and Right switch tab; Tab cycles the components that can hold the focus.
-    fn press_move(
+    fn press_move<'r>(
         &mut self,
-        screen: &Screen,
+        screen: &'r Screen,
         key: &str,
         page: usize,
-        rows: &dyn Fn(&List) -> Vec<&Row>,
+        rows: &dyn Fn(&'r List) -> Vec<&'r Row>,
     ) -> Option<Outcome> {
         let parts = components(screen);
         let holders = parts
@@ -491,7 +498,11 @@ impl Interaction {
     }
 
     /// The ids that can take the focus in a component, in reading order.
-    fn items(&self, component: &Component, rows: &dyn Fn(&List) -> Vec<&Row>) -> Vec<String> {
+    fn items<'r>(
+        &self,
+        component: &'r Component,
+        rows: &dyn Fn(&'r List) -> Vec<&'r Row>,
+    ) -> Vec<String> {
         match component {
             Component::List(list) => rows(list)
                 .into_iter()
