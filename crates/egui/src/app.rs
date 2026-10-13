@@ -780,19 +780,32 @@ impl<M: GameModel> App<M> {
             om.route_text.clone(),
             hint,
         ];
-        let status = parts
-            .into_iter()
-            .flatten()
-            .map(|p| {
-                if p.ends_with(['.', '!', '?', '。', '！', '？']) {
-                    p
-                } else {
-                    p + "."
-                }
-            })
-            .collect::<Vec<_>>()
-            .join(" ");
-        let status_label = ui.label(&status);
+        let sentences = |parts: &[Option<String>]| {
+            parts
+                .iter()
+                .flatten()
+                .map(|p| {
+                    if p.ends_with(['.', '!', '?', '。', '！', '？']) {
+                        p.clone()
+                    } else {
+                        format!("{p}.")
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join(" ")
+        };
+        let overmap_status = sentences(&parts);
+        // Hovering another square names it and its note; the engine describes only the cursor square.
+        let square_status = |at: (i32, i32, i32)| {
+            if at == om.cursor {
+                return overmap_status.clone();
+            }
+            sentences(&[
+                Some(format!("{} ({}, {}, {})", om.title, at.0, at.1, at.2)),
+                om.note(at).map(str::to_owned),
+            ])
+        };
+        let status_label = ui.label(&overmap_status);
         ui.ctx()
             .accesskit_node_builder(status_label.id, |b| b.set_live(accesskit::Live::Polite));
         self.display.update(ui.ctx());
@@ -811,7 +824,7 @@ impl<M: GameModel> App<M> {
             ui.ctx().accesskit_node_builder(response.id, |b| {
                 b.set_role(accesskit::Role::Canvas);
                 b.set_description(
-                    [Some(status.clone()), om.notes_text()]
+                    [Some(overmap_status.clone()), om.notes_text()]
                         .into_iter()
                         .flatten()
                         .collect::<Vec<_>>()
@@ -891,7 +904,7 @@ impl<M: GameModel> App<M> {
             response.clone().on_hover_ui_at_pointer(|ui| {
                 if let Some(p) = response.hover_pos() {
                     ui.add(
-                        egui::Label::new(status(square_at(p)))
+                        egui::Label::new(square_status(square_at(p)))
                             .wrap_mode(egui::TextWrapMode::Extend),
                     );
                 }
