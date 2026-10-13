@@ -200,6 +200,43 @@ fn a_text_prompt_is_typed_and_enter_submits_it() {
 }
 
 #[test]
+fn a_prompt_submitted_while_the_engine_is_busy_is_sent_once_it_is_free() {
+    let field = json!({"id":"field:value","label":"Name","description":"","value":"","type":"text",
+        "max_length":-1,"printable":false});
+    let (mut app, h) = open(Some(field), vec![]);
+    assert!(app.model.invoke_action("CONFIRM"), "puts the engine to work");
+    app.handle_key(key(KeyCode::Char('k')));
+    app.handle_key(key(KeyCode::Enter));
+    assert_eq!(operations(&h), [json!({"kind":"action","action_id":"CONFIRM"})]);
+    assert!(text(&mut app).contains("Name: k_"), "the typed name stays shown");
+    h.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{"epoch":"e7f3","command_id":"c:5","stage":"completed"}}));
+    app.model.poll();
+    app.tick();
+    assert_eq!(operations(&h).last(), Some(&fill("field:value", "k", true)));
+    app.tick();
+    assert_eq!(operations(&h).len(), 2, "the submit is sent once");
+}
+
+#[test]
+fn tab_goes_to_the_engine_when_the_screen_binds_it() {
+    let (mut app, h) = open(None, vec![row("mode:add_local", "Add local", None)]);
+    let mut menu = fixture("events_43_menu");
+    let ev = &mut menu["params"]["events"][0]["changes"]["interaction"];
+    ev["interaction"]["title"] = "Options".into();
+    ev["interaction"]["choices"] = json!([row("mode:add_local", "Add local", None)]);
+    ev["actions"] = json!([{"id":"NEXT_TAB","name":"Next tab","keys":["TAB"]}]);
+    menu["params"]["events"][0]["sequence"] = "60".into();
+    menu["params"]["events"][0]["revision"] = "40".into();
+    h.push(menu);
+    app.model.poll();
+    app.handle_key(key(KeyCode::Tab));
+    assert_eq!(
+        operations(&h),
+        [json!({"kind":"action","action_id":"NEXT_TAB"})]
+    );
+}
+
+#[test]
 fn a_filter_beside_a_list_updates_the_screen_without_ending_it() {
     let field = json!({"id":"field:value","label":"Filter","description":"","value":"","type":"text",
         "max_length":-1,"printable":false});
