@@ -21,6 +21,9 @@ const STRIP: u32 = 4096;
 /// Remembered squares draw darkened, squares in low light slightly less.
 const MEMORY: Color32 = Color32::from_gray(100);
 const SHADOW: Color32 = Color32::from_gray(170);
+/// Each zoom step scales the map squares by this much, for at most this many steps either way.
+const ZOOM_STEP: f32 = 1.25;
+const ZOOM_STEPS: i8 = 4;
 
 /// The choice that survives a restart.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -34,6 +37,13 @@ pub struct Settings {
     /// Play no shot, explosion or floating-text overlays on the map.
     #[serde(default)]
     pub reduced_motion: bool,
+    /// The map zoom in steps from the tileset's own size, which the zoom keys and the wheel move.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub zoom: i8,
+}
+
+fn is_zero(n: &i8) -> bool {
+    *n == 0
 }
 
 /// `$XDG_CONFIG_HOME/bn-client-egui/settings.json`, or the same under `~/.config`.
@@ -574,6 +584,21 @@ impl Display {
         self.atlas.as_ref().map_or(glyph, |a| {
             (a.tileset.tile.0 as f32).clamp(glyph, 3.0 * glyph)
         })
+    }
+
+    /// The factor the map squares are scaled by.
+    pub fn zoom(&self) -> f32 {
+        ZOOM_STEP.powi(self.settings.zoom.into())
+    }
+
+    /// Zooms the map by `steps` (positive is closer), within bounds, and keeps it.
+    pub fn zoom_by(&mut self, steps: i8) {
+        let zoom = self.settings.zoom.saturating_add(steps);
+        let zoom = zoom.clamp(-ZOOM_STEPS, ZOOM_STEPS);
+        if zoom != self.settings.zoom {
+            self.settings.zoom = zoom;
+            self.save();
+        }
     }
 
     /// Mode and tileset choice, kept as soon as they change.

@@ -467,6 +467,25 @@ impl<M: GameModel> App<M> {
                 .collect::<Vec<_>>()
         });
         let menu = self.model.menu();
+        // Zoom is the client's own view; the keys the engine binds to its zoom actions never reach it.
+        let typed = if menu.is_none() {
+            let actions = self.model.actions();
+            let zoom = |token: &str| {
+                let bound = actions.iter().find(|a| a.keys.iter().any(|k| k == token));
+                bound.and_then(|a| match a.id.as_str() {
+                    "zoom_in" => Some(1),
+                    "zoom_out" => Some(-1),
+                    _ => None,
+                })
+            };
+            let (zooms, rest): (Vec<_>, Vec<_>) =
+                typed.into_iter().partition(|t| zoom(t).is_some());
+            self.display
+                .zoom_by(zooms.iter().filter_map(|t| zoom(t)).sum());
+            rest
+        } else {
+            typed
+        };
         // A menu is an engine input context: its navigation, paging, confirm and cancel keys are the
         // player's bindings, and the engine moves its own cursor. The exceptions are the toolkit's
         // accessibility keys: Tab and Shift+Tab move focus, and Space and Enter act on a focused widget.
@@ -903,7 +922,7 @@ impl<M: GameModel> App<M> {
     fn map(&mut self, ui: &mut egui::Ui) {
         self.display.update(ui.ctx());
         self.display.controls(ui);
-        let cell_px = self.display.cell(CELL);
+        let cell_px = self.display.cell(CELL) * self.display.zoom();
         self.display.begin();
         // The room left for the map, less the status block above it, in whole cells.
         let room = ui.available_size() - egui::vec2(0.0, status_height(ui));
@@ -993,6 +1012,25 @@ impl<M: GameModel> App<M> {
             egui::Sense::click().union(egui::Sense::focusable_noninteractive()),
         );
         response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Other, true, "Map"));
+        // One zoom step per wheel event over the map, not per smoothed frame.
+        if response.hovered() {
+            let steps = ui.input(|i| {
+                i.raw
+                    .events
+                    .iter()
+                    .map(|e| match e {
+                        egui::Event::MouseWheel { delta, .. } => {
+                            delta.y.signum() as i8 * (delta.y != 0.0) as i8
+                        }
+                        _ => 0,
+                    })
+                    .sum::<i8>()
+            });
+            if steps != 0 {
+                self.display.zoom_by(steps);
+                ui.ctx().request_repaint();
+            }
+        }
         ui.ctx().accesskit_node_builder(response.id, |b| {
             b.set_role(accesskit::Role::Canvas);
             b.set_description(status.as_str());
