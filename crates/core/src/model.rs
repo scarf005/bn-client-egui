@@ -2,9 +2,7 @@ use crate::colors::ColorMap;
 use crate::interaction::InvokeError;
 use crate::markup::{self, Run};
 
-use crate::protocol::{
-    Area, Column, Editor, InvokeArgs, List, Mark, ModTileset, Row, Screen, Vehicle,
-};
+use crate::protocol::{Column, Editor, InvokeArgs, List, Mark, ModTileset, Row, Screen, Vehicle};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Pos {
     pub x: i32,
@@ -280,8 +278,6 @@ pub struct MenuPane {
     pub sort: String,
     /// The header totals the native pane prints; absent from engines that predate them.
     pub totals: Option<PaneTotals>,
-    /// Actions of the areas this pane cannot put items in; the native picker draws them red.
-    pub blocked: Vec<String>,
     /// The native page indicator as (number, count) from 1; absent for a list that does not page.
     pub page: Option<(u64, u64)>,
 }
@@ -336,8 +332,6 @@ pub struct Menu {
     pub choices: Vec<MenuChoice>,
     /// The panes of a two-pane menu; empty for other menus.
     pub panes: Vec<MenuPane>,
-    /// The area picker of the advanced inventory; empty for other menus.
-    pub areas: Vec<Area>,
     /// How many choices the engine has in all; more than `choices.len()` until the rest is fetched.
     pub total: usize,
     pub can_cancel: bool,

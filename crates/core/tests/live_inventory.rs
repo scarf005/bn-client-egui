@@ -145,7 +145,12 @@ fn live_advanced_inventory_is_a_screen_of_areas_and_two_panes_and_the_main_menu_
         .cloned()
         .expect("the advanced inventory");
     let root = screen.root.expect("described by components");
-    for id in ["aim:areas", "aim:pane:left:items", "aim:pane:right:items"] {
+    for id in [
+        "aim:pane:left:areas",
+        "aim:pane:right:areas",
+        "aim:pane:left:items",
+        "aim:pane:right:items",
+    ] {
         assert!(root.find(id).is_some(), "{id}");
     }
     let offered = |id: &str| screen.affordances.iter().any(|a| a.id == id);

@@ -545,9 +545,6 @@ pub struct Interaction {
     pub allow_cancel: bool,
     pub allow_set_count: bool,
     pub choices: Vec<Choice>,
-    /// The advanced inventory's area picker, laid out and keyed as the native header draws it.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub areas: Vec<Area>,
     pub choice_total: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub compat: Option<Value>,
@@ -565,21 +562,6 @@ pub struct Interaction {
     /// Where the engine redraws the screen on its own, the interval in milliseconds.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub refresh_ms: Option<u64>,
-}
-
-/// One square of the advanced inventory's area picker.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Area {
-    /// The registered action that points the active pane at the area.
-    pub action_id: String,
-    pub label: String,
-    /// The key the player bound to the action; empty when none.
-    pub key: String,
-    /// Character cells from the picker's top-left corner.
-    pub x: u16,
-    pub y: u16,
-    /// The screen offers the action.
-    pub available: bool,
 }
 
 /// A native window as drawn: per row, `[text, foreground, background]` runs of cells that share

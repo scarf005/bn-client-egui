@@ -259,7 +259,11 @@ fn escape_runs_the_cancel_affordance_of_the_screen_scope() {
 
 #[test]
 fn a_panel_draws_its_title_subtitle_and_stats() {
-    let panel = example("aim.json", "advanced inventory pane with totals");
+    let panel = json!({"id": "panel:pane-destination", "kind": "panel", "title": "Destination",
+        "subtitle": "Directly under you", "stats": [
+            {"key": "weight", "label": "Weight", "value": "0.0", "unit": "kg"},
+            {"key": "volume", "label": "Volume", "value": "0.00", "max": "1000.00", "unit": "L"},
+            {"key": "sort", "label": "Sort", "value": "name"}]});
     let (mut app, _) = open(screen(panel, json!([])));
     let text = lines(&render(&mut app)).join("\n");
     for shown in [

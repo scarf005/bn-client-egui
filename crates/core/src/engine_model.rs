@@ -1453,16 +1453,9 @@ impl EngineModel {
                         page: p["page"]["number"]
                             .as_u64()
                             .zip(p["page"]["count"].as_u64()),
-                        blocked: p["blocked_areas"]
-                            .as_array()
-                            .into_iter()
-                            .flatten()
-                            .filter_map(|a| a.as_str().map(String::from))
-                            .collect(),
                     }
                 })
                 .collect(),
-            areas: i.areas.clone(),
             can_cancel: i.allow_cancel,
             pane_tabs: pane_labels
                 .iter()
