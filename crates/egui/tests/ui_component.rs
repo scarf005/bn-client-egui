@@ -867,3 +867,45 @@ fn a_keybinding_row_runs_the_pick_with_its_action_and_the_screen_says_its_mode()
         )]
     );
 }
+
+#[test]
+fn a_distraction_row_runs_the_toggle_with_the_distraction_as_its_row() {
+    let screen = example("distractions.json", "distraction manager");
+    let (mut h, script) = harness(screen);
+    h.get_by_label("Pain").click();
+    h.run_steps(3);
+    assert_eq!(
+        submits(&script),
+        [boundary_invoke(
+            "distractions:toggle",
+            json!({"row": "distraction:Pain"})
+        )]
+    );
+}
+
+#[test]
+fn a_colour_column_tab_runs_the_column_affordance_by_its_token() {
+    let screen = example("colors.json", "colour manager");
+    let (mut h, script) = harness(screen);
+    h.get_all_by_label("Invert").next().unwrap().click();
+    h.run_steps(3);
+    assert_eq!(
+        submits(&script),
+        [boundary_invoke("colors:column", json!({"row": "invert"}))]
+    );
+}
+
+#[test]
+fn a_colour_row_runs_the_activate_affordance_with_the_colour_as_its_row() {
+    let screen = example("colors.json", "colour manager");
+    let (mut h, script) = harness(screen);
+    h.get_by_label("c_black_cyan").click();
+    h.run_steps(3);
+    assert_eq!(
+        submits(&script),
+        [boundary_invoke(
+            "colors:activate",
+            json!({"row": "color:c_black_cyan"})
+        )]
+    );
+}
