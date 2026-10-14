@@ -176,3 +176,27 @@ fn a_switch_row_shows_whether_it_is_on() {
         "a row that is no switch keeps the column: {shown}"
     );
 }
+
+#[test]
+fn a_key_prompt_submits_the_next_key_by_its_engine_name_and_leaves_escape_to_the_screen() {
+    let mut screen = example("filter prompt before typing");
+    let form = screen["root"]["children"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|c| c["kind"] == "form")
+        .unwrap();
+    form["fields"][0]["type"] = json!("key");
+    let (mut app, h) = open(screen.clone());
+    press(&mut app, KeyCode::Char('z'));
+    assert_eq!(
+        operations(&h),
+        [json!({"kind": "invoke", "affordance_id": "bn:submit:form:field", "args": {"text": "z"}})]
+    );
+    let (mut app, h) = open(screen);
+    press(&mut app, KeyCode::Esc);
+    assert_eq!(
+        operations(&h),
+        [json!({"kind": "invoke", "affordance_id": "TEXT.QUIT", "args": {}})]
+    );
+}

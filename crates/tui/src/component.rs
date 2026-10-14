@@ -2,6 +2,7 @@
 //! affordances with their keys and denials. This module only draws and moves the client-local focus; the
 //! core (`interaction::*`) gathers every argument and the model sends every command.
 
+use super::settings::engine_key;
 use super::{color, token};
 use bn_client_core::colors::ColorMap;
 use bn_client_core::interaction::{self, ArgKind, Interaction, InvokeError, Reason, Window};
@@ -116,6 +117,8 @@ struct Typing {
     text: String,
     /// The text last sent, so it goes out once.
     handed: String,
+    /// The next key names a binding, as the engine writes it, and is submitted at once.
+    named: bool,
     /// Return was pressed and the text is to be submitted once the engine can take it.
     submitting: bool,
 }
@@ -132,7 +135,10 @@ impl Typing {
                 .iter()
                 .find(|a| Some(&a.id) == form.submit.as_ref())
                 .filter(|a| a.role == Some(AffordanceRole::Confirm))?;
-            let field = form.fields.iter().find(|f| f.kind == FieldKind::Text)?;
+            let field = form
+                .fields
+                .iter()
+                .find(|f| matches!(f.kind, FieldKind::Text | FieldKind::Key))?;
             let fill = interaction::form_fill(screen, form, &field.id)?;
             Some(Self {
                 screen: screen.screen_id.clone(),
@@ -142,6 +148,7 @@ impl Typing {
                 submit: submit.id.clone(),
                 text: field.value.clone(),
                 handed: field.value.clone(),
+                named: field.kind == FieldKind::Key,
                 submitting: false,
             })
         })
@@ -149,6 +156,15 @@ impl Typing {
 
     /// A key typed into the prompt; false when the screen's own keys take it.
     fn key(&mut self, key: KeyEvent) -> bool {
+        if self.named {
+            // Esc is left to cancel the prompt.
+            let Some(name) = engine_key(key).filter(|_| key.code != KeyCode::Esc) else {
+                return false;
+            };
+            self.text = name;
+            self.submitting = true;
+            return true;
+        }
         let plain = !key
             .modifiers
             .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT);
@@ -324,6 +340,10 @@ impl View {
         self.sync(model);
         self.note = None;
         if self.ui.ask().is_none() && self.typing.as_mut().is_some_and(|typing| typing.key(key)) {
+            // A named key goes out now, the typed text of a prompt with the next tick.
+            if self.typing.as_ref().is_some_and(|typing| typing.named) {
+                self.send_typed(model);
+            }
             return;
         }
         let Some(name) = token(key) else {
