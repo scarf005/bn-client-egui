@@ -11,12 +11,18 @@
 use crate::protocol::{
     Affordance, AffordanceRole, ArgShape, At, Boundary, BoundaryExpect, Component, CountShape,
     Expect, FieldOption, Form, Grid, InteractionExpect, InvokeArgs, List, Operation, PAGE_ROWS,
-    Row, RowPick, RowsResult, Scope, Screen, ScreenExpect, ScreenFocus, Submit, Text, WorldPos,
+    Row, RowPick, RowsResult, Scope, Screen, ScreenExpect, ScreenFocus, ScreenRole, Submit, Text,
+    WorldPos,
 };
 use std::collections::HashMap;
 
 mod input;
 pub use input::{Outcome, form_fill};
+
+/// Whether `stack` is the title screen's: it holds screens and none of them is the running game's map.
+pub fn titled(stack: &[Screen]) -> bool {
+    !stack.is_empty() && stack.iter().all(|s| s.role != ScreenRole::Map)
+}
 
 /// One member of an invoke's arguments.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -897,11 +903,6 @@ pub struct Override {
 /// 0.1 `interaction` is gone.
 pub const OVERRIDES: &[Override] = &[
     Override {
-        module: "crates/egui/src/app.rs",
-        screen: "the main menu rules",
-        slice: "S10",
-    },
-    Override {
         module: "crates/egui/src/app/character.rs",
         screen: "PLAYER_INFO, BIONICS, MUTATIONS",
         slice: "S9",
@@ -932,11 +933,6 @@ pub const OVERRIDES: &[Override] = &[
         slice: "S6",
     },
     Override {
-        module: "crates/egui/src/app/terminal.rs",
-        screen: "COMPUTER_TERMINAL and the extended description",
-        slice: "S10",
-    },
-    Override {
         module: "crates/egui/src/app/vehicle.rs",
         screen: "VEH_INTERACT",
         slice: "S8",
@@ -945,11 +941,6 @@ pub const OVERRIDES: &[Override] = &[
         module: "crates/egui/src/editor.rs",
         screen: "option editors and the key prompt",
         slice: "S0",
-    },
-    Override {
-        module: "crates/tui/src/canvas.rs",
-        screen: "engine-drawn windows (software mini-games)",
-        slice: "S10",
     },
     Override {
         module: "crates/tui/src/crafting.rs",
@@ -965,10 +956,5 @@ pub const OVERRIDES: &[Override] = &[
         module: "crates/tui/src/settings.rs",
         screen: "option, key and rule screens",
         slice: "S0",
-    },
-    Override {
-        module: "crates/tui/src/terminal.rs",
-        screen: "COMPUTER_TERMINAL and the extended description",
-        slice: "S10",
     },
 ];

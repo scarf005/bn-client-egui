@@ -1,10 +1,8 @@
 //! Terminal client over the same `GameModel` as the egui client.
 
-mod canvas;
 mod component;
 mod crafting;
 mod settings;
-mod terminal;
 
 use bn_client_core::markup::plain;
 use bn_client_core::protocol::SidebarSide;
@@ -51,7 +49,6 @@ pub struct TuiApp<M: GameModel> {
     hovered: Option<Pos>,
     /// A settings value being typed.
     edit: Option<settings::Edit>,
-    terminal: terminal::Terminal,
     /// Where the open menu's rows and tabs were last drawn, for mouse clicks.
     menu_hits: MenuHits,
     /// The action row of the open menu the keyboard focus is on (Alt+Down, Alt+Up), where Enter sends it.
@@ -151,7 +148,6 @@ impl<M: GameModel> TuiApp<M> {
             engine_at: None,
             moved: None,
             menu_sig: None,
-            terminal: Default::default(),
             quit: false,
             map_cells: Rect::default(),
             overmap_cells: Rect::default(),
@@ -263,7 +259,6 @@ impl<M: GameModel> TuiApp<M> {
         if let Some(menu) = self.menu() {
             return match menu.context.as_str() {
                 "CRAFTING" => self.crafting_key(&menu, key),
-                _ if (menu.terminal() || menu.description()) && self.terminal_key(key) => {}
                 _ if self.footer_key(key) => {}
                 _ if !menu.screen && self.action_row_key(&menu, key) => {}
                 _ if !menu.screen && self.settings_key(&menu, key) => {}
@@ -443,15 +438,6 @@ impl<M: GameModel> TuiApp<M> {
         if self.model.loading().is_some() {
             return;
         }
-        if ev.kind == MouseEventKind::Down(MouseButton::Left)
-            && self
-                .model
-                .menu()
-                .is_some_and(|m| m.terminal() || m.description())
-        {
-            self.terminal_click(ev.column, ev.row);
-            return;
-        }
         if ev.kind == MouseEventKind::Down(MouseButton::Left) && self.menu_click(ev) {
             return;
         }
@@ -515,11 +501,7 @@ impl<M: GameModel> TuiApp<M> {
         let Some(menu) = self.model.menu().or_else(|| self.model.target_panel()) else {
             return false;
         };
-        if menu.screen
-            || menu.terminal()
-            || menu.description()
-            || matches!(menu.context.as_str(), "CRAFTING")
-        {
+        if menu.screen || matches!(menu.context.as_str(), "CRAFTING") {
             return false;
         }
         let within = |r: Rect| {
@@ -739,10 +721,6 @@ impl<M: GameModel> TuiApp<M> {
         if let Some(menu) = self.menu() {
             match menu.context.as_str() {
                 "CRAFTING" => self.draw_crafting(f, &menu),
-                _ if menu.terminal() || menu.description() => self.draw_terminal(f, &menu),
-                _ if menu.canvas.is_some() => {
-                    menu.canvas.iter().for_each(|c| canvas::draw_canvas(f, c))
-                }
                 _ => self.draw_menu(f, &menu),
             }
         }
@@ -1371,18 +1349,6 @@ fn bar(tabs: &[(String, bool)]) -> Line<'static> {
             })
             .collect::<Vec<_>>(),
     )
-}
-
-/// `text` cut to `width` terminal columns.
-fn fit(text: &str, width: usize) -> String {
-    let mut out = String::new();
-    for c in text.chars() {
-        if out.width() + c.width().unwrap_or(0) > width {
-            break;
-        }
-        out.push(c);
-    }
-    out
 }
 
 /// Breaks `text` into lines of at most `width` terminal columns, at spaces where it can.

@@ -475,6 +475,58 @@ fn a_canvas_is_drawn_in_the_colours_the_engine_drew_it_with_and_its_keys_are_the
 }
 
 #[test]
+fn a_terminal_draws_its_output_in_the_colours_the_engine_marked_and_any_key_runs_its_action() {
+    let output = json!({"id": "terminal:output", "kind": "text", "role": "terminal_output",
+        "markup": "<color_c_green>Logging into Test Terminal</color>\nLogin successful"});
+    let any_key = json!({"id": "ANY_INPUT", "label": "Press any key", "keys": [], "enabled": true,
+        "role": "any_key", "expect": "screen"});
+    let (mut app, h) = open(screen(output, json!([any_key])));
+    let t = render(&mut app);
+    let text = lines(&t).join("\n");
+    assert!(text.contains("Logging into Test Terminal") && text.contains("Login successful"));
+    assert_eq!(fg(&t, "Logging"), Color::Rgb(40, 160, 60));
+    press(&mut app, KeyCode::Char('z'));
+    assert_eq!(
+        operations(&h),
+        [json!({"kind": "invoke", "affordance_id": "ANY_INPUT", "args": {}})]
+    );
+}
+
+#[test]
+fn the_description_of_a_target_is_drawn_with_the_target_named_and_a_switch_runs_by_id() {
+    let panel = json!({"id": "description", "kind": "panel", "title": "Creature",
+        "child": {"id": "description:text", "kind": "text", "markup": "This is a zombie."}});
+    let switch = json!({"id": "FURNITURE", "label": "Furniture", "keys": ["f"], "enabled": true,
+        "expect": "screen"});
+    let (mut app, h) = open(screen(panel, json!([switch])));
+    let text = lines(&render(&mut app)).join("\n");
+    assert!(
+        text.contains("Creature") && text.contains("This is a zombie."),
+        "{text}"
+    );
+    press(&mut app, KeyCode::Char('f'));
+    assert_eq!(
+        operations(&h),
+        [json!({"kind": "invoke", "affordance_id": "FURNITURE", "args": {}})]
+    );
+}
+
+#[test]
+fn the_title_screen_draws_its_banner_above_the_tabs_and_their_entries() {
+    let title = example("title.json", "title screen with its banner and tabs");
+    let (mut app, _) = open(title);
+    let t = render(&mut app);
+    let (_, banner) = at(&t, "_________");
+    let (_, tabs) = at(&t, "New Game");
+    assert!(banner < tabs, "the banner is the heading: {:#?}", lines(&t));
+    assert!(
+        lines(&t).join("\n").contains("Custom Character"),
+        "the entries of the tab are shown: {:#?}",
+        lines(&t)
+    );
+}
+
+#[test]
 fn the_bar_shows_keys_and_a_denial_and_a_denied_key_sends_nothing_while_any_key_runs_the_rest() {
     let body =
         json!({"id": "message", "kind": "text", "markup": "You'll owe $12.00", "tone": "bad"});

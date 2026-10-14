@@ -37,8 +37,13 @@ fn dialog(root: Value, affordances: Vec<Value>) -> Value {
 }
 
 fn harness<'a>(screen: Value) -> (H<'a>, ScriptHandle) {
+    stacked(vec![screen])
+}
+
+/// The same with a whole stack, bottom first; a game is running only when the map is in it.
+fn stacked<'a>(stack: Vec<Value>) -> (H<'a>, ScriptHandle) {
     let mut subscribe = fixture("subscribe_result");
-    subscribe["result"]["interaction"]["stack"] = json!([screen]);
+    subscribe["result"]["interaction"]["stack"] = json!(stack);
     let reply = vec![
         subscribe,
         fixture("snapshot_part_0"),
@@ -276,7 +281,8 @@ fn a_screen_with_a_dock_starts_at_that_side_of_the_window() {
         let mut screen = pickup_screen();
         screen["dock"] = dock.into();
         screen["title"] = "Docked".into();
-        let (h, _) = harness(screen);
+        let map = example("tutorial.json", "map screen");
+        let (h, _) = stacked(vec![map, screen]);
         h.get_all_by_role(egui::accesskit::Role::Window)
             .next()
             .unwrap()
@@ -286,6 +292,49 @@ fn a_screen_with_a_dock_starts_at_that_side_of_the_window() {
     assert!(left.left() < 5.0, "{left:?}");
     // The sidebar is on the right: the window sits against its inner edge, not the window's.
     assert!(right.right() < 1095.0 && right.right() > 500.0, "{right:?}");
+}
+
+#[test]
+fn the_title_screen_draws_the_banner_above_its_tabs_and_entries() {
+    let title = example("title.json", "title screen with its banner and tabs");
+    let (h, _) = harness(title);
+    h.get_by_label("Tutorial");
+    // The banner is above the tab strip, which is above the entries.
+    let top = |label: &str| h.get_by_label(label).rect().top();
+    assert!(
+        top("Tutorial") > top("New Game"),
+        "entries are under their tab"
+    );
+    let banner = h
+        .get_all_by_role(egui::accesskit::Role::Label)
+        .find(|n| {
+            n.accesskit_node()
+                .value()
+                .is_some_and(|v| v.contains("Version: build"))
+        })
+        .expect("the banner text is drawn");
+    assert!(
+        banner.rect().top() < top("New Game"),
+        "the banner is the heading"
+    );
+}
+
+#[test]
+fn the_title_screen_is_only_its_menu_and_a_tab_click_runs_the_tab_with_its_id() {
+    let title = example("title.json", "title screen with its banner and tabs");
+    let (mut h, script) = harness(title);
+    for panel in ["Message log", "Ground", "Inventory", "Map"] {
+        assert!(
+            h.query_by_label(panel).is_none(),
+            "{panel} belongs to a running game"
+        );
+    }
+    h.get_by_label("Credits").click();
+    h.run_steps(3);
+    assert_eq!(
+        submits(&script),
+        [boundary_invoke("menu:tab", json!({"row": "credits"}))]
+    );
 }
 
 #[test]
@@ -347,6 +396,59 @@ fn text_draws_its_markup_without_the_tags_and_its_tone() {
     h.get_by_label("a green word");
 }
 
+fn screen_action(id: &str, label: &str, role: Option<&str>) -> Value {
+    let mut action =
+        json!({"id": id, "label": label, "keys": [], "enabled": true, "expect": "screen"});
+    if let Some(role) = role {
+        action["role"] = role.into();
+    }
+    action
+}
+
+#[test]
+fn a_terminal_draws_its_output_and_its_any_key_button_runs_the_any_key_action() {
+    let output = json!({"id": "terminal:output", "kind": "text", "role": "terminal_output",
+        "markup": "<color_c_green>Logging into Test Terminal</color>\nLogin successful"});
+    let any_key = screen_action("ANY_INPUT", "Press any key", Some("any_key"));
+    let (mut h, script) = harness(dialog(output, vec![any_key]));
+    assert!(h.get_all_by_role(egui::accesskit::Role::Label).any(|n| {
+        n.accesskit_node()
+            .value()
+            .is_some_and(|v| v.contains("Login successful"))
+    }));
+    h.get_by_label("Press any key").click();
+    h.run_steps(3);
+    assert_eq!(submits(&script), [screen_invoke("ANY_INPUT")]);
+}
+
+#[test]
+fn a_terminal_query_offers_yes_no_and_quit_and_runs_the_one_clicked() {
+    let output = json!({"id": "terminal:output", "kind": "text", "role": "terminal_output",
+        "markup": "Bypass security?"});
+    let answers = vec![
+        screen_action("YES", "Yes", None),
+        screen_action("NO", "No", None),
+        screen_action("QUIT", "Quit", Some("cancel")),
+    ];
+    let (mut h, script) = harness(dialog(output, answers));
+    h.get_by_label("No").click();
+    h.run_steps(3);
+    assert_eq!(submits(&script), [screen_invoke("NO")]);
+}
+
+#[test]
+fn the_description_of_a_target_runs_the_action_that_switches_the_target() {
+    let panel = json!({"id": "description", "kind": "panel", "title": "Creature",
+        "child": {"id": "description:text", "kind": "text", "markup": "This is a zombie."}});
+    let switch = screen_action("FURNITURE", "Furniture", None);
+    let (mut h, script) = harness(dialog(panel, vec![switch]));
+    h.get_by_label("Creature");
+    h.get_by_label("This is a zombie.");
+    h.get_by_label("Furniture").click();
+    h.run_steps(3);
+    assert_eq!(submits(&script), [screen_invoke("FURNITURE")]);
+}
+
 #[test]
 fn grid_draws_its_cells_and_a_cell_with_an_affordance_runs_it_with_the_cell_as_its_row() {
     let panel = example(
@@ -384,6 +486,45 @@ fn canvas_draws_the_engines_window_run_by_run() {
     let (h, _) = harness(screen);
     assert!(h.get_all_by_label_contains("S N A K E").count() >= 1);
     h.get_by_label("######   *");
+}
+
+/// A mini-game window of the engine: `rows` of `(text, fg, bg)` runs on a grid `cols` wide.
+fn game(cols: u32, rows: Vec<Value>) -> Value {
+    json!({"screen_id": "screen:2", "role": "dialog", "title": "S N A K E",
+        "root": {"id": "canvas", "kind": "canvas", "cols": cols, "rows": rows},
+        "refresh_ms": 100, "affordances": []})
+}
+
+#[test]
+fn a_canvas_is_sized_to_the_window_and_keeps_its_grid() {
+    let rows = vec![
+        json!([["Score: 0", 15, 0]]),
+        json!([["ab", 15, 0], ["*", 9, 0]]),
+    ];
+    let (mut h, _) = harness(game(20, rows));
+    let big = h.get_by_label_contains("Score: 0").rect();
+    h.set_size(egui::vec2(240.0, 300.0));
+    h.run_steps(4);
+    let small = h.get_by_label_contains("Score: 0").rect();
+    assert!(big.height() > 16.0, "larger than a fixed 14 px font");
+    assert!(big.height() > small.height(), "{big:?} vs {small:?}");
+    // The widest row spans the grid: 20 columns fit the room the window leaves.
+    let row = h.get_by_label_contains("ab").rect();
+    assert!(row.width() <= 240.0 * 0.9 + 1.0, "{row:?}");
+}
+
+#[test]
+fn a_canvas_of_24_rows_is_not_clipped_by_the_dialog() {
+    let rows = (0..24)
+        .map(|n| json!([[format!("row{n:02}"), 15, 0]]))
+        .collect::<Vec<_>>();
+    let (h, _) = harness(game(80, rows));
+    let last = h.get_by_label_contains("row23").rect();
+    let window = h
+        .ctx
+        .memory(|m| m.area_rect(egui::Id::new(("dialog", "S N A K E"))))
+        .unwrap();
+    assert!(window.max.y >= last.max.y, "{window:?} under {last:?}");
 }
 
 #[test]

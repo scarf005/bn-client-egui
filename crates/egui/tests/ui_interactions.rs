@@ -585,23 +585,6 @@ fn mini_game(sequence: u32, body: &str) -> Value {
 }
 
 #[test]
-fn a_mini_game_window_is_drawn_whole_and_each_redraw_replaces_it() {
-    let (mut h, script) = harness();
-    h.run_steps(3);
-    script.push(mini_game(41, "ab"));
-    h.run_steps(4);
-    h.get_by_label_contains("Score: 0");
-    h.get_by_label_contains("ab*");
-    script.push(mini_game(42, "cd"));
-    h.run_steps(4);
-    h.get_by_label_contains("cd*");
-    assert!(
-        h.query_by_label_contains("ab*").is_none(),
-        "the old frame is gone"
-    );
-}
-
-#[test]
 fn a_mini_game_key_is_the_engines_action() {
     let (mut h, script) = harness();
     h.run_steps(3);
@@ -1250,44 +1233,4 @@ fn a_filter_prompt_that_follows_an_untitled_list_takes_the_typing_at_once() {
         sent.iter().any(|s| s["kind"] == "fill"),
         "typed text reaches the engine without a click first: {sent:?}"
     );
-}
-
-#[test]
-fn a_mini_game_window_is_sized_to_the_window_and_keeps_its_grid() {
-    let (mut h, script) = harness();
-    h.run_steps(3);
-    script.push(mini_game(41, "ab"));
-    h.run_steps(4);
-    let big = h.get_by_label_contains("Score: 0").rect();
-    h.set_size(egui::vec2(240.0, 300.0));
-    h.run_steps(4);
-    let small = h.get_by_label_contains("Score: 0").rect();
-    assert!(big.height() > 16.0, "larger than the old fixed 14 px font");
-    assert!(big.height() > small.height(), "{big:?} vs {small:?}");
-    // The widest row spans the grid: 20 columns fit the room the window leaves.
-    let row = h.get_by_label_contains("ab*").rect();
-    assert!(row.width() <= 240.0 * 0.9 + 1.0, "{row:?}");
-}
-
-#[test]
-fn a_mini_game_window_of_24_rows_is_not_clipped_by_the_dialog() {
-    let (mut h, script) = harness();
-    h.run_steps(3);
-    let rows = (0..24)
-        .map(|n| json!([[format!("row{n:02}"), 15, 0]]))
-        .collect::<Vec<_>>();
-    script.push(show(
-        41,
-        json!([]),
-        json!({"schema_id":"s:snake","kind":"custom","context":"SNAKE","title":"S N A K E",
-            "message":"","allow_cancel":false,"allow_set_count":false,"choices":[],
-            "choice_total":0,"canvas":{"cols":80,"rows":rows}}),
-    ));
-    h.run_steps(4);
-    let last = h.get_by_label_contains("row23").rect();
-    let window = h
-        .ctx
-        .memory(|m| m.area_rect(egui::Id::new(("dialog", "S N A K E"))))
-        .unwrap();
-    assert!(window.max.y >= last.max.y, "{window:?} under {last:?}");
 }

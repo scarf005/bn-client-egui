@@ -2,7 +2,7 @@
 
 use super::App;
 use crate::windows::{self, WindowSpec};
-use crate::{a11y, editor, text};
+use crate::{a11y, editor};
 use bn_client_core::{GameModel, markup};
 use eframe::egui::{self, accesskit};
 
@@ -38,11 +38,6 @@ impl<M: GameModel> App<M> {
         }
         if menu.context == "CONSTRUCTION" {
             let focused = self.construction(ctx, &menu, entered);
-            self.focus_menu = entered && !focused;
-            return;
-        }
-        if menu.terminal() || menu.description() {
-            let focused = self.terminal(ctx, &menu, entered);
             self.focus_menu = entered && !focused;
             return;
         }
@@ -87,7 +82,7 @@ impl<M: GameModel> App<M> {
             menu.context.as_str()
         };
         let spec = WindowSpec {
-            title_bar: !title.is_empty() && menu.banner.is_empty(),
+            title_bar: !title.is_empty(),
             closable: menu.can_cancel && !menu.acknowledges(),
             // Rows fill the list, so the window is as wide as it may get from its first frame; growing
             // into it later would move its centred position.
@@ -100,7 +95,6 @@ impl<M: GameModel> App<M> {
         };
         let shown = windows::show(ctx, spec, |ui| {
             ui.set_min_width(520.0);
-            self.banner(ui, &menu.banner);
             // Cancel sits right under the title, so it is at the same place for every dialog.
             if menu.can_cancel && !menu.acknowledges() {
                 let button = ui.add_enabled(self.idle(), egui::Button::new("Cancel"));
@@ -187,9 +181,7 @@ impl<M: GameModel> App<M> {
                             continue;
                         }
                         ui.horizontal(|ui| {
-                            let whole_row = menu.context != "MAIN_MENU"
-                                && choice.id != "acknowledge"
-                                && choice.denial.is_empty();
+                            let whole_row = choice.id != "acknowledge" && choice.denial.is_empty();
                             if whole_row {
                                 list_row_style(ui);
                             }
@@ -449,73 +441,8 @@ impl<M: GameModel> App<M> {
         response
     }
 
-    /// The title art and version line: fixed-width text, so the art keeps its shape.
-    fn banner(&self, ui: &mut egui::Ui, lines: &[String]) {
-        let font = egui::FontId::monospace(12.0);
-        ui.spacing_mut().item_spacing.y = 0.0;
-        for line in lines {
-            let runs = self.model.styled(line);
-            ui.add(egui::Label::new(text::job(&runs, &font)).wrap_mode(egui::TextWrapMode::Extend));
-        }
-        ui.spacing_mut().item_spacing.y = 4.0;
-    }
-
-    /// The engine's own window, a row of colored cells at a time, in a fixed-width font as large as
-    /// lets the whole grid fit the window, so every cell keeps its column and row at any size.
-    pub(super) fn canvas(&self, ui: &mut egui::Ui, canvas: &bn_client_core::Canvas) {
-        // The room is what the dialog offers its list; it does not depend on the dialog's own size,
-        // which follows the canvas.
-        // A row's height rounds up to a whole pixel, which a row of slack each pays for.
-        let room = egui::vec2(
-            ui.ctx().content_rect().width() * 0.9,
-            ui.available_height() - canvas.rows.len() as f32,
-        );
-        let unit = 100.0;
-        let cell = ui
-            .painter()
-            .layout_no_wrap(
-                "0".into(),
-                egui::FontId::monospace(unit),
-                egui::Color32::WHITE,
-            )
-            .size()
-            / unit;
-        let fit = (room.x / (canvas.cols.max(1) as f32 * cell.x))
-            .min(room.y / (canvas.rows.len().max(1) as f32 * cell.y));
-        let font = egui::FontId::monospace(fit.clamp(10.0, 40.0));
-        let paint = |c: bn_client_core::Rgb| egui::Color32::from_rgb(c.0, c.1, c.2);
-        ui.spacing_mut().item_spacing.y = 0.0;
-        for row in &canvas.rows {
-            let mut job = egui::text::LayoutJob::default();
-            for run in row {
-                job.append(
-                    &run.text,
-                    0.0,
-                    egui::TextFormat {
-                        color: paint(run.color),
-                        background: run.bg.map_or(egui::Color32::TRANSPARENT, paint),
-                        font_id: font.clone(),
-                        ..Default::default()
-                    },
-                );
-            }
-            // An empty row keeps its height.
-            if row.is_empty() {
-                job.append(
-                    " ",
-                    0.0,
-                    egui::TextFormat::simple(font.clone(), egui::Color32::BLACK),
-                );
-            }
-            ui.add(egui::Label::new(job).wrap_mode(egui::TextWrapMode::Extend));
-        }
-        ui.spacing_mut().item_spacing.y = 4.0;
-    }
-
     fn menu_message(&self, ui: &mut egui::Ui, menu: &bn_client_core::Menu) {
-        if let Some(canvas) = &menu.canvas {
-            self.canvas(ui, canvas);
-        } else if menu.screen {
+        if menu.screen {
             // A composed screen: columns line up only in a fixed-width font.
             ui.add(
                 egui::Label::new(egui::RichText::new(&menu.message).monospace())

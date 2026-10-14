@@ -6,13 +6,13 @@ use crate::interaction::{self, InvokeError, Pages};
 use crate::keys;
 use crate::markup::{self, Run};
 use crate::model::{
-    ActionEntry, Canvas, CanvasRun, Cell, CommandStatus, Effect, Failure, FailureKind, GameModel,
-    Heard, Layer, Loading, LogLine, Menu, MenuChoice, MenuField, MenuPane, Mutation, Overmap,
-    OvermapCell, OvermapTile, PaneTotals, Pos, Rgb, Shape,
+    ActionEntry, Cell, CommandStatus, Effect, Failure, FailureKind, GameModel, Heard, Layer,
+    Loading, LogLine, Menu, MenuChoice, MenuField, MenuPane, Mutation, Overmap, OvermapCell,
+    OvermapTile, PaneTotals, Pos, Rgb, Shape,
 };
 use crate::protocol::{
-    self, CanvasWire, Cell as WorldCell, Entity, Incoming, InvokeArgs, Known, LoadingNotice, Look,
-    ModTileset, Operation, Row, Screen, Snapshot, Traits, WorldPos,
+    self, Cell as WorldCell, Entity, Incoming, InvokeArgs, Known, LoadingNotice, Look, ModTileset,
+    Operation, Row, Screen, Snapshot, Traits, WorldPos,
 };
 use crate::replica::{Outcome, Replica};
 use crate::transport::{Transport, request};
@@ -231,26 +231,6 @@ fn id_seed(id: &str) -> u32 {
 
 /// Native registered-action id for a one-square move.
 impl EngineModel {
-    /// The engine's window with its curses colors resolved.
-    fn canvas(&self, wire: &CanvasWire) -> Canvas {
-        Canvas {
-            cols: wire.cols,
-            rows: wire
-                .rows
-                .iter()
-                .map(|row| {
-                    row.iter()
-                        .map(|(text, fg, bg)| CanvasRun {
-                            text: text.clone(),
-                            color: self.colors.index(*fg),
-                            bg: (*bg != 0).then(|| self.colors.index(*bg)),
-                        })
-                        .collect()
-                })
-                .collect(),
-        }
-    }
-
     /// The fetched pages of this interaction, when they belong to it.
     fn more_of(&self, i: &protocol::Interaction) -> &[protocol::Choice] {
         let b = self.replica.boundary();
@@ -1431,7 +1411,6 @@ impl EngineModel {
             message: i.message.clone(),
             message_tone: i.message_tone.clone().unwrap_or_default(),
             category_mode: i.category_mode,
-            banner: i.banner.clone().unwrap_or_default(),
             total: i.choice_total as usize,
             choices: all()
                 .map(|c| MenuChoice {
@@ -1507,7 +1486,6 @@ impl EngineModel {
                 .and_then(|c| pane_of(&c.label).map(String::from)),
             screen: i.kind == "custom",
             vehicle: i.vehicle.clone(),
-            canvas: i.canvas.as_ref().map(|wire| self.canvas(wire)),
             focus: i
                 .compat
                 .as_ref()
@@ -1628,7 +1606,7 @@ impl GameModel for EngineModel {
                 self.native.push(line);
             }
         }
-        let at_main_menu = self.menu().is_some_and(|m| m.context == "MAIN_MENU");
+        let at_main_menu = interaction::titled(self.replica.stack());
         if at_main_menu && !std::mem::replace(&mut self.at_main_menu, true) {
             self.messages.clear();
             self.sounds.clear();

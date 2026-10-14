@@ -640,13 +640,32 @@ impl<M: GameModel> Painter<'_, M> {
     }
 
     fn split(&mut self, f: &mut Frame, split: &Split, area: Rect) {
-        let n = split.children.len().max(1);
+        // A banner is the screen's heading: it sits above the parts, as tall as its lines but for at most
+        // half the area, so a small terminal still shows the parts.
+        let (banners, parts) = split.children.iter().partition::<Vec<_>, _>(
+            |c| matches!(c, Component::Text(t) if t.role == Some(TextRole::Banner)),
+        );
+        let mut area = area;
+        for banner in banners {
+            let lines = match banner {
+                Component::Text(t) => t.markup.shown().lines().count(),
+                _ => 0,
+            };
+            let height = u16::try_from(lines)
+                .unwrap_or(u16::MAX)
+                .min(area.height / 2);
+            let [top, rest] =
+                Layout::vertical([Constraint::Length(height), Constraint::Min(0)]).areas(area);
+            self.component(f, banner, top);
+            area = rest;
+        }
+        let n = parts.len().max(1);
         let side = usize::from(area.width) >= 30 * n;
         let cells = match side {
             true => Layout::horizontal(vec![Constraint::Fill(1); n]).split(area),
             false => Layout::vertical(vec![Constraint::Fill(1); n]).split(area),
         };
-        for (child, cell) in split.children.iter().zip(cells.iter()) {
+        for (child, cell) in parts.into_iter().zip(cells.iter()) {
             self.component(f, child, *cell);
         }
     }
@@ -774,7 +793,12 @@ impl<M: GameModel> Painter<'_, M> {
             (None, None) => Style::new(),
         };
         let runs = self.model.styled(&text.markup.shown());
-        let lines = flow(&runs, usize::from(area.width));
+        // A banner is art: its lines are cut at the window's edge, never wrapped.
+        let width = match text.role {
+            Some(TextRole::Banner) => usize::from(u16::MAX),
+            _ => usize::from(area.width),
+        };
+        let lines = flow(&runs, width);
         let window = Window {
             total: lines.len(),
             visible: usize::from(area.height),

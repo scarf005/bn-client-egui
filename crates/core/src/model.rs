@@ -325,8 +325,6 @@ pub struct Menu {
     pub message_tone: String,
     /// Whether the native category-selection mode is on; absent where the screen has none.
     pub category_mode: Option<bool>,
-    /// Lines drawn above the menu in a fixed-width font, with colour tags.
-    pub banner: Vec<String>,
     pub choices: Vec<MenuChoice>,
     /// The panes of a two-pane menu; empty for other menus.
     pub panes: Vec<MenuPane>,
@@ -349,23 +347,6 @@ pub struct Menu {
     pub screen: bool,
     /// The vehicle interaction window, when this menu is one.
     pub vehicle: Option<Vehicle>,
-    /// The window of a screen the engine draws itself, such as a software mini-game.
-    pub canvas: Option<Canvas>,
-}
-
-/// A run of cells of one window row that share their colors; no background for curses color 0.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct CanvasRun {
-    pub text: String,
-    pub color: Rgb,
-    pub bg: Option<Rgb>,
-}
-
-/// A native window as drawn, one list of runs per row.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Canvas {
-    pub cols: usize,
-    pub rows: Vec<Vec<CanvasRun>>,
 }
 
 impl Menu {
@@ -391,18 +372,6 @@ impl Menu {
         named
             .filter(|_| changed && self.sections.len() > 1)
             .map(|(_, label)| label.as_str())
-    }
-
-    /// A computer terminal: its text is the message and its answers carry the pane `terminal`.
-    pub fn terminal(&self) -> bool {
-        self.choices
-            .iter()
-            .any(|c| c.group.as_deref() == Some("terminal"))
-    }
-
-    /// The extended description of a square: scrollable text with the targets it describes as rows.
-    pub fn description(&self) -> bool {
-        self.context == "EXTENDED_DESCRIPTION"
     }
 
     /// The only way out is the engine's own acknowledge row, so a separate Cancel would duplicate it.

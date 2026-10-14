@@ -870,48 +870,6 @@ mod overmap {
 }
 
 #[test]
-fn the_title_screen_is_only_its_menu() {
-    let (mut h, script) = harness();
-    h.run_steps(3);
-    h.get_by_label("Message log");
-    let mut menu = fixture("events_43_menu");
-    menu["params"]["events"][0]["changes"]["interaction"]["interaction"]["context"] =
-        json!("MAIN_MENU");
-    script.push(fixture("events_41_walk"));
-    script.push(fixture("events_42_message"));
-    script.push(menu);
-    h.run_steps(4);
-    h.get_by_label("combat knife");
-    for panel in ["Message log", "Ground", "Inventory", "Map"] {
-        assert!(
-            h.query_by_label(panel).is_none(),
-            "{panel} belongs to a running game"
-        );
-    }
-}
-
-#[test]
-fn the_title_screen_draws_the_engines_banner_above_its_menu() {
-    let (mut h, script) = harness();
-    h.run_steps(3);
-    let mut menu = fixture("events_43_menu");
-    let interaction = &mut menu["params"]["events"][0]["changes"]["interaction"]["interaction"];
-    interaction["context"] = json!("MAIN_MENU");
-    interaction["banner"] = json!([
-        "<color_light_cyan> _ART_ </color>",
-        "",
-        "Version: HEAD-HASH"
-    ]);
-    script.push(fixture("events_41_walk"));
-    script.push(fixture("events_42_message"));
-    script.push(menu);
-    h.run_steps(4);
-    h.get_by_label(" _ART_ ");
-    h.get_by_label("Version: HEAD-HASH");
-    h.get_by_label("combat knife");
-}
-
-#[test]
 fn a_menu_entry_is_where_it_stays_on_the_first_frame_the_menu_is_shown() {
     let (mut h, script) = harness();
     h.run_steps(3);

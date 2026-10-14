@@ -7,14 +7,13 @@
 use super::App;
 use crate::windows::{self, Origin, Shown, WindowSpec};
 use crate::{a11y, editor, text};
-use bn_client_core::colors::ColorMap;
 use bn_client_core::interaction::{self, ArgKind, InvokeError, Reason};
 use bn_client_core::protocol::{
     Affordance, AffordanceRole, CanvasComponent, Component, Editor, EditorValue, FieldKind, Form,
     FormField, Grid, List, MapComponent, MapMode, PanelStat, Row, Screen, ScreenDock, ScreenRole,
     Selection, SidebarSide, Text, TextBlock, TextRole, Tone,
 };
-use bn_client_core::{Canvas, CanvasRun, GameModel, markup};
+use bn_client_core::{GameModel, markup};
 use eframe::egui::{self, WidgetInfo, WidgetType};
 use std::collections::HashSet;
 
@@ -180,26 +179,6 @@ fn editor_of(field: &FormField) -> Editor {
         minimum: field.min.clone(),
         maximum: field.max.clone(),
         max_length: field.max_length.unwrap_or(-1),
-    }
-}
-
-/// The engine's window with its curses colours resolved from the built-in palette.
-fn canvas_of(canvas: &CanvasComponent, colors: &ColorMap) -> Canvas {
-    Canvas {
-        cols: canvas.cols,
-        rows: canvas
-            .rows
-            .iter()
-            .map(|row| {
-                row.iter()
-                    .map(|(text, fg, bg)| CanvasRun {
-                        text: text.clone(),
-                        color: colors.index(*fg),
-                        bg: (*bg != 0).then(|| colors.index(*bg)),
-                    })
-                    .collect()
-            })
-            .collect(),
     }
 }
 
@@ -476,8 +455,15 @@ impl<M: GameModel> App<M> {
                 }
             }
             Component::Split(split) => {
-                ui.columns(split.children.len(), |columns| {
-                    for (ui, child) in columns.iter_mut().zip(&split.children) {
+                // A banner is the screen's heading: it sits above the parts, whatever their number.
+                let (banners, parts) = split.children.iter().partition::<Vec<_>, _>(
+                    |c| matches!(c, Component::Text(t) if t.role == Some(TextRole::Banner)),
+                );
+                for banner in banners {
+                    self.component(ui, screen, banner, out);
+                }
+                ui.columns(parts.len(), |columns| {
+                    for (ui, child) in columns.iter_mut().zip(parts) {
                         let active = split.active.as_deref() == Some(child.id());
                         let stroke = if active {
                             ui.visuals().selection.stroke
@@ -512,7 +498,7 @@ impl<M: GameModel> App<M> {
             Component::Text(block) => self.text_block(ui, block),
             Component::Grid(grid) => self.grid(ui, grid, out),
             Component::Map(map) => self.map_slot(ui, map),
-            Component::Canvas(canvas) => self.canvas(ui, &canvas_of(canvas, self.model.colors())),
+            Component::Canvas(canvas) => self.canvas(ui, canvas),
         }
         if !matches!(c, Component::List(_)) {
             self.component_buttons(ui, screen, c, None, out);
@@ -545,13 +531,84 @@ impl<M: GameModel> App<M> {
             ),
         };
         let job = text::job(&self.model.styled(&block.markup.shown()), &font);
-        ui.scope(|ui| {
-            if let Some(tone) = block.tone {
-                ui.visuals_mut().override_text_color =
-                    Some(if tone == Tone::Good { GOOD } else { BAD });
+        let show = |ui: &mut egui::Ui| {
+            ui.scope(|ui| {
+                if let Some(tone) = block.tone {
+                    ui.visuals_mut().override_text_color =
+                        Some(if tone == Tone::Good { GOOD } else { BAD });
+                }
+                ui.add(egui::Label::new(job).wrap_mode(wrap));
+            });
+        };
+        // A banner is the screen's heading and keeps its height; any other text scrolls past a window's.
+        if block.role == Some(TextRole::Banner) {
+            show(ui);
+        } else {
+            egui::ScrollArea::vertical()
+                .max_height(super::dialog_scroll_height(ui.ctx()))
+                .auto_shrink(true)
+                .show(ui, show);
+        }
+    }
+
+    /// The engine's own window, a row of colored cells at a time, in a fixed-width font as large as
+    /// lets the whole grid fit the window, so every cell keeps its column and row at any size.
+    fn canvas(&self, ui: &mut egui::Ui, canvas: &CanvasComponent) {
+        // The room is what the dialog offers its list; it does not depend on the dialog's own size,
+        // which follows the canvas.
+        // A row's height rounds up to a whole pixel, which a row of slack each pays for.
+        let room = egui::vec2(
+            ui.ctx().content_rect().width() * 0.9,
+            ui.available_height() - canvas.rows.len() as f32,
+        );
+        let unit = 100.0;
+        let cell = ui
+            .painter()
+            .layout_no_wrap(
+                "0".into(),
+                egui::FontId::monospace(unit),
+                egui::Color32::WHITE,
+            )
+            .size()
+            / unit;
+        let fit = (room.x / (canvas.cols.max(1) as f32 * cell.x))
+            .min(room.y / (canvas.rows.len().max(1) as f32 * cell.y));
+        let font = egui::FontId::monospace(fit.clamp(10.0, 40.0));
+        let colors = self.model.colors();
+        let paint = |index: u8| {
+            let c = colors.index(index);
+            egui::Color32::from_rgb(c.0, c.1, c.2)
+        };
+        ui.spacing_mut().item_spacing.y = 0.0;
+        for row in &canvas.rows {
+            let mut job = egui::text::LayoutJob::default();
+            for (text, fg, bg) in row {
+                job.append(
+                    text,
+                    0.0,
+                    egui::TextFormat {
+                        color: paint(*fg),
+                        background: if *bg == 0 {
+                            egui::Color32::TRANSPARENT
+                        } else {
+                            paint(*bg)
+                        },
+                        font_id: font.clone(),
+                        ..Default::default()
+                    },
+                );
             }
-            ui.add(egui::Label::new(job).wrap_mode(wrap));
-        });
+            // An empty row keeps its height.
+            if row.is_empty() {
+                job.append(
+                    " ",
+                    0.0,
+                    egui::TextFormat::simple(font.clone(), egui::Color32::BLACK),
+                );
+            }
+            ui.add(egui::Label::new(job).wrap_mode(egui::TextWrapMode::Extend));
+        }
+        ui.spacing_mut().item_spacing.y = 4.0;
     }
 
     fn form(&self, ui: &mut egui::Ui, screen: &Screen, form: &Form, out: &mut Vec<Intent>) {

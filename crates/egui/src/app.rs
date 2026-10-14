@@ -4,7 +4,7 @@ use crate::effects::Effects;
 use crate::text;
 use crate::windows::{Origin, Shown, WindowSpec};
 use bn_client_core::protocol::SidebarSide;
-use bn_client_core::{Failure, GameModel, Loading, Overmap, Pos, keys};
+use bn_client_core::{Failure, GameModel, Loading, Overmap, Pos, interaction, keys};
 use eframe::egui::{self, accesskit};
 
 mod character;
@@ -17,7 +17,6 @@ mod sidebar;
 mod sounds;
 mod spells;
 mod target;
-mod terminal;
 mod vehicle;
 
 /// A command must outlast this before the controls show it; keeps short commands from blinking the UI.
@@ -373,7 +372,7 @@ impl<M: GameModel> App<M> {
         if self.pending_since.is_some() && !self.settled() {
             ui.ctx().request_repaint_after(SETTLE);
         }
-        if self.model.menu().is_some_and(|m| m.context == "MAIN_MENU") {
+        if interaction::titled(self.model.screens()) {
             // The game is over: the next one starts with the cursor on its player and and no travel marker.
             (self.cursor_placed, self.marker) = (false, None);
         }
@@ -407,7 +406,7 @@ impl<M: GameModel> App<M> {
             }
         }
         egui::Panel::top("bar").show(ui, |ui| self.bar(ui));
-        if self.model.menu().is_some_and(|m| m.context == "MAIN_MENU") {
+        if interaction::titled(self.model.screens()) {
             // The title screen is only its menu: no map, sidebar or log of a game that is not running.
             self.menu_or_screen(ui.ctx());
             return;
