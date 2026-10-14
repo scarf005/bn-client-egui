@@ -71,7 +71,6 @@ fn by_def(def: &str, v: &Value) -> Result<Value, String> {
         "environment" => round_trip::<Environment>(v),
         "look" => round_trip::<Look>(v),
         "overmap" => round_trip::<OvermapWire>(v),
-        "canvas" => round_trip::<CanvasWire>(v),
         "data_message_logged" => round_trip::<LoggedMessage>(v),
         "event" => round_trip::<Event>(v),
         other => Err(format!("no type for {other}")),
@@ -215,7 +214,7 @@ fn the_schema_hash_is_the_vendored_schemas_sha256_prefix() {
         .map(|b| format!("{b:02x}"))
         .collect::<String>();
     assert_eq!(protocol::SCHEMA_HASH, format!("sha256:{}", &hex[..16]));
-    assert_eq!(protocol::SCHEMA_HASH, "sha256:49564dab26f80340");
+    assert_eq!(protocol::SCHEMA_HASH, "sha256:52f01000bc3be52d");
 }
 
 #[test]
