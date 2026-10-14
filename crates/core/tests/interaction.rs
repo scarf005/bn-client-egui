@@ -726,17 +726,11 @@ fn moving_the_focus_in_a_list_a_select_affordance_names_invokes_it_once_with_the
     let focus = json!({"component_id": "list", "row_id": "a"});
     let mut ui = Interaction::default();
     ui.sync(&selecting("screen:1", focus.clone(), "list", true));
-    assert!(
-        ui.take_select().is_none(),
-        "the engine's own cursor is not sent back"
-    );
+    assert!(ui.take_select().is_none(), "the engine's own cursor is not sent back");
     ui.focus_row("list", "c");
     ui.sync(&selecting("screen:1", focus.clone(), "list", true));
     let (id, args) = ui.take_select().expect("the focus moved");
-    assert_eq!(
-        (id.as_str(), args.row.as_deref()),
-        ("pick:select", Some("c"))
-    );
+    assert_eq!((id.as_str(), args.row.as_deref()), ("pick:select", Some("c")));
     ui.sync(&selecting("screen:1", focus, "list", true));
     assert!(ui.take_select().is_none(), "once per move");
 }
@@ -748,10 +742,7 @@ fn the_focus_moving_elsewhere_or_with_no_enabled_select_affordance_invokes_nothi
     ui.sync(&selecting("screen:1", focus.clone(), "list", true));
     ui.focus_row("tabs", "x");
     ui.sync(&selecting("screen:1", focus.clone(), "list", true));
-    assert!(
-        ui.take_select().is_none(),
-        "the affordance names another list"
-    );
+    assert!(ui.take_select().is_none(), "the affordance names another list");
     ui.focus_row("list", "b");
     ui.sync(&selecting("screen:1", focus, "list", false));
     assert!(ui.take_select().is_none(), "a disabled affordance");
@@ -760,18 +751,8 @@ fn the_focus_moving_elsewhere_or_with_no_enabled_select_affordance_invokes_nothi
 #[test]
 fn an_engine_cursor_that_moves_is_followed_and_not_sent_back() {
     let mut ui = Interaction::default();
-    ui.sync(&selecting(
-        "screen:1",
-        json!({"component_id": "list", "row_id": "a"}),
-        "list",
-        true,
-    ));
-    ui.sync(&selecting(
-        "screen:1",
-        json!({"component_id": "list", "row_id": "b"}),
-        "list",
-        true,
-    ));
+    ui.sync(&selecting("screen:1", json!({"component_id": "list", "row_id": "a"}), "list", true));
+    ui.sync(&selecting("screen:1", json!({"component_id": "list", "row_id": "b"}), "list", true));
     assert_eq!(ui.focus().row_id.as_deref(), Some("b"));
     assert!(ui.take_select().is_none());
 }
