@@ -455,15 +455,18 @@ mod overmap {
     #[test]
     fn the_cursor_status_reads_the_squares_description_and_the_view_lists_the_notes() {
         let (h, _script) = open();
-        let said = "lake on the northwest outskirts of Bristol. Route of 2 squares.";
+        let said = "lake on the northwest outskirts of Bristol";
         let live = announced(&h);
-        assert!(live.iter().any(|v| v.starts_with(said)), "{live:?}");
-        let view = h.get_by_label("Overmap view").accesskit_node();
+        for line in [said, "Route of 2 squares."] {
+            assert!(live.iter().any(|v| v == line), "{line} in {live:?}");
+        }
+        let view = h
+            .get_by_role_and_label(egui::accesskit::Role::Canvas, "Overmap")
+            .accesskit_node();
         let described = view.description().unwrap_or_default();
-        assert!(described.starts_with(said), "{described}");
-        assert!(
-            described.contains("Notes: (99, 200, 0) cache."),
-            "{described}"
+        assert_eq!(
+            described,
+            format!("{said} Route of 2 squares. List Notes (99, 200, 0) cache")
         );
     }
 

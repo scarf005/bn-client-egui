@@ -68,6 +68,14 @@ enum OvermapPaint {
         painter: egui::Painter,
         rect: egui::Rect,
     },
+    /// A name or marker drawn over the squares, centred on `rect`.
+    Text {
+        painter: egui::Painter,
+        rect: egui::Rect,
+        text: String,
+        color: Rgb,
+        font: egui::FontId,
+    },
 }
 
 /// An overmap tile that outlives the frame's data.
@@ -850,29 +858,14 @@ impl<M: GameModel> App<M> {
                 .find(|a| a.args.as_ref().is_some_and(|args| args.pos.is_some()) == pos)
         };
         let (mover, runner) = (by_args(true), by_args(false));
-        // What the engine says of the cursor square, a sentence each.
-        let status = [
-            om.cursor_here.clone(),
-            Some(om.cursor_description.clone()),
-            om.cursor_note.clone(),
-            om.route_text.clone(),
-        ]
-        .into_iter()
-        .flatten()
-        .filter(|t| !t.is_empty())
-        .map(|t| {
-            if t.ends_with(['.', '!', '?', '。', '！', '？']) {
-                t
-            } else {
-                format!("{t}.")
-            }
-        })
-        .collect::<Vec<_>>()
-        .join(" ");
-        let status_label = ui.label(&status);
-        ui.ctx().accesskit_node_builder(status_label.id, |b| {
-            b.set_live(egui::accesskit::Live::Polite)
-        });
+        // What the engine says of the cursor square, a line each.
+        let status = om.status();
+        for line in &status {
+            let label = ui.label(*line);
+            ui.ctx()
+                .accesskit_node_builder(label.id, |b| b.set_live(egui::accesskit::Live::Polite));
+        }
+        let status = status.join(" ");
 
         let cell_px = self.display.cell(super::CELL);
         let font = egui::FontId::monospace(cell_px - 2.0);
@@ -912,13 +905,23 @@ impl<M: GameModel> App<M> {
                 egui::vec2(cols as f32 * cell_px, rows as f32 * cell_px),
                 egui::Sense::click(),
             );
-            response.widget_info(|| WidgetInfo::labeled(WidgetType::Other, true, "Overmap view"));
+            let title = screen
+                .title
+                .as_ref()
+                .map(|t| markup::plain(&t.shown()))
+                .unwrap_or_default();
+            response.widget_info(|| WidgetInfo::labeled(WidgetType::Other, true, &title));
             ui.ctx().accesskit_node_builder(response.id, |b| {
                 b.set_role(egui::accesskit::Role::Canvas);
+                let notes = (!om.notes.is_empty())
+                    .then(|| [om.notes_title.clone()].into_iter().chain(om.note_lines()))
+                    .into_iter()
+                    .flatten();
                 b.set_description(
-                    [Some(status.clone()), om.notes_text()]
+                    [status.clone()]
                         .into_iter()
-                        .flatten()
+                        .chain(notes)
+                        .filter(|t| !t.is_empty())
                         .collect::<Vec<_>>()
                         .join(" "),
                 );
@@ -969,6 +972,50 @@ impl<M: GameModel> App<M> {
                     color: egui::Color32::from_rgba_unmultiplied(0, 200, 255, alpha),
                 });
             }
+            for label in &om.labels {
+                let Some((col, row)) = om.cell_of(&label.pos).filter(|(c, r)| {
+                    (left..left + cols).contains(c) && (top..top + rows).contains(r)
+                }) else {
+                    continue;
+                };
+                paints.push(OvermapPaint::Text {
+                    painter: painter.clone(),
+                    rect: rect_of(col, row),
+                    text: label.text.clone(),
+                    color: colors.index(label.foreground),
+                    font: font.clone(),
+                });
+            }
+            // The mission's target, marked at the edge of the squares shown when it lies beyond them.
+            if let Some(target) = &om.mission_target {
+                let (dx, dy) = (target.x - om.origin.x, target.y - om.origin.y);
+                let inside = (left as i32..(left + cols) as i32).contains(&dx)
+                    && (top as i32..(top + rows) as i32).contains(&dy);
+                if !inside {
+                    let col = dx.clamp(left as i32, (left + cols) as i32 - 1) as usize;
+                    let row = dy.clamp(top as i32, (top + rows) as i32 - 1) as usize;
+                    let (toward_x, toward_y) = (
+                        (target.x - cursor.x).signum(),
+                        (target.y - cursor.y).signum(),
+                    );
+                    let marker = match (toward_x, toward_y) {
+                        (0, -1) => "^",
+                        (1, -1) | (-1, 1) => "/",
+                        (1, 0) => ">",
+                        (1, 1) | (-1, -1) => "\\",
+                        (0, 1) => "v",
+                        (-1, 0) => "<",
+                        _ => " ",
+                    };
+                    paints.push(OvermapPaint::Text {
+                        painter: painter.clone(),
+                        rect: rect_of(col, row),
+                        text: marker.into(),
+                        color: colors.index(1),
+                        font: font.clone(),
+                    });
+                }
+            }
             paints.push(OvermapPaint::Outline {
                 painter: painter.clone(),
                 rect: rect_of(cursor_col, cursor_row),
@@ -1013,7 +1060,7 @@ impl<M: GameModel> App<M> {
                 }
                 if !om.notes.is_empty() {
                     ui.separator();
-                    ui.heading("Notes");
+                    ui.heading(&om.notes_title);
                 }
                 for note in &om.notes {
                     let link = ui.link(format!("({}, {}) {}", note.pos.x, note.pos.y, note.text));
@@ -1084,6 +1131,21 @@ impl<M: GameModel> App<M> {
                 } => {
                     painter.rect_filled(rect, 0.0, color);
                 }
+                OvermapPaint::Text {
+                    painter,
+                    rect,
+                    text,
+                    color,
+                    font,
+                } => {
+                    painter.text(
+                        rect.center(),
+                        egui::Align2::CENTER_CENTER,
+                        text,
+                        font,
+                        super::rgb(color),
+                    );
+                }
                 OvermapPaint::Outline { painter, rect } => {
                     painter.rect_stroke(
                         rect,
@@ -1118,7 +1180,11 @@ impl<M: GameModel> App<M> {
         let name = match (&map.head.label, map.mode) {
             (Some(label), _) => markup::plain(&label.shown()),
             (None, MapMode::World) => "Map".into(),
-            (None, MapMode::Overmap) => "Overmap".into(),
+            (None, MapMode::Overmap) => screen
+                .title
+                .as_ref()
+                .map(|t| markup::plain(&t.shown()))
+                .unwrap_or_default(),
         };
         let size = egui::vec2(ui.available_width().min(480.0), 120.0);
         let (rect, response) = ui.allocate_exact_size(size, egui::Sense::hover());

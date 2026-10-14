@@ -577,6 +577,15 @@ pub struct OvermapWire {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub route_text: Option<String>,
     pub notes: Vec<OvermapNote>,
+    /// The heading of `notes`, localized by the engine.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub notes_title: String,
+    /// The names the native window prints over squares.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub labels: Vec<OvermapLabel>,
+    /// The active mission's target while the overlays are shown.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mission_target: Option<WorldPos>,
     #[serde(default)]
     pub path: Vec<WorldPos>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -632,14 +641,26 @@ impl OvermapWire {
             .map(|n| n.text.as_str())
     }
 
-    /// Every note in view, for a reader that cannot see the markers.
-    pub fn notes_text(&self) -> Option<String> {
-        let notes = self
-            .notes
+    /// The status lines the engine says of the cursor square, in the order it says them.
+    pub fn status(&self) -> Vec<&str> {
+        [
+            self.cursor_here.as_deref(),
+            Some(self.cursor_description.as_str()),
+            self.cursor_note.as_deref(),
+            self.route_text.as_deref(),
+        ]
+        .into_iter()
+        .flatten()
+        .filter(|t| !t.is_empty())
+        .collect()
+    }
+
+    /// Every note in view with its square, for a reader that cannot see the markers.
+    pub fn note_lines(&self) -> Vec<String> {
+        self.notes
             .iter()
             .map(|n| format!("({}, {}, {}) {}", n.pos.x, n.pos.y, n.pos.z, n.text))
-            .collect::<Vec<_>>();
-        (!notes.is_empty()).then(|| format!("Notes: {}.", notes.join("; ")))
+            .collect()
     }
 }
 
@@ -649,6 +670,15 @@ pub struct OvermapTiles {
     /// `[tile, rotation, subtile]` per square, row-major like the glyph cells.
     pub cells: Vec<Vec<(String, u8, String)>>,
     pub looks_like: std::collections::BTreeMap<String, Vec<String>>,
+}
+
+/// A name printed over an overmap square, in curses color indexes.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OvermapLabel {
+    pub pos: WorldPos,
+    pub text: String,
+    pub foreground: u8,
+    pub background: u8,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

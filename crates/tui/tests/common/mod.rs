@@ -56,7 +56,7 @@ pub fn overmap_event(cursor_x: i32) -> Value {
             "origin": at(cursor_x - 2, 199), "player": at(98, 200), "cols": 4, "rows": 3,
             "cells": [row("F"), row("f"), row("r")],
             "legend": ["LEVEL 0, 100, 200"], "cursor_description": "Overmap forest",
-            "route_text": "Route of 2 squares.",
+            "route_text": "Route of 2 squares.", "notes_title": "List Notes",
             "notes": [{"pos": at(cursor_x - 1, 200), "text": "cache"}],
             "path": [at(cursor_x + 1, 200), at(cursor_x + 2, 200)]}});
     let toggles = json!({"id": "overmap:toggles", "kind": "panel", "title": "", "stats": [

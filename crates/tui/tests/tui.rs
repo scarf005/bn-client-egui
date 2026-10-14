@@ -862,6 +862,31 @@ mod overmap {
     }
 
     #[test]
+    fn labels_are_written_over_the_squares_they_name_and_a_far_target_is_marked_at_the_edge() {
+        let (mut app, h) = engine();
+        let mut event = common::overmap_event(100);
+        let om = common::squares_mut(&mut event);
+        om["labels"] = json!([{"pos": {"dim":"","x":99,"y":201,"z":0}, "text": "Mi",
+            "foreground": 14, "background": 0}]);
+        om["mission_target"] = json!({"dim":"","x":500,"y":200,"z":0});
+        h.push(event);
+        app.model.poll();
+        let screen = text(&render(&mut app));
+        let grid = screen
+            .lines()
+            .filter(|l| l.contains("@"))
+            .collect::<Vec<_>>();
+        assert!(
+            grid.iter().any(|l| l.contains("Mi")),
+            "the name replaces the cells it covers\n{screen}"
+        );
+        assert!(
+            grid.iter().any(|l| l.contains('>')),
+            "the target lies east\n{screen}"
+        );
+    }
+
+    #[test]
     fn the_screen_shows_the_engines_lines_for_the_cursor_square_its_route_and_its_notes() {
         let (mut app, h) = engine();
         let mut event = common::overmap_event(100);
@@ -875,7 +900,8 @@ mod overmap {
             "You are here.",
             "Note: cache",
             "Route of 2 squares.",
-            "(99, 200) cache",
+            "List Notes",
+            "(99, 200, 0) cache",
         ] {
             assert!(screen.contains(line), "{line} in\n{screen}");
         }

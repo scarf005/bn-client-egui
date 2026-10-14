@@ -755,9 +755,35 @@ mod overmap {
     #[test]
     fn the_overmap_screen_names_the_cursor_square_from_the_engines_lines() {
         let (h, _script) = open_overmap();
-        h.get_by_label("Overmap view");
-        h.get_by_label_contains("Overmap forest. Route of 2 squares.");
+        h.get_by_role_and_label(egui::accesskit::Role::Canvas, "Overmap");
+        h.get_by_label("Overmap forest");
+        h.get_by_label("Route of 2 squares.");
         h.get_by_label("LEVEL 0, 100, 200");
+        h.get_by_label("List Notes");
+    }
+
+    #[test]
+    fn the_notes_heading_is_the_engines_and_only_while_there_are_notes() {
+        let (mut h, script) = harness();
+        h.run_steps(3);
+        let mut event = common::overmap_event(100);
+        common::squares_mut(&mut event)["notes_title"] = "Anmerkungen".into();
+        script.push(event);
+        h.run_steps(3);
+        h.get_by_label("Anmerkungen");
+        h.get_by_label("(99, 200) cache");
+    }
+
+    #[test]
+    fn no_notes_leave_no_notes_heading() {
+        let (mut h, script) = harness();
+        h.run_steps(3);
+        let mut event = common::overmap_event(100);
+        common::squares_mut(&mut event)["notes"] = json!([]);
+        script.push(event);
+        h.run_steps(3);
+        h.get_by_label("Overmap forest");
+        assert!(h.query_by_label("List Notes").is_none());
     }
 
     #[test]
@@ -770,13 +796,23 @@ mod overmap {
         om["cursor_note"] = "Note: cache...".into();
         script.push(event);
         h.run_steps(3);
-        h.get_by_label_contains("現在地。 Overmap forest. Note: cache... Route of 2 squares.");
+        for line in [
+            "現在地。",
+            "Overmap forest",
+            "Note: cache...",
+            "Route of 2 squares.",
+        ] {
+            h.get_by_label(line);
+        }
     }
 
     #[test]
     fn hovering_another_square_names_it_and_its_note() {
         let (mut h, _script) = open_overmap();
-        let origin = h.get_by_label("Overmap view").rect().min;
+        let origin = h
+            .get_by_role_and_label(egui::accesskit::Role::Canvas, "Overmap")
+            .rect()
+            .min;
         // Cell (1, 1) is square (99, 200), which holds the note.
         h.hover_at(origin + egui::vec2(1.5 * CELL, 1.5 * CELL));
         h.run_steps(3);
@@ -786,7 +822,10 @@ mod overmap {
     #[test]
     fn clicking_a_square_moves_the_cursor_and_clicking_the_cursor_travels() {
         let (mut h, script) = open_overmap();
-        let origin = h.get_by_label("Overmap view").rect().min;
+        let origin = h
+            .get_by_role_and_label(egui::accesskit::Role::Canvas, "Overmap")
+            .rect()
+            .min;
         let click = |h: &mut H, col: f32, row: f32| {
             let pos = origin + egui::vec2((col + 0.5) * CELL, (row + 0.5) * CELL);
             h.hover_at(pos);

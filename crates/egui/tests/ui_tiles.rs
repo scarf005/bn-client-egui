@@ -170,7 +170,8 @@ fn the_overmap_draws_the_engines_tile_ids_with_fallbacks_and_keeps_markers_as_gl
         12,
         "a sprite under every square, markers on top"
     );
-    h.get_by_label("Overmap forest. Route of 2 squares.");
+    h.get_by_label("Overmap forest");
+    h.get_by_label("Route of 2 squares.");
     // The note is listed and a click on it moves the overmap cursor there.
     h.get_by_label("(99, 200) cache").click();
     h.run_steps(2);

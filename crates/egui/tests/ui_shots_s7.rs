@@ -57,7 +57,10 @@ fn shot(screen: Value, name: &str) {
 fn overmap_screens() {
     for (name, file) in [
         ("overmap screen", "overmap.png"),
-        ("overmap screen for a client that draws tiles", "overmap-tiles.png"),
+        (
+            "overmap screen for a client that draws tiles",
+            "overmap-tiles.png",
+        ),
     ] {
         shot(example(name), file);
     }

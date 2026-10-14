@@ -955,15 +955,11 @@ impl<M: GameModel> Painter<'_, M> {
         };
         let cursor = map.cursor().unwrap_or_else(|| om.origin.clone());
         let mut notes = om.legend.clone();
-        notes.extend(om.cursor_here.clone());
-        notes.push(om.cursor_description.clone());
-        notes.extend(om.cursor_note.clone());
-        notes.extend(om.route_text.clone());
-        notes.extend(
-            om.notes
-                .iter()
-                .map(|n| format!("({}, {}) {}", n.pos.x, n.pos.y, n.text)),
-        );
+        notes.extend(om.status().into_iter().map(str::to_owned));
+        if !om.notes.is_empty() {
+            notes.push(om.notes_title.clone());
+        }
+        notes.extend(om.note_lines());
         let notes = notes
             .into_iter()
             .filter(|n| !n.is_empty())
@@ -983,8 +979,8 @@ impl<M: GameModel> Painter<'_, M> {
         );
         let [grid, foot] =
             Layout::vertical([Constraint::Length(rows as u16), Constraint::Min(0)]).areas(inner);
-        let lines = (top..top + rows).map(|row| {
-            Line::from(
+        let mut cells = (top..top + rows)
+            .map(|row| {
                 (left..left + cols)
                     .filter_map(|col| {
                         let (glyph, fg, bg) = om.cells.get(row)?.get(col)?;
@@ -1000,10 +996,55 @@ impl<M: GameModel> Painter<'_, M> {
                         }
                         Some(Span::styled(glyph.clone(), style))
                     })
-                    .collect::<Vec<_>>(),
-            )
-        });
-        f.render_widget(Paragraph::new(lines.collect::<Vec<_>>()), grid);
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        // The names over squares run from their square, centred, over the cells beside it.
+        for label in &om.labels {
+            let Some((col, row)) = om.cell_of(&label.pos) else {
+                continue;
+            };
+            let Some(line) = row.checked_sub(top).and_then(|r| cells.get_mut(r)) else {
+                continue;
+            };
+            let style = Style::new().fg(color(self.colors.index(label.foreground)));
+            let start = col as i64 - left as i64 - label.text.chars().count() as i64 / 2;
+            for (i, glyph) in label.text.chars().enumerate() {
+                if let Some(cell) = usize::try_from(start + i as i64)
+                    .ok()
+                    .and_then(|at| line.get_mut(at))
+                {
+                    *cell = Span::styled(glyph.to_string(), style);
+                }
+            }
+        }
+        // The mission's target, marked at the edge of the squares shown when it lies beyond them.
+        if let Some(target) = &om.mission_target {
+            let (dx, dy) = (target.x - om.origin.x, target.y - om.origin.y);
+            let inside = (left as i32..(left + cols) as i32).contains(&dx)
+                && (top as i32..(top + rows) as i32).contains(&dy);
+            if !inside {
+                let col = dx.clamp(left as i32, (left + cols) as i32 - 1) as usize - left;
+                let row = dy.clamp(top as i32, (top + rows) as i32 - 1) as usize - top;
+                let marker = match (
+                    (target.x - cursor.x).signum(),
+                    (target.y - cursor.y).signum(),
+                ) {
+                    (0, -1) => "^",
+                    (1, -1) | (-1, 1) => "/",
+                    (1, 0) => ">",
+                    (1, 1) | (-1, -1) => "\\",
+                    (0, 1) => "v",
+                    (-1, 0) => "<",
+                    _ => " ",
+                };
+                if let Some(cell) = cells.get_mut(row).and_then(|line| line.get_mut(col)) {
+                    *cell = Span::styled(marker, Style::new().fg(Color::Red));
+                }
+            }
+        }
+        let lines = cells.into_iter().map(Line::from).collect::<Vec<_>>();
+        f.render_widget(Paragraph::new(lines), grid);
         f.render_widget(
             Paragraph::new(notes.into_iter().map(Line::from).collect::<Vec<_>>()),
             foot,

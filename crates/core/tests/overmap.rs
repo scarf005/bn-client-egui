@@ -22,7 +22,7 @@ pub fn overmap_event(cursor_x: i32) -> Value {
             "origin": at(cursor_x - 2, 199), "player": at(98, 200), "cols": 4, "rows": 3,
             "cells": [row("F"), row("f"), row("r")],
             "legend": ["LEVEL 0, 100, 200"], "cursor_description": "Overmap forest",
-            "route_text": "Route of 2 squares.",
+            "route_text": "Route of 2 squares.", "notes_title": "List Notes",
             "notes": [{"pos": at(cursor_x - 1, 200), "text": "cache"}],
             "path": [at(cursor_x + 1, 200), at(cursor_x + 2, 200)]}});
     let toggles = json!({"id": "overmap:toggles", "kind": "panel", "title": "", "stats": [
@@ -142,19 +142,55 @@ fn the_overmap_screen_is_a_map_component_with_squares_cursor_and_notes() {
 }
 
 #[test]
-fn notes_are_listed_with_their_squares() {
+fn the_status_and_the_notes_are_the_engines_lines_in_its_order() {
     let (m, _h) = open();
-    assert_eq!(
-        squares_of(&m).notes_text().as_deref(),
-        Some("Notes: (99, 200, 0) cache.")
-    );
+    let om = squares_of(&m);
+    assert_eq!(om.status(), ["Overmap forest", "Route of 2 squares."]);
+    assert_eq!(om.notes_title, "List Notes");
+    assert_eq!(om.note_lines(), ["(99, 200, 0) cache"]);
     let mut event = overmap_event(100);
-    squares_mut(&mut event)["notes"] = json!([]);
+    let squares = squares_mut(&mut event);
+    squares["cursor_here"] = "You are here.".into();
+    squares["cursor_note"] = "Note: cache".into();
+    squares["notes"] = json!([]);
     let (t, h) = session();
-    let mut quiet = connected(t);
+    let mut m = connected(t);
     h.push(event);
-    quiet.poll();
-    assert_eq!(squares_of(&quiet).notes_text(), None);
+    m.poll();
+    let om = squares_of(&m);
+    assert_eq!(
+        om.status(),
+        [
+            "You are here.",
+            "Overmap forest",
+            "Note: cache",
+            "Route of 2 squares."
+        ]
+    );
+    assert!(om.note_lines().is_empty());
+}
+
+#[test]
+fn labels_and_the_mission_target_are_the_engines() {
+    let (m, _h) = open();
+    let om = squares_of(&m);
+    assert!(om.labels.is_empty() && om.mission_target.is_none());
+    let mut event = overmap_event(100);
+    let squares = squares_mut(&mut event);
+    squares["labels"] = json!([{"pos": {"dim":"","x":101,"y":199,"z":0}, "text": "Mill",
+        "foreground": 14, "background": 0}]);
+    squares["mission_target"] = json!({"dim":"","x":500,"y":200,"z":0});
+    let (t, h) = session();
+    let mut m = connected(t);
+    h.push(event);
+    m.poll();
+    let om = squares_of(&m);
+    assert_eq!(om.labels.len(), 1);
+    assert_eq!(
+        (om.labels[0].text.as_str(), om.labels[0].foreground),
+        ("Mill", 14)
+    );
+    assert_eq!(om.mission_target, Some(at(500, 200, 0)));
 }
 
 #[test]

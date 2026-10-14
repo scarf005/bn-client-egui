@@ -505,7 +505,7 @@ fn grid_draws_its_cells_and_a_cell_with_an_affordance_runs_it_with_the_cell_as_i
 #[test]
 fn the_overmap_screen_draws_its_map_and_the_toggles_it_names() {
     let (h, _) = harness(example("overmap.json", "overmap screen"));
-    h.get_by_label("Overmap view");
+    h.get_by_role_and_label(egui::accesskit::Role::Canvas, "Overmap");
     h.get_by_label_contains("You are here.");
     assert!(h.get_all_by_label_contains("Toggle Map Notes").count() >= 1);
 }
