@@ -1429,11 +1429,6 @@ impl EngineModel {
                         storage: text("storage_kind"),
                         description: text("area_description"),
                         filter: text("filter"),
-                        placement: if text("role") == "pickup" {
-                            text("area_id")
-                        } else {
-                            String::new()
-                        },
                         sort: text("sort"),
                         totals: p["totals"].is_object().then(|| {
                             let t =

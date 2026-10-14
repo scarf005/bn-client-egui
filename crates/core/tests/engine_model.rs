@@ -1985,41 +1985,6 @@ fn returning_to_the_main_menu_clears_the_previous_games_log_and_command_lines() 
 }
 
 #[test]
-fn pickup_rows_carry_the_native_highlight_marks_and_counts() {
-    let text = std::fs::read_to_string(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/tests/fixtures/pickup.json"
-    ))
-    .unwrap();
-    let boundary = serde_json::from_str::<Value>(&text).unwrap()["pickup"].clone();
-    let (t, h) = session();
-    let mut m = connected(t);
-    h.push(change(41, json!({"interaction": boundary})));
-    m.poll();
-    let menu = m.menu().unwrap();
-    assert_eq!(menu.context, "PICKUP");
-    let rows = menu
-        .choices
-        .iter()
-        .map(|c| {
-            (
-                c.highlighted,
-                c.selected,
-                c.selected_count,
-                c.available_count,
-            )
-        })
-        .collect::<Vec<_>>();
-    assert_eq!(
-        rows,
-        [
-            (false, false, None, Some(1)),
-            (true, true, Some(2), Some(3))
-        ]
-    );
-}
-
-#[test]
 fn the_vehicle_window_reaches_the_menu_with_its_detail_and_the_native_cursor_row() {
     let text = std::fs::read_to_string(concat!(
         env!("CARGO_MANIFEST_DIR"),

@@ -142,29 +142,6 @@ fn windows() {
     w.run_steps(2);
     save(&mut w, "cancel-during-wheel.png");
 
-    let inventory = |i: usize, source: &str, category: &str, name: &str| {
-        row(
-            &format!("i:{i}"),
-            name,
-            json!([
-                {"key":"source","label":"","value":source},
-                {"key":"category","label":"","value":category},
-                {"key":"name","label":"Name","value":name},
-                {"key":"weight","label":"Weight","value":"1.2"},
-            ]),
-        )
-    };
-    let rows = vec![
-        inventory(0, "inventory", "TOOLS", "hammer"),
-        inventory(1, "inventory", "TOOLS", "flashlight"),
-        inventory(2, "inventory", "FOOD", "water bottle"),
-        inventory(3, "map_or_vehicle", "FOOD", "canned beans"),
-        inventory(4, "worn_or_wielded", "ARMOR", "jeans"),
-    ];
-    let (mut i, script) = harness(&file);
-    open(&mut i, &script, "INVENTORY", "Inventory", rows);
-    save(&mut i, "inventory.png");
-
     // Collapsed from the title bar's arrow.
     let (mut c, script) = harness(&file);
     open(&mut c, &script, "UILIST", "Debug", debug_rows());

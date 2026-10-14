@@ -321,7 +321,10 @@ impl<M: GameModel> App<M> {
                     };
                     let text = self.rich(
                         ui,
-                        &super::inventory::tinted(&row.color, &format!("{hotkey}{name}")),
+                        &super::component::tagged(
+                            Some(row.color.as_str()).filter(|c| !c.is_empty()),
+                            &format!("{hotkey}{name}"),
+                        ),
                     );
                     let response = ui.selectable_label(row.highlighted, text);
                     if row.highlighted && !response.is_pointer_button_down_on() {

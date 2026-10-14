@@ -56,18 +56,8 @@ impl<M: GameModel> App<M> {
             self.focus_menu = entered && !focused;
             return;
         }
-        if menu.context == "INVENTORY" {
-            let focused = self.inventory(ctx, &menu, entered);
-            self.focus_menu = entered && !focused;
-            return;
-        }
         if let (true, Some(vehicle)) = (menu.context == "VEH_INTERACT", &menu.vehicle) {
             let focused = self.vehicle(ctx, &menu, vehicle, entered);
-            self.focus_menu = entered && !focused;
-            return;
-        }
-        if menu.context == "PICKUP" {
-            let focused = self.pickup(ctx, &menu, entered);
             self.focus_menu = entered && !focused;
             return;
         }
@@ -537,6 +527,9 @@ impl<M: GameModel> App<M> {
     }
 }
 
+/// The blue of the cursor row.
+pub(super) const BAR: egui::Color32 = egui::Color32::from_rgb(10, 10, 220);
+
 /// The native list's window: black, with its thin pink border.
 pub(super) fn list_frame(ctx: &egui::Context) -> egui::Frame {
     egui::Frame::window(&ctx.global_style())
@@ -550,7 +543,7 @@ pub(super) fn list_row_style(ui: &mut egui::Ui) {
     let visuals = ui.visuals_mut();
     visuals.widgets.inactive.weak_bg_fill = egui::Color32::TRANSPARENT;
     visuals.widgets.inactive.bg_stroke = egui::Stroke::NONE;
-    visuals.selection.bg_fill = super::inventory::BAR;
+    visuals.selection.bg_fill = BAR;
     visuals.selection.stroke = egui::Stroke::new(1.0, egui::Color32::WHITE);
 }
 

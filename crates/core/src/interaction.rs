@@ -917,19 +917,9 @@ pub const OVERRIDES: &[Override] = &[
         slice: "S5",
     },
     Override {
-        module: "crates/egui/src/app/inventory.rs",
-        screen: "INVENTORY",
-        slice: "S3",
-    },
-    Override {
         module: "crates/egui/src/app/menu.rs",
         screen: "context dispatch and the 0.1 generic menu",
         slice: "S0",
-    },
-    Override {
-        module: "crates/egui/src/app/pickup.rs",
-        screen: "PICKUP",
-        slice: "S3",
     },
     Override {
         module: "crates/egui/src/app/spells.rs",
@@ -970,11 +960,6 @@ pub const OVERRIDES: &[Override] = &[
         module: "crates/tui/src/lib.rs",
         screen: "context dispatch, the 0.1 generic menu and action rows",
         slice: "S0",
-    },
-    Override {
-        module: "crates/tui/src/pickup.rs",
-        screen: "PICKUP",
-        slice: "S3",
     },
     Override {
         module: "crates/tui/src/settings.rs",

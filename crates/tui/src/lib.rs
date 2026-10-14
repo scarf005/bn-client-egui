@@ -3,7 +3,6 @@
 mod canvas;
 mod component;
 mod crafting;
-mod pickup;
 mod settings;
 mod terminal;
 
@@ -52,7 +51,6 @@ pub struct TuiApp<M: GameModel> {
     hovered: Option<Pos>,
     /// A settings value being typed.
     edit: Option<settings::Edit>,
-    pickup: pickup::Pickup,
     terminal: terminal::Terminal,
     /// Where the open menu's rows and tabs were last drawn, for mouse clicks.
     menu_hits: MenuHits,
@@ -165,7 +163,6 @@ impl<M: GameModel> TuiApp<M> {
             input: None,
             edit: None,
             hovered: None,
-            pickup: Default::default(),
             menu_hits: Default::default(),
             action_focus: None,
             footer: Footer::default(),
@@ -266,7 +263,6 @@ impl<M: GameModel> TuiApp<M> {
         if let Some(menu) = self.menu() {
             return match menu.context.as_str() {
                 "CRAFTING" => self.crafting_key(&menu, key),
-                "PICKUP" => self.pickup_key(&menu, key),
                 _ if (menu.terminal() || menu.description()) && self.terminal_key(key) => {}
                 _ if self.footer_key(key) => {}
                 _ if !menu.screen && self.action_row_key(&menu, key) => {}
@@ -445,12 +441,6 @@ impl<M: GameModel> TuiApp<M> {
             return;
         }
         if self.model.loading().is_some() {
-            return;
-        }
-        if ev.kind == MouseEventKind::Down(MouseButton::Left)
-            && self.model.menu().is_some_and(|m| m.context == "PICKUP")
-        {
-            self.pickup_click(ev.column, ev.row);
             return;
         }
         if ev.kind == MouseEventKind::Down(MouseButton::Left)
@@ -748,7 +738,6 @@ impl<M: GameModel> TuiApp<M> {
         if let Some(menu) = self.menu() {
             match menu.context.as_str() {
                 "CRAFTING" => self.draw_crafting(f, &menu),
-                "PICKUP" => self.draw_pickup(f, &menu),
                 _ if menu.terminal() || menu.description() => self.draw_terminal(f, &menu),
                 _ if menu.canvas.is_some() => {
                     menu.canvas.iter().for_each(|c| canvas::draw_canvas(f, c))

@@ -230,6 +230,46 @@ fn panel_shows_title_subtitle_and_stats_with_their_maximum_and_unit() {
     h.get_by_label("Free capacity: 43.83 kg, 14.97 L");
 }
 
+/// The pickup list as the engine publishes it: a panel with the carry stats over a single list whose
+/// rows carry the engine's marks and counts, with a toggle and a count affordance.
+fn pickup_screen() -> Value {
+    let row = |id: &str, label: &str, glyph: &str, picked: u64| {
+        json!({"id": id, "label": label, "description": "", "denial": "", "enabled": true,
+            "selectable": true, "selected": picked > 0, "columns": [],
+            "mark": {"glyph": glyph, "color": "c_light_blue"},
+            "selected_count": picked, "minimum_count": 0, "max": 3})
+    };
+    let list = json!({"id": "pickup:items", "kind": "list", "columns": [],
+        "rows": [row("pickup:a", "3 rocks", "#", 2), row("pickup:b", "stick", "-", 0)],
+        "total": 2, "selection": "single", "activate": "pickup:toggle",
+        "affordances": ["pickup:count"]});
+    let panel = json!({"id": "pickup", "kind": "panel", "title": "Pick up", "subtitle": "ground",
+        "stats": [{"key": "weight", "label": "Weight", "value": "2.0", "max": "45.0", "unit": "kg"}],
+        "child": list});
+    let row_arg = json!({"row": {"component_id": "pickup:items"}});
+    dialog(
+        panel,
+        vec![
+            affordance("pickup:toggle", &[], row_arg.clone()),
+            affordance("pickup:count", &[], row_arg),
+        ],
+    )
+}
+
+#[test]
+fn a_pickup_list_draws_its_stats_and_rows_and_a_click_runs_the_toggle_with_the_row() {
+    let (mut h, script) = harness(pickup_screen());
+    h.get_by_label("Pick up");
+    h.get_by_label("Weight: 2.0/45.0 kg");
+    h.get_by_label("3 rocks");
+    h.get_by_label("stick").click();
+    h.run_steps(3);
+    assert_eq!(
+        submits(&script),
+        [boundary_invoke("pickup:toggle", json!({"row": "pickup:b"}))]
+    );
+}
+
 #[test]
 fn form_field_set_by_the_player_runs_the_forms_affordance_with_the_field_and_text() {
     let screen = example("menu.json", "options page with each editor type");

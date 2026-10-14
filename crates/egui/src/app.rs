@@ -11,10 +11,8 @@ mod character;
 mod component;
 mod construction;
 mod crafting;
-mod inventory;
 mod menu;
 mod palette;
-mod pickup;
 mod sidebar;
 mod sounds;
 mod spells;
@@ -158,10 +156,6 @@ pub struct App<M: GameModel> {
     screens: component::Screens,
     crafting: crafting::Crafting,
     construction: construction::Construction,
-    pickup: pickup::Pickup,
-    /// The left edge of the sidebar as last drawn: what the pickup list at the right docks against.
-    sidebar_left: Option<f32>,
-    inventory: inventory::Inventory,
     /// The engine's selected row of the open menu, to keep it in view when the wheel moves it.
     menu_cursor: Option<String>,
     /// The text prompt that already took the keyboard focus when it opened.
@@ -209,9 +203,6 @@ impl<M: GameModel> App<M> {
             screens: Default::default(),
             crafting: Default::default(),
             construction: Default::default(),
-            pickup: Default::default(),
-            sidebar_left: None,
-            inventory: Default::default(),
             menu_cursor: None,
             prompt_focused: None,
             scrolled_to: None,
@@ -438,7 +429,7 @@ impl<M: GameModel> App<M> {
             Some((SidebarSide::Left, ..)) => egui::Panel::left(egui::Id::new(&name)),
             _ => egui::Panel::right(egui::Id::new(&name)),
         };
-        let sidebar = panel
+        panel
             .default_size(initial.clamp(narrowest, widest))
             .size_range(narrowest..=widest)
             .show(ui, |ui| {
@@ -446,9 +437,6 @@ impl<M: GameModel> App<M> {
                 ui.set_min_width(ui.available_width());
                 self.sidebar_panel(ui, layout.as_ref())
             });
-        // The pickup list docks against the sidebar's inner edge when it is on the right.
-        self.sidebar_left = (!matches!(native, Some((SidebarSide::Left, ..))))
-            .then(|| sidebar.response.rect.left());
         label_resize_handle(ui.ctx(), &name, "Resize sidebar");
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE.fill(egui::Color32::BLACK))

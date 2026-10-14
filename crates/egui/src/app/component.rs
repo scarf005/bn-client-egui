@@ -174,7 +174,7 @@ fn reason_words(reason: Reason) -> String {
 }
 
 /// `text` in the game colour, as the native markup writes it.
-fn tagged(color: Option<&str>, text: &str) -> String {
+pub(super) fn tagged(color: Option<&str>, text: &str) -> String {
     match color {
         Some(color) => format!("<color_{color}>{text}</color>"),
         None => text.into(),
@@ -589,7 +589,7 @@ impl<M: GameModel> App<M> {
                         let marked = cell.selected == Some(true) || at_cursor;
                         if !actionable {
                             let shown = match marked {
-                                true => shown.background_color(super::inventory::BAR),
+                                true => shown.background_color(super::menu::BAR),
                                 false => shown,
                             };
                             ui.add_sized(size, egui::Label::new(shown));
