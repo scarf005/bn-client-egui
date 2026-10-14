@@ -2525,15 +2525,6 @@
           ],
           "description": "Where the player asked a list window to sit, such as the pickup list. Absent when the screen has no such choice."
         },
-        "dock": {
-          "enum": [
-            "left",
-            "right",
-            "overlapping",
-            "cursor"
-          ],
-          "description": "Where the player asked a list window to sit, such as the pickup list. Absent when the screen has no such choice."
-        },
         "context": {
           "type": "string",
           "description": "Diagnostics and tests only. Clients must not branch on it."

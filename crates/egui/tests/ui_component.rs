@@ -787,7 +787,7 @@ fn the_editmap_screen_draws_the_engines_cursor_parts_and_a_click_runs_its_edit_a
     let edit = json!({"id": "EDIT_TERRAIN", "label": "Edit terrain", "keys": ["e"],
         "enabled": true, "expect": "screen", "args": {}});
     let (mut h, script) = harness(dialog(root, vec![edit]));
-    h.get_by_label_contains("Grass / Smoke");
+    h.get_by_value("Grass\nSmoke");
     h.get_by_label_contains("Edit terrain").click();
     h.run_steps(3);
     assert_eq!(submits(&script), [screen_invoke("EDIT_TERRAIN")]);

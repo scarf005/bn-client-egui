@@ -2523,7 +2523,8 @@ fn describes(h: &bn_client_core::transport::ScriptHandle) -> usize {
 #[test]
 fn a_hovered_square_is_described_again_when_its_answer_is_for_an_older_revision() {
     let (t, h) = session();
-    let reply = json!({"jsonrpc":"2.0","id":0,"result":{"lines":["Wall"]}});
+    let reply =
+        json!({"jsonrpc":"2.0","id":0,"result":{"parts":[{"kind":"terrain","text":"Wall"}]}});
     let mut m = connected(
         t.on("bn.world.describe", vec![reply.clone()])
             .on("bn.world.describe", vec![reply]),
