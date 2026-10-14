@@ -192,7 +192,7 @@ fn leaving_the_overmap_invokes_the_registered_quit() {
         .unwrap();
     assert_eq!(
         sent["params"]["operation"],
-        json!({"kind":"invoke","affordance_id":"QUIT"})
+        json!({"kind":"invoke","affordance_id":"QUIT","args":{}})
     );
 }
 

@@ -477,7 +477,7 @@ fn the_overmap_screen_draws_its_cells_in_the_engines_colours_and_what_it_says_of
     let text = lines(&t).join("\n");
     assert!(text.contains("You are here.") && text.contains("LEVEL 0, 50, 50"));
     assert!(text.contains("tutorial room north from Leominster"));
-    assert_eq!(fg(&t, "#"), Color::Rgb(40, 40, 170), "curses colour 4");
+    assert_eq!(fg(&t, "#"), Color::Rgb(60, 90, 200), "curses colour 4");
 }
 
 #[test]
