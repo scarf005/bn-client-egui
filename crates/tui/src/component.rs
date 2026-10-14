@@ -8,8 +8,9 @@ use bn_client_core::colors::ColorMap;
 use bn_client_core::interaction::{self, ArgKind, Interaction, InvokeError, Reason, Window};
 use bn_client_core::markup::Run;
 use bn_client_core::protocol::{
-    AffordanceRole, Component, FieldKind, Form, Grid, GridCell, List, MapComponent, Panel, Row,
-    RowColumn, Screen, ScreenDock, ScreenRole, Selection, Split, Tabs, TextBlock, TextRole, Tone,
+    AffordanceRole, Component, FieldKind, Form, Grid, GridCell, InvokeArgs, List, MapComponent,
+    Panel, Row, RowColumn, Screen, ScreenDock, ScreenRole, Selection, Split, Tabs, TextBlock,
+    TextRole, Tone, WorldPos,
 };
 use bn_client_core::{GameModel, Rgb};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -105,6 +106,20 @@ pub(super) struct View {
     /// The sidebar of the last frame and whether it is on the left: a docked window sits beside its inner
     /// edge.
     sidebar: Option<(Rect, bool)>,
+    /// Where the overmap's squares were drawn in the last frame, for a click.
+    overmap: Option<OvermapHit>,
+}
+
+/// The overmap squares of one frame: where they are on the terminal and which squares they are.
+struct OvermapHit {
+    area: Rect,
+    /// The cell of the engine's squares drawn in the top-left corner of `area`.
+    first: (usize, usize),
+    origin: WorldPos,
+    cursor: WorldPos,
+    /// The affordance that puts the cursor on a square, and the one a click on the cursor runs.
+    mover: Option<String>,
+    runner: Option<String>,
 }
 
 /// A text prompt the engine confirms with Return: a list filter, a name. Its text goes out with each key.
@@ -288,6 +303,7 @@ impl View {
         ])
         .areas(inner);
         if let Some(root) = &screen.root {
+            self.overmap = None;
             let mut painter = Painter {
                 model,
                 screen,
@@ -295,6 +311,7 @@ impl View {
                 ui: &mut self.ui,
                 extents: &mut self.extents,
                 typing: self.typing.as_ref(),
+                overmap: &mut self.overmap,
             };
             painter.component(f, root, body);
         }
@@ -337,6 +354,38 @@ impl View {
         }
         let note = self.note.as_ref()?;
         Some(Line::styled(note.clone(), Style::new().fg(Color::Yellow)))
+    }
+
+    /// A click on an overmap square moves the engine's cursor there; a click on the cursor runs the map's
+    /// other affordance (travel).
+    pub(super) fn click<M: GameModel>(&mut self, model: &mut M, column: u16, row: u16) {
+        let Some(hit) = &self.overmap else {
+            return;
+        };
+        let area = hit.area;
+        if !(area.x..area.x + area.width).contains(&column)
+            || !(area.y..area.y + area.height).contains(&row)
+        {
+            return;
+        }
+        let at = WorldPos {
+            dim: hit.origin.dim.clone(),
+            x: hit.origin.x + (hit.first.0 + usize::from(column - area.x)) as i32,
+            y: hit.origin.y + (hit.first.1 + usize::from(row - area.y)) as i32,
+            z: hit.origin.z,
+        };
+        let (id, args) = match (&hit.runner, &hit.mover) {
+            (Some(run), _) if at == hit.cursor => (run.clone(), InvokeArgs::default()),
+            (_, Some(mover)) => (
+                mover.clone(),
+                InvokeArgs {
+                    pos: Some(at),
+                    ..InvokeArgs::default()
+                },
+            ),
+            _ => return,
+        };
+        let _ = model.invoke_affordance(&id, args);
     }
 
     pub(super) fn key<M: GameModel>(&mut self, model: &mut M, key: KeyEvent) {
@@ -424,7 +473,11 @@ fn words(reason: Reason) -> String {
 fn affordance_lines(screen: &Screen, width: usize) -> Vec<Line<'static>> {
     let mut lines: Vec<Vec<Span<'static>>> = vec![vec![]];
     let mut used = 0;
-    for a in screen.affordances.iter().filter(|a| a.role != Some(AffordanceRole::Select)) {
+    for a in screen
+        .affordances
+        .iter()
+        .filter(|a| a.role != Some(AffordanceRole::Select))
+    {
         let keys = match a.keys.is_empty() {
             true => String::new(),
             false => format!(" [{}]", a.keys.join(",")),
@@ -555,6 +608,7 @@ struct Painter<'a, M> {
     ui: &'a mut Interaction,
     extents: &'a mut HashMap<String, Window>,
     typing: Option<&'a Typing>,
+    overmap: &'a mut Option<OvermapHit>,
 }
 
 impl<M: GameModel> Painter<'_, M> {
@@ -682,7 +736,14 @@ impl<M: GameModel> Painter<'_, M> {
                 (false, false) => Style::new().fg(Color::DarkGray),
             };
             [
-                Span::styled(format!(" {}{} ", tab.label.shown(), if tab.unread { " •" } else { "" }), style),
+                Span::styled(
+                    format!(
+                        " {}{} ",
+                        tab.label.shown(),
+                        if tab.unread { " •" } else { "" }
+                    ),
+                    style,
+                ),
                 Span::raw(" "),
             ]
         });
@@ -873,8 +934,8 @@ impl<M: GameModel> Painter<'_, M> {
         }
     }
 
-    /// The overmap the engine drew in curses cells with what it says of the cursor square; the world map
-    /// is the 0.1 view's, so it is an empty frame here.
+    /// The overmap squares around the engine's cursor, cut to the room, with what it says of the cursor
+    /// square; the world map is the 0.1 view's, so it is an empty frame here.
     fn map(&mut self, f: &mut Frame, map: &MapComponent, area: Rect) {
         let block = Block::bordered();
         let inner = block.inner(area);
@@ -892,32 +953,52 @@ impl<M: GameModel> Painter<'_, M> {
         let Some(om) = &map.overmap else {
             return;
         };
+        let cursor = map.cursor().unwrap_or_else(|| om.origin.clone());
         let mut notes = om.legend.clone();
         notes.extend(om.cursor_here.clone());
         notes.push(om.cursor_description.clone());
         notes.extend(om.cursor_note.clone());
         notes.extend(om.route_text.clone());
+        notes.extend(
+            om.notes
+                .iter()
+                .map(|n| format!("({}, {}) {}", n.pos.x, n.pos.y, n.text)),
+        );
         let notes = notes
             .into_iter()
             .filter(|n| !n.is_empty())
             .collect::<Vec<_>>();
         let rows = om
-            .cells
-            .len()
-            .min(usize::from(inner.height).saturating_sub(notes.len()).max(1))
-            as u16;
+            .rows
+            .min(usize::from(inner.height).saturating_sub(notes.len()).max(1));
+        let cols = om.cols.min(usize::from(inner.width));
+        let (cursor_col, cursor_row) = om.cell_of(&cursor).unwrap_or((om.cols / 2, om.rows / 2));
+        // The squares that fit, kept around the cursor.
+        let first = |at: usize, shown: usize, all: usize| {
+            at.saturating_sub(shown / 2).min(all.saturating_sub(shown))
+        };
+        let (left, top) = (
+            first(cursor_col, cols, om.cols),
+            first(cursor_row, rows, om.rows),
+        );
         let [grid, foot] =
-            Layout::vertical([Constraint::Length(rows), Constraint::Min(0)]).areas(inner);
-        let lines = om.cells.iter().map(|row| {
+            Layout::vertical([Constraint::Length(rows as u16), Constraint::Min(0)]).areas(inner);
+        let lines = (top..top + rows).map(|row| {
             Line::from(
-                row.iter()
-                    .map(|(glyph, fg, bg)| {
-                        let style = Style::new().fg(color(self.colors.index(*fg)));
-                        let style = match bg {
-                            0 => style,
-                            bg => style.bg(color(self.colors.index(*bg))),
-                        };
-                        Span::styled(glyph.clone(), style)
+                (left..left + cols)
+                    .filter_map(|col| {
+                        let (glyph, fg, bg) = om.cells.get(row)?.get(col)?;
+                        let mut style = Style::new().fg(color(self.colors.index(*fg)));
+                        if *bg != 0 {
+                            style = style.bg(color(self.colors.index(*bg)));
+                        }
+                        if om.path.contains(&om.square(col, row)) {
+                            style = style.bg(Color::Cyan);
+                        }
+                        if (col, row) == (cursor_col, cursor_row) {
+                            style = style.add_modifier(Modifier::REVERSED);
+                        }
+                        Some(Span::styled(glyph.clone(), style))
                     })
                     .collect::<Vec<_>>(),
             )
@@ -927,6 +1008,22 @@ impl<M: GameModel> Painter<'_, M> {
             Paragraph::new(notes.into_iter().map(Line::from).collect::<Vec<_>>()),
             foot,
         );
+        let named = |pos: bool| {
+            map.head
+                .affordances
+                .iter()
+                .filter_map(|id| self.screen.affordances.iter().find(|a| &a.id == id))
+                .find(|a| a.args.as_ref().is_some_and(|args| args.pos.is_some()) == pos)
+                .map(|a| a.id.clone())
+        };
+        *self.overmap = Some(OvermapHit {
+            area: Rect::new(grid.x, grid.y, cols as u16, rows as u16),
+            first: (left, top),
+            origin: om.origin.clone(),
+            cursor,
+            mover: named(true),
+            runner: named(false),
+        });
     }
 
     fn list(&mut self, f: &mut Frame, list: &List, area: Rect) {

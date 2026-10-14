@@ -444,14 +444,8 @@ mod overmap {
         let (mut h, script) = harness();
         h.run_steps(3);
         let mut ev: Value = common::overmap_event(100);
-        let om = &mut ev["params"]["events"][0]["changes"]["interaction"]["interaction"]["overmap"];
-        om["legend"] = json!([
-            "│",
-            "│# lake on the northwest",
-            "│  outskirts of Bristol",
-            "│",
-            "│Use movement keys to pan."
-        ]);
+        let om = common::squares_mut(&mut ev);
+        om["legend"] = json!(["Distance to active mission:", "LEVEL 0, 100, 200"]);
         om["cursor_description"] = json!("lake on the northwest outskirts of Bristol");
         script.push(ev);
         h.run_steps(3);
@@ -461,7 +455,7 @@ mod overmap {
     #[test]
     fn the_cursor_status_reads_the_squares_description_and_the_view_lists_the_notes() {
         let (h, _script) = open();
-        let said = "Overmap (100, 200, 0). lake on the northwest outskirts of Bristol.";
+        let said = "lake on the northwest outskirts of Bristol. Route of 2 squares.";
         let live = announced(&h);
         assert!(live.iter().any(|v| v.starts_with(said)), "{live:?}");
         let view = h.get_by_label("Overmap view").accesskit_node();
@@ -474,18 +468,18 @@ mod overmap {
     }
 
     #[test]
-    fn the_sidebar_frame_is_not_read_and_blank_rows_are_hidden() {
+    fn the_legend_is_the_engines_lines_and_nothing_of_a_window_frame() {
         let (h, _script) = open();
+        h.get_by_label("Distance to active mission:");
+        h.get_by_label("LEVEL 0, 100, 200");
         let rows: Vec<_> = h
             .root()
             .children_recursive()
             .filter(|n| n.accesskit_node().role() == accesskit::Role::Label)
-            .filter(|n| !n.accesskit_node().is_hidden())
             .filter_map(|n| n.accesskit_node().value())
-            .filter(|v| v.contains('│') || v.trim().is_empty())
+            .filter(|v| v.contains('│'))
             .collect();
-        assert!(rows.is_empty(), "frame or blank rows read aloud: {rows:?}");
-        h.get_by_label("Use movement keys to pan.");
+        assert!(rows.is_empty(), "frame read aloud: {rows:?}");
     }
 }
 

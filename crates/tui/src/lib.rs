@@ -6,7 +6,7 @@ mod settings;
 use bn_client_core::markup::plain;
 use bn_client_core::protocol::SidebarSide;
 use bn_client_core::sidebar::{self as native, Body};
-use bn_client_core::{ActionEntry, Failure, GameModel, Loading, Menu, Overmap, Pos, Rgb, keys};
+use bn_client_core::{ActionEntry, Failure, GameModel, Loading, Menu, Pos, Rgb, keys};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Position, Rect};
@@ -31,11 +31,6 @@ pub struct TuiApp<M: GameModel> {
     quit: bool,
     /// Where the map cells were last drawn, for mouse clicks.
     map_cells: Rect,
-    /// Where the overmap's cells were last drawn, and the overmap they show.
-    overmap_cells: Rect,
-    /// Where the overmap's note list was last drawn, one note per row.
-    overmap_notes: Rect,
-    overmap_shown: Option<Overmap>,
     /// View coordinates of the first drawn cell.
     map_first: Pos,
     /// The action list popup is open, with its highlighted row.
@@ -147,9 +142,6 @@ impl<M: GameModel> TuiApp<M> {
             menu_sig: None,
             quit: false,
             map_cells: Rect::default(),
-            overmap_cells: Rect::default(),
-            overmap_notes: Rect::default(),
-            overmap_shown: None,
             map_first: Pos { x: 0, y: 0 },
             actions_open: None,
             log_back: 0,
@@ -233,13 +225,9 @@ impl<M: GameModel> TuiApp<M> {
             return self.components.key(&mut self.model, key);
         }
         if key.code == KeyCode::Esc {
-            // Esc stops a running activity, else closes the overmap or a menu.
+            // Esc stops a running activity, else closes a menu.
             let stopped = self.model.interrupt();
             if stopped {
-                return;
-            }
-            if self.model.overmap().is_some() {
-                self.model.close_overmap();
                 return;
             }
         }
@@ -427,6 +415,9 @@ impl<M: GameModel> TuiApp<M> {
     /// click shows the route), the right click is the engine's context click.
     pub fn handle_mouse(&mut self, ev: MouseEvent) {
         if component::placement(self.model.screens()).is_some() {
+            if ev.kind == MouseEventKind::Down(MouseButton::Left) {
+                self.components.click(&mut self.model, ev.column, ev.row);
+            }
             return;
         }
         if self.model.loading().is_some() {
@@ -453,13 +444,6 @@ impl<M: GameModel> TuiApp<M> {
             // wheel; the highlight is the engine's own cursor, so any other menu ignores it, as native.
             self.model.scroll_menu(up);
             return;
-        }
-        if let Some(om) = self
-            .overmap_shown
-            .clone()
-            .filter(|_| self.model.overmap().is_some())
-        {
-            return self.overmap_mouse(&om, ev);
         }
         let area = self.map_cells;
         let inside = (area.x..area.x + area.width).contains(&ev.column)
@@ -524,102 +508,6 @@ impl<M: GameModel> TuiApp<M> {
         }
     }
 
-    /// A click moves the overmap cursor to the square; a click on the cursor travels there.
-    fn overmap_mouse(&mut self, om: &Overmap, ev: MouseEvent) {
-        let notes = self.overmap_notes;
-        let on_notes = (notes.x..notes.x + notes.width).contains(&ev.column)
-            && (notes.y..notes.y + notes.height).contains(&ev.row);
-        if ev.kind == MouseEventKind::Down(MouseButton::Left) && on_notes {
-            if let Some((at, _)) = om.notes.get(usize::from(ev.row - notes.y)) {
-                self.model.overmap_cursor_to(*at);
-            }
-            return;
-        }
-        let area = self.overmap_cells;
-        let inside = (area.x..area.x + area.width).contains(&ev.column)
-            && (area.y..area.y + area.height).contains(&ev.row);
-        if ev.kind != MouseEventKind::Down(MouseButton::Left) || !inside {
-            return;
-        }
-        let at = om.square(i32::from(ev.column - area.x), i32::from(ev.row - area.y));
-        if at == om.cursor {
-            self.model.invoke_action("CHOOSE_DESTINATION");
-        } else {
-            self.model.overmap_cursor_to(at);
-        }
-    }
-
-    /// The overmap window as the game drew it, the cursor reversed, with the sidebar beside it.
-    fn draw_overmap(&mut self, f: &mut Frame, om: &Overmap) {
-        let [grid, legend] = Layout::horizontal([
-            Constraint::Length(om.cols.clamp(0, i32::from(u16::MAX)) as u16),
-            Constraint::Min(10),
-        ])
-        .areas(f.area());
-        let cells = Rect::new(
-            grid.x,
-            grid.y,
-            grid.width,
-            (om.rows.clamp(0, i32::from(u16::MAX)) as u16).min(grid.height),
-        );
-        self.overmap_cells = cells;
-        self.overmap_shown = Some(om.clone());
-        let cursor = (om.cursor.0 - om.origin.0, om.cursor.1 - om.origin.1);
-        let lines = (0..i32::from(cells.height)).map(|row| {
-            let spans = (0..i32::from(cells.width)).map(|col| {
-                let Some(cell) = om.cell(col, row) else {
-                    return Span::raw(" ");
-                };
-                let mut style = Style::new().fg(color(cell.color));
-                if let Some(bg) = cell.bg {
-                    style = style.bg(color(bg));
-                }
-                if om.path.contains(&om.square(col, row)) {
-                    style = style.bg(Color::Cyan);
-                }
-                if (col, row) == cursor {
-                    style = style.add_modifier(Modifier::REVERSED);
-                }
-                let glyph = if cell.glyph.is_empty() {
-                    " "
-                } else {
-                    &cell.glyph
-                };
-                Span::styled(glyph.to_string(), style)
-            });
-            Line::from(spans.collect::<Vec<_>>())
-        });
-        f.render_widget(Paragraph::new(lines.collect::<Vec<_>>()), cells);
-        // The engine's title and lines for the cursor square; the coordinates and the click hint are ours.
-        let (x, y, z) = om.cursor;
-        let mut sidebar = vec![Line::from(format!("{} ({x}, {y}, {z})", om.title))];
-        sidebar.extend(
-            [&om.cursor_here, &om.cursor_note]
-                .into_iter()
-                .flatten()
-                .map(|line| Line::from(line.clone())),
-        );
-        if let Some(route) = &om.route_text {
-            sidebar.push(Line::from(format!("{route} Click the cursor to go.")));
-        }
-        sidebar.extend(om.legend.iter().map(|l| Line::from(l.clone())));
-        let listed = om.notes.len().min(usize::from(legend.height) / 3);
-        let [text, notes] =
-            Layout::vertical([Constraint::Min(0), Constraint::Length(listed as u16)]).areas(legend);
-        f.render_widget(Paragraph::new(sidebar), text);
-        // One row per note, nearest the foot of the sidebar; a click on a row moves the cursor to it.
-        self.overmap_notes = notes;
-        let rows = om.notes.iter().take(listed).map(|((x, y, _), note)| {
-            Line::styled(
-                format!("({x}, {y}) {note}"),
-                Style::new()
-                    .fg(Color::Yellow)
-                    .add_modifier(Modifier::UNDERLINED),
-            )
-        });
-        f.render_widget(Paragraph::new(rows.collect::<Vec<_>>()), notes);
-    }
-
     pub fn draw(&mut self, f: &mut Frame) {
         if let Some(failure) = self.model.failure() {
             return Self::draw_failure(f, &failure);
@@ -629,9 +517,6 @@ impl<M: GameModel> TuiApp<M> {
             return self
                 .components
                 .draw(f, &mut self.model, component::Placement::Full);
-        }
-        if let Some(om) = self.model.overmap() {
-            return self.draw_overmap(f, &om);
         }
         if let Some(loading) = self.model.loading() {
             return Self::draw_loading(f, &loading);

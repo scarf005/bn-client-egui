@@ -471,13 +471,13 @@ fn a_grid_draws_its_cells_and_the_focus_moves_between_them_before_one_is_chosen(
 }
 
 #[test]
-fn a_map_component_draws_the_overmap_cells_and_what_the_engine_says_of_the_cursor() {
-    let map = example("target.json", "overmap map with the cursor described");
-    let (mut app, _) = open(screen(map, json!([])));
+fn the_overmap_screen_draws_its_cells_in_the_engines_colours_and_what_it_says_of_the_cursor() {
+    let (mut app, _) = open(example("overmap.json", "overmap screen"));
     let t = render(&mut app);
     let text = lines(&t).join("\n");
-    assert!(text.contains("│F forest") && text.contains("forest"));
-    assert_eq!(fg(&t, "F"), Color::Rgb(40, 160, 60), "curses colour 2");
+    assert!(text.contains("You are here.") && text.contains("LEVEL 0, 50, 50"));
+    assert!(text.contains("tutorial room north from Leominster"));
+    assert_eq!(fg(&t, "#"), Color::Rgb(40, 40, 170), "curses colour 4");
 }
 
 #[test]
@@ -650,15 +650,15 @@ fn recipe_screen(tabs: &str, list: &str, select: &str) -> Value {
             "selectable": true, "selected": i == 0, "columns": []})
     });
     let root = json!({"id": tabs, "kind": "tabs", "select": "tab",
-        "tabs": [
-            {"id": "t1", "label": "Weapons", "selected": true, "enabled": true, "unread": true},
-            {"id": "t2", "label": "Tools", "selected": false, "enabled": true},
-        ],
-        "child": {"id": "body", "kind": "split", "relation": "detail", "active": list, "children": [
-            {"id": list, "kind": "list", "columns": [], "rows": rows.collect::<Vec<_>>(),
-                "total": 3, "selection": "single", "activate": "go"},
-            {"id": "detail", "kind": "panel", "title": "Detail of a", "stats": []},
-        ]}});
+    "tabs": [
+        {"id": "t1", "label": "Weapons", "selected": true, "enabled": true, "unread": true},
+        {"id": "t2", "label": "Tools", "selected": false, "enabled": true},
+    ],
+    "child": {"id": "body", "kind": "split", "relation": "detail", "active": list, "children": [
+        {"id": list, "kind": "list", "columns": [], "rows": rows.collect::<Vec<_>>(),
+            "total": 3, "selection": "single", "activate": "go"},
+        {"id": "detail", "kind": "panel", "title": "Detail of a", "stats": []},
+    ]}});
     let mut pick = choose(select, list);
     pick["role"] = json!("select");
     let mut screen = screen(root, json!([choose("go", list), pick]));
@@ -670,7 +670,10 @@ fn follows_the_focus_with_a_select_invoke(tabs: &str, list: &str, select: &str) 
     let (mut app, h) = open(recipe_screen(tabs, list, select));
     let t = render(&mut app);
     let text = lines(&t).join("\n");
-    assert!(text.contains("Weapons •") && text.contains("Tools"), "{text}");
+    assert!(
+        text.contains("Weapons •") && text.contains("Tools"),
+        "{text}"
+    );
     assert!(text.contains("Detail of a"), "{text}");
     assert!(operations(&h).is_empty());
     press(&mut app, KeyCode::Down);

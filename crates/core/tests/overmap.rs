@@ -1,39 +1,62 @@
 #![recursion_limit = "512"]
 mod common;
-use bn_client_core::{EngineModel, GameModel, Rgb};
+use bn_client_core::protocol::{Component, InvokeArgs, MapComponent, OvermapWire, WorldPos};
+use bn_client_core::{EngineModel, GameModel};
 use common::{connected, session};
 use serde_json::{Value, json};
 
-/// A 4x3 overmap centred on (100, 200, 0) with the player two squares west of the cursor.
-fn overmap_event(cursor_x: i32) -> Value {
+/// The overmap screen the engine publishes: 4x3 squares centred on (cursor_x, 200, 0) with the player two
+/// squares west of the cursor, over the map in the stack.
+pub fn overmap_event(cursor_x: i32) -> Value {
     let cell = |g: &str, fg: u8| json!([g, fg, 0]);
     let row = |g: &str| json!([cell(g, 7), cell(g, 2), cell("@", 11), cell(g, 1)]);
-    json!({"jsonrpc":"2.0","method":"bn.events","params":{"epoch":"e7f3","events":[{
-    "sequence":"41","revision":"32","type":"interaction.changed","changes":{"interaction":{
-    "boundary_id":"b:60",
-    "readiness":{"phase":"playing","game_ready":true,"accepts_interaction_commands":true,"accepts_registered_actions":true},
-    "actions":[{"id":"CHOOSE_DESTINATION","name":"Travel","keys":["_"]},{"id":"QUIT","name":"Quit","keys":["ESC"]}],
-    "interaction":{
-        "schema_id":format!("s:om{cursor_x}"),"kind":"target","context":"OVERMAP","title":"Overmap",
-        "message":"","allow_cancel":true,"allow_set_count":false,"choices":[],"choice_total":0,
-        "target":{"source":{"dim":"","x":98,"y":200,"z":0},"current":{"dim":"","x":cursor_x,"y":200,"z":0},
-            "range":100,"distance_metric":"square","unit":"omt","status":"","candidates":[]},
-        "overmap":{
-            "origin":{"dim":"","x":cursor_x - 2,"y":199,"z":0},
-            "player":{"dim":"","x":98,"y":200,"z":0},
-            "cols":4,"rows":3,
-            "cells":[row("F"), row("f"), row("r")],
-            "legend":["Overmap","  forest"],"cursor_description":"forest on the west edge","route_text":"Route of 2 squares.",
-            "notes":[{"pos":{"dim":"","x":cursor_x - 1,"y":200,"z":0},"text":"cache"}],
-                "path":[{"dim":"","x":cursor_x + 1,"y":200,"z":0},{"dim":"","x":cursor_x + 2,"y":200,"z":0}]
-        },
-        "compat":{"panes":[]}
-    }}}}]}})
+    let at = |x: i32, y: i32| json!({"dim": "", "x": x, "y": y, "z": 0});
+    let map = json!({
+        "id": "map:overmap", "kind": "map", "mode": "overmap",
+        "affordances": ["overmap:cursor", "CHOOSE_DESTINATION"],
+        "target": {"source": at(98, 200), "current": at(cursor_x, 200),
+            "minimum": {"dim": "", "x": -1000, "y": -1000, "z": -10},
+            "maximum": {"dim": "", "x": 1000, "y": 1000, "z": 10},
+            "range": 2000, "distance_metric": "square", "unit": "omt", "status": "", "candidates": []},
+        "overmap": {
+            "origin": at(cursor_x - 2, 199), "player": at(98, 200), "cols": 4, "rows": 3,
+            "cells": [row("F"), row("f"), row("r")],
+            "legend": ["LEVEL 0, 100, 200"], "cursor_description": "Overmap forest",
+            "route_text": "Route of 2 squares.",
+            "notes": [{"pos": at(cursor_x - 1, 200), "text": "cache"}],
+            "path": [at(cursor_x + 1, 200), at(cursor_x + 2, 200)]}});
+    let toggles = json!({"id": "overmap:toggles", "kind": "panel", "title": "", "stats": [
+        {"key": "TOGGLE_MAP_NOTES", "label": "Toggle Map Notes", "value": "On", "tone": "good"}]});
+    let screen = json!({
+        "screen_id": "screen:om", "role": "screen", "title": "Overmap",
+        "root": {"id": "overmap", "kind": "split", "relation": "peers", "children": [map, toggles]},
+        "affordances": [
+            {"id": "overmap:cursor", "label": "Select", "keys": [], "enabled": true,
+                "expect": "boundary", "args": {"pos": {"unit": "overmap", "component_id": "map:overmap"}}},
+            {"id": "CHOOSE_DESTINATION", "label": "Travel", "keys": ["_"], "enabled": true,
+                "expect": "screen"},
+            {"id": "QUIT", "label": "Quit", "keys": ["ESC"], "enabled": true, "role": "cancel",
+                "expect": "screen"}]});
+    json!({"jsonrpc": "2.0", "method": "bn.events", "params": {"epoch": "e7f3", "events": [{
+        "sequence": "41", "revision": "32", "type": "interaction.changed", "changes": {"interaction": {
+        "boundary_id": "b:60",
+        "readiness": {"phase": "playing", "game_ready": true, "accepts_interaction_commands": true,
+            "accepts_registered_actions": true},
+        "actions": [{"id": "CHOOSE_DESTINATION", "name": "Travel", "keys": ["_"]},
+            {"id": "QUIT", "name": "Quit", "keys": ["ESC"]}],
+        "interaction": null,
+        "stack": [{"screen_id": "screen:map:e7f3", "role": "map", "root": null, "affordances": []},
+            screen]}}}]}})
+}
+
+/// The squares of the overmap screen in `event`.
+pub fn squares_mut(event: &mut Value) -> &mut Value {
+    &mut event["params"]["events"][0]["changes"]["interaction"]["stack"][1]["root"]["children"][0]["overmap"]
 }
 
 /// The overmap event for a client that said it draws tiles: every square is `t_floor` but the
 /// top-right one, a `forest` that falls back to `t_dirt`.
-fn with_tiles(mut event: Value) -> Value {
+pub fn with_tiles(mut event: Value) -> Value {
     let rows: Vec<Value> = (0..3)
         .map(|row| {
             let cells: Vec<Value> = (0..4)
@@ -45,7 +68,7 @@ fn with_tiles(mut event: Value) -> Value {
             json!(cells)
         })
         .collect();
-    event["params"]["events"][0]["changes"]["interaction"]["interaction"]["overmap"]["tiles"] =
+    squares_mut(&mut event)["tiles"] =
         json!({"cells": rows, "looks_like": {"forest": ["t_dirt"], "t_floor": []}});
     event
 }
@@ -58,36 +81,90 @@ fn open() -> (EngineModel, bn_client_core::transport::ScriptHandle) {
     (m, h)
 }
 
+/// The overmap map of the screen on top.
+fn map_of(m: &EngineModel) -> MapComponent {
+    let root = m
+        .screens()
+        .last()
+        .and_then(|s| s.root.as_ref())
+        .expect("a screen with components");
+    match root.find("map:overmap") {
+        Some(Component::Map(map)) => map.clone(),
+        other => panic!("no overmap map: {other:?}"),
+    }
+}
+
+fn squares_of(m: &EngineModel) -> OvermapWire {
+    map_of(m).overmap.expect("the squares")
+}
+
+fn at(x: i32, y: i32, z: i32) -> WorldPos {
+    WorldPos {
+        dim: String::new(),
+        x,
+        y,
+        z,
+    }
+}
+
 #[test]
-fn the_overmap_interaction_becomes_a_grid_with_colours_cursor_and_notes() {
+fn the_overmap_screen_is_a_map_component_with_squares_cursor_and_notes() {
     let (m, _h) = open();
-    let om = m.overmap().expect("overmap is open");
+    let screen = m.screens().last().unwrap();
+    assert_eq!(
+        screen.title.as_ref().map(|t| t.shown()).as_deref(),
+        Some("Overmap")
+    );
+    let map = map_of(&m);
+    assert_eq!(map.target.as_ref().unwrap()["current"]["x"], 100);
+    let om = squares_of(&m);
     assert_eq!((om.cols, om.rows), (4, 3));
-    assert_eq!(om.cells.len(), 12);
-    assert_eq!(om.cell(2, 0).unwrap().glyph, "@");
-    assert_eq!(om.cell(3, 1).unwrap().color, Rgb(170, 40, 40), "curses red");
-    assert_eq!(om.cursor, (100, 200, 0));
-    assert_eq!(om.player, (98, 200, 0));
-    assert_eq!(om.square(2, 1), (100, 200, 0), "cell (2, 1) is the cursor");
-    assert_eq!(om.legend, ["Overmap", "  forest"]);
-    assert_eq!(om.cursor_description, "forest on the west edge");
-    // The engine's own lines: its title and the route's length; the cursor is not on the player or a note.
-    assert_eq!(om.title, "Overmap");
+    assert_eq!(om.cells[0][2], ("@".to_string(), 11, 0));
+    assert_eq!(
+        om.square(2, 1),
+        at(100, 200, 0),
+        "cell (2, 1) is the cursor"
+    );
+    assert_eq!(om.cell_of(&at(100, 200, 0)), Some((2, 1)));
+    assert_eq!(om.cell_of(&at(100, 200, 1)), None, "another level");
+    assert_eq!(om.cell_of(&at(104, 200, 0)), None, "beyond the columns");
+    assert_eq!(om.legend, ["LEVEL 0, 100, 200"]);
+    assert_eq!(om.cursor_description, "Overmap forest");
     assert_eq!(om.route_text.as_deref(), Some("Route of 2 squares."));
     assert_eq!(
         (om.cursor_here.as_deref(), om.cursor_note.as_deref()),
         (None, None)
     );
-    assert_eq!(om.note((99, 200, 0)), Some("cache"));
-    assert!(om.cell(4, 0).is_none() && om.cell(0, 3).is_none());
+    assert_eq!(om.note(&at(99, 200, 0)), Some("cache"));
+    assert_eq!(om.path, [at(101, 200, 0), at(102, 200, 0)]);
     assert!(m.menu().is_none(), "the overmap is not a list menu");
     assert!(m.focus().is_none(), "its cursor is not a map square");
 }
 
 #[test]
-fn moving_the_cursor_submits_set_target_with_an_overmap_square() {
+fn notes_are_listed_with_their_squares() {
+    let (m, _h) = open();
+    assert_eq!(
+        squares_of(&m).notes_text().as_deref(),
+        Some("Notes: (99, 200, 0) cache.")
+    );
+    let mut event = overmap_event(100);
+    squares_mut(&mut event)["notes"] = json!([]);
+    let (t, h) = session();
+    let mut quiet = connected(t);
+    h.push(event);
+    quiet.poll();
+    assert_eq!(squares_of(&quiet).notes_text(), None);
+}
+
+#[test]
+fn moving_the_cursor_invokes_its_affordance_with_an_overmap_square() {
     let (mut m, h) = open();
-    m.overmap_cursor_to((103, 198, 0));
+    let args = InvokeArgs {
+        pos: Some(at(103, 198, 0)),
+        ..InvokeArgs::default()
+    };
+    assert!(m.invoke_affordance("overmap:cursor", args).is_ok());
     let sent = h
         .sent()
         .into_iter()
@@ -95,44 +172,44 @@ fn moving_the_cursor_submits_set_target_with_an_overmap_square() {
         .expect("a command was submitted");
     assert_eq!(
         sent["params"]["operation"],
-        json!({"kind":"set_target","pos":{"dim":"","x":103,"y":198,"z":0}})
+        json!({"kind":"invoke","affordance_id":"overmap:cursor",
+            "args":{"pos":{"dim":"","x":103,"y":198,"z":0}}})
     );
-    assert_eq!(sent["params"]["expect"]["schema_id"], "s:om100");
-}
-
-#[test]
-fn closing_the_overmap_submits_cancel_and_a_closed_one_does_nothing() {
-    let (mut m, h) = open();
-    m.close_overmap();
-    assert_eq!(
-        h.sent().last().unwrap()["params"]["operation"],
-        json!({"kind":"cancel"})
-    );
-    let (t, h2) = session();
-    let mut closed = connected(t);
-    closed.close_overmap();
-    closed.overmap_cursor_to((1, 2, 3));
-    assert!(!h2.sent_methods().contains(&"bn.command.submit".to_string()));
-}
-
-#[test]
-fn the_planned_route_and_the_tile_ids_come_with_the_overmap() {
-    let (m, _h) = open();
-    let om = m.overmap().unwrap();
-    assert_eq!(om.path, [(101, 200, 0), (102, 200, 0)]);
     assert!(
-        om.tiles.is_empty() && om.tile(0, 0).is_none(),
-        "no tiles unless asked for"
+        sent["params"]["expect"].get("boundary_id").is_some(),
+        "the cursor is boundary-scoped"
     );
+}
+
+#[test]
+fn leaving_the_overmap_invokes_the_registered_quit() {
+    let (mut m, h) = open();
+    assert!(m.invoke_affordance("QUIT", InvokeArgs::default()).is_ok());
+    let sent = h
+        .sent()
+        .into_iter()
+        .rfind(|s| s["method"] == "bn.command.submit")
+        .unwrap();
+    assert_eq!(
+        sent["params"]["operation"],
+        json!({"kind":"invoke","affordance_id":"QUIT"})
+    );
+}
+
+#[test]
+fn the_tile_ids_come_with_the_squares_only_for_a_client_that_draws_tiles() {
+    let (m, _h) = open();
+    let om = squares_of(&m);
+    assert!(om.tile(0, 0).is_none(), "no tiles unless asked for");
 
     let (t, h) = session();
     let mut tiled = EngineModel::connect(Box::new(t), true);
     tiled.poll();
     h.push(with_tiles(overmap_event(100)));
     tiled.poll();
-    let om = tiled.overmap().unwrap();
+    let om = squares_of(&tiled);
     let forest = om.tile(3, 0).unwrap();
-    assert_eq!((forest.id.as_str(), forest.rotation), ("forest", 1));
+    assert_eq!((forest.id, forest.rotation), ("forest", 1));
     assert_eq!(forest.fallbacks, ["t_dirt"]);
     assert_eq!(om.tile(0, 0).unwrap().id, "t_floor");
     assert!(om.tile(4, 0).is_none());

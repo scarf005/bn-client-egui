@@ -801,27 +801,34 @@ mod overmap {
         submits(h).last().unwrap()["params"]["operation"].clone()
     }
 
-    #[test]
-    fn the_overmap_is_drawn_with_the_cursor_note_and_legend() {
-        let (mut app, _h) = open_overmap();
-        let screen = text(&render(&mut app));
-        assert!(screen.contains("Overmap (100, 200, 0)"), "{screen}");
-        assert!(
-            screen.contains("Note: cache") || !screen.contains("Note:"),
-            "{screen}"
-        );
-        assert!(screen.contains("forest"), "{screen}");
-        assert!(
-            screen.contains("@"),
-            "the player marker is part of the cells"
-        );
-        assert!(!screen.contains("Map"), "the map is not drawn under it");
+    /// Where the player marker of the first row of squares is drawn, which is cell (2, 0).
+    fn player_cell(app: &mut TuiApp<EngineModel>) -> (u16, u16) {
+        let screen = text(&render(app));
+        let (row, line) = screen
+            .lines()
+            .enumerate()
+            .find(|(_, l)| l.contains('@'))
+            .expect("the player marker is part of the cells");
+        let col = line.chars().position(|c| c == '@').unwrap();
+        (col as u16, row as u16)
     }
 
     #[test]
-    fn a_click_moves_the_cursor_and_esc_closes() {
+    fn the_overmap_is_drawn_with_the_squares_the_legend_and_the_cursor_description() {
+        let (mut app, _h) = open_overmap();
+        let screen = text(&render(&mut app));
+        assert!(screen.contains("Overmap forest"), "{screen}");
+        assert!(screen.contains("LEVEL 0, 100, 200"), "{screen}");
+        assert!(
+            screen.contains('@'),
+            "the player marker is part of the cells"
+        );
+    }
+
+    #[test]
+    fn a_click_moves_the_cursor_a_click_on_the_cursor_travels_and_esc_closes() {
         let (mut app, h) = open_overmap();
-        render(&mut app);
+        let (col, row) = player_cell(&mut app);
         let click = |col: u16, row: u16| MouseEvent {
             kind: MouseEventKind::Down(MouseButton::Left),
             column: col,
@@ -829,34 +836,46 @@ mod overmap {
             modifiers: KeyModifiers::NONE,
         };
         // Cell (3, 0) is square (101, 199).
-        app.handle_mouse(click(3, 0));
+        app.handle_mouse(click(col + 1, row));
         assert_eq!(
             last_operation(&h),
-            json!({"kind":"set_target","pos":{"dim":"","x":101,"y":199,"z":0}})
+            json!({"kind":"invoke","affordance_id":"overmap:cursor",
+                "args":{"pos":{"dim":"","x":101,"y":199,"z":0}}})
+        );
+        h.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{
+            "epoch":"e7f3","command_id":"c:5","stage":"completed"}}));
+        app.model.poll();
+        // Cell (2, 1) is the cursor.
+        app.handle_mouse(click(col, row + 1));
+        assert_eq!(
+            last_operation(&h),
+            json!({"kind":"invoke","affordance_id":"CHOOSE_DESTINATION","args":{}})
         );
         h.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{
             "epoch":"e7f3","command_id":"c:5","stage":"completed"}}));
         app.model.poll();
         app.handle_key(key(KeyCode::Esc));
-        assert_eq!(last_operation(&h), json!({"kind":"cancel"}));
+        assert_eq!(
+            last_operation(&h),
+            json!({"kind":"invoke","affordance_id":"QUIT","args":{}})
+        );
     }
 
     #[test]
-    fn the_sidebar_shows_the_engines_lines_for_the_cursor_square_and_its_route() {
+    fn the_screen_shows_the_engines_lines_for_the_cursor_square_its_route_and_its_notes() {
         let (mut app, h) = engine();
         let mut event = common::overmap_event(100);
-        let om =
-            &mut event["params"]["events"][0]["changes"]["interaction"]["interaction"]["overmap"];
+        let om = common::squares_mut(&mut event);
         om["cursor_here"] = "You are here.".into();
         om["cursor_note"] = "Note: cache".into();
         h.push(event);
         app.model.poll();
         let screen = text(&render(&mut app));
         for line in [
-            "Overmap (100, 200, 0)",
             "You are here.",
             "Note: cache",
-            "Route of 2 squares. Click the cursor to go.",
+            "Route of 2 squares.",
+            "(99, 200) cache",
         ] {
             assert!(screen.contains(line), "{line} in\n{screen}");
         }
@@ -912,41 +931,6 @@ fn a_composed_screen_shows_its_text_and_its_actions_take_the_keys() {
     );
     app.handle_key(key(KeyCode::Tab));
     assert_eq!(sent_actions(&h), [json!("NEXT_TAB")]);
-}
-
-mod overmap_route {
-    use super::*;
-
-    #[test]
-    fn the_route_and_the_notes_are_shown_and_a_note_row_moves_the_cursor() {
-        let (mut app, h) = engine();
-        h.push(common::overmap_event(100));
-        app.model.poll();
-        let screen = text(&render(&mut app));
-        assert!(screen.contains("Route of 2 squares"), "{screen}");
-        assert!(screen.contains("(99, 200) cache"), "{screen}");
-        // The note list sits at the foot of the sidebar; its one row is the note.
-        let row = screen
-            .lines()
-            .position(|l| l.contains("(99, 200) cache"))
-            .unwrap() as u16;
-        let col = screen
-            .lines()
-            .nth(row as usize)
-            .unwrap()
-            .find("(99, 200)")
-            .unwrap() as u16;
-        app.handle_mouse(MouseEvent {
-            kind: MouseEventKind::Down(MouseButton::Left),
-            column: col,
-            row,
-            modifiers: KeyModifiers::NONE,
-        });
-        assert_eq!(
-            submits(&h).last().unwrap()["params"]["operation"],
-            json!({"kind":"set_target","pos":{"dim":"","x":99,"y":200,"z":0}})
-        );
-    }
 }
 
 #[test]

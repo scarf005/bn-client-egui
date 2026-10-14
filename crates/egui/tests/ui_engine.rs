@@ -753,17 +753,11 @@ mod overmap {
     }
 
     #[test]
-    fn the_overmap_replaces_the_map_and_names_the_cursor_square() {
+    fn the_overmap_screen_names_the_cursor_square_from_the_engines_lines() {
         let (h, _script) = open_overmap();
         h.get_by_label("Overmap view");
-        h.get_by_label_contains(
-            "Overmap (100, 200, 0). Overmap forest. Route of 2 squares. Click the cursor to go.",
-        );
-        assert!(
-            h.query_by_label("Map").is_none(),
-            "the map is not drawn under it"
-        );
-        h.get_by_label("forest");
+        h.get_by_label_contains("Overmap forest. Route of 2 squares.");
+        h.get_by_label("LEVEL 0, 100, 200");
     }
 
     #[test]
@@ -771,15 +765,12 @@ mod overmap {
         let (mut h, script) = harness();
         h.run_steps(3);
         let mut event = common::overmap_event(100);
-        let om = &mut event["params"]["events"][0]["changes"]["interaction"]["interaction"];
-        om["title"] = "オーバーマップ".into();
-        om["overmap"]["cursor_here"] = "現在地。".into();
-        om["overmap"]["cursor_note"] = "Note: cache...".into();
+        let om = common::squares_mut(&mut event);
+        om["cursor_here"] = "現在地。".into();
+        om["cursor_note"] = "Note: cache...".into();
         script.push(event);
         h.run_steps(3);
-        h.get_by_label_contains(
-            "オーバーマップ (100, 200, 0). 現在地。 Overmap forest. Note: cache... Route of 2 squares. Click the cursor to go.",
-        );
+        h.get_by_label_contains("現在地。 Overmap forest. Note: cache... Route of 2 squares.");
     }
 
     #[test]
@@ -789,7 +780,7 @@ mod overmap {
         // Cell (1, 1) is square (99, 200), which holds the note.
         h.hover_at(origin + egui::vec2(1.5 * CELL, 1.5 * CELL));
         h.run_steps(3);
-        h.get_by_label("Overmap (99, 200, 0). cache.");
+        h.get_by_label("(99, 200, 0) cache");
     }
 
     #[test]
@@ -813,21 +804,27 @@ mod overmap {
         };
         // Cell (3, 0) is square (101, 199).
         click(&mut h, 3.0, 0.0);
-        let ops = operations(&script);
         assert_eq!(
-            ops.last().unwrap(),
-            &json!({"kind":"set_target","pos":{"dim":"","x":101,"y":199,"z":0}})
+            operations(&script).last().unwrap(),
+            &json!({"kind":"invoke","affordance_id":"overmap:cursor",
+                "args":{"pos":{"dim":"","x":101,"y":199,"z":0}}})
+        );
+        // Cell (2, 1) is the cursor.
+        click(&mut h, 2.0, 1.0);
+        assert_eq!(
+            operations(&script).last().unwrap(),
+            &json!({"kind":"invoke","affordance_id":"CHOOSE_DESTINATION","args":{}})
         );
     }
 
     #[test]
-    fn escape_leaves_the_overmap_through_the_engines_quit_action() {
+    fn escape_leaves_the_overmap_through_the_engines_quit_affordance() {
         let (mut h, script) = open_overmap();
         h.key_press(egui::Key::Escape);
         h.run_steps(2);
         assert_eq!(
             operations(&script).last().unwrap(),
-            &json!({"kind":"action","action_id":"QUIT"})
+            &json!({"kind":"invoke","affordance_id":"QUIT","args":{}})
         );
     }
 }

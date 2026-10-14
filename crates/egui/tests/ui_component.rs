@@ -503,10 +503,11 @@ fn grid_draws_its_cells_and_a_cell_with_an_affordance_runs_it_with_the_cell_as_i
 }
 
 #[test]
-fn map_component_keeps_its_place_on_the_screen() {
-    let map = example("target.json", "overmap map with the cursor described");
-    let (h, _) = harness(dialog(map, vec![]));
-    h.get_by_label("Overmap");
+fn the_overmap_screen_draws_its_map_and_the_toggles_it_names() {
+    let (h, _) = harness(example("overmap.json", "overmap screen"));
+    h.get_by_label("Overmap view");
+    h.get_by_label_contains("You are here.");
+    h.get_by_label_contains("Toggle Map Notes");
 }
 
 #[test]

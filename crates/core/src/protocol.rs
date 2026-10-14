@@ -549,15 +549,13 @@ pub struct Interaction {
     pub field: Option<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub target: Option<Value>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub overmap: Option<OvermapWire>,
     /// Where the engine redraws the screen on its own, the interval in milliseconds.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub refresh_ms: Option<u64>,
 }
 
-/// The native overmap window as drawn: `[glyph, foreground, background]` per cell, row-major,
-/// with curses color indexes, and the sidebar text.
+/// Overmap squares as the player knows them: `[glyph, foreground, background]` per cell, row-major,
+/// with curses color indexes, and what the screen says of the cursor square.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OvermapWire {
     pub origin: WorldPos,
@@ -583,6 +581,66 @@ pub struct OvermapWire {
     pub path: Vec<WorldPos>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tiles: Option<OvermapTiles>,
+}
+
+/// The tile drawn on one overmap square.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct OvermapTile<'a> {
+    pub id: &'a str,
+    pub rotation: u8,
+    /// The multitile key, empty for a plain tile.
+    pub subtile: &'a str,
+    /// Tile ids to try when the tileset has no sprite for `id`, nearest first.
+    pub fallbacks: &'a [String],
+}
+
+impl OvermapWire {
+    /// The absolute overmap square drawn in cell `(col, row)`.
+    pub fn square(&self, col: usize, row: usize) -> WorldPos {
+        WorldPos {
+            dim: self.origin.dim.clone(),
+            x: self.origin.x + col as i32,
+            y: self.origin.y + row as i32,
+            z: self.origin.z,
+        }
+    }
+
+    /// The cell `(col, row)` for an absolute square; none outside the cells.
+    pub fn cell_of(&self, at: &WorldPos) -> Option<(usize, usize)> {
+        let col = usize::try_from(at.x - self.origin.x).ok()?;
+        let row = usize::try_from(at.y - self.origin.y).ok()?;
+        (at.z == self.origin.z && col < self.cols && row < self.rows).then_some((col, row))
+    }
+
+    /// The tile of cell `(col, row)`, when the engine sent tile ids.
+    pub fn tile(&self, col: usize, row: usize) -> Option<OvermapTile<'_>> {
+        let tiles = self.tiles.as_ref()?;
+        let (id, rotation, subtile) = tiles.cells.get(row)?.get(col)?;
+        Some(OvermapTile {
+            id,
+            rotation: *rotation,
+            subtile,
+            fallbacks: tiles.looks_like.get(id).map_or(&[], Vec::as_slice),
+        })
+    }
+
+    /// The text of the note on this square, if any.
+    pub fn note(&self, at: &WorldPos) -> Option<&str> {
+        self.notes
+            .iter()
+            .find(|n| n.pos == *at)
+            .map(|n| n.text.as_str())
+    }
+
+    /// Every note in view, for a reader that cannot see the markers.
+    pub fn notes_text(&self) -> Option<String> {
+        let notes = self
+            .notes
+            .iter()
+            .map(|n| format!("({}, {}, {}) {}", n.pos.x, n.pos.y, n.pos.z, n.text))
+            .collect::<Vec<_>>();
+        (!notes.is_empty()).then(|| format!("Notes: {}.", notes.join("; ")))
+    }
 }
 
 /// Tile ids of the overmap squares, for a client that said it draws tiles.
@@ -1973,6 +2031,11 @@ pub struct MapComponent {
 }
 
 impl MapComponent {
+    /// The square the screen's cursor is on.
+    pub fn cursor(&self) -> Option<WorldPos> {
+        serde_json::from_value(self.target.as_ref()?["current"].clone()).ok()
+    }
+
     /// What the engine says of the cursor's square: the screen's status in words, then each fact it prints of
     /// the square with what more it says of it, as markup lines.
     pub fn cursor_lines(&self) -> Vec<String> {

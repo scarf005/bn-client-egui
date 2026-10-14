@@ -85,47 +85,53 @@ pub fn game_root(tag: &str) -> std::path::PathBuf {
     root
 }
 
-/// A 4x3 overmap centred on (cursor_x, 200, 0) with the player two squares west of the cursor.
+/// The overmap screen the engine publishes: 4x3 squares centred on (cursor_x, 200, 0) with the player two
+/// squares west of the cursor, over the map in the stack.
 pub fn overmap_event(cursor_x: i32) -> Value {
-    let cell = |g: &str, fg: u8| format!(r#"["{g}",{fg},0]"#);
-    let row = |g: &str| {
-        format!(
-            "[{},{},{},{}]",
-            cell(g, 7),
-            cell(g, 2),
-            cell("@", 11),
-            cell(g, 1)
-        )
-    };
-    let text = format!(
-        r#"{{"jsonrpc":"2.0","method":"bn.events","params":{{"epoch":"e7f3","events":[{{
-        "sequence":"41","revision":"32","type":"interaction.changed","changes":{{"interaction":{{
-        "boundary_id":"b:60",
-        "readiness":{{"phase":"playing","game_ready":true,"accepts_interaction_commands":true,"accepts_registered_actions":true}},
-        "actions":[{{"id":"CHOOSE_DESTINATION","name":"Travel","keys":["_"]}},{{"id":"QUIT","name":"Quit","keys":["ESC"]}}],
-        "interaction":{{
-            "schema_id":"s:om{cursor_x}","kind":"target","context":"OVERMAP","title":"Overmap",
-            "message":"","allow_cancel":true,"allow_set_count":false,"choices":[],"choice_total":0,
-            "target":{{"source":{{"dim":"","x":98,"y":200,"z":0}},"current":{{"dim":"","x":{cursor_x},"y":200,"z":0}},
-                "range":100,"distance_metric":"square","unit":"omt","status":"","candidates":[]}},
-            "overmap":{{
-                "origin":{{"dim":"","x":{origin_x},"y":199,"z":0}},
-                "player":{{"dim":"","x":98,"y":200,"z":0}},
-                "cols":4,"rows":3,
-                "cells":[{rows}],
-                "legend":["Overmap","  forest"],"cursor_description":"Overmap forest","route_text":"Route of 2 squares.",
-                "notes":[{{"pos":{{"dim":"","x":{note_x},"y":200,"z":0}},"text":"cache"}}],
-                "path":[{{"dim":"","x":{p1},"y":200,"z":0}},{{"dim":"","x":{p2},"y":200,"z":0}}]
-            }},
-            "compat":{{"panes":[]}}
-        }}}}}}}}]}}}}"#,
-        origin_x = cursor_x - 2,
-        rows = [row("F"), row("f"), row("r")].join(","),
-        note_x = cursor_x - 1,
-        p1 = cursor_x + 1,
-        p2 = cursor_x + 2,
-    );
-    serde_json::from_str(&text).unwrap()
+    let cell = |g: &str, fg: u8| json!([g, fg, 0]);
+    let row = |g: &str| json!([cell(g, 7), cell(g, 2), cell("@", 11), cell(g, 1)]);
+    let at = |x: i32, y: i32| json!({"dim": "", "x": x, "y": y, "z": 0});
+    let map = json!({
+        "id": "map:overmap", "kind": "map", "mode": "overmap",
+        "affordances": ["overmap:cursor", "CHOOSE_DESTINATION"],
+        "target": {"source": at(98, 200), "current": at(cursor_x, 200),
+            "minimum": {"dim": "", "x": -1000, "y": -1000, "z": -10},
+            "maximum": {"dim": "", "x": 1000, "y": 1000, "z": 10},
+            "range": 2000, "distance_metric": "square", "unit": "omt", "status": "", "candidates": []},
+        "overmap": {
+            "origin": at(cursor_x - 2, 199), "player": at(98, 200), "cols": 4, "rows": 3,
+            "cells": [row("F"), row("f"), row("r")],
+            "legend": ["LEVEL 0, 100, 200"], "cursor_description": "Overmap forest",
+            "route_text": "Route of 2 squares.",
+            "notes": [{"pos": at(cursor_x - 1, 200), "text": "cache"}],
+            "path": [at(cursor_x + 1, 200), at(cursor_x + 2, 200)]}});
+    let toggles = json!({"id": "overmap:toggles", "kind": "panel", "title": "", "stats": [
+        {"key": "TOGGLE_MAP_NOTES", "label": "Toggle Map Notes", "value": "On", "tone": "good"}]});
+    let screen = json!({
+        "screen_id": "screen:om", "role": "screen", "title": "Overmap",
+        "root": {"id": "overmap", "kind": "split", "relation": "peers", "children": [map, toggles]},
+        "affordances": [
+            {"id": "overmap:cursor", "label": "Select", "keys": [], "enabled": true,
+                "expect": "boundary", "args": {"pos": {"unit": "overmap", "component_id": "map:overmap"}}},
+            {"id": "CHOOSE_DESTINATION", "label": "Travel", "keys": ["_"], "enabled": true,
+                "expect": "screen"},
+            {"id": "QUIT", "label": "Quit", "keys": ["ESC"], "enabled": true, "role": "cancel",
+                "expect": "screen"}]});
+    json!({"jsonrpc": "2.0", "method": "bn.events", "params": {"epoch": "e7f3", "events": [{
+        "sequence": "41", "revision": "32", "type": "interaction.changed", "changes": {"interaction": {
+        "boundary_id": "b:60",
+        "readiness": {"phase": "playing", "game_ready": true, "accepts_interaction_commands": true,
+            "accepts_registered_actions": true},
+        "actions": [{"id": "CHOOSE_DESTINATION", "name": "Travel", "keys": ["_"]},
+            {"id": "QUIT", "name": "Quit", "keys": ["ESC"]}],
+        "interaction": null,
+        "stack": [{"screen_id": "screen:map:e7f3", "role": "map", "root": null, "affordances": []},
+            screen]}}}]}})
+}
+
+/// The squares of the overmap screen in `event`.
+pub fn squares_mut(event: &mut Value) -> &mut Value {
+    &mut event["params"]["events"][0]["changes"]["interaction"]["stack"][1]["root"]["children"][0]["overmap"]
 }
 
 /// The overmap event for a client that said it draws tiles: every square is `t_floor` but the
@@ -142,7 +148,7 @@ pub fn with_tiles(mut event: Value) -> Value {
             json!(cells)
         })
         .collect();
-    event["params"]["events"][0]["changes"]["interaction"]["interaction"]["overmap"]["tiles"] =
+    squares_mut(&mut event)["tiles"] =
         json!({"cells": rows, "looks_like": {"forest": ["t_dirt"], "t_floor": []}});
     event
 }

@@ -1,5 +1,6 @@
 //! Needs a real engine build: `BN_ENGINE=/path/to/cataclysm-bn-tiles cargo test --test live_engine -- --ignored`
 mod common;
+use bn_client_core::protocol::{Component, InvokeArgs, WorldPos};
 use bn_client_core::transport::{Profile, StdioTransport};
 use bn_client_core::watchdog::Watchdog;
 use bn_client_core::{EngineModel, GameModel, Pos};
@@ -557,8 +558,28 @@ fn live_engine_long_wait_is_never_reported_as_stalled() {
     assert!(model.failure().is_none());
 }
 
+/// The squares of the overmap screen on top and the square its cursor is on, while it is open.
+fn overmap_of(m: &EngineModel) -> Option<(bn_client_core::protocol::OvermapWire, WorldPos)> {
+    let root = m.screens().last()?.root.as_ref()?;
+    let Some(Component::Map(map)) = root.find("map:overmap") else {
+        return None;
+    };
+    let cursor = serde_json::from_value(map.target.as_ref()?["current"].clone()).ok()?;
+    Some((map.overmap.clone()?, cursor))
+}
+
+fn leave_overmap(model: &mut EngineModel) {
+    assert!(
+        model
+            .invoke_affordance("QUIT", InvokeArgs::default())
+            .is_ok()
+    );
+    wait_for(model, "the overmap to close", |m| overmap_of(m).is_none());
+    wait_for(model, "idle", |m| !m.busy());
+}
+
 #[test]
-#[ignore = "requires BN_ENGINE with the structured overmap"]
+#[ignore = "requires BN_ENGINE with the overmap as components"]
 fn live_engine_opens_the_overmap_moves_its_cursor_and_closes_it() {
     let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
     let transport = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
@@ -570,49 +591,51 @@ fn live_engine_opens_the_overmap_moves_its_cursor_and_closes_it() {
     dismiss_popups(&mut model);
 
     assert!(model.invoke_action("map"), "the overmap action is offered");
-    wait_for(&mut model, "the overmap", |m| m.overmap().is_some());
+    wait_for(&mut model, "the overmap", |m| overmap_of(m).is_some());
     wait_for(&mut model, "idle", |m| !m.busy());
-    let first = model.overmap().unwrap();
+    let (first, cursor) = overmap_of(&model).unwrap();
     println!(
-        "overmap {}x{} cursor {:?} legend {:?}",
+        "overmap {}x{} cursor {cursor:?} legend {:?}",
         first.cols,
         first.rows,
-        first.cursor,
         first.legend.iter().take(3).collect::<Vec<_>>()
     );
     assert!(first.cols > 10 && first.rows > 5);
-    assert_eq!(first.cursor, first.player, "it opens on the player");
+    assert_eq!(cursor, first.player, "it opens on the player");
     assert!(first.legend.iter().any(|l| !l.trim().is_empty()));
     // The client said it draws tiles: every square names a tile, the one under the player a known one.
-    assert_eq!(first.tiles.len(), (first.cols * first.rows) as usize);
     let under = first.tile(first.cols / 2, first.rows / 2).unwrap();
     println!("tile under the player: {under:?}");
     assert!(!under.id.is_empty() && under.id != "unknown_terrain");
 
-    let to = (first.cursor.0 + 3, first.cursor.1 - 2, first.cursor.2);
-    model.overmap_cursor_to(to);
+    let to = WorldPos {
+        x: cursor.x + 3,
+        y: cursor.y - 2,
+        ..cursor.clone()
+    };
+    let args = InvokeArgs {
+        pos: Some(to.clone()),
+        ..InvokeArgs::default()
+    };
+    assert!(model.invoke_affordance("overmap:cursor", args).is_ok());
     wait_for(&mut model, "the cursor to move", |m| {
-        m.overmap().is_some_and(|o| o.cursor == to)
+        overmap_of(m).is_some_and(|(_, at)| at == to)
     });
     wait_for(&mut model, "idle", |m| !m.busy());
-    let moved = model.overmap().unwrap();
+    let (moved, _) = overmap_of(&model).unwrap();
     assert_eq!(
-        moved.origin.0,
-        first.origin.0 + 3,
+        moved.origin.x,
+        first.origin.x + 3,
         "the view follows the cursor"
     );
     assert_eq!(moved.player, first.player);
 
-    model.close_overmap();
-    wait_for(&mut model, "the overmap to close", |m| {
-        m.overmap().is_none()
-    });
-    wait_for(&mut model, "idle", |m| !m.busy());
+    leave_overmap(&mut model);
     assert!(model.failure().is_none());
 }
 
 #[test]
-#[ignore = "requires BN_ENGINE with the structured overmap"]
+#[ignore = "requires BN_ENGINE with the overmap as components"]
 fn live_engine_overmap_gains_and_loses_tile_ids_when_the_client_switches() {
     let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
     let transport = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
@@ -624,29 +647,26 @@ fn live_engine_overmap_gains_and_loses_tile_ids_when_the_client_switches() {
     dismiss_popups(&mut model);
 
     assert!(model.invoke_action("map"));
-    wait_for(&mut model, "the overmap", |m| m.overmap().is_some());
+    wait_for(&mut model, "the overmap", |m| overmap_of(m).is_some());
     wait_for(&mut model, "idle", |m| !m.busy());
     assert!(
-        model.overmap().unwrap().tiles.is_empty(),
+        overmap_of(&model).unwrap().0.tiles.is_none(),
         "ASCII client: no tile ids"
     );
 
     // The player picks Tiles while the overmap is open: the open screen is published again with ids.
     model.set_tiles(true);
     wait_for(&mut model, "tile ids", |m| {
-        m.overmap().is_some_and(|o| !o.tiles.is_empty())
+        overmap_of(m).is_some_and(|(o, _)| o.tiles.is_some())
     });
-    let tiled = model.overmap().unwrap();
-    assert_eq!(tiled.tiles.len(), (tiled.cols * tiled.rows) as usize);
+    let (tiled, _) = overmap_of(&model).unwrap();
+    assert_eq!(tiled.tiles.unwrap().cells.len(), tiled.rows);
 
     model.set_tiles(false);
     wait_for(&mut model, "no tile ids", |m| {
-        m.overmap().is_some_and(|o| o.tiles.is_empty())
+        overmap_of(m).is_some_and(|(o, _)| o.tiles.is_none())
     });
-    model.close_overmap();
-    wait_for(&mut model, "the overmap to close", |m| {
-        m.overmap().is_none()
-    });
+    leave_overmap(&mut model);
     assert!(model.failure().is_none());
 }
 

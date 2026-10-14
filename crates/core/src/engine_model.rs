@@ -7,8 +7,7 @@ use crate::keys;
 use crate::markup::{self, Run};
 use crate::model::{
     ActionEntry, Cell, CommandStatus, Effect, Failure, FailureKind, GameModel, Heard, Layer,
-    Loading, LogLine, Menu, MenuChoice, MenuField, MenuPane, Mutation, Overmap, OvermapCell,
-    OvermapTile, PaneTotals, Pos, Rgb, Shape,
+    Loading, LogLine, Menu, MenuChoice, MenuField, MenuPane, Mutation, PaneTotals, Pos, Rgb, Shape,
 };
 use crate::protocol::{
     self, Cell as WorldCell, Entity, Incoming, InvokeArgs, Known, LoadingNotice, Look, ModTileset,
@@ -1554,7 +1553,7 @@ impl EngineModel {
 /// What a target screen other than a shot says: the step of a zone's area (`message`), for the map
 /// editor the rows of the square under its cursor and the keys of its edit actions.
 fn target_note(i: &protocol::Interaction) -> Option<String> {
-    i.target.as_ref().filter(|_| i.overmap.is_none())?;
+    i.target.as_ref()?;
     let rows = |pane: &str| {
         i.choices
             .iter()
@@ -1991,83 +1990,6 @@ impl GameModel for EngineModel {
         (i.kind != "target").then(|| self.menu_of(i))
     }
 
-    fn overmap(&self) -> Option<Overmap> {
-        let i = self.replica.boundary()?.interaction.as_ref()?;
-        let wire = i.overmap.as_ref()?;
-        let at = |p: &WorldPos| (p.x, p.y, p.z);
-        let cursor =
-            serde_json::from_value::<WorldPos>(i.target.as_ref()?["current"].clone()).ok()?;
-        let black = Rgb(0, 0, 0);
-        let cells = wire
-            .cells
-            .iter()
-            .flatten()
-            .map(|(glyph, fg, bg)| {
-                let bg = self.colors.index(*bg);
-                OvermapCell {
-                    glyph: glyph.clone(),
-                    color: self.colors.index(*fg),
-                    bg: (bg != black).then_some(bg),
-                }
-            })
-            .collect();
-        Some(Overmap {
-            title: markup::plain(&i.title),
-            cols: wire.cols as i32,
-            rows: wire.rows as i32,
-            cells,
-            origin: at(&wire.origin),
-            cursor: at(&cursor),
-            player: at(&wire.player),
-            legend: wire.legend.clone(),
-            cursor_description: wire.cursor_description.clone(),
-            cursor_here: wire.cursor_here.clone(),
-            cursor_note: wire.cursor_note.clone(),
-            route_text: wire.route_text.clone(),
-            notes: wire
-                .notes
-                .iter()
-                .map(|n| (at(&n.pos), n.text.clone()))
-                .collect(),
-            path: wire.path.iter().map(at).collect(),
-            tiles: wire
-                .tiles
-                .iter()
-                .flat_map(|t| {
-                    t.cells
-                        .iter()
-                        .flatten()
-                        .map(|(id, rotation, subtile)| OvermapTile {
-                            id: id.clone(),
-                            rotation: *rotation,
-                            subtile: subtile.clone(),
-                            fallbacks: t.looks_like.get(id).cloned().unwrap_or_default(),
-                        })
-                })
-                .collect(),
-        })
-    }
-
-    fn overmap_cursor_to(&mut self, at: (i32, i32, i32)) {
-        if self.overmap().is_some() && !self.busy {
-            self.submit(Operation::SetTarget {
-                candidate_id: None,
-                pos: Some(WorldPos {
-                    dim: String::new(),
-                    x: at.0,
-                    y: at.1,
-                    z: at.2,
-                }),
-            });
-        }
-    }
-
-    fn close_overmap(&mut self) {
-        if self.overmap().is_some() && !self.busy {
-            self.submit(Operation::Cancel);
-        }
-    }
-
     fn colors(&self) -> &ColorMap {
         &self.colors
     }
@@ -2170,10 +2092,6 @@ impl GameModel for EngineModel {
             Some(map) => map.target.clone()?,
             None => {
                 let i = self.replica.boundary()?.interaction.as_ref()?;
-                if i.overmap.is_some() {
-                    // The overmap's cursor is an overmap square, not a map square.
-                    return None;
-                }
                 i.target.clone()?
             }
         };

@@ -4,7 +4,8 @@ use crate::tileset::{self, PaintQuery, Paints, Placed, Query, Tileset, TilesetIn
 use crate::tint::{Paint, tint_pixel};
 use crate::windows::WindowState;
 use bn_client_core::protocol::ModTileset;
-use bn_client_core::{Cell, Layer, OvermapTile};
+use bn_client_core::protocol::OvermapTile;
+use bn_client_core::{Cell, Layer};
 use eframe::egui::{self, Color32, Mesh, Rect, Shape, TextureHandle, TextureId, TextureOptions};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
@@ -687,7 +688,7 @@ impl Display {
         &mut self,
         painter: &egui::Painter,
         rect: Rect,
-        tile: &OvermapTile,
+        tile: &OvermapTile<'_>,
     ) -> bool {
         let Some(atlas) = &mut self.atlas else {
             return false;
@@ -698,9 +699,9 @@ impl Display {
             rect.height() / atlas.tileset.tile.1 as f32,
         );
         let query = Query {
-            id: &tile.id,
-            fallbacks: &tile.fallbacks,
-            subtile: (!tile.subtile.is_empty()).then_some(tile.subtile.as_str()),
+            id: tile.id,
+            fallbacks: tile.fallbacks,
+            subtile: (!tile.subtile.is_empty()).then_some(tile.subtile),
             rotation: tile.rotation,
             mirrored: false,
             creature: false,

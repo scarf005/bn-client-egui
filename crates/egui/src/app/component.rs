@@ -10,10 +10,11 @@ use crate::{a11y, editor, text};
 use bn_client_core::interaction::{self, ArgKind, InvokeError, Reason};
 use bn_client_core::protocol::{
     Affordance, AffordanceRole, CanvasComponent, Component, Editor, EditorValue, FieldKind, Form,
-    FormField, Grid, List, MapComponent, MapMode, PanelStat, Row, Screen, ScreenDock, ScreenRole,
-    Selection, SidebarSide, Text, TextBlock, TextRole, Tone,
+    FormField, Grid, InvokeArgs, List, MapComponent, MapMode, OvermapTile, OvermapWire, PanelStat,
+    Row, Screen, ScreenDock, ScreenRole, Selection, SidebarSide, Text, TextBlock, TextRole, Tone,
+    WorldPos,
 };
-use bn_client_core::{Cell, GameModel, markup};
+use bn_client_core::{Cell, GameModel, Rgb, markup};
 use eframe::egui::{self, WidgetInfo, WidgetType};
 use std::cell::RefCell;
 use std::collections::HashSet;
@@ -39,6 +40,42 @@ pub(super) struct Screens {
     reveal: Option<String>,
     /// The squares of this frame's list rows left for their item's sprite, painted once the window is drawn.
     icons: RefCell<Vec<RowIcon>>,
+    /// What this frame's overmap draws, painted once the window is drawn, so that a tileset's sprites come
+    /// before the marks over them.
+    overmap: RefCell<Vec<OvermapPaint>>,
+}
+
+/// One thing the overmap draws, in the order it is drawn.
+enum OvermapPaint {
+    /// A square: its terrain sprite when the tileset has one, else its glyph.
+    Square {
+        painter: egui::Painter,
+        rect: egui::Rect,
+        tile: Option<OwnedTile>,
+        glyph: String,
+        color: Rgb,
+        bg: Option<Rgb>,
+        /// Something lies over the terrain (the player, a note, the route): the glyph is drawn over a sprite.
+        overlay: bool,
+        font: egui::FontId,
+    },
+    Fill {
+        painter: egui::Painter,
+        rect: egui::Rect,
+        color: egui::Color32,
+    },
+    Outline {
+        painter: egui::Painter,
+        rect: egui::Rect,
+    },
+}
+
+/// An overmap tile that outlives the frame's data.
+struct OwnedTile {
+    id: String,
+    rotation: u8,
+    subtile: String,
+    fallbacks: Vec<String>,
 }
 
 /// A list row's item and the square it is drawn in.
@@ -64,6 +101,11 @@ enum Intent {
         count: u64,
     },
     Run(String),
+    /// Runs the affordance that puts the cursor on a square.
+    Move {
+        affordance: String,
+        at: WorldPos,
+    },
     Fill {
         affordance: String,
         form: String,
@@ -235,8 +277,15 @@ impl<M: GameModel> App<M> {
         let season = self.model.season();
         for icon in self.screens.icons.take() {
             let display = &mut self.display;
-            sidebar::paint_cell(&icon.painter, icon.rect, display, &icon.cell, season.as_deref());
+            sidebar::paint_cell(
+                &icon.painter,
+                icon.rect,
+                display,
+                &icon.cell,
+                season.as_deref(),
+            );
         }
+        self.paint_overmap(ctx);
         out.into_iter().for_each(|intent| self.apply(intent));
     }
 
@@ -327,6 +376,18 @@ impl<M: GameModel> App<M> {
             Intent::Text(typed) => return interaction.answer_text(&typed),
             Intent::Cancel => return interaction.cancel(),
             Intent::Run(id) => interaction.activate(top, &id),
+            Intent::Move { affordance, at } => {
+                let args = InvokeArgs {
+                    pos: Some(at),
+                    ..InvokeArgs::default()
+                };
+                if let Err(InvokeError::Disabled(denial)) =
+                    self.model.invoke_affordance(&affordance, args)
+                {
+                    self.screens.denial = denial.as_ref().map(Text::shown);
+                }
+                return;
+            }
             Intent::Fill {
                 affordance,
                 form,
@@ -409,7 +470,10 @@ impl<M: GameModel> App<M> {
             return;
         }
         ui.horizontal_wrapped(|ui| {
-            for a in affordances.iter().filter(|a| a.role != Some(AffordanceRole::Select)) {
+            for a in affordances
+                .iter()
+                .filter(|a| a.role != Some(AffordanceRole::Select))
+            {
                 let availability = interaction::row_availability(a, row);
                 let (enabled, denial) =
                     (availability.enabled, availability.denial.map(|d| d.shown()));
@@ -461,7 +525,11 @@ impl<M: GameModel> App<M> {
                 ui.horizontal_wrapped(|ui| {
                     for tab in &tabs.tabs {
                         let on = tab.enabled && select.is_some_and(|a| a.enabled);
-                        let marked = format!("{}{}", tab.label.shown(), if tab.unread { " •" } else { "" });
+                        let marked = format!(
+                            "{}{}",
+                            tab.label.shown(),
+                            if tab.unread { " •" } else { "" }
+                        );
                         let label = self.line(ui, &marked);
                         let button = self.control(ui, label, &tab.id, on, tab.selected);
                         a11y::tab(ui.ctx(), button.id, tab.selected);
@@ -525,7 +593,7 @@ impl<M: GameModel> App<M> {
             Component::Form(form) => self.form(ui, screen, form, out),
             Component::Text(block) => self.text_block(ui, block),
             Component::Grid(grid) => self.grid(ui, grid, out),
-            Component::Map(map) => self.map_slot(ui, map),
+            Component::Map(map) => self.map_slot(ui, screen, map, out),
             Component::Canvas(canvas) => self.canvas(ui, canvas),
         }
         if !matches!(c, Component::List(_)) {
@@ -763,9 +831,283 @@ impl<M: GameModel> App<M> {
         });
     }
 
+    /// The overmap squares around the cursor, cut to the room the window has: hovering names a square, a
+    /// click moves the cursor there, and a click on the cursor runs the map's other affordance (travel). The
+    /// engine's lines for the cursor square and its notes stand beside them.
+    fn overmap(
+        &self,
+        ui: &mut egui::Ui,
+        screen: &Screen,
+        map: &MapComponent,
+        om: &OvermapWire,
+        out: &mut Vec<Intent>,
+    ) {
+        let cursor = map.cursor().unwrap_or_else(|| om.origin.clone());
+        let ids = &map.head.affordances;
+        let by_args = |pos: bool| {
+            ids.iter()
+                .filter_map(|id| find(screen, id))
+                .find(|a| a.args.as_ref().is_some_and(|args| args.pos.is_some()) == pos)
+        };
+        let (mover, runner) = (by_args(true), by_args(false));
+        // What the engine says of the cursor square, a sentence each.
+        let status = [
+            om.cursor_here.clone(),
+            Some(om.cursor_description.clone()),
+            om.cursor_note.clone(),
+            om.route_text.clone(),
+        ]
+        .into_iter()
+        .flatten()
+        .filter(|t| !t.is_empty())
+        .map(|t| {
+            if t.ends_with(['.', '!', '?', '。', '！', '？']) {
+                t
+            } else {
+                format!("{t}.")
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ");
+        let status_label = ui.label(&status);
+        ui.ctx().accesskit_node_builder(status_label.id, |b| {
+            b.set_live(egui::accesskit::Live::Polite)
+        });
+
+        let cell_px = self.display.cell(super::CELL);
+        let font = egui::FontId::monospace(cell_px - 2.0);
+        // The squares that fit, kept around the cursor.
+        let room = ui.available_size();
+        let fit = |cells: usize, space: f32| ((space / cell_px) as usize).clamp(1, cells.max(1));
+        let (cols, rows) = (
+            fit(om.cols, room.x * 0.7),
+            fit(om.rows, super::dialog_scroll_height(ui.ctx())),
+        );
+        let (cursor_col, cursor_row) = om.cell_of(&cursor).unwrap_or((om.cols / 2, om.rows / 2));
+        let first = |at: usize, shown: usize, all: usize| {
+            at.saturating_sub(shown / 2).min(all.saturating_sub(shown))
+        };
+        let (left, top) = (
+            first(cursor_col, cols, om.cols),
+            first(cursor_row, rows, om.rows),
+        );
+        let cols = cols.min(om.cols.saturating_sub(left));
+        let rows = rows.min(om.rows.saturating_sub(top));
+        let colors = self.model.colors();
+        let square_status = |at: &WorldPos| {
+            if *at == cursor {
+                return status.clone();
+            }
+            [
+                Some(format!("({}, {}, {})", at.x, at.y, at.z)),
+                om.note(at).map(str::to_owned),
+            ]
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>()
+            .join(" ")
+        };
+        ui.horizontal_top(|ui| {
+            let (response, painter) = ui.allocate_painter(
+                egui::vec2(cols as f32 * cell_px, rows as f32 * cell_px),
+                egui::Sense::click(),
+            );
+            response.widget_info(|| WidgetInfo::labeled(WidgetType::Other, true, "Overmap view"));
+            ui.ctx().accesskit_node_builder(response.id, |b| {
+                b.set_role(egui::accesskit::Role::Canvas);
+                b.set_description(
+                    [Some(status.clone()), om.notes_text()]
+                        .into_iter()
+                        .flatten()
+                        .collect::<Vec<_>>()
+                        .join(" "),
+                );
+            });
+            let rect_of = |col: usize, row: usize| {
+                egui::Rect::from_min_size(
+                    response.rect.min
+                        + egui::vec2((col - left) as f32, (row - top) as f32) * cell_px,
+                    egui::Vec2::splat(cell_px),
+                )
+            };
+            painter.rect_filled(response.rect, 0.0, egui::Color32::BLACK);
+            let mut paints = self.screens.overmap.borrow_mut();
+            for row in top..top + rows {
+                for col in left..left + cols {
+                    let Some((glyph, fg, bg)) = om.cells.get(row).and_then(|r| r.get(col)) else {
+                        continue;
+                    };
+                    let at = om.square(col, row);
+                    let bg = colors.index(*bg);
+                    paints.push(OvermapPaint::Square {
+                        painter: painter.clone(),
+                        rect: rect_of(col, row),
+                        tile: om.tile(col, row).map(|t| OwnedTile {
+                            id: t.id.into(),
+                            rotation: t.rotation,
+                            subtile: t.subtile.into(),
+                            fallbacks: t.fallbacks.to_vec(),
+                        }),
+                        glyph: glyph.clone(),
+                        color: colors.index(*fg),
+                        bg: (bg != Rgb(0, 0, 0)).then_some(bg),
+                        overlay: at == om.player || om.note(&at).is_some() || om.path.contains(&at),
+                        font: font.clone(),
+                    });
+                }
+            }
+            for (i, step) in om.path.iter().enumerate() {
+                let Some((col, row)) = om.cell_of(step).filter(|(c, r)| {
+                    (left..left + cols).contains(c) && (top..top + rows).contains(r)
+                }) else {
+                    continue;
+                };
+                let alpha = if i + 1 == om.path.len() { 140 } else { 70 };
+                paints.push(OvermapPaint::Fill {
+                    painter: painter.clone(),
+                    rect: rect_of(col, row),
+                    color: egui::Color32::from_rgba_unmultiplied(0, 200, 255, alpha),
+                });
+            }
+            paints.push(OvermapPaint::Outline {
+                painter: painter.clone(),
+                rect: rect_of(cursor_col, cursor_row),
+            });
+            drop(paints);
+            let square_at = |p: egui::Pos2| {
+                let v = (p - response.rect.min) / cell_px;
+                om.square(
+                    left + (v.x as usize).min(cols - 1),
+                    top + (v.y as usize).min(rows - 1),
+                )
+            };
+            response.clone().on_hover_ui_at_pointer(|ui| {
+                if let Some(p) = response.hover_pos() {
+                    ui.add(
+                        egui::Label::new(square_status(&square_at(p)))
+                            .wrap_mode(egui::TextWrapMode::Extend),
+                    );
+                }
+            });
+            if let Some(p) = response
+                .interact_pointer_pos()
+                .filter(|_| response.clicked())
+            {
+                let at = square_at(p);
+                match (at == cursor, &runner, &mover) {
+                    (true, Some(run), _) => out.push(Intent::Run(run.id.clone())),
+                    (_, _, Some(mover)) => out.push(Intent::Move {
+                        affordance: mover.id.clone(),
+                        at,
+                    }),
+                    _ => {}
+                }
+                ui.ctx().request_repaint();
+            }
+            ui.vertical(|ui| {
+                for line in &om.legend {
+                    ui.add(
+                        egui::Label::new(egui::RichText::new(line).monospace())
+                            .wrap_mode(egui::TextWrapMode::Extend),
+                    );
+                }
+                if !om.notes.is_empty() {
+                    ui.separator();
+                    ui.heading("Notes");
+                }
+                for note in &om.notes {
+                    let link = ui.link(format!("({}, {}) {}", note.pos.x, note.pos.y, note.text));
+                    if let (true, Some(mover)) = (link.clicked(), &mover) {
+                        out.push(Intent::Move {
+                            affordance: mover.id.clone(),
+                            at: note.pos.clone(),
+                        });
+                    }
+                }
+            });
+        });
+    }
+
+    /// Paints what the overmap collected, now that the window is drawn.
+    fn paint_overmap(&mut self, ctx: &egui::Context) {
+        let paints = self.screens.overmap.take();
+        if paints.is_empty() {
+            return;
+        }
+        self.display.update(ctx);
+        self.display.begin();
+        for paint in paints {
+            match paint {
+                OvermapPaint::Square {
+                    painter,
+                    rect,
+                    tile,
+                    glyph,
+                    color,
+                    bg,
+                    overlay,
+                    font,
+                } => {
+                    // With a tileset the terrain is its sprite; what lies over it stays a glyph.
+                    let sprite = tile.is_some_and(|t| {
+                        self.display.paint_overmap(
+                            &painter,
+                            rect,
+                            &OvermapTile {
+                                id: &t.id,
+                                rotation: t.rotation,
+                                subtile: &t.subtile,
+                                fallbacks: &t.fallbacks,
+                            },
+                        )
+                    });
+                    if sprite && !overlay {
+                        continue;
+                    }
+                    if let Some(bg) = bg.filter(|_| !sprite) {
+                        painter.rect_filled(rect, 0.0, super::rgb(bg));
+                    }
+                    if !glyph.trim().is_empty() {
+                        painter.text(
+                            rect.center(),
+                            egui::Align2::CENTER_CENTER,
+                            glyph,
+                            font,
+                            super::rgb(color),
+                        );
+                    }
+                }
+                OvermapPaint::Fill {
+                    painter,
+                    rect,
+                    color,
+                } => {
+                    painter.rect_filled(rect, 0.0, color);
+                }
+                OvermapPaint::Outline { painter, rect } => {
+                    painter.rect_stroke(
+                        rect,
+                        0.0,
+                        egui::Stroke::new(1.0, egui::Color32::WHITE),
+                        egui::StrokeKind::Inside,
+                    );
+                }
+            }
+        }
+    }
+
     /// The map is the map view's; here it is the place it would take, or the words the engine says of the
     /// cursor's square when the screen puts a cursor on it.
-    fn map_slot(&self, ui: &mut egui::Ui, map: &MapComponent) {
+    fn map_slot(
+        &self,
+        ui: &mut egui::Ui,
+        screen: &Screen,
+        map: &MapComponent,
+        out: &mut Vec<Intent>,
+    ) {
+        if let (MapMode::Overmap, Some(om)) = (map.mode, &map.overmap) {
+            return self.overmap(ui, screen, map, om, out);
+        }
         let lines = map.cursor_lines();
         if !lines.is_empty() {
             let font = egui::TextStyle::Body.resolve(ui.style());
