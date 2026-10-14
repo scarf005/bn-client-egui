@@ -1284,35 +1284,35 @@ fn an_avatar_that_carries_nothing_empties_the_inventory_panel() {
     assert!(m.inventory().is_empty());
 }
 
-fn crafting(name: &str) -> Value {
+fn counted(name: &str) -> Value {
     let text = std::fs::read_to_string(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/tests/fixtures/crafting.json"
+        "/tests/fixtures/menu-counts.json"
     ))
     .unwrap();
     serde_json::from_str::<Value>(&text).unwrap()[name].clone()
 }
 
 #[test]
-fn crafting_menu_exposes_context_field_details_and_sends_fill_and_set_count() {
+fn counted_menu_exposes_context_field_details_and_sends_fill_and_set_count() {
     let (t, h) = session();
     let mut m = connected(t.on("bn.command.submit", walk_reply()));
-    h.push(change(41, json!({"interaction": crafting("weapon")})));
+    h.push(change(41, json!({"interaction": counted("counted")})));
     m.poll();
     let menu = m.menu().unwrap();
-    assert_eq!(menu.context, "CRAFTING");
+    assert_eq!(menu.context, "COUNTED");
     assert!(menu.can_set_count);
     let field = menu.field.unwrap();
     assert_eq!((field.id.as_str(), field.value.as_str()), ("filter", ""));
-    let club = menu.choices.iter().find(|c| c.id == "recipe:aa").unwrap();
+    let club = menu.choices.iter().find(|c| c.id == "item:aa").unwrap();
     assert!(club.description.starts_with("Time to complete"));
     assert_eq!(club.column("skill"), "fabrication 1");
     assert_eq!(club.column_label("skill"), "Skill");
 
     m.fill("nope", "club", true);
     assert!(submits(&h).is_empty(), "unknown fields are never submitted");
-    m.set_count("recipe:bb", 2);
-    assert!(submits(&h).is_empty(), "disabled recipes take no count");
+    m.set_count("item:bb", 2);
+    assert!(submits(&h).is_empty(), "disabled rows take no count");
     m.fill("filter", "club", true);
     assert_eq!(
         submits(&h)[0]["params"]["operation"],
@@ -1321,19 +1321,19 @@ fn crafting_menu_exposes_context_field_details_and_sends_fill_and_set_count() {
 }
 
 #[test]
-fn set_count_submits_for_an_enabled_recipe_and_batch_mode_has_no_field() {
+fn set_count_submits_for_an_enabled_row_and_batch_mode_has_no_field() {
     let (t, h) = session();
     let mut m = connected(t.on("bn.command.submit", walk_reply()));
-    h.push(change(41, json!({"interaction": crafting("weapon")})));
+    h.push(change(41, json!({"interaction": counted("counted")})));
     m.poll();
-    m.set_count("recipe:aa", 3);
+    m.set_count("item:aa", 3);
     assert_eq!(
         submits(&h)[0]["params"]["operation"],
-        json!({"kind":"set_count","choice_id":"recipe:aa","count":3})
+        json!({"kind":"set_count","choice_id":"item:aa","count":3})
     );
     let (t, h) = session();
     let mut m = connected(t.on("bn.command.submit", walk_reply()));
-    h.push(change(41, json!({"interaction": crafting("batch")})));
+    h.push(change(41, json!({"interaction": counted("batch")})));
     m.poll();
     assert!(m.menu().unwrap().field.is_none());
     m.fill("filter", "x", true);
@@ -1970,7 +1970,7 @@ fn returning_to_the_main_menu_clears_the_previous_games_log_and_command_lines() 
     m.poll();
     m.say("Something blocks the way.".into());
     assert_eq!(m.native_log().len(), 1);
-    let mut menu = crafting("favorites");
+    let mut menu = counted("base");
     // The title screen is a stack with no map in it.
     menu["stack"] = json!([{"screen_id": "screen:1", "role": "screen", "title": "Title",
         "root": {"id": "banner", "kind": "text", "markup": "Title"}, "affordances": []}]);
@@ -2105,7 +2105,7 @@ fn a_client_line_repeating_the_newest_one_is_not_added_again() {
 
 #[test]
 fn query_popup_rows_do_not_carry_the_action_id_as_a_description() {
-    let mut menu = crafting("favorites");
+    let mut menu = counted("base");
     menu["actions"] = json!([{"id": "YES", "name": "Yes", "keys": ["y"]}, {"id": "NO", "name": "No", "keys": ["n"]}]);
     let rows = ["Yes", "No"].map(|label| {
         let id = label.to_uppercase();
@@ -2125,7 +2125,7 @@ fn query_popup_rows_do_not_carry_the_action_id_as_a_description() {
         menu.choices
     );
     // Text that is not an action id stays.
-    let mut real = crafting("weapon");
+    let mut real = counted("counted");
     real["actions"] = json!([{"id": "YES", "name": "Yes"}]);
     h.push(change(42, json!({"interaction": real})));
     m.poll();
@@ -2134,7 +2134,7 @@ fn query_popup_rows_do_not_carry_the_action_id_as_a_description() {
         .unwrap()
         .choices
         .into_iter()
-        .find(|c| c.id == "recipe:aa")
+        .find(|c| c.id == "item:aa")
         .unwrap();
     assert!(kept.description.starts_with("Time to complete"));
 }
@@ -2389,7 +2389,7 @@ fn a_list_of_named_panes_starts_each_pane_under_its_heading() {
 }
 
 fn snake_boundary(id: &str, refresh: bool) -> Value {
-    let mut boundary = crafting("favorites");
+    let mut boundary = counted("base");
     boundary["boundary_id"] = json!(id);
     boundary["actions"] = json!([{"id": "UP", "name": "Up", "keys": ["w"]}]);
     let i = &mut boundary["interaction"];

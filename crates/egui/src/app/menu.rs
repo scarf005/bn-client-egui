@@ -31,16 +31,6 @@ impl<M: GameModel> App<M> {
         );
         let entered =
             self.focus_menu | (self.menu_title.replace(shown.clone()).as_ref() != Some(&shown));
-        if menu.context == "CRAFTING" {
-            let focused = self.crafting(ctx, &menu, entered);
-            self.focus_menu = entered && !focused;
-            return;
-        }
-        if menu.context == "CONSTRUCTION" {
-            let focused = self.construction(ctx, &menu, entered);
-            self.focus_menu = entered && !focused;
-            return;
-        }
         if menu.context == "SPELL_SELECT" {
             let focused = self.spells(ctx, &menu, entered);
             self.focus_menu = entered && !focused;

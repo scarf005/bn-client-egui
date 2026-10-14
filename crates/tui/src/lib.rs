@@ -1,7 +1,6 @@
 //! Terminal client over the same `GameModel` as the egui client.
 
 mod component;
-mod crafting;
 mod settings;
 
 use bn_client_core::markup::plain;
@@ -43,8 +42,6 @@ pub struct TuiApp<M: GameModel> {
     actions_open: Option<usize>,
     /// Message log lines scrolled back from the newest.
     log_back: usize,
-    /// The crafting search or batch count being typed.
-    input: Option<crafting::Input>,
     /// The map square the mouse last hovered, in absolute coordinates.
     hovered: Option<Pos>,
     /// A settings value being typed.
@@ -156,7 +153,6 @@ impl<M: GameModel> TuiApp<M> {
             map_first: Pos { x: 0, y: 0 },
             actions_open: None,
             log_back: 0,
-            input: None,
             edit: None,
             hovered: None,
             menu_hits: Default::default(),
@@ -193,9 +189,8 @@ impl<M: GameModel> TuiApp<M> {
             self.action_focus = None;
             self.menu_sig = sig;
         }
-        // The engine's own cursor is the highlight; its navigation keys move it. The crafting
-        // screen keeps its own list.
-        if let Some(menu) = menu.as_ref().filter(|m| m.context != "CRAFTING") {
+        // The engine's own cursor is the highlight; its navigation keys move it.
+        if let Some(menu) = menu.as_ref() {
             let entries = menu.entries();
             // A cursor on a tab header, or none, leaves the row marked selected as the one it is on.
             let at = entries
@@ -258,7 +253,6 @@ impl<M: GameModel> TuiApp<M> {
         }
         if let Some(menu) = self.menu() {
             return match menu.context.as_str() {
-                "CRAFTING" => self.crafting_key(&menu, key),
                 _ if self.footer_key(key) => {}
                 _ if !menu.screen && self.action_row_key(&menu, key) => {}
                 _ if !menu.screen && self.settings_key(&menu, key) => {}
@@ -501,7 +495,7 @@ impl<M: GameModel> TuiApp<M> {
         let Some(menu) = self.model.menu().or_else(|| self.model.target_panel()) else {
             return false;
         };
-        if menu.screen || matches!(menu.context.as_str(), "CRAFTING") {
+        if menu.screen {
             return false;
         }
         let within = |r: Rect| {
@@ -720,7 +714,6 @@ impl<M: GameModel> TuiApp<M> {
         }
         if let Some(menu) = self.menu() {
             match menu.context.as_str() {
-                "CRAFTING" => self.draw_crafting(f, &menu),
                 _ => self.draw_menu(f, &menu),
             }
         }

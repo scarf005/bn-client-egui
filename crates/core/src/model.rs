@@ -249,7 +249,7 @@ pub struct MenuChoice {
     pub editor: Option<Editor>,
 }
 
-/// The text field of a menu, such as the crafting search.
+/// The text field of a menu, such as a search box.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MenuField {
     pub id: String,
@@ -317,7 +317,7 @@ impl PaneTotals {
 /// The engine's current interaction, rendered generically.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Menu {
-    /// The engine's name for the kind of menu, such as `CRAFTING`.
+    /// The engine's name for the kind of menu, such as `MAIN_MENU`.
     pub context: String,
     pub title: String,
     pub message: String,

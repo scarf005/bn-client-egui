@@ -9,8 +9,6 @@ use eframe::egui::{self, accesskit};
 
 mod character;
 mod component;
-mod construction;
-mod crafting;
 mod menu;
 mod palette;
 mod sidebar;
@@ -153,8 +151,6 @@ pub struct App<M: GameModel> {
     was_looking: bool,
     /// The client-local state of the top screen when the engine describes it by components.
     screens: component::Screens,
-    crafting: crafting::Crafting,
-    construction: construction::Construction,
     /// The sidebar as last drawn: the side it is on and its rectangle, which a docked window sits beside.
     sidebar: Option<(SidebarSide, egui::Rect)>,
     /// The engine's selected row of the open menu, to keep it in view when the wheel moves it.
@@ -202,8 +198,6 @@ impl<M: GameModel> App<M> {
             command_live: a11y::Announcer::new(" "),
             status_live: a11y::Announcer::new(", "),
             screens: Default::default(),
-            crafting: Default::default(),
-            construction: Default::default(),
             sidebar: None,
             menu_cursor: None,
             prompt_focused: None,
@@ -1266,9 +1260,9 @@ fn tab_is_engines(menu: &bn_client_core::Menu) -> bool {
 }
 
 /// Whether the keys pressed go to the engine: with no menu open, or in a menu that has no text field
-/// to type into (the crafting screen takes its own keys).
+/// to type into.
 fn menu_forwards_keys(menu: Option<&bn_client_core::Menu>) -> bool {
-    menu.is_none_or(|m| m.acknowledges() || (m.field.is_none() && m.context != "CRAFTING"))
+    menu.is_none_or(|m| m.acknowledges() || m.field.is_none())
 }
 
 impl<M: GameModel> eframe::App for App<M> {

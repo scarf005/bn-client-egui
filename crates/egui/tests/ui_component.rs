@@ -181,12 +181,31 @@ fn clicking_the_row_of_a_single_list_runs_its_activate_affordance_with_the_row()
     );
 }
 
+/// Two tabs, the second selected, over a list of one row with a favorite and a buildable column.
+fn tabs_over_rows() -> Value {
+    json!({"id": "tabs", "kind": "tabs", "affordances": ["bn:choose:tabs"],
+        "tabs": [
+            {"id": "tab:ALL", "label": "All", "selected": false, "enabled": true},
+            {"id": "tab:WALLS", "label": "Walls", "selected": true, "enabled": true},
+        ],
+        "select": "bn:choose:tabs",
+        "child": {"id": "list", "kind": "list", "affordances": ["bn:choose:list"],
+            "columns": [
+                {"key": "favorite", "label": "Favorite"},
+                {"key": "buildable", "label": "Buildable"},
+            ],
+            "rows": [{"id": "wall", "label": "Build Wooden Wall", "description": "", "denial": "",
+                "enabled": true, "selectable": true, "selected": true,
+                "columns": [
+                    {"key": "favorite", "label": "Favorite", "value": "no"},
+                    {"key": "buildable", "label": "Buildable", "value": "yes"},
+                ]}],
+            "total": 1, "selection": "single", "activate": "bn:choose:list"}})
+}
+
 #[test]
 fn tabs_select_a_tab_by_its_id_and_show_the_child() {
-    let tabs = example(
-        "construction.json",
-        "construction menu: tabs over the buildable rows",
-    );
+    let tabs = tabs_over_rows();
     let select = affordance(
         "bn:choose:tabs",
         &[],

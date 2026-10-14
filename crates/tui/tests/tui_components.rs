@@ -192,12 +192,31 @@ fn a_list_draws_headings_columns_and_the_state_of_its_pages() {
     );
 }
 
+/// Two tabs, the second selected, over a list of one row with a favorite and a buildable column.
+fn tabs_over_rows() -> Value {
+    json!({"id": "tabs", "kind": "tabs", "affordances": ["bn:choose:tabs"],
+        "tabs": [
+            {"id": "tab:ALL", "label": "All", "selected": false, "enabled": true},
+            {"id": "tab:WALLS", "label": "Walls", "selected": true, "enabled": true},
+        ],
+        "select": "bn:choose:tabs",
+        "child": {"id": "list", "kind": "list", "affordances": ["bn:choose:list"],
+            "columns": [
+                {"key": "favorite", "label": "Favorite"},
+                {"key": "buildable", "label": "Buildable"},
+            ],
+            "rows": [{"id": "wall", "label": "Build Wooden Wall", "description": "", "denial": "",
+                "enabled": true, "selectable": true, "selected": true,
+                "columns": [
+                    {"key": "favorite", "label": "Favorite", "value": "no"},
+                    {"key": "buildable", "label": "Buildable", "value": "yes"},
+                ]}],
+            "total": 1, "selection": "single", "activate": "bn:choose:list"}})
+}
+
 #[test]
 fn tabs_mark_the_selected_one_and_a_side_key_selects_the_neighbour() {
-    let tabs = example(
-        "construction.json",
-        "construction menu: tabs over the buildable rows",
-    );
+    let tabs = tabs_over_rows();
     let (mut app, h) = open(screen(tabs, json!([choose("bn:choose:tabs", "tabs")])));
     let t = render(&mut app);
     let text = lines(&t).join("\n");
