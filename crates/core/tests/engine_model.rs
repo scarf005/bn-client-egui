@@ -2599,3 +2599,15 @@ fn a_hovered_square_is_described_again_when_its_answer_is_for_an_older_revision(
     assert_eq!(describes(&h), 2, "once per revision");
     assert!(m.hover_text(Pos { x: 22, y: 12 }).is_some());
 }
+
+#[test]
+fn no_command_leaves_for_the_old_world_while_the_new_one_is_being_fetched() {
+    let (t, h) = session();
+    // The engine has not answered the new subscription yet.
+    let mut m = connected(t.on("bn.command.submit", walk_reply()));
+    h.push(fixture("resync"));
+    m.poll();
+    assert_eq!(h.sent_methods().last().unwrap(), "bn.subscribe");
+    assert!(!m.invoke_action("RIGHT"), "the mirror is the old world's");
+    assert!(submits(&h).is_empty());
+}

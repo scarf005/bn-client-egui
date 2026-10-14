@@ -826,6 +826,10 @@ impl EngineModel {
     /// The one way a command leaves the client: `interaction::submit` builds it with the expectation its
     /// operation takes, or says why there is none.
     fn send(&mut self, operation: Operation) -> Result<(), InvokeError> {
+        // Until the new snapshot lands the mirror is the old world's, whose epoch the engine refuses.
+        if self.subscribing {
+            return Err(InvokeError::Busy);
+        }
         let (Some(at), Some(b)) = (self.replica.at(), self.replica.boundary()) else {
             return Err(InvokeError::NoScreen);
         };
