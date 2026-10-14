@@ -636,3 +636,56 @@ fn a_docked_dialog_sits_beside_the_sidebars_inner_edge() {
     assert_eq!(at(&right, "Docked").0, 5, "{:#?}", lines(&right));
     assert_eq!(right.backend().buffer()[(43, 0)].symbol(), "┐");
 }
+
+/// Unread tabs over a list whose cursor row has a detail panel, and the `select` affordance that moves
+/// the engine's cursor to the row the focus moves to.
+fn recipe_screen(tabs: &str, list: &str, select: &str) -> Value {
+    let rows = ["a", "b", "c"].iter().enumerate().map(|(i, id)| {
+        json!({"id": id, "label": format!("Row {id}"), "description": "", "denial": "", "enabled": true,
+            "selectable": true, "selected": i == 0, "columns": []})
+    });
+    let root = json!({"id": tabs, "kind": "tabs", "select": "tab",
+        "tabs": [
+            {"id": "t1", "label": "Weapons", "selected": true, "enabled": true, "unread": true},
+            {"id": "t2", "label": "Tools", "selected": false, "enabled": true},
+        ],
+        "child": {"id": "body", "kind": "split", "relation": "detail", "active": list, "children": [
+            {"id": list, "kind": "list", "columns": [], "rows": rows.collect::<Vec<_>>(),
+                "total": 3, "selection": "single", "activate": "go"},
+            {"id": "detail", "kind": "panel", "title": "Detail of a", "stats": []},
+        ]}});
+    let mut pick = choose(select, list);
+    pick["role"] = json!("select");
+    let mut screen = screen(root, json!([choose("go", list), pick]));
+    screen["focus"] = json!({"component_id": list, "row_id": "a"});
+    screen
+}
+
+fn follows_the_focus_with_a_select_invoke(tabs: &str, list: &str, select: &str) {
+    let (mut app, h) = open(recipe_screen(tabs, list, select));
+    let t = render(&mut app);
+    let text = lines(&t).join("\n");
+    assert!(text.contains("Weapons •") && text.contains("Tools"), "{text}");
+    assert!(text.contains("Detail of a"), "{text}");
+    assert!(operations(&h).is_empty());
+    press(&mut app, KeyCode::Down);
+    render(&mut app);
+    assert_eq!(
+        operations(&h),
+        [json!({"kind": "invoke", "affordance_id": select, "args": {"row": "b"}})]
+    );
+}
+
+#[test]
+fn the_crafting_screen_marks_unread_tabs_and_selects_the_row_the_focus_moves_to() {
+    follows_the_focus_with_a_select_invoke("crafting:tabs", "crafting:recipes", "craft:select");
+}
+
+#[test]
+fn the_construction_screen_marks_unread_tabs_and_selects_the_row_the_focus_moves_to() {
+    follows_the_focus_with_a_select_invoke(
+        "construction:tabs",
+        "construction:groups",
+        "construct:select",
+    );
+}

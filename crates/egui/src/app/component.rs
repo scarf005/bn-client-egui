@@ -202,9 +202,17 @@ pub(super) fn tagged(color: Option<&str>, text: &str) -> String {
 }
 
 impl<M: GameModel> App<M> {
+    /// Takes the stack the engine published, and moves the engine's cursor where the player's focus went.
+    fn sync_screens(&mut self) {
+        self.screens.interaction.sync(self.model.screens());
+        if let Some((id, args)) = self.screens.interaction.take_select() {
+            let _ = self.model.invoke_affordance(&id, args);
+        }
+    }
+
     /// The screen on top drawn from its components when the engine describes it so, else the 0.1 menu.
     pub(super) fn menu_or_screen(&mut self, ctx: &egui::Context) {
-        self.screens.interaction.sync(self.model.screens());
+        self.sync_screens();
         let Some(top) = sliced(self.model.screens()) else {
             return self.menu(ctx);
         };
@@ -220,7 +228,7 @@ impl<M: GameModel> App<M> {
     /// The keys pressed this frame go to the interaction core, which decides what each one does.
     pub(super) fn component_keys(&mut self, ctx: &egui::Context) {
         self.keys_consumed = false;
-        self.screens.interaction.sync(self.model.screens());
+        self.sync_screens();
         let page = self.page_rows(ctx);
         let keys = ctx.input(|i| {
             i.events
@@ -386,7 +394,7 @@ impl<M: GameModel> App<M> {
             return;
         }
         ui.horizontal_wrapped(|ui| {
-            for a in affordances {
+            for a in affordances.iter().filter(|a| a.role != Some(AffordanceRole::Select)) {
                 let availability = interaction::row_availability(a, row);
                 let (enabled, denial) =
                     (availability.enabled, availability.denial.map(|d| d.shown()));
@@ -438,7 +446,8 @@ impl<M: GameModel> App<M> {
                 ui.horizontal_wrapped(|ui| {
                     for tab in &tabs.tabs {
                         let on = tab.enabled && select.is_some_and(|a| a.enabled);
-                        let label = self.line(ui, &tab.label.shown());
+                        let marked = format!("{}{}", tab.label.shown(), if tab.unread { " •" } else { "" });
+                        let label = self.line(ui, &marked);
                         let button = self.control(ui, label, &tab.id, on, tab.selected);
                         a11y::tab(ui.ctx(), button.id, tab.selected);
                         if let (true, Some(a)) = (button.clicked(), select) {

@@ -187,8 +187,11 @@ impl View {
     }
 
     /// Follows the stack the engine published.
-    fn sync<M: GameModel>(&mut self, model: &M) {
+    fn sync<M: GameModel>(&mut self, model: &mut M) {
         self.ui.sync(model.screens());
+        if let Some((id, args)) = self.ui.take_select() {
+            let _ = model.invoke_affordance(&id, args);
+        }
         let top = described(model.screens());
         if self.typing.as_ref().map(|t| &t.screen) != top.map(|s| &s.screen_id) {
             self.typing = top.and_then(Typing::of);
@@ -421,7 +424,7 @@ fn words(reason: Reason) -> String {
 fn affordance_lines(screen: &Screen, width: usize) -> Vec<Line<'static>> {
     let mut lines: Vec<Vec<Span<'static>>> = vec![vec![]];
     let mut used = 0;
-    for a in &screen.affordances {
+    for a in screen.affordances.iter().filter(|a| a.role != Some(AffordanceRole::Select)) {
         let keys = match a.keys.is_empty() {
             true => String::new(),
             false => format!(" [{}]", a.keys.join(",")),
@@ -679,7 +682,7 @@ impl<M: GameModel> Painter<'_, M> {
                 (false, false) => Style::new().fg(Color::DarkGray),
             };
             [
-                Span::styled(format!(" {} ", tab.label.shown()), style),
+                Span::styled(format!(" {}{} ", tab.label.shown(), if tab.unread { " •" } else { "" }), style),
                 Span::raw(" "),
             ]
         });

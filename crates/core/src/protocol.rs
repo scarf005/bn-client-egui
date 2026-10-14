@@ -1860,6 +1860,9 @@ pub struct Tab {
     pub label: Text,
     pub selected: bool,
     pub enabled: bool,
+    /// Something in the tab is new to the player.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub unread: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -2111,6 +2114,8 @@ pub enum AffordanceRole {
     Cancel,
     /// Runs on a key no affordance binds.
     AnyKey,
+    /// Moves the screen's cursor to the row it is given, which the client invokes when its focus moves.
+    Select,
 }
 
 /// Which expectation an invoke of the affordance carries; the engine assigns it.

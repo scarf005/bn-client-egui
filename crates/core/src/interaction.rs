@@ -467,14 +467,56 @@ pub struct Interaction {
     scroll: HashMap<String, usize>,
     picks: HashMap<String, Vec<RowPick>>,
     ask: Option<Ask>,
+    /// The row the engine's cursor is known to be on, by list: the focus when the engine put it there or a
+    /// `select` invoke moved it.
+    followed: Option<(String, String)>,
+    /// The `select` invoke that the focus moving calls for, until the host takes it.
+    select: Option<(String, InvokeArgs)>,
 }
 
 impl Interaction {
     /// Takes the stack the engine published. Another top screen drops everything local; the same one keeps
-    /// it, except that a moved engine cursor takes the focus, and a draft whose affordance went ends.
+    /// it, except that a moved engine cursor takes the focus, and a draft whose affordance went ends. A focus
+    /// that moved to a row of a list that a `select`-role affordance names is left for `take_select`.
     pub fn sync(&mut self, stack: &[Screen]) {
+        self.track(stack);
+        self.select = stack.last().and_then(|top| self.select_for(top));
+    }
+
+    /// The invoke that moves the engine's cursor to the focused row, once, when the focus moved in a list
+    /// that a `select`-role affordance of the screen names.
+    pub fn take_select(&mut self) -> Option<(String, InvokeArgs)> {
+        self.select.take()
+    }
+
+    fn select_for(&mut self, top: &Screen) -> Option<(String, InvokeArgs)> {
+        let at = (self.focus.component_id.clone()?, self.focus.row_id.clone()?);
+        if self.followed.as_ref() == Some(&at) {
+            return None;
+        }
+        let select = top.affordances.iter().find(|a| {
+            a.enabled
+                && a.role == Some(AffordanceRole::Select)
+                && a.args
+                    .as_ref()
+                    .and_then(|shape| shape.row.as_ref())
+                    .is_some_and(|row| row.component_id == at.0)
+        })?;
+        let call = (
+            select.id.clone(),
+            InvokeArgs {
+                row: Some(at.1.clone()),
+                ..InvokeArgs::default()
+            },
+        );
+        self.followed = Some(at);
+        Some(call)
+    }
+
+    fn track(&mut self, stack: &[Screen]) {
         let top = stack.last();
         let native = top.and_then(|s| s.focus.clone()).unwrap_or_default();
+        let known = |focus: &ScreenFocus| Some((focus.component_id.clone()?, focus.row_id.clone()?));
         if top.map(|s| s.screen_id.as_str()) != self.screen_id.as_deref() {
             let focus = match native == ScreenFocus::default() {
                 true => input::selected_focus(top),
@@ -482,6 +524,7 @@ impl Interaction {
             };
             *self = Self {
                 screen_id: top.map(|s| s.screen_id.clone()),
+                followed: known(&focus),
                 focus,
                 native,
                 ..Self::default()
@@ -489,6 +532,7 @@ impl Interaction {
             return;
         }
         if native != self.native {
+            self.followed = known(&native);
             self.focus = native.clone();
             self.native = native;
         }

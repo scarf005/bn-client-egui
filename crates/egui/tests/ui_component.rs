@@ -715,3 +715,62 @@ fn return_on_the_focused_grid_cell_runs_the_affordance_the_cell_names() {
         [boundary_invoke("go", json!({"row": "cell:0"}))]
     );
 }
+
+/// A crafting or construction screen: unread tabs over a list whose cursor row has `detail`, and the
+/// `select` affordance that moves the engine's cursor to the row the focus moves to.
+fn recipe_screen(tabs: &str, list: &str, select: &str) -> Value {
+    let rows = ["a", "b", "c"].iter().enumerate().map(|(i, id)| {
+        json!({"id": id, "label": format!("Row {id}"), "description": "", "denial": "", "enabled": true,
+            "selectable": true, "selected": i == 0, "columns": []})
+    });
+    let root = json!({"id": tabs, "kind": "tabs", "select": "tab",
+        "tabs": [
+            {"id": "t1", "label": "Weapons", "selected": true, "enabled": true, "unread": true},
+            {"id": "t2", "label": "Tools", "selected": false, "enabled": true},
+        ],
+        "child": {"id": "body", "kind": "split", "relation": "detail", "active": list, "children": [
+            {"id": list, "kind": "list", "columns": [], "rows": rows.collect::<Vec<_>>(),
+                "total": 3, "selection": "single", "activate": "go"},
+            {"id": "detail", "kind": "panel", "title": "Detail of a", "stats": []},
+        ]}});
+    let row = json!({"row": {"component_id": list}});
+    let mut go = affordance("go", &["RETURN"], row.clone());
+    go["label"] = json!("Go");
+    let mut pick = affordance(select, &[], row);
+    pick["role"] = json!("select");
+    dialog(root, vec![go, pick])
+}
+
+fn follows_the_focus_with_a_select_invoke(tabs: &str, list: &str, select: &str) {
+    let mut screen = recipe_screen(tabs, list, select);
+    screen["focus"] = json!({"component_id": list, "row_id": "a"});
+    let (mut h, script) = harness(screen);
+    h.get_by_label("Weapons •");
+    h.get_by_label("Tools");
+    h.get_by_label("Detail of a");
+    assert!(
+        h.query_by_label(select).is_none(),
+        "a select affordance is not a button"
+    );
+    assert!(submits(&script).is_empty());
+    h.key_press(egui::Key::ArrowDown);
+    h.run_steps(3);
+    assert_eq!(
+        submits(&script),
+        [boundary_invoke(select, json!({"row": "b"}))]
+    );
+}
+
+#[test]
+fn the_crafting_screen_marks_unread_tabs_and_selects_the_row_the_focus_moves_to() {
+    follows_the_focus_with_a_select_invoke("crafting:tabs", "crafting:recipes", "craft:select");
+}
+
+#[test]
+fn the_construction_screen_marks_unread_tabs_and_selects_the_row_the_focus_moves_to() {
+    follows_the_focus_with_a_select_invoke(
+        "construction:tabs",
+        "construction:groups",
+        "construct:select",
+    );
+}
