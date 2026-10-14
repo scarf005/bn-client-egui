@@ -164,20 +164,6 @@ fn live_region_announces_only_the_newest_message() {
 }
 
 #[test]
-fn keyboard_moves_cursor_and_enter_travels() {
-    let mut h = harness();
-    h.get_by_label("Map").focus();
-    h.run_steps(2);
-    for _ in 0..2 {
-        h.key_press(egui::Key::ArrowRight);
-        h.run_steps(2);
-    }
-    h.key_press(egui::Key::Enter);
-    h.run_steps(30);
-    assert_eq!(h.state().model.player(), Pos { x: 7, y: 5 });
-}
-
-#[test]
 fn no_interactive_node_lacks_a_label() {
     use egui::accesskit::Role;
     let mut h = harness();
@@ -224,31 +210,10 @@ fn hovering_a_cell_shows_tooltip_with_its_description() {
 }
 
 #[test]
-fn stationary_pointer_does_not_override_keyboard_cursor() {
-    let mut h = harness();
-    h.hover_at(cell_center(&h, Pos { x: 10, y: 10 }));
-    h.run_steps(3);
-    h.get_by_label("Map").focus();
-    h.run_steps(2);
-    for _ in 0..2 {
-        h.key_press(egui::Key::ArrowRight);
-        h.run_steps(2);
-    }
-    h.get_by_label_contains("Cursor (12, 10)");
-    h.key_press(egui::Key::Enter);
-    h.run_steps(60);
-    assert_eq!(h.state().model.player(), Pos { x: 12, y: 10 });
-}
-
-#[test]
 fn accessibility_click_on_map_travels_to_cursor() {
     let mut h = harness();
-    h.get_by_label("Map").focus();
-    h.run_steps(2);
-    for _ in 0..2 {
-        h.key_press(egui::Key::ArrowDown);
-        h.run_steps(2);
-    }
+    h.hover_at(cell_center(&h, Pos { x: 5, y: 7 }));
+    h.run_steps(3);
     h.get_by_label("Map").click_accesskit();
     h.run_steps(30);
     assert_eq!(h.state().model.player(), Pos { x: 5, y: 7 });
@@ -258,12 +223,8 @@ fn accessibility_click_on_map_travels_to_cursor() {
 fn map_node_has_role_and_describes_cursor_and_status_is_live() {
     use egui::accesskit::{Live, Role};
     let mut h = harness();
-    h.get_by_label("Map").focus();
-    h.run_steps(2);
-    for _ in 0..2 {
-        h.key_press(egui::Key::ArrowRight);
-        h.run_steps(2);
-    }
+    h.hover_at(cell_center(&h, Pos { x: 7, y: 5 }));
+    h.run_steps(3);
     let map = h.get_by_label("Map");
     assert_ne!(map.accesskit_node().role(), Role::Unknown);
     let description = map.accesskit_node().description().unwrap_or_default();
@@ -281,14 +242,13 @@ fn empty_map_does_not_panic() {
 }
 
 #[test]
-fn shrinking_map_clamps_stale_cursor() {
+fn shrinking_map_takes_the_pointer_off_it_and_the_cursor_back_to_the_player() {
     let mut h = harness();
     h.hover_at(cell_center(&h, Pos { x: 30, y: 20 }));
     h.run_steps(3);
-    h.remove_cursor();
     h.state_mut().model.size = Pos { x: 10, y: 10 };
     h.run_steps(3);
-    h.get_by_label_contains("Cursor (9, 9)");
+    h.get_by_label_contains("Cursor (5, 5)");
 }
 
 #[test]

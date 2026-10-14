@@ -135,8 +135,6 @@ pub struct App<M: GameModel> {
     palette_ids: Vec<egui::Id>,
     /// Where the engine's cursor was in the open menu, so keyboard focus can follow it.
     menu_focus: Option<String>,
-    /// The cursor has been put on the player since the map first appeared.
-    cursor_placed: bool,
     /// The engine's text prompt as last seen (field id, value), and the text typed into it.
     prompt: ((String, String), String),
     /// The newest prompt text not yet sent, and whether Enter asked to submit it.
@@ -147,8 +145,6 @@ pub struct App<M: GameModel> {
     prompt_composing: bool,
     /// Shots, explosions and floating text now playing on the map.
     effects: Effects,
-    /// The engine's look cursor was up at the last frame.
-    was_looking: bool,
     /// The client-local state of the top screen when the engine describes it by components.
     screens: component::Screens,
     /// The sidebar as last drawn: the side it is on and its rectangle, which a docked window sits beside.
@@ -184,13 +180,11 @@ impl<M: GameModel> App<M> {
             menu_title: None,
             focus_menu: false,
             refocus_map: false,
-            cursor_placed: false,
             prompt: Default::default(),
             prompt_send: None,
             prompt_sent: Vec::new(),
             prompt_composing: false,
             effects: Effects::default(),
-            was_looking: false,
             menu_ids: Vec::new(),
             action_ids: Vec::new(),
             palette_ids: Vec::new(),
@@ -369,7 +363,7 @@ impl<M: GameModel> App<M> {
         }
         if interaction::titled(self.model.screens()) {
             // The game is over: the next one starts with the cursor on its player and and no travel marker.
-            (self.cursor_placed, self.marker) = (false, None);
+            self.marker = None;
         }
         // Esc interrupts a running activity; with none running it goes to the game like any key
         // (leaves look mode, acknowledges a popup, else opens the main menu).
@@ -947,13 +941,10 @@ impl<M: GameModel> App<M> {
         let looking = self.model.focus();
         if let Some(focus) = looking {
             self.cursor = to_abs(focus);
-        } else if std::mem::take(&mut self.was_looking) {
-            // Native shows no cursor outside look mode: it goes back to the player.
-            self.cursor = to_abs(self.model.player());
         }
-        self.was_looking = looking.is_some();
         let player = self.model.player();
-        if !std::mem::replace(&mut self.cursor_placed, true) {
+        // Native shows no cursor outside look mode and the mouse: without a pointer it is the player's square.
+        if looking.is_none() && self.last_hover.is_none() {
             self.cursor = to_abs(player);
         }
         let mut cursor = at_view(self.cursor);
@@ -1079,21 +1070,8 @@ impl<M: GameModel> App<M> {
                     },
                 )
             });
-            let (dx, dy) = ui.input(|i| {
-                let k = |key| i.key_pressed(key) as i32;
-                (
-                    k(egui::Key::ArrowRight) - k(egui::Key::ArrowLeft),
-                    k(egui::Key::ArrowDown) - k(egui::Key::ArrowUp),
-                )
-            });
-            // While the engine owns the cursor its own arrow handling moves it.
-            if self.model.focus().is_none() {
-                cursor = Pos {
-                    x: (cursor.x + dx).clamp(0, size.x - 1),
-                    y: (cursor.y + dy).clamp(0, size.y - 1),
-                };
-            }
-            // A keyboard cursor gets the same native description a hovering pointer does.
+            // A keyboard cursor gets the same native description a hovering pointer does. The arrow keys
+            // only walk: outside look and aim mode the cursor follows the mouse, else it is the player's square.
             if self.model.focus().is_none() {
                 self.model.hover(cursor);
             }
@@ -1220,12 +1198,14 @@ impl<M: GameModel> App<M> {
                 egui::Color32::YELLOW,
             );
         }
-        painter.rect_stroke(
-            rect(cursor),
-            0.0,
-            egui::Stroke::new(1.0, egui::Color32::WHITE),
-            egui::StrokeKind::Inside,
-        );
+        if looking.is_some() || hover.is_some() {
+            painter.rect_stroke(
+                rect(cursor),
+                0.0,
+                egui::Stroke::new(1.0, egui::Color32::WHITE),
+                egui::StrokeKind::Inside,
+            );
+        }
         let ascii = !self.display.tiles();
         self.effects
             .paint(&painter, now, cell_px, rect, &mut self.display, ascii);

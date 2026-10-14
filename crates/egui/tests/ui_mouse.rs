@@ -148,6 +148,47 @@ fn left_click_travels_to_the_square_even_next_to_the_avatar() {
     );
 }
 
+fn described(script: &ScriptHandle) -> usize {
+    (script.sent().iter())
+        .filter(|m| m["method"] == "bn.world.describe")
+        .count()
+}
+
+#[test]
+fn arrow_keys_on_the_map_only_walk_and_neither_move_the_cursor_nor_describe_a_square() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    h.get_by_label("Map").focus();
+    h.run_steps(4);
+    let (asked, before) = (described(&script), h.get_by_label("Map").rect());
+    for _ in 0..3 {
+        h.key_press(egui::Key::ArrowRight);
+        h.run_steps(2);
+    }
+    assert!(!operations(&script).is_empty(), "the arrows walk");
+    assert_eq!(described(&script), asked, "an arrow sends no hover");
+    h.get_by_label_contains("Cursor (3, 4)");
+    assert_eq!(h.get_by_label("Map").rect(), before);
+}
+
+#[test]
+fn arrow_keys_leave_a_hovered_square_as_the_cursor() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    let at = square(&mut h, (22.5, 12.5));
+    h.hover_at(at);
+    h.run_steps(4);
+    let asked = described(&script);
+    h.get_by_label("Map").focus();
+    h.run_steps(2);
+    for _ in 0..2 {
+        h.key_press(egui::Key::ArrowDown);
+        h.run_steps(2);
+    }
+    assert_eq!(described(&script), asked, "an arrow sends no hover");
+    h.get_by_label_contains("Cursor (5, 4)");
+}
+
 #[test]
 fn right_click_is_the_engines_context_click_and_opens_no_menu_of_its_own() {
     let (mut h, script) = harness();
