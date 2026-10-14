@@ -254,6 +254,17 @@ fn panel_shows_title_subtitle_and_stats_with_their_maximum_and_unit() {
     h.get_by_label("Free capacity: 43.83 kg, 14.97 L");
 }
 
+#[test]
+fn a_panel_with_no_title_draws_no_heading_line() {
+    let subtitle_top = |title: &str| {
+        let panel = json!({"id": "panel:one", "kind": "panel", "title": title,
+            "subtitle": "Player items"});
+        let (h, _) = harness(dialog(panel, vec![]));
+        h.get_by_label("Player items").rect().min.y
+    };
+    assert!(subtitle_top("") < subtitle_top("You"));
+}
+
 /// The pickup list as the engine publishes it: a panel with the carry stats over a single list whose
 /// rows carry the engine's marks and counts, with a toggle and a count affordance.
 fn pickup_screen() -> Value {

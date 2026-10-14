@@ -503,7 +503,11 @@ impl<M: GameModel> App<M> {
             }
             Component::Panel(panel) => {
                 egui::Frame::group(ui.style()).show(ui, |ui| {
-                    ui.label(egui::RichText::new(markup::plain(&panel.title.shown())).strong());
+                    // A panel the screen's own title already names has none.
+                    let title = markup::plain(&panel.title.shown());
+                    if !title.is_empty() {
+                        ui.label(egui::RichText::new(title).strong());
+                    }
                     if let Some(subtitle) = &panel.subtitle {
                         ui.label(self.line(ui, &subtitle.shown()));
                     }
