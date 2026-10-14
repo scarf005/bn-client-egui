@@ -329,7 +329,7 @@ fn typing_a_filter_keeps_the_edit_when_the_engine_answers_with_fewer_rows() {
     interaction["title"] = "Options".into();
     interaction["choices"] = json!([row("action:UP", "Move North", None)]);
     interaction["field"] = field;
-    menu["params"]["events"][0]["sequence"] = "60".into();
+    menu["params"]["events"][0]["sequence"] = "41".into();
     menu["params"]["events"][0]["revision"] = "40".into();
     h.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{"epoch":"e7f3","command_id":"c:5","stage":"completed"}}));
     h.push(menu);
