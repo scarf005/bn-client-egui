@@ -1131,6 +1131,11 @@ impl HelloParams {
         Self { tiles, ..self }
     }
 
+    /// Asks for the engine's text in a BN language id (`lang/languages.json`).
+    pub fn with_locale(self, locale: Option<String>) -> Self {
+        Self { locale, ..self }
+    }
+
     /// Asks for credits and a frame rate cap, kept within the 1 to 240 the engine accepts.
     pub fn with_delivery(self, credits: u16, max_hz: Option<u16>) -> Self {
         Self {

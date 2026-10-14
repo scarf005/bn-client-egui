@@ -4,7 +4,7 @@
 //! parent directory, the path saved in the client's config file, then `PATH`.
 
 use crate::colors::ColorMap;
-use crate::engine_model::EngineModel;
+use crate::engine_model::{ConnectOptions, EngineModel};
 use crate::transport::{Profile, StdioTransport, Transport, game_root};
 use clap::Args;
 use serde_json::{Value, json};
@@ -36,6 +36,9 @@ pub struct LaunchArgs {
     /// Run the in-memory fake model instead of an engine
     #[arg(long, conflicts_with = "engine")]
     pub fake: bool,
+    /// BN language id the engine words its text in, e.g. ko_KR (default: the engine's own)
+    #[arg(long, value_name = "ID", env = "BN_LOCALE")]
+    pub locale: Option<String>,
     #[command(flatten)]
     pub profile: Profile,
 }
@@ -171,12 +174,11 @@ pub struct Opened {
 /// Starts the engine and loads colours and keys from its game root. Writes no file: remembering the engine
 /// path is the user's act (`save_engine`).
 ///
-/// `tiles` says the client draws tiles: the engine then sends tile ids where it has them.
+/// `options.tiles` says the client draws tiles: the engine then sends tile ids where it has them.
 pub fn open_engine(
     engine: &Path,
     profile: &Profile,
-    tiles: bool,
-    max_hz: u16,
+    options: ConnectOptions,
 ) -> Result<Opened, String> {
     let transport = StdioTransport::spawn_with(engine, profile)
         .map_err(|e| format!("cannot start engine {}: {e}", engine.display()))?;
@@ -188,7 +190,7 @@ pub fn open_engine(
     let respawn = Box::new(move || {
         StdioTransport::spawn_with(&spawned, &profile).map(|t| Box::new(t) as Box<dyn Transport>)
     });
-    let model = EngineModel::connect_with(Box::new(transport), tiles, max_hz)
+    let model = EngineModel::open(Box::new(transport), options)
         .with_colors(colors)
         .with_respawn(respawn)
         .with_engine(engine.to_path_buf());

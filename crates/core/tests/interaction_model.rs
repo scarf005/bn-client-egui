@@ -73,6 +73,22 @@ fn the_hello_names_0_2_the_schema_and_what_the_client_can_do_the_schema_and_its_
 }
 
 #[test]
+fn the_hello_names_the_language_the_client_asked_for_and_none_otherwise() {
+    let (_, unasked) = model(1, |t| t);
+    assert!(unasked.sent()[0]["params"].get("locale").is_none());
+    let (t, h) = ScriptedTransport::new();
+    let t = t
+        .on("bn.hello", vec![fixture("hello_result")])
+        .on("bn.subscribe", subscribe_with_stack(1));
+    let options = ConnectOptions {
+        locale: Some("ko_KR".into()),
+        ..ConnectOptions::default()
+    };
+    EngineModel::open(Box::new(t), options).poll();
+    assert_eq!(h.sent()[0]["params"]["locale"], json!("ko_KR"));
+}
+
+#[test]
 fn the_stack_of_the_boundary_is_the_models_screens() {
     let (m, _) = model(1, |t| t);
     let [screen] = m.screens() else {

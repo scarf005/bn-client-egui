@@ -1,5 +1,5 @@
 use bn_client_core::launch::{LaunchArgs, Search, open_engine, resolve};
-use bn_client_core::{FakeModel, GameModel};
+use bn_client_core::{ConnectOptions, FakeModel, GameModel};
 use bn_client_tui::TuiApp;
 use clap::Parser;
 use crossterm::event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyEventKind};
@@ -80,7 +80,12 @@ fn main() -> std::io::Result<()> {
         eprintln!("{e}");
         std::process::exit(1);
     });
-    let opened = open_engine(&engine, &cli.launch.profile, false, MAX_HZ).unwrap_or_else(|e| {
+    let options = ConnectOptions {
+        max_hz: MAX_HZ,
+        locale: cli.launch.locale.clone(),
+        ..ConnectOptions::default()
+    };
+    let opened = open_engine(&engine, &cli.launch.profile, options).unwrap_or_else(|e| {
         eprintln!("{e}");
         std::process::exit(1);
     });

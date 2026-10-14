@@ -30,12 +30,14 @@ const MAX_SOUNDS: usize = 50;
 const RESIZE_DEBOUNCE: std::time::Duration = std::time::Duration::from_millis(250);
 
 /// How a session starts.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct ConnectOptions {
     /// The client draws tiles, so the engine sends tile ids too.
     pub tiles: bool,
     /// The most frames per second the client can show while an activity runs.
     pub max_hz: u16,
+    /// The BN language id the client wants the engine's text in; the engine's own when absent.
+    pub locale: Option<String>,
 }
 
 impl Default for ConnectOptions {
@@ -43,6 +45,7 @@ impl Default for ConnectOptions {
         Self {
             tiles: false,
             max_hz: DEFAULT_MAX_HZ,
+            locale: None,
         }
     }
 }
@@ -93,6 +96,8 @@ pub struct EngineModel {
     tiles_told: bool,
     /// The most frames per second the client shows, asked of the engine in every hello.
     max_hz: u16,
+    /// The language the client asked the engine to word its text in, asked in every hello.
+    locale: Option<String>,
     /// The ids of the tints the client's tileset has, and what the engine was last told.
     tint_ids: Vec<String>,
     tints_told: Vec<String>,
@@ -326,14 +331,26 @@ impl EngineModel {
 
     /// Like `connect`, with the most frames per second the client can show while an activity runs.
     pub fn connect_with(transport: Box<dyn Transport>, tiles: bool, max_hz: u16) -> Self {
-        Self::open(transport, ConnectOptions { tiles, max_hz })
+        Self::open(
+            transport,
+            ConnectOptions {
+                tiles,
+                max_hz,
+                locale: None,
+            },
+        )
     }
 
     /// Starts the session as `options` say.
     pub fn open(transport: Box<dyn Transport>, options: ConnectOptions) -> Self {
-        let ConnectOptions { tiles, max_hz } = options;
+        let ConnectOptions {
+            tiles,
+            max_hz,
+            locale,
+        } = options;
         let mut m = Self {
             max_hz,
+            locale,
             tiles,
             tiles_told: tiles,
             tint_ids: vec![],
@@ -404,7 +421,9 @@ impl EngineModel {
 
     /// A hello with the delivery this client needs.
     fn with_session(&self, params: protocol::HelloParams) -> protocol::HelloParams {
-        params.with_delivery(crate::transport::CREDIT_WINDOW, Some(self.max_hz))
+        params
+            .with_locale(self.locale.clone())
+            .with_delivery(crate::transport::CREDIT_WINDOW, Some(self.max_hz))
     }
 
     /// Times the resize debounce with `clock`, so tests can advance it instead of sleeping.
@@ -1678,6 +1697,7 @@ impl GameModel for EngineModel {
                 let options = ConnectOptions {
                     tiles: self.tiles,
                     max_hz: self.max_hz,
+                    locale: self.locale.clone(),
                 };
                 let mut fresh = EngineModel::open(transport, options)
                     .with_clock(self.clock.clone())
