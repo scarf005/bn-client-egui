@@ -902,11 +902,6 @@ pub const OVERRIDES: &[Override] = &[
         slice: "S10",
     },
     Override {
-        module: "crates/egui/src/app/aim.rs",
-        screen: "ADVANCED_INVENTORY",
-        slice: "S2",
-    },
-    Override {
         module: "crates/egui/src/app/character.rs",
         screen: "PLAYER_INFO, BIONICS, MUTATIONS",
         slice: "S9",
@@ -960,11 +955,6 @@ pub const OVERRIDES: &[Override] = &[
         module: "crates/egui/src/editor.rs",
         screen: "option editors and the key prompt",
         slice: "S0",
-    },
-    Override {
-        module: "crates/tui/src/aim.rs",
-        screen: "ADVANCED_INVENTORY",
-        slice: "S2",
     },
     Override {
         module: "crates/tui/src/canvas.rs",

@@ -1,11 +1,12 @@
 //! Drives the terminal client's key handling against a real engine:
 //! `BN_ENGINE=... cargo test -p bn-client-tui --test live_tui -- --ignored --nocapture`
 mod common;
+use bn_client_core::protocol::{Component, InvokeArgs, RowPick};
 use bn_client_core::transport::StdioTransport;
 use bn_client_core::watchdog::Watchdog;
 use bn_client_core::{EngineModel, GameModel};
 use bn_client_tui::TuiApp;
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use std::time::Duration;
 
 type App = TuiApp<EngineModel>;
@@ -264,76 +265,94 @@ fn settle(app: &mut App, what: &str, done: impl Fn(&App) -> bool) {
     }
 }
 
-/// The advanced inventory pane (0 left, 1 right) whose rows are listed, by the engine's pane ids.
-fn pane_rows(app: &App, index: usize) -> Vec<String> {
-    let Some(menu) = app.model.menu() else {
+/// The rows of the advanced inventory list `id` on the top screen, by the engine's row ids.
+fn pane_rows(app: &App, id: &str) -> Vec<String> {
+    let Some(Component::List(list)) = app
+        .model
+        .screens()
+        .last()
+        .and_then(|s| s.root.as_ref()?.find(id))
+    else {
         return vec![];
     };
-    let Some(pane) = menu.panes.get(index) else {
-        return vec![];
-    };
-    menu.choices
-        .iter()
-        .filter(|c| c.group.as_deref() == Some(pane.id.as_str()))
-        .map(|c| c.label.clone())
-        .collect()
+    list.rows.iter().map(|r| r.id.clone()).collect()
 }
 
 /// The tutorial gives its character no shirt, so the item moved is the lighter it starts with: from the
-/// Inventory pane to the pane of the square under the avatar, chosen with a mouse click on its row and moved by the native action.
+/// Inventory pane to the pane of the square under the avatar, by the rows the move affordance names.
 #[test]
 #[ignore = "requires BN_ENGINE pointing at an engine binary"]
-fn live_tui_advanced_inventory_moves_an_item_between_panes_with_a_click_and_the_native_move() {
+fn live_tui_advanced_inventory_moves_an_item_between_panes_with_the_move_affordance() {
     let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
     let transport =
         StdioTransport::spawn_with(engine.as_ref(), &common::cpu_profile()).expect("engine starts");
     let mut app = TuiApp::new(EngineModel::new(Box::new(transport)));
     start_tutorial(&mut app);
-    let act = |app: &mut App, id: &str| {
+    let act = |app: &mut App, id: &str, args: InvokeArgs| {
         wait(app, "idle", |a| !a.model.busy());
-        assert!(app.model.invoke_action(id), "{id} is offered");
+        app.model.invoke_affordance(id, args).expect(id);
         wait(app, "idle", |a| !a.model.busy());
     };
-    act(&mut app, "advinv");
+    wait(&mut app, "idle", |a| !a.model.busy());
+    assert!(app.model.invoke_action("advinv"));
     wait(&mut app, "the advanced inventory", |a| {
         a.model
-            .menu()
-            .is_some_and(|m| m.context == "ADVANCED_INVENTORY")
+            .screens()
+            .last()
+            .is_some_and(|s| s.context.as_deref() == Some("ADVANCED_INVENTORY"))
     });
-    act(&mut app, "ITEMS_INVENTORY");
-    // The right pane points at the square under the avatar: items cannot be put on the one below.
-    act(&mut app, "RIGHT");
-    act(&mut app, "ITEMS_CE");
+    // The left pane shows the inventory and the right one the square under the avatar: items cannot be
+    // put on the one below.
+    let area = |area: &str, pane: &str| InvokeArgs {
+        row: Some(area.into()),
+        pane: Some(pane.into()),
+        ..InvokeArgs::default()
+    };
+    act(
+        &mut app,
+        "aim:set_area",
+        area("area:INVENTORY", "aim:pane:left"),
+    );
+    act(
+        &mut app,
+        "aim:set_area",
+        area("area:CENTER", "aim:pane:right"),
+    );
     settle(&mut app, "the lighter listed", |a| {
-        pane_rows(a, 0).iter().any(|r| r.contains("lighter"))
+        pane_rows(a, "aim:pane:left:items")
+            .iter()
+            .any(|r| r.contains("lighter"))
     });
-    assert!(pane_rows(&app, 1).iter().all(|r| !r.contains("lighter")));
-
-    // Click the lighter's row where the screen draws it.
-    let mut screen = ratatui::Terminal::new(ratatui::backend::TestBackend::new(140, 40)).unwrap();
-    screen.draw(|f| app.draw(f)).unwrap();
-    let buf = screen.backend().buffer();
-    let (x, y) = (0..buf.area.height)
-        .find_map(|y| {
-            let row = (0..buf.area.width)
-                .map(|x| buf[(x, y)].symbol())
-                .collect::<String>();
-            row.find("lighter").map(|x| (x as u16, y))
-        })
-        .expect("the lighter's row is drawn");
-    app.handle_mouse(MouseEvent {
-        kind: MouseEventKind::Down(MouseButton::Left),
-        column: x,
-        row: y,
-        modifiers: KeyModifiers::NONE,
-    });
-    wait(&mut app, "the click's choose", |a| {
-        a.tick();
-        !a.model.busy()
-    });
-    act(&mut app, "MOVE_ITEM_STACK");
+    let lighter = pane_rows(&app, "aim:pane:left:items")
+        .into_iter()
+        .find(|r| r.contains("lighter"))
+        .unwrap();
+    assert!(
+        pane_rows(&app, "aim:pane:right:items")
+            .iter()
+            .all(|r| !r.contains("lighter"))
+    );
+    let rows = vec![RowPick {
+        id: lighter,
+        count: Some(1),
+    }];
+    act(
+        &mut app,
+        "aim:move",
+        InvokeArgs {
+            rows: Some(rows),
+            pane: Some("aim:pane:right".into()),
+            ..InvokeArgs::default()
+        },
+    );
     settle(&mut app, "the lighter on the floor", |a| {
-        pane_rows(a, 1).iter().any(|r| r.contains("lighter"))
+        pane_rows(a, "aim:pane:right:items")
+            .iter()
+            .any(|r| r.contains("lighter"))
     });
-    assert!(pane_rows(&app, 0).iter().all(|r| !r.contains("lighter")));
+    assert!(
+        pane_rows(&app, "aim:pane:left:items")
+            .iter()
+            .all(|r| !r.contains("lighter"))
+    );
 }

@@ -1,6 +1,5 @@
 //! Terminal client over the same `GameModel` as the egui client.
 
-mod aim;
 mod canvas;
 mod component;
 mod crafting;
@@ -53,8 +52,6 @@ pub struct TuiApp<M: GameModel> {
     hovered: Option<Pos>,
     /// A settings value being typed.
     edit: Option<settings::Edit>,
-    /// The advanced inventory's drawn rows and queued inputs.
-    aim: aim::Aim,
     pickup: pickup::Pickup,
     terminal: terminal::Terminal,
     /// Where the open menu's rows and tabs were last drawn, for mouse clicks.
@@ -168,7 +165,6 @@ impl<M: GameModel> TuiApp<M> {
             input: None,
             edit: None,
             hovered: None,
-            aim: Default::default(),
             pickup: Default::default(),
             menu_hits: Default::default(),
             action_focus: None,
@@ -226,10 +222,9 @@ impl<M: GameModel> TuiApp<M> {
         menu
     }
 
-    /// Sends the next queued input once the engine is free; call between frames.
+    /// Sends the filter a list is waiting to send; call between frames.
     pub fn tick(&mut self) {
         self.send_filter();
-        self.run_aim_steps();
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) {
@@ -271,8 +266,6 @@ impl<M: GameModel> TuiApp<M> {
         if let Some(menu) = self.menu() {
             return match menu.context.as_str() {
                 "CRAFTING" => self.crafting_key(&menu, key),
-                // Every key of the advanced inventory is the engine's, Tab included (it swaps panes).
-                "ADVANCED_INVENTORY" => self.menu_key(&menu, key),
                 "PICKUP" => self.pickup_key(&menu, key),
                 _ if (menu.terminal() || menu.description()) && self.terminal_key(key) => {}
                 _ if self.footer_key(key) => {}
@@ -454,13 +447,6 @@ impl<M: GameModel> TuiApp<M> {
         if self.model.loading().is_some() {
             return;
         }
-        if let Some(menu) = self
-            .model
-            .menu()
-            .filter(|m| m.context == "ADVANCED_INVENTORY")
-        {
-            return self.aim_mouse(&menu, ev);
-        }
         if ev.kind == MouseEventKind::Down(MouseButton::Left)
             && self.model.menu().is_some_and(|m| m.context == "PICKUP")
         {
@@ -542,7 +528,7 @@ impl<M: GameModel> TuiApp<M> {
         if menu.screen
             || menu.terminal()
             || menu.description()
-            || matches!(menu.context.as_str(), "CRAFTING" | "ADVANCED_INVENTORY")
+            || matches!(menu.context.as_str(), "CRAFTING")
         {
             return false;
         }
@@ -762,7 +748,6 @@ impl<M: GameModel> TuiApp<M> {
         if let Some(menu) = self.menu() {
             match menu.context.as_str() {
                 "CRAFTING" => self.draw_crafting(f, &menu),
-                "ADVANCED_INVENTORY" => self.draw_aim(f, &menu),
                 "PICKUP" => self.draw_pickup(f, &menu),
                 _ if menu.terminal() || menu.description() => self.draw_terminal(f, &menu),
                 _ if menu.canvas.is_some() => {
@@ -1396,6 +1381,18 @@ fn bar(tabs: &[(String, bool)]) -> Line<'static> {
             })
             .collect::<Vec<_>>(),
     )
+}
+
+/// `text` cut to `width` terminal columns.
+fn fit(text: &str, width: usize) -> String {
+    let mut out = String::new();
+    for c in text.chars() {
+        if out.width() + c.width().unwrap_or(0) > width {
+            break;
+        }
+        out.push(c);
+    }
+    out
 }
 
 /// Breaks `text` into lines of at most `width` terminal columns, at spaces where it can.

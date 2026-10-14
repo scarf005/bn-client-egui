@@ -1,5 +1,6 @@
 //! Needs a real engine build: `BN_ENGINE=/path/to/cataclysm-bn-tiles cargo test -p bn-client-core --test live_inventory -- --ignored --test-threads=1`
 mod common;
+use bn_client_core::protocol::InvokeArgs;
 use bn_client_core::transport::StdioTransport;
 use bn_client_core::watchdog::Watchdog;
 use bn_client_core::{EngineModel, GameModel};
@@ -134,24 +135,29 @@ fn live_pickup_list_has_the_carry_header_a_cursor_row_marks_and_the_confirm_acti
 
 #[test]
 #[ignore = "needs a real engine"]
-fn live_advanced_inventory_areas_carry_the_players_keys_and_the_main_menu_names_options() {
+fn live_advanced_inventory_is_a_screen_of_areas_and_two_panes_and_the_main_menu_names_options() {
     let mut model = start_tutorial();
     assert!(model.invoke_action("advinv"));
     settle(&mut model);
-    let menu = model.menu().expect("the advanced inventory");
-    assert_eq!(menu.context, "ADVANCED_INVENTORY");
-    let area = |action: &str| menu.areas.iter().find(|a| a.action_id == action);
-    let north = area("ITEMS_N").expect("the north area");
-    assert_eq!((north.label.as_str(), north.key.as_str()), ("North", "8"));
-    assert!(area("ITEMS_INVENTORY").is_some_and(|a| a.available && (a.x, a.y) == (3, 1)));
-    assert!(area("ITEMS_DRAGGED_CONTAINER").is_some_and(|a| !a.available));
-    let entry = |id: &str| model.actions().into_iter().find(|a| a.id == id);
-    assert_eq!(
-        entry("MOVE_SINGLE_ITEM").map(|a| a.name).as_deref(),
-        Some("Move a single item")
-    );
-    model.cancel_menu();
-    wait_for(&mut model, "the screen to close", |m| m.menu().is_none());
+    let screen = model
+        .screens()
+        .last()
+        .cloned()
+        .expect("the advanced inventory");
+    let root = screen.root.expect("described by components");
+    for id in ["aim:areas", "aim:pane:left:items", "aim:pane:right:items"] {
+        assert!(root.find(id).is_some(), "{id}");
+    }
+    let offered = |id: &str| screen.affordances.iter().any(|a| a.id == id);
+    assert!(offered("aim:move") && offered("aim:set_area") && offered("aim:close"));
+    model
+        .invoke_affordance("aim:close", InvokeArgs::default())
+        .expect("close is offered");
+    wait_for(&mut model, "the screen to close", |m| {
+        m.screens()
+            .last()
+            .is_some_and(|s| s.context.as_deref() != Some("ADVANCED_INVENTORY"))
+    });
     assert!(model.invoke_action("main_menu"));
     settle(&mut model);
     let menu = model.menu().expect("the in-game main menu");

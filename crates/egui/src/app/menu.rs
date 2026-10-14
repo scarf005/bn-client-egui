@@ -41,11 +41,6 @@ impl<M: GameModel> App<M> {
             self.focus_menu = entered && !focused;
             return;
         }
-        if menu.context == "ADVANCED_INVENTORY" {
-            let focused = self.aim(ctx, &menu, entered);
-            self.focus_menu = entered && !focused;
-            return;
-        }
         if menu.terminal() || menu.description() {
             let focused = self.terminal(ctx, &menu, entered);
             self.focus_menu = entered && !focused;

@@ -134,7 +134,7 @@ impl<M: GameModel> TuiApp<M> {
         let mut head_spans = Vec::new();
         let mut head_used = 0;
         for run in self.model.styled(&head_line) {
-            let text = super::aim::fit(&run.text, usize::from(width).saturating_sub(head_used));
+            let text = super::fit(&run.text, usize::from(width).saturating_sub(head_used));
             head_used += text.width();
             let style = run
                 .color
@@ -196,7 +196,7 @@ impl<M: GameModel> TuiApp<M> {
                 markup => tinted(&row.color, markup),
             };
             for run in self.model.styled(&name) {
-                let text = super::aim::fit(&run.text, name_width.saturating_sub(used));
+                let text = super::fit(&run.text, name_width.saturating_sub(used));
                 used += text.width();
                 let style = run
                     .color

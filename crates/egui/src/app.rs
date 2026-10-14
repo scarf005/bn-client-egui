@@ -7,7 +7,6 @@ use bn_client_core::protocol::SidebarSide;
 use bn_client_core::{Failure, GameModel, Loading, Overmap, Pos, keys};
 use eframe::egui::{self, accesskit};
 
-mod aim;
 mod character;
 mod component;
 mod construction;
@@ -159,7 +158,6 @@ pub struct App<M: GameModel> {
     screens: component::Screens,
     crafting: crafting::Crafting,
     construction: construction::Construction,
-    aim: aim::Aim,
     pickup: pickup::Pickup,
     /// The left edge of the sidebar as last drawn: what the pickup list at the right docks against.
     sidebar_left: Option<f32>,
@@ -211,7 +209,6 @@ impl<M: GameModel> App<M> {
             screens: Default::default(),
             crafting: Default::default(),
             construction: Default::default(),
-            aim: Default::default(),
             pickup: Default::default(),
             sidebar_left: None,
             inventory: Default::default(),
@@ -386,7 +383,6 @@ impl<M: GameModel> App<M> {
             // The game is over: the next one starts with the cursor on its player and and no travel marker.
             (self.cursor_placed, self.marker) = (false, None);
         }
-        self.run_aim_steps();
         // Esc interrupts a running activity; with none running it goes to the game like any key
         // (leaves look mode, acknowledges a popup, else opens the main menu).
         let interrupted =
@@ -397,7 +393,7 @@ impl<M: GameModel> App<M> {
             None => self.game_keys(ui.ctx(), interrupted),
         }
         let open = self.model.menu();
-        if menu_forwards_keys(open.as_ref()) && !self.aim.editing {
+        if menu_forwards_keys(open.as_ref()) {
             // Arrow keys belong to the game, whichever widget was clicked last; Tab still moves focus,
             // except on a tabbed screen where it is the engine's tab key.
             let tab = open.as_ref().is_some_and(tab_is_engines);
@@ -520,7 +516,7 @@ impl<M: GameModel> App<M> {
                     || (focused && matches!(token, "SPACE" | "RETURN"))
             }
         };
-        let forwards = menu_forwards_keys(menu.as_ref()) && !self.aim.editing;
+        let forwards = menu_forwards_keys(menu.as_ref());
         let typed = if forwards { typed } else { vec![] };
         // Esc closes a menu through its cancel button, which also covers menus the engine binds no key to.
         let esc_cancels = menu
