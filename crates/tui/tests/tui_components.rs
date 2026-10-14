@@ -433,29 +433,34 @@ fn a_text_taller_than_its_area_scrolls_and_stops_at_its_end() {
 
 #[test]
 fn a_grid_draws_its_cells_and_the_focus_moves_between_them_before_one_is_chosen() {
-    let panel = example(
-        "vehicle.json",
-        "vehicle install list with the highlighted part's requirements",
-    );
-    let mut grid = panel["child"]["children"][0].clone();
-    grid["cells"][0]["id"] = json!("cell:o");
-    grid["cells"][1]["id"] = json!("cell:h");
-    grid["cells"][1]["affordance"] = json!("pick");
-    grid["cells"][1]["label"] = json!("Hood");
+    let screen_value = example("vehicle.json", "vehicle screen");
+    let mut grid = screen_value["root"]["children"][0]["child"]["children"][0].clone();
     assert_eq!(grid["kind"], "grid");
+    let cell = |glyph: &str| {
+        grid["cells"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .position(|c| c["glyph"] == glyph)
+            .unwrap()
+    };
+    let top = cell("|");
+    grid["cells"][top]["id"] = json!("cell:h");
+    grid["cells"][top]["affordance"] = json!("pick");
+    grid["cells"][top]["label"] = json!("Hood");
     let (mut app, h) = open(screen(grid, json!([choose("pick", "vehicle:grid")])));
     let t = render(&mut app);
-    let (hx, hy) = at(&t, "H");
-    let (ox, oy) = at(&t, "o");
-    assert_eq!((hx, oy), (ox, hy + 1), "the cell at y 1 is one row down");
+    let (hx, hy) = at(&t, "|");
+    let (ox, oy) = at(&t, "#");
+    assert_eq!((hx, oy), (ox, hy + 1), "the cell at y 4 is one row down");
     assert!(
-        modifier(&t, "o").contains(Modifier::REVERSED),
+        modifier(&t, "#").contains(Modifier::REVERSED),
         "the engine's cursor"
     );
     press(&mut app, KeyCode::Up);
     press(&mut app, KeyCode::Up);
     let t = render(&mut app);
-    assert!(modifier(&t, "H").contains(Modifier::REVERSED));
+    assert!(modifier(&t, "|").contains(Modifier::REVERSED));
     assert!(lines(&t).join("\n").contains("Hood"), "the cell's label");
     assert!(submits(&h).is_empty(), "moving the focus sends nothing");
     press(&mut app, KeyCode::Enter);

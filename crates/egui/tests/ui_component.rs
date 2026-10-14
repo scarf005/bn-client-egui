@@ -470,12 +470,11 @@ fn the_description_of_a_target_runs_the_action_that_switches_the_target() {
 
 #[test]
 fn grid_draws_its_cells_and_a_cell_with_an_affordance_runs_it_with_the_cell_as_its_row() {
-    let panel = example(
-        "vehicle.json",
-        "vehicle install list with the highlighted part's requirements",
-    );
-    let (h, _) = harness(dialog(panel, vec![]));
-    h.get_by_label("H");
+    let screen = example("vehicle.json", "vehicle screen");
+    let drawn = &screen["root"]["children"][0]["child"]["children"][0];
+    assert_eq!(drawn["kind"], "grid");
+    let (h, _) = harness(dialog(drawn.clone(), vec![]));
+    h.get_by_label("|");
     h.get_by_label("o");
     let grid = json!({"id": "grid", "kind": "grid", "cols": 2, "rows": 1, "cells": [
         {"x": 0, "y": 0, "id": "cell:0", "glyph": "A", "label": "Alpha", "affordance": "go", "enabled": true},

@@ -14,7 +14,6 @@ mod palette;
 mod sidebar;
 mod sounds;
 mod spells;
-mod vehicle;
 
 /// A command must outlast this before the controls show it; keeps short commands from blinking the UI.
 const SETTLE: std::time::Duration = std::time::Duration::from_millis(150);

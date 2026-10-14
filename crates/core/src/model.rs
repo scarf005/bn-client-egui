@@ -2,7 +2,7 @@ use crate::colors::ColorMap;
 use crate::interaction::InvokeError;
 use crate::markup::{self, Run};
 
-use crate::protocol::{Column, Editor, InvokeArgs, List, Mark, ModTileset, Row, Screen, Vehicle};
+use crate::protocol::{Column, Editor, InvokeArgs, List, Mark, ModTileset, Row, Screen};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Pos {
     pub x: i32,
@@ -345,8 +345,6 @@ pub struct Menu {
     /// The engine's composed screen of a view it has no structured interaction for: only text to
     /// show, driven by the keys of the view's actions.
     pub screen: bool,
-    /// The vehicle interaction window, when this menu is one.
-    pub vehicle: Option<Vehicle>,
 }
 
 impl Menu {

@@ -41,11 +41,6 @@ impl<M: GameModel> App<M> {
             self.focus_menu = entered && !focused;
             return;
         }
-        if let (true, Some(vehicle)) = (menu.context == "VEH_INTERACT", &menu.vehicle) {
-            let focused = self.vehicle(ctx, &menu, vehicle, entered);
-            self.focus_menu = entered && !focused;
-            return;
-        }
         a11y::trap_tab(
             ctx,
             self.trapped_by_menu(),

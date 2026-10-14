@@ -139,7 +139,6 @@ const REJECTED: &[&str] = &[
     "text with a member of its own",
     "text as a number",
     "balance tone that is a color",
-    "vehicle grid cell without its availability",
     "position without a dimension",
     "hello request with a malformed schema hash",
     "hello delivery without credits",
