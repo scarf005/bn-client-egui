@@ -3,6 +3,7 @@
 //! `BN_ENGINE=<engine> BN_PERF_SCENARIO=tutorial|town BN_PERF_TILES=0|1 cargo test --release -p bn-client-egui --test perf_live -- --ignored --nocapture`
 //! With `--features profile` the scope timings of all frames (egui's own included) are listed too.
 //! Measures the CPU time of one frame (UI pass, tessellation, accessibility tree); GPU work is not included.
+use bn_client_egui::interaction::InvokeError;
 use bn_client_egui::protocol::InvokeArgs;
 use bn_client_egui::transport::{StdioTransport, game_root};
 use bn_client_egui::watchdog::Watchdog;
@@ -162,16 +163,24 @@ fn choose(h: &mut H, clock: &Clockwork, affordance: &str, row: &str) -> Frames {
             .last()
             .is_some_and(|s| s.affordances.iter().any(|a| a.id == affordance))
     };
-    let frames = run(h, clock, 120, row, |h| {
-        offered(h) && !h.state().model.busy()
-    });
-    let args = InvokeArgs {
-        row: Some(row.into()),
-        ..Default::default()
-    };
-    let sent = h.state_mut().model.invoke_affordance(affordance, args);
-    sent.unwrap_or_else(|e| panic!("{affordance} on {row}: {e:?}"));
-    frames
+    let mut frames = Frames::default();
+    // An idle engine may still owe answers to what the app's own frames asked; the model refuses until then.
+    loop {
+        frames.merge(run(h, clock, 120, row, |h| {
+            offered(h) && !h.state().model.busy()
+        }));
+        let args = InvokeArgs {
+            row: Some(row.into()),
+            ..Default::default()
+        };
+        match h.state_mut().model.invoke_affordance(affordance, args) {
+            Err(InvokeError::Busy) => frame(h, &mut frames),
+            sent => {
+                sent.unwrap_or_else(|e| panic!("{affordance} on {row}: {e:?}"));
+                return frames;
+            }
+        }
+    }
 }
 
 /// The tutorial teaches with pop-ups; each closes with its only choice.
