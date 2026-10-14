@@ -1,6 +1,7 @@
 //! Per-step and start-up latency against a real engine:
 //! `BN_ENGINE=... cargo test --release --test live_latency -- --ignored --nocapture`
 mod common;
+use bn_client_core::protocol::InvokeArgs;
 use bn_client_core::transport::StdioTransport;
 use bn_client_core::watchdog::Watchdog;
 use bn_client_core::{EngineModel, GameModel};
@@ -44,23 +45,25 @@ fn pump(model: &mut EngineModel, what: &str, done: impl Fn(&EngineModel) -> bool
     }
 }
 
-fn choose(model: &mut EngineModel, label: &str) -> Instant {
-    pump(model, label, |m| {
-        !m.busy()
-            && m.menu()
-                .is_some_and(|x| x.choices.iter().any(|c| c.label.contains(label)))
-    });
-    let id = model
-        .menu()
-        .unwrap()
-        .choices
-        .iter()
-        .find(|c| c.label.contains(label))
-        .unwrap()
-        .id
-        .clone();
+/// Whether the screen on top offers `affordance`.
+fn offers(model: &EngineModel, affordance: &str) -> bool {
+    model
+        .screens()
+        .last()
+        .is_some_and(|s| s.affordances.iter().any(|a| a.id == affordance))
+}
+
+/// Runs `affordance` of the main menu on `row` once the menu offers it, and says when it was sent.
+fn submit(model: &mut EngineModel, affordance: &str, row: &str) -> Instant {
+    pump(model, row, |m| !m.busy() && offers(m, affordance));
     let t = Instant::now();
-    model.choose(&id);
+    let args = InvokeArgs {
+        row: Some(row.into()),
+        ..Default::default()
+    };
+    model
+        .invoke_affordance(affordance, args)
+        .expect("submitted");
     t
 }
 
@@ -83,7 +86,7 @@ fn measure_startup_and_steps() {
         let _ = tx.lock().unwrap().send(());
     }));
     WAKE.set(Mutex::new(rx)).ok();
-    pump(&mut model, "menu", |m| m.menu().is_some());
+    pump(&mut model, "menu", |m| offers(m, "menu:tab"));
     let trace = model.take_trace();
     let at = |name: &str| {
         trace
@@ -102,14 +105,12 @@ fn measure_startup_and_steps() {
         "subscribed -> main menu   {:8.0} ms",
         ms(at("subscribed"), t_menu)
     );
-    let t = choose(&mut model, "New Game");
+    let t = submit(&mut model, "menu:tab", "new_game");
     let t_sub = pump(&mut model, "world menu", |m| {
-        !m.busy()
-            && m.menu()
-                .is_some_and(|x| x.choices.iter().any(|c| c.label.contains("Tutorial")))
+        !m.busy() && offers(m, "menu:entry")
     });
     println!("New Game -> world menu    {:8.0} ms", ms(t, t_sub));
-    let t = choose(&mut model, "Tutorial");
+    let t = submit(&mut model, "menu:entry", "new_game:tutorial");
     let t_map = pump(&mut model, "map", |m| m.size().x > 0);
     println!("Tutorial -> first map     {:8.0} ms", ms(t, t_map));
     println!("total start -> map        {:8.0} ms", ms(t0, t_map));

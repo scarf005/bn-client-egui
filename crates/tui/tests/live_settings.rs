@@ -1,5 +1,6 @@
 //! Changes an option and a keybinding through the terminal client's keys, against a real engine:
 //! `BN_ENGINE=... cargo test -p bn-client-tui --test live_settings -- --ignored --nocapture`
+mod common;
 use bn_client_core::transport::StdioTransport;
 use bn_client_core::watchdog::Watchdog;
 use bn_client_core::{EngineModel, GameModel};
@@ -78,46 +79,18 @@ fn answer_yes(app: &mut App) {
     press(app, KeyCode::Char('y'));
 }
 
-/// Switches the menu to the tab whose label contains `label`, stepping with Left or Right.
-fn tab(app: &mut App, label: &str) {
-    let positions = |a: &mut App| {
-        let menu = a.model.menu()?;
-        let tabs = menu.tabs();
-        Some((
-            tabs.iter().position(|t| t.selected)?,
-            tabs.iter().position(|t| t.label.contains(label))?,
-        ))
-    };
-    wait(app, label, |a| positions(a).is_some());
-    for _ in 0..20 {
-        let (at, want) = positions(app).expect("tab row");
-        if at == want {
-            return;
-        }
-        press(
-            app,
-            if want < at {
-                KeyCode::Left
-            } else {
-                KeyCode::Right
-            },
-        );
-        std::thread::sleep(Duration::from_millis(300));
-        app.model.poll();
-    }
-    panic!("tab {label}");
-}
-
 /// Leaves a settings screen with Esc and answers the save prompt.
 fn leave_saving(app: &mut App) {
     press(app, KeyCode::Esc);
     wait(app, "the save prompt or the main menu", |a| {
-        a.model.menu().is_some()
+        a.model.menu().is_some() || !common::main_menu_tabs(&a.model).is_empty()
     });
-    if context(app) != "MAIN_MENU" {
+    if common::main_menu_tabs(&app.model).is_empty() {
         answer_yes(app);
     }
-    wait(app, "the main menu", |a| context(a) == "MAIN_MENU");
+    wait(app, "the main menu", |a| {
+        !common::main_menu_tabs(&a.model).is_empty()
+    });
 }
 
 fn row_label(app: &App, id: &str) -> String {
@@ -142,11 +115,13 @@ fn live_tui_changes_an_option_and_rebinds_a_key_that_then_walks() {
     let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
     let transport = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
     let mut app = TuiApp::new(EngineModel::new(Box::new(transport)));
-    wait(&mut app, "the main menu", |a| context(a) == "MAIN_MENU");
+    wait(&mut app, "the main menu", |a| {
+        !common::main_menu_tabs(&a.model).is_empty()
+    });
 
     // Options: the General page holds the integer; Enter types a value, Enter commits it.
-    tab(&mut app, "Settings");
-    pick(&mut app, "Options");
+    common::main_menu(&mut app.model, "menu:tab", "settings");
+    common::main_menu(&mut app.model, "menu:entry", "settings:options");
     wait(&mut app, "the options", |a| context(a) == "OPTIONS");
     let option = "option:SAFEMODEPROXIMITY";
     wait(&mut app, "the option row", |a| {
@@ -159,7 +134,7 @@ fn live_tui_changes_an_option_and_rebinds_a_key_that_then_walks() {
     leave_saving(&mut app);
 
     // Keybindings: clear the keys of Move East, then bind z to it.
-    pick(&mut app, "Keybindings");
+    common::main_menu(&mut app.model, "menu:entry", "settings:keybindings");
     wait(&mut app, "the keybindings", |a| {
         context(a) == "HELP_KEYBINDINGS"
     });
@@ -218,8 +193,8 @@ fn live_tui_changes_an_option_and_rebinds_a_key_that_then_walks() {
     leave_saving(&mut app);
 
     // In the game the action resolves to the new key, which walks the avatar east.
-    tab(&mut app, "New Game");
-    pick(&mut app, "Tutorial");
+    common::main_menu(&mut app.model, "menu:tab", "new_game");
+    common::main_menu(&mut app.model, "menu:entry", "new_game:tutorial");
     wait(&mut app, "the tutorial map", |a| a.model.size().x > 0);
     wait(&mut app, "idle", |a| !a.model.busy());
     while app.model.menu().is_some() {

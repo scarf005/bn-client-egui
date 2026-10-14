@@ -5,7 +5,7 @@ use bn_client_egui::watchdog::Watchdog;
 use bn_client_egui::{App, EngineModel, GameModel};
 use eframe::egui;
 use egui_kittest::Harness;
-use egui_kittest::kittest::{NodeT, Queryable};
+use egui_kittest::kittest::Queryable;
 use std::time::{Duration, Instant};
 
 type H<'a> = Harness<'a, App<EngineModel>>;
@@ -39,7 +39,7 @@ fn click_settled(h: &mut H, label: &str) {
 
 #[test]
 #[ignore = "requires BN_ENGINE pointing at an engine binary"]
-fn clicking_new_game_shows_the_command_status() {
+fn clicking_a_main_menu_entry_shows_the_command_status() {
     let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
     let transport = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
     let model = EngineModel::new(Box::new(transport));
@@ -50,16 +50,15 @@ fn clicking_new_game_shows_the_command_status() {
             App::new(model),
         );
     run_until(&mut h, "the main menu", 60, |h| {
-        h.query_by_label("New Game").is_some()
+        h.query_by_label("Tutorial").is_some()
     });
-    click_settled(&mut h, "New Game");
+    click_settled(&mut h, "Tutorial");
     let clicked = Instant::now();
     // A command that went well is no longer shown, so the model's status is what reports it.
-    run_until(&mut h, "the command to finish", 60, |h| {
-        h.state()
-            .model
-            .command()
-            .is_some_and(|c| c.label == "New Game" && c.finished && c.stage == "done")
+    run_until(&mut h, "the command to finish", 300, |h| {
+        h.state().model.command().is_some_and(|c| {
+            c.target.as_deref() == Some("menu:entry") && c.finished && c.stage == "done"
+        })
     });
-    println!("New Game done after {:?}", clicked.elapsed());
+    println!("Tutorial done after {:?}", clicked.elapsed());
 }

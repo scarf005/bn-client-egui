@@ -1,5 +1,6 @@
 //! Needs a real engine build: `BN_ENGINE=/path/to/cataclysm-bn-tiles BN_ROOT=/path/to/game cargo test -p bn-client-core --test live_delivery -- --ignored --nocapture`
 //! A one hour wait shows its turns as they pass instead of one jump when it ends.
+mod common;
 use bn_client_core::transport::StdioTransport;
 use bn_client_core::{EngineModel, GameModel};
 
@@ -61,8 +62,7 @@ fn live_engine_one_hour_wait_streams_its_turns_before_it_completes() {
     let transport = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
     let mut model = EngineModel::connect_with(Box::new(transport), false, MAX_HZ);
     wait_for(&mut model, "the main menu", |m| m.live());
-    choose_label(&mut model, "New Game");
-    choose_label(&mut model, "Tutorial");
+    common::start_tutorial(&mut model);
     wait_for(&mut model, "the tutorial map", |m| {
         m.size().x > 0 && !m.busy()
     });

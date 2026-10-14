@@ -1,6 +1,7 @@
 //! The terminal client's mouse against a real engine, in a private profile with the CPU compute path:
 //! `TMPDIR=$HOME/scratch BN_ENGINE=... cargo test -p bn-client-tui --test live_mouse -- --ignored`
 mod common;
+use bn_client_core::protocol::InvokeArgs;
 use bn_client_core::transport::StdioTransport;
 use bn_client_core::watchdog::Watchdog;
 use bn_client_core::{EngineModel, GameModel};
@@ -69,7 +70,7 @@ fn live_tui_mouse_ignores_the_wheel_in_the_main_menu_then_describes_and_right_cl
 
     // The native main menu registers no SCROLL action, so the client has nothing to send.
     wait(&mut app, "the main menu", |a| {
-        a.model.menu().is_some_and(|m| m.context == "MAIN_MENU")
+        !common::main_menu_tabs(&a.model).is_empty()
     });
     assert!(
         !app.model
@@ -83,19 +84,17 @@ fn live_tui_mouse_ignores_the_wheel_in_the_main_menu_then_describes_and_right_cl
     assert!(app.model.command().is_none(), "nothing was sent");
 
     // Tutorial, past its pop-ups.
-    let tutorial = |a: &mut App| {
-        a.model
-            .menu()
-            .is_some_and(|m| m.title == "Cataclysm: Bright Nights")
-    };
-    wait(&mut app, "the menu", tutorial);
-    wait(&mut app, "the entries", |a| {
-        a.model
-            .menu()
-            .is_some_and(|m| m.choices.iter().any(|c| c.id == "new_game:tutorial"))
-    });
+    common::main_menu(&mut app.model, "menu:tab", "new_game");
     wait(&mut app, "idle", |a| !a.model.busy());
-    app.model.choose("new_game:tutorial");
+    app.model
+        .invoke_affordance(
+            "menu:entry",
+            InvokeArgs {
+                row: Some("new_game:tutorial".into()),
+                ..Default::default()
+            },
+        )
+        .expect("the tutorial entry");
     // Pop-ups (the tutorial's lessons, engine notices) are menus too; each closes with Enter.
     let mut watchdog = Watchdog::new(Duration::from_secs(120), Duration::from_secs(240));
     loop {

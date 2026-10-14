@@ -1,5 +1,6 @@
 //! Needs a real engine build: `BN_ENGINE=/path/to/cataclysm-bn-tiles cargo test -p bn-client-core --test live_timing -- --ignored --nocapture`
 //! Times starting the tutorial and loading its save, and what the loading screen showed each time.
+mod common;
 use bn_client_core::transport::StdioTransport;
 use bn_client_core::watchdog::Watchdog;
 use bn_client_core::{EngineModel, GameModel};
@@ -104,10 +105,10 @@ fn live_timing_of_starting_the_tutorial_and_loading_its_save() {
     let mut model = EngineModel::new(Box::new(transport));
     wait_for(&mut model, "the main menu", |m| m.live());
 
-    choose_label(&mut model, "New Game");
+    common::main_menu_tab(&mut model, "new_game");
     take_loading();
     let started = Instant::now();
-    choose_label(&mut model, "Tutorial");
+    common::submit_main_menu(&mut model, "menu:entry", "new_game:tutorial");
     let new_game = wait_for(&mut model, "the tutorial map", |m| m.size().x > 0);
     let new_game_total = started.elapsed();
     let (new_game_steps, new_game_loading) = take_loading();
@@ -132,28 +133,30 @@ fn live_timing_of_starting_the_tutorial_and_loading_its_save() {
     }
     choose_label(&mut model, "Yes");
     wait_for(&mut model, "the main menu again", |m| {
-        m.menu().is_some_and(|x| x.context == "MAIN_MENU")
+        !common::main_menu_tabs(m).is_empty()
     });
 
-    choose_label(&mut model, "Load");
+    common::main_menu_tab(&mut model, "load");
     let world = wait_for(&mut model, "the world entry", |m| {
-        m.menu()
-            .is_some_and(|x| x.entries().iter().any(|c| c.label.starts_with("TUTORIAL")))
+        common::main_menu_entries(m)
+            .iter()
+            .any(|id| id.starts_with("load:"))
     });
     let _ = world;
-    let entry = model
-        .menu()
-        .and_then(|m| {
-            m.entries()
-                .into_iter()
-                .find(|c| c.label.starts_with("TUTORIAL"))
-                .map(|c| c.label.clone())
-        })
+    let entry = common::main_menu_entries(&model)
+        .into_iter()
+        .find(|id| id.starts_with("load:"))
         .unwrap();
     take_loading();
     let started = Instant::now();
-    choose_label(&mut model, &entry);
-    choose_label(&mut model, "John Smith");
+    common::main_menu_entry(&mut model, &entry);
+    // The world's only character is the first row of the list that follows.
+    wait_for(&mut model, "the character list", |m| {
+        m.menu().is_some_and(|x| !x.choices.is_empty())
+    });
+    let character = model.menu().unwrap().choices[0].id.clone();
+    wait_for(&mut model, "idle", |m| !m.busy());
+    model.choose(&character);
     // A debug message about the tutorial save may ask to continue first.
     let load = wait_for(&mut model, "the loaded map", |m| {
         m.size().x > 0 && m.menu().is_none_or(|x| x.context != "MAIN_MENU")

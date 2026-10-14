@@ -1,5 +1,6 @@
 //! Needs a real engine build: `BN_ENGINE=... cargo test -p bn-client-core --test live_light -- --ignored --nocapture`
 //! Counts the squares of the tutorial's first view by the light level the engine publishes.
+mod common;
 use bn_client_core::transport::StdioTransport;
 use bn_client_core::watchdog::Watchdog;
 use bn_client_core::{EngineModel, GameModel, Pos};
@@ -24,21 +25,6 @@ fn wait_for(model: &mut EngineModel, what: &str, mut done: impl FnMut(&EngineMod
     }
 }
 
-fn choose_label(model: &mut EngineModel, label: &str) {
-    wait_for(model, label, |m| {
-        m.menu()
-            .is_some_and(|x| x.choices.iter().any(|c| c.label == label))
-    });
-    wait_for(model, "idle", |m| !m.busy());
-    let id = model
-        .menu()
-        .and_then(|m| m.choices.into_iter().find(|c| c.label == label))
-        .expect("choice")
-        .id;
-    model.choose(&id);
-    wait_for(model, label, |m| !m.busy());
-}
-
 #[test]
 #[ignore = "requires BN_ENGINE"]
 fn live_light_levels_of_the_first_tutorial_view() {
@@ -46,8 +32,7 @@ fn live_light_levels_of_the_first_tutorial_view() {
     let transport = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
     let mut model = EngineModel::new(Box::new(transport));
     wait_for(&mut model, "the main menu", |m| m.live());
-    choose_label(&mut model, "New Game");
-    choose_label(&mut model, "Tutorial");
+    common::start_tutorial(&mut model);
     wait_for(&mut model, "the map", |m| m.size().x > 0);
     wait_for(&mut model, "idle", |m| !m.busy());
     std::thread::sleep(Duration::from_secs(3));

@@ -60,8 +60,7 @@ fn live_engine_starts_the_tutorial_and_walks_one_step() {
     let mut model = EngineModel::new(Box::new(transport));
 
     wait_for(&mut model, "subscription", |m| m.live());
-    choose_label(&mut model, "New Game");
-    choose_label(&mut model, "Tutorial");
+    common::start_tutorial(&mut model);
     wait_for(&mut model, "the tutorial map", |m| m.size().x > 0);
 
     // The view follows the avatar, so only the absolute square tells that it moved.
@@ -80,8 +79,7 @@ fn live_engine_non_movement_action_opens_a_menu_that_can_be_cancelled() {
     let mut model = EngineModel::new(Box::new(transport));
 
     wait_for(&mut model, "subscription", |m| m.live());
-    choose_label(&mut model, "New Game");
-    choose_label(&mut model, "Tutorial");
+    common::start_tutorial(&mut model);
     wait_for(&mut model, "the tutorial map", |m| m.size().x > 0);
     wait_for(&mut model, "idle", |m| !m.busy());
     dismiss_popups(&mut model);
@@ -93,16 +91,17 @@ fn live_engine_non_movement_action_opens_a_menu_that_can_be_cancelled() {
         .expect("inventory action offered");
     assert_eq!(inventory.keys, ["i"], "key comes from keybindings.json");
     assert!(model.press("i"), "the game key runs the action");
-    wait_for(&mut model, "the inventory menu", |m| m.menu().is_some());
-    let menu = model.menu().unwrap();
-    println!(
-        "inventory menu: {:?} with {} choices",
-        menu.title,
-        menu.choices.len()
-    );
+    let inventory_open = |m: &EngineModel| {
+        m.screens()
+            .last()
+            .is_some_and(|s| s.context.as_deref() == Some("INVENTORY"))
+    };
+    wait_for(&mut model, "the inventory screen", inventory_open);
     wait_for(&mut model, "the command to finish", |m| !m.busy());
-    model.cancel_menu();
-    wait_for(&mut model, "the menu to close", |m| m.menu().is_none());
+    model
+        .invoke_affordance("QUIT", Default::default())
+        .expect("the inventory offers its cancel");
+    wait_for(&mut model, "the inventory to close", |m| !inventory_open(m));
 }
 
 #[test]
@@ -112,21 +111,10 @@ fn live_engine_shows_a_loading_screen_while_the_tutorial_loads() {
     let transport = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
     let mut model = EngineModel::new(Box::new(transport));
     wait_for(&mut model, "subscription", |m| m.live());
-    choose_label(&mut model, "New Game");
+    common::main_menu_tab(&mut model, "new_game");
     let mut seen = vec![];
-    // Tutorial is chosen inside this loop's first poll; the command finishes only after loading.
-    wait_for(&mut model, "the world menu", |m| m.menu().is_some());
-    let id = model
-        .menu()
-        .unwrap()
-        .choices
-        .iter()
-        .find(|c| c.label.contains("Tutorial"))
-        .expect("Tutorial choice")
-        .id
-        .clone();
-    wait_for(&mut model, "idle", |m| !m.busy());
-    model.choose(&id);
+    // The command finishes only after loading.
+    common::submit_main_menu(&mut model, "menu:entry", "new_game:tutorial");
     wait_for(&mut model, "the tutorial map", |m| {
         if let Some(l) = m.loading().filter(|l| seen.last() != Some(l)) {
             seen.push(l);
@@ -150,8 +138,7 @@ fn live_engine_travel_click_plans_a_route_and_a_second_click_walks_it() {
     let mut model = EngineModel::new(Box::new(transport));
 
     wait_for(&mut model, "subscription", |m| m.live());
-    choose_label(&mut model, "New Game");
-    choose_label(&mut model, "Tutorial");
+    common::start_tutorial(&mut model);
     wait_for(&mut model, "the tutorial map", |m| m.size().x > 0);
     wait_for(&mut model, "idle", |m| !m.busy());
     dismiss_popups(&mut model);
@@ -226,8 +213,7 @@ fn live_engine_remembered_furniture_stays_drawn_after_walking_past_it() {
     let mut model = EngineModel::new(Box::new(transport));
 
     wait_for(&mut model, "subscription", |m| m.live());
-    choose_label(&mut model, "New Game");
-    choose_label(&mut model, "Tutorial");
+    common::start_tutorial(&mut model);
     wait_for(&mut model, "the tutorial map", |m| m.size().x > 0);
     wait_for(&mut model, "idle", |m| !m.busy());
     dismiss_popups(&mut model);
@@ -269,8 +255,7 @@ fn live_engine_map_follows_the_declared_viewport_and_accepts_clicks_across_it() 
     let mut model = EngineModel::new(Box::new(transport));
 
     wait_for(&mut model, "subscription", |m| m.live());
-    choose_label(&mut model, "New Game");
-    choose_label(&mut model, "Tutorial");
+    common::start_tutorial(&mut model);
     wait_for(&mut model, "the tutorial map", |m| m.size().x > 0);
     wait_for(&mut model, "idle", |m| !m.busy());
     dismiss_popups(&mut model);
@@ -314,8 +299,8 @@ fn live_engine_saved_character_is_listed_on_the_load_tab_and_loads_after_relaunc
 
     let mut model = launch();
     wait_for(&mut model, "subscription", |m| m.live());
-    choose_label(&mut model, "New Game");
-    choose_label(&mut model, "Play Now!");
+    common::main_menu_tab(&mut model, "new_game");
+    common::main_menu_entry(&mut model, "new_game:play_now");
     wait_for(&mut model, "the map", |m| m.size().x > 0);
     wait_for(&mut model, "idle", |m| !m.busy());
     dismiss_popups(&mut model);
@@ -327,30 +312,24 @@ fn live_engine_saved_character_is_listed_on_the_load_tab_and_loads_after_relaunc
     println!("prompt: {:?}", model.menu());
     choose_label(&mut model, "Yes");
     wait_for(&mut model, "the main menu again", |m| {
-        m.menu()
-            .is_some_and(|menu| menu.choices.iter().any(|c| c.label.contains("Load")))
+        common::main_menu_tabs(m).contains(&"load".into())
     });
     drop(model);
 
     let mut model = launch();
     wait_for(&mut model, "subscription", |m| m.live());
-    choose_label(&mut model, "Load");
+    common::main_menu_tab(&mut model, "load");
     wait_for(&mut model, "the saved world", |m| {
-        m.menu()
-            .is_some_and(|menu| menu.choices.iter().any(|c| c.id.starts_with("load:")))
+        common::main_menu_entries(m)
+            .iter()
+            .any(|id| id.starts_with("load:"))
     });
-    println!("load tab: {:?}", model.menu());
-    let id = model
-        .menu()
-        .unwrap()
-        .choices
-        .iter()
-        .find(|c| c.id.starts_with("load:"))
-        .unwrap()
-        .id
-        .clone();
-    wait_for(&mut model, "idle", |m| !m.busy());
-    model.choose(&id);
+    println!("load tab: {:?}", common::main_menu_entries(&model));
+    let id = common::main_menu_entries(&model)
+        .into_iter()
+        .find(|id| id.starts_with("load:"))
+        .unwrap();
+    common::main_menu_entry(&mut model, &id);
     wait_for(&mut model, "the character list", |m| {
         m.menu()
             .is_some_and(|menu| menu.message.contains("Load character"))
@@ -372,8 +351,7 @@ fn live_engine_interrupts_a_long_wait_and_the_stop_question_is_a_menu() {
     let transport = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
     let mut model = EngineModel::new(Box::new(transport));
     wait_for(&mut model, "subscription", |m| m.live());
-    choose_label(&mut model, "New Game");
-    choose_label(&mut model, "Tutorial");
+    common::start_tutorial(&mut model);
     wait_for(&mut model, "the tutorial map", |m| m.size().x > 0);
     wait_for(&mut model, "idle", |m| !m.busy());
     dismiss_popups(&mut model);
@@ -420,8 +398,7 @@ fn live_engine_reports_the_native_sidebar_of_the_tutorial_avatar() {
     let transport = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
     let mut model = EngineModel::new(Box::new(transport));
     wait_for(&mut model, "subscription", |m| m.live());
-    choose_label(&mut model, "New Game");
-    choose_label(&mut model, "Tutorial");
+    common::start_tutorial(&mut model);
     wait_for(&mut model, "the sidebar", |m| !m.sidebar().is_empty());
     let rows: Vec<String> = model
         .sidebar()
@@ -446,8 +423,7 @@ fn live_engine_reports_the_sidebar_layout_and_the_compass_of_the_tutorial_avatar
     let transport = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
     let mut model = EngineModel::new(Box::new(transport));
     wait_for(&mut model, "subscription", |m| m.live());
-    choose_label(&mut model, "New Game");
-    choose_label(&mut model, "Tutorial");
+    common::start_tutorial(&mut model);
     wait_for(&mut model, "the sidebar layout", |m| {
         m.sidebar_layout().is_some()
     });
@@ -471,8 +447,7 @@ fn live_engine_killed_mid_game_shows_the_failure_and_restart_brings_the_menu_bac
             .map(|t| Box::new(t) as Box<dyn bn_client_core::transport::Transport>)
     }));
     wait_for(&mut model, "subscription", |m| m.live());
-    choose_label(&mut model, "New Game");
-    choose_label(&mut model, "Tutorial");
+    common::start_tutorial(&mut model);
     wait_for(&mut model, "the tutorial map", |m| m.size().x > 0);
     assert!(model.failure().is_none());
 
@@ -490,8 +465,7 @@ fn live_engine_killed_mid_game_shows_the_failure_and_restart_brings_the_menu_bac
     wait_for(&mut model, "the new session", |m| m.live());
     assert!(model.failure().is_none());
     wait_for(&mut model, "the main menu", |m| {
-        m.menu()
-            .is_some_and(|menu| menu.choices.iter().any(|c| c.label.contains("New Game")))
+        common::main_menu_tabs(m).contains(&"new_game".into())
     });
 }
 
@@ -514,8 +488,7 @@ fn live_engine_long_wait_is_never_reported_as_stalled() {
     let transport = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
     let mut model = EngineModel::new(Box::new(transport));
     wait_for(&mut model, "subscription", |m| m.live());
-    choose_label(&mut model, "New Game");
-    choose_label(&mut model, "Tutorial");
+    common::start_tutorial(&mut model);
     wait_for(&mut model, "the tutorial map", |m| m.size().x > 0);
     wait_for(&mut model, "idle", |m| !m.busy());
     dismiss_popups(&mut model);
@@ -591,8 +564,7 @@ fn live_engine_opens_the_overmap_moves_its_cursor_and_closes_it() {
     let transport = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
     let mut model = EngineModel::connect(Box::new(transport), true);
     wait_for(&mut model, "subscription", |m| m.live());
-    choose_label(&mut model, "New Game");
-    choose_label(&mut model, "Tutorial");
+    common::start_tutorial(&mut model);
     wait_for(&mut model, "the tutorial map", |m| m.size().x > 0);
     wait_for(&mut model, "idle", |m| !m.busy());
     dismiss_popups(&mut model);
@@ -646,8 +618,7 @@ fn live_engine_overmap_gains_and_loses_tile_ids_when_the_client_switches() {
     let transport = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
     let mut model = EngineModel::connect(Box::new(transport), false);
     wait_for(&mut model, "subscription", |m| m.live());
-    choose_label(&mut model, "New Game");
-    choose_label(&mut model, "Tutorial");
+    common::start_tutorial(&mut model);
     wait_for(&mut model, "the tutorial map", |m| m.size().x > 0);
     wait_for(&mut model, "idle", |m| !m.busy());
     dismiss_popups(&mut model);
@@ -688,22 +659,19 @@ fn live_engine_says_hello_with_0_2_and_shows_the_main_menu() {
 
     wait_for(&mut model, "subscription", |m| m.live());
     wait_for(&mut model, "the main menu", |m| {
-        m.menu().is_some() || !m.screens().is_empty()
+        !common::main_menu_tabs(m).is_empty()
     });
     assert!(model.failure().is_none(), "{:?}", model.failure());
-    let menu = model.menu();
     println!(
-        "menu: {:?} with {:?}; screens: {:?}",
-        menu.as_ref().map(|m| m.title.clone()),
-        menu.as_ref().map(|m| m.choices.len()),
+        "tabs: {:?}; screens: {:?}",
+        common::main_menu_tabs(&model),
         model
             .screens()
             .iter()
             .map(|s| (s.role, s.context.clone()))
             .collect::<Vec<_>>()
     );
-    let menu = menu.expect("the main menu is drawn");
-    assert!(menu.choices.iter().any(|c| c.label.contains("New Game")));
+    assert!(common::main_menu_tabs(&model).contains(&"new_game".into()));
 }
 
 #[test]
@@ -713,8 +681,7 @@ fn live_engine_debug_menu_filter_matches_tele_in_any_case() {
     let transport = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
     let mut model = EngineModel::new(Box::new(transport));
     wait_for(&mut model, "subscription", |m| m.live());
-    choose_label(&mut model, "New Game");
-    choose_label(&mut model, "Tutorial");
+    common::start_tutorial(&mut model);
     wait_for(&mut model, "the tutorial map", |m| m.size().x > 0);
     wait_for(&mut model, "idle", |m| !m.busy());
     dismiss_popups(&mut model);

@@ -34,31 +34,10 @@ fn press(app: &mut App, code: KeyCode) {
     app.handle_key(KeyEvent::new(code, KeyModifiers::NONE));
 }
 
-/// Moves the menu highlight to the row whose label contains `label` and presses Enter. Each Down waits
-/// until the engine's cursor has moved, so the next one is not counted from a stale highlight (one Down
-/// too many lands on Defence mode, which opens character creation).
-fn pick(app: &mut App, label: &str) {
-    wait(app, label, |a| {
-        a.model
-            .menu()
-            .is_some_and(|m| m.choices.iter().any(|c| c.label.contains(label)))
-    });
-    for _ in 0..50 {
-        if app.selected_label().is_some_and(|l| l.contains(label)) {
-            break;
-        }
-        let before = app.selected_label();
-        press(app, KeyCode::Down);
-        wait(app, "the cursor to move", |a| a.selected_label() != before);
-    }
-    assert!(app.selected_label().unwrap().contains(label));
-    press(app, KeyCode::Enter);
-}
-
 /// Starts the tutorial and closes the lesson pop-ups between it and the map with Enter, like a player.
 fn start_tutorial(app: &mut App) {
-    tab(app, "New Game");
-    pick(app, "Tutorial");
+    common::main_menu(&mut app.model, "menu:tab", "new_game");
+    common::main_menu(&mut app.model, "menu:entry", "new_game:tutorial");
     let mut watchdog = Watchdog::new(Duration::from_secs(300), Duration::from_secs(900));
     loop {
         app.model.poll();
@@ -77,41 +56,6 @@ fn start_tutorial(app: &mut App) {
         }
         std::thread::sleep(Duration::from_millis(50));
     }
-}
-
-/// Switches the main menu to the tab named `label` with Left or Right, whichever is nearer in tab order.
-fn tab(app: &mut App, label: &str) {
-    // (index of the selected tab, index of `label`) in the tab row.
-    let positions = |a: &mut App| {
-        let menu = a.model.menu()?;
-        let tabs = menu.tabs();
-        Some((
-            tabs.iter().position(|t| t.selected)?,
-            tabs.iter().position(|t| t.label == label)?,
-        ))
-    };
-    wait(app, label, |a| positions(a).is_some());
-    for _ in 0..20 {
-        let (at, want) = positions(app).expect("tab row");
-        if at == want {
-            return;
-        }
-        press(
-            app,
-            if want < at {
-                KeyCode::Left
-            } else {
-                KeyCode::Right
-            },
-        );
-        std::thread::sleep(Duration::from_millis(300));
-        app.model.poll();
-    }
-    assert_eq!(
-        positions(app).map(|(at, want)| at == want),
-        Some(true),
-        "tab {label}"
-    );
 }
 
 #[test]

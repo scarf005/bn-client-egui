@@ -1,6 +1,8 @@
 #![allow(dead_code)]
+use bn_client_core::protocol::{Component, InvokeArgs};
 use bn_client_core::transport::Profile;
 use bn_client_core::transport::{ScriptHandle, ScriptedTransport};
+use bn_client_core::watchdog::Watchdog;
 use bn_client_core::{EngineModel, GameModel};
 use serde_json::{Value, json};
 
@@ -121,5 +123,50 @@ pub fn cpu_profile() -> Profile {
         userdir: Some(dir.clone()),
         configdir: Some(dir.join("config")),
         ..Profile::default()
+    }
+}
+
+/// Polls the model until `done`.
+pub fn wait_for(model: &mut EngineModel, what: &str, mut done: impl FnMut(&EngineModel) -> bool) {
+    let mut watchdog = Watchdog::live();
+    while !done(model) {
+        assert!(
+            !watchdog.expired(model.received()),
+            "timed out waiting for {what}: {:?}",
+            model.messages()
+        );
+        model.poll();
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+}
+
+/// Runs `affordance` of the main menu on the row `row` (a tab or an entry, by id) once the menu offers it and
+/// no command is in flight, then waits for the command to finish.
+pub fn main_menu(model: &mut EngineModel, affordance: &str, row: &str) {
+    wait_for(model, affordance, |m| {
+        !m.busy()
+            && m.screens()
+                .last()
+                .is_some_and(|s| s.affordances.iter().any(|a| a.id == affordance))
+    });
+    let args = InvokeArgs {
+        row: Some(row.into()),
+        ..Default::default()
+    };
+    model
+        .invoke_affordance(affordance, args)
+        .unwrap_or_else(|e| panic!("{affordance} on {row}: {e:?}"));
+    wait_for(model, row, |m| !m.busy());
+}
+
+/// The ids of the main menu's tabs, empty while the menu is not on top.
+pub fn main_menu_tabs(model: &EngineModel) -> Vec<String> {
+    let tabs = model
+        .screens()
+        .last()
+        .and_then(|s| s.root.as_ref()?.find("menu:tabs"));
+    match tabs {
+        Some(Component::Tabs(tabs)) => tabs.tabs.iter().map(|t| t.id.clone()).collect(),
+        _ => vec![],
     }
 }

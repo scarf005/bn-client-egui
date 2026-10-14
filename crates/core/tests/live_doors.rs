@@ -1,4 +1,5 @@
 //! Needs a real engine build: `BN_ENGINE=/path/to/cataclysm-bn-tiles cargo test -p bn-client-core --test live_doors -- --ignored --nocapture`
+mod common;
 use bn_client_core::transport::{Profile, StdioTransport};
 use bn_client_core::watchdog::Watchdog;
 use bn_client_core::{EngineModel, GameModel, Pos};
@@ -23,25 +24,6 @@ fn wait_for(model: &mut EngineModel, what: &str, mut done: impl FnMut(&EngineMod
     }
 }
 
-fn choose_label(model: &mut EngineModel, label: &str) {
-    wait_for(model, label, |m| {
-        m.menu()
-            .is_some_and(|menu| menu.choices.iter().any(|c| c.label.contains(label)))
-    });
-    let id = model
-        .menu()
-        .unwrap()
-        .choices
-        .iter()
-        .find(|c| c.label.contains(label))
-        .unwrap()
-        .id
-        .clone();
-    wait_for(model, "idle", |m| !m.busy());
-    model.choose(&id);
-    wait_for(model, "choice", |m| !m.busy());
-}
-
 fn dismiss_popups(model: &mut EngineModel) {
     while let Some(menu) = model.menu() {
         let id = menu.choices.first().map(|c| c.id.clone());
@@ -63,8 +45,7 @@ fn live_engine_click_on_an_adjacent_closed_door_opens_it() {
     let t = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
     let mut m = EngineModel::new(Box::new(t));
     wait_for(&mut m, "subscription", |m| m.live());
-    choose_label(&mut m, "New Game");
-    choose_label(&mut m, "Tutorial");
+    common::start_tutorial(&mut m);
     wait_for(&mut m, "the tutorial map", |m| m.size().x > 0);
     wait_for(&mut m, "idle", |m| !m.busy());
     dismiss_popups(&mut m);
@@ -125,8 +106,7 @@ fn live_engine_survives_the_door_popup_chain_repeatedly() {
         .expect("engine starts");
         let mut m = EngineModel::new(Box::new(t));
         wait_for(&mut m, "subscription", |m| m.live());
-        choose_label(&mut m, "New Game");
-        choose_label(&mut m, "Tutorial");
+        common::start_tutorial(&mut m);
         wait_for(&mut m, "the tutorial map", |m| m.size().x > 0);
         wait_for(&mut m, "idle", |m| !m.busy());
         for step in 0..14 {

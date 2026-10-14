@@ -1,4 +1,5 @@
 //! Needs a real engine build: `BN_ENGINE=/path/to/cataclysm-bn-tiles cargo test -p bn-client-core --test live_messages -- --ignored --nocapture`
+mod common;
 use bn_client_core::transport::StdioTransport;
 use bn_client_core::watchdog::Watchdog;
 use bn_client_core::{EngineModel, GameModel};
@@ -15,25 +16,6 @@ fn wait_for(model: &mut EngineModel, what: &str, mut done: impl FnMut(&EngineMod
         model.poll();
         std::thread::sleep(Duration::from_millis(50));
     }
-}
-
-fn choose_label(model: &mut EngineModel, label: &str) {
-    wait_for(model, label, |m| {
-        m.menu()
-            .is_some_and(|menu| menu.choices.iter().any(|c| c.label.contains(label)))
-    });
-    let id = model
-        .menu()
-        .unwrap()
-        .choices
-        .iter()
-        .find(|c| c.label.contains(label))
-        .unwrap()
-        .id
-        .clone();
-    wait_for(model, "idle", |m| !m.busy());
-    model.choose(&id);
-    wait_for(model, "choice", |m| !m.busy());
 }
 
 fn dismiss_popups(model: &mut EngineModel) {
@@ -58,8 +40,7 @@ fn live_engine_message_log_shows_native_lines_with_repeat_counts() {
     let t = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
     let mut m = EngineModel::new(Box::new(t));
     wait_for(&mut m, "subscription", |m| m.live());
-    choose_label(&mut m, "New Game");
-    choose_label(&mut m, "Tutorial");
+    common::start_tutorial(&mut m);
     wait_for(&mut m, "the tutorial map", |m| m.size().x > 0);
     wait_for(&mut m, "idle", |m| !m.busy());
     dismiss_popups(&mut m);

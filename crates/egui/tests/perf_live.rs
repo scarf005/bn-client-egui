@@ -3,6 +3,7 @@
 //! `BN_ENGINE=<engine> BN_PERF_SCENARIO=tutorial|town BN_PERF_TILES=0|1 cargo test --release -p bn-client-egui --test perf_live -- --ignored --nocapture`
 //! With `--features profile` the scope timings of all frames (egui's own included) are listed too.
 //! Measures the CPU time of one frame (UI pass, tessellation, accessibility tree); GPU work is not included.
+use bn_client_egui::protocol::InvokeArgs;
 use bn_client_egui::transport::{StdioTransport, game_root};
 use bn_client_egui::watchdog::Watchdog;
 use bn_client_egui::{App, EngineModel, GameModel};
@@ -153,28 +154,23 @@ fn square(h: &H) -> (i32, i32) {
     (m.player().x + m.origin().x, m.player().y + m.origin().y)
 }
 
-fn choose(h: &mut H, clock: &Clockwork, label: &str) -> Frames {
-    let found = |h: &H| {
+fn choose(h: &mut H, clock: &Clockwork, affordance: &str, row: &str) -> Frames {
+    let offered = |h: &H| {
         h.state()
             .model
-            .menu()
-            .is_some_and(|m| m.choices.iter().any(|c| c.label.contains(label)))
+            .screens()
+            .last()
+            .is_some_and(|s| s.affordances.iter().any(|a| a.id == affordance))
     };
-    let frames = run(h, clock, 120, label, |h| {
-        found(h) && !h.state().model.busy()
+    let frames = run(h, clock, 120, row, |h| {
+        offered(h) && !h.state().model.busy()
     });
-    let id = h
-        .state()
-        .model
-        .menu()
-        .unwrap()
-        .choices
-        .iter()
-        .find(|c| c.label.contains(label))
-        .unwrap()
-        .id
-        .clone();
-    h.state_mut().model.choose(&id);
+    let args = InvokeArgs {
+        row: Some(row.into()),
+        ..Default::default()
+    };
+    let sent = h.state_mut().model.invoke_affordance(affordance, args);
+    sent.unwrap_or_else(|e| panic!("{affordance} on {row}: {e:?}"));
     frames
 }
 
@@ -249,12 +245,12 @@ fn frame_cost_idle_and_while_stepping() {
     let started = Instant::now();
     let process = ProcessTime::now();
     let mut warmup = Frames::default();
-    warmup.merge(choose(&mut h, &clock, "New Game"));
-    let (label, wait) = match scenario.as_str() {
-        "town" => ("Play Now", 600),
-        _ => ("Tutorial", 120),
+    warmup.merge(choose(&mut h, &clock, "menu:tab", "new_game"));
+    let (entry, wait) = match scenario.as_str() {
+        "town" => ("new_game:play_now", 600),
+        _ => ("new_game:tutorial", 120),
     };
-    warmup.merge(choose(&mut h, &clock, label));
+    warmup.merge(choose(&mut h, &clock, "menu:entry", entry));
     warmup.merge(run(&mut h, &clock, wait, "the map", |h| {
         h.state().model.size().x > 0
     }));

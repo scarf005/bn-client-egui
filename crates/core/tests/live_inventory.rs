@@ -19,21 +19,6 @@ fn wait_for(model: &mut EngineModel, what: &str, mut done: impl FnMut(&EngineMod
     }
 }
 
-fn choose_label(model: &mut EngineModel, label: &str) {
-    wait_for(model, label, |m| {
-        m.menu()
-            .is_some_and(|menu| menu.choices.iter().any(|c| c.label.contains(label)))
-    });
-    let id = model
-        .menu()
-        .and_then(|m| m.choices.into_iter().find(|c| c.label.contains(label)))
-        .expect("choice")
-        .id;
-    wait_for(model, "the previous command", |m| !m.busy());
-    model.choose(&id);
-    wait_for(model, &format!("{label} to finish"), |m| !m.busy());
-}
-
 /// The tutorial greets and teaches with pop-ups; each closes with its only choice.
 fn dismiss_popups(model: &mut EngineModel) {
     while let Some(menu) = model.menu() {
@@ -53,8 +38,7 @@ fn start_tutorial() -> EngineModel {
     let transport = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
     let mut model = EngineModel::new(Box::new(transport));
     wait_for(&mut model, "subscription", |m| m.live());
-    choose_label(&mut model, "New Game");
-    choose_label(&mut model, "Tutorial");
+    common::start_tutorial(&mut model);
     wait_for(&mut model, "the tutorial map", |m| m.size().x > 0);
     wait_for(&mut model, "idle", |m| !m.busy());
     dismiss_popups(&mut model);

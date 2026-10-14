@@ -1,5 +1,6 @@
 //! Needs a real engine build: `BN_ENGINE=/path/to/cataclysm-bn-tiles cargo test --test live_settings -- --ignored`
 //! Edits the rule screens of the Settings tab through the client model, in a fresh temporary profile.
+mod common;
 use bn_client_core::transport::StdioTransport;
 use bn_client_core::watchdog::Watchdog;
 use bn_client_core::{EngineModel, GameModel, MenuChoice};
@@ -51,9 +52,8 @@ fn fill(model: &mut EngineModel, field: &str, value: &str) {
 }
 
 fn open(model: &mut EngineModel, entry: &str, ctx: &str) {
-    wait_for(model, "the main menu", |m| row(m, "tab:settings").is_some());
-    choose(model, "tab:settings");
-    choose(model, entry);
+    common::main_menu_tab(model, "settings");
+    common::main_menu_entry(model, entry);
     wait_for(model, ctx, |m| context(m) == ctx);
 }
 
@@ -62,14 +62,16 @@ fn leave(model: &mut EngineModel) {
     model.cancel_menu();
     settled(model, "leaving");
     // A changed screen asks to save; answering yes returns to the main menu.
-    if context(model) != "MAIN_MENU" {
+    if common::main_menu_tabs(model).is_empty() {
         let yes = model
             .menu()
             .and_then(|m| m.choices.into_iter().find(|c| c.label == "Yes"))
             .expect("save prompt");
         choose(model, &yes.id);
     }
-    wait_for(model, "the main menu", |m| context(m) == "MAIN_MENU");
+    wait_for(model, "the main menu", |m| {
+        !common::main_menu_tabs(m).is_empty()
+    });
 }
 
 fn value(model: &EngineModel, id: &str, column: usize) -> String {
@@ -86,9 +88,11 @@ fn live_rule_screens_add_edit_move_and_remove_rules_and_colors_pick_a_custom_col
     let mut model = EngineModel::new(Box::new(transport));
     wait_for(&mut model, "subscription", |m| m.live());
     // Startup prompts close with their only choice.
-    while context(&model) != "MAIN_MENU" {
-        wait_for(&mut model, "a menu", |m| m.menu().is_some());
-        if context(&model) == "MAIN_MENU" {
+    while common::main_menu_tabs(&model).is_empty() {
+        wait_for(&mut model, "a menu", |m| {
+            m.menu().is_some() || !common::main_menu_tabs(m).is_empty()
+        });
+        if !common::main_menu_tabs(&model).is_empty() {
             break;
         }
         let id = model.menu().unwrap().choices[0].id.clone();

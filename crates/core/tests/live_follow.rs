@@ -37,21 +37,6 @@ fn dismiss_popups(model: &mut EngineModel) {
     }
 }
 
-fn choose_label(model: &mut EngineModel, label: &str) {
-    wait_for(model, label, |m| {
-        m.menu()
-            .is_some_and(|x| x.choices.iter().any(|c| c.label == label))
-    });
-    wait_for(model, "idle", |m| !m.busy());
-    let id = model
-        .menu()
-        .and_then(|m| m.choices.into_iter().find(|c| c.label == label))
-        .expect("choice")
-        .id;
-    model.choose(&id);
-    wait_for(model, label, |m| !m.busy());
-}
-
 #[test]
 #[ignore = "requires BN_ENGINE"]
 fn live_player_stays_centred_while_walking() {
@@ -59,8 +44,7 @@ fn live_player_stays_centred_while_walking() {
     let transport = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
     let mut model = EngineModel::new(Box::new(transport));
     wait_for(&mut model, "the main menu", |m| m.live());
-    choose_label(&mut model, "New Game");
-    choose_label(&mut model, "Tutorial");
+    common::start_tutorial(&mut model);
     model.set_viewport(Pos { x: 41, y: 26 });
     wait_for(&mut model, "the map", |m| m.size().x > 0);
     wait_for(&mut model, "idle", |m| !m.busy());
