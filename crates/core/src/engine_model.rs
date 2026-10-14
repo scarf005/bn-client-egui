@@ -1806,6 +1806,10 @@ impl GameModel for EngineModel {
             .map_or(vec![], |a| crate::sidebar::lines(a, &self.colors))
     }
 
+    fn look_cell(&self, look: &Look) -> Option<Cell> {
+        Some(self.item_cell(look))
+    }
+
     fn sidebar_layout(&self) -> Option<crate::sidebar::Layout> {
         let avatar = self.replica.avatar()?;
         crate::sidebar::layout(avatar, &self.colors, |look| self.item_cell(look))

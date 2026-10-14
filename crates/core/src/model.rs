@@ -2,7 +2,7 @@ use crate::colors::ColorMap;
 use crate::interaction::InvokeError;
 use crate::markup::{self, Run};
 
-use crate::protocol::{Column, Editor, InvokeArgs, List, Mark, ModTileset, Row, Screen};
+use crate::protocol::{Column, Editor, InvokeArgs, List, Look, Mark, ModTileset, Row, Screen};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Pos {
     pub x: i32,
@@ -722,6 +722,10 @@ pub trait GameModel {
     /// Sounds heard that the game's message log does not hold: grouped, oldest first, faded by age.
     fn sounds(&self) -> Vec<crate::sounds::SoundLine> {
         vec![]
+    }
+    /// How a list row's look is drawn (sprite layers, else glyph and colour); none for a model without looks.
+    fn look_cell(&self, _look: &Look) -> Option<Cell> {
+        None
     }
     /// The avatar's sidebar as coloured lines; empty before the engine reports one.
     fn sidebar(&self) -> Vec<crate::sidebar::Line> {

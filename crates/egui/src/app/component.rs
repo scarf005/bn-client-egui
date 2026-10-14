@@ -4,7 +4,7 @@
 //! Drawing reads the engine's data and collects what the player did as `Intent`s. Applying an intent only
 //! calls the interaction core (`bn_client_core::interaction`), which decides what is sent.
 
-use super::App;
+use super::{App, sidebar};
 use crate::windows::{self, Origin, Shown, WindowSpec};
 use crate::{a11y, editor, text};
 use bn_client_core::interaction::{self, ArgKind, InvokeError, Reason};
@@ -13,8 +13,9 @@ use bn_client_core::protocol::{
     FormField, Grid, List, MapComponent, MapMode, PanelStat, Row, Screen, ScreenDock, ScreenRole,
     Selection, SidebarSide, Text, TextBlock, TextRole, Tone,
 };
-use bn_client_core::{GameModel, markup};
+use bn_client_core::{Cell, GameModel, markup};
 use eframe::egui::{self, WidgetInfo, WidgetType};
+use std::cell::RefCell;
 use std::collections::HashSet;
 
 /// Share of a list's width its label takes when the list has columns.
@@ -36,6 +37,15 @@ pub(super) struct Screens {
     denial: Option<String>,
     /// The list the keys just moved the focus in, to be scrolled to it.
     reveal: Option<String>,
+    /// The squares of this frame's list rows left for their item's sprite, painted once the window is drawn.
+    icons: RefCell<Vec<RowIcon>>,
+}
+
+/// A list row's item and the square it is drawn in.
+struct RowIcon {
+    painter: egui::Painter,
+    rect: egui::Rect,
+    cell: Cell,
 }
 
 /// What the player did while the screen was drawn.
@@ -222,6 +232,11 @@ impl<M: GameModel> App<M> {
             out.push(Intent::Cancel);
         }
         self.screens.reveal = None;
+        let season = self.model.season();
+        for icon in self.screens.icons.take() {
+            let display = &mut self.display;
+            sidebar::paint_cell(&icon.painter, icon.rect, display, &icon.cell, season.as_deref());
+        }
         out.into_iter().for_each(|intent| self.apply(intent));
     }
 
@@ -773,8 +788,9 @@ impl<M: GameModel> App<M> {
         response.widget_info(|| WidgetInfo::labeled(WidgetType::Label, true, &name));
     }
 
-    /// The row's text with its marks: the picking mark, the engine's mark, the key, the name in its colour.
-    fn row_markup(list: &List, row: &Row, picked: bool) -> String {
+    /// The row's text with its marks: the picking mark, the engine's mark, the key, the name in its colour. The
+    /// item's glyph is left out when its square beside the row draws it.
+    fn row_markup(list: &List, row: &Row, picked: bool, square: bool) -> String {
         let look = row.look.as_ref();
         let parts = [
             row.parent_id.is_some().then(|| "  ".to_string()),
@@ -785,7 +801,8 @@ impl<M: GameModel> App<M> {
             row.mark
                 .as_ref()
                 .map(|m| tagged(m.color.as_deref(), &m.glyph)),
-            look.map(|l| tagged(Some(&l.color), &l.glyph)),
+            look.filter(|_| !square)
+                .map(|l| tagged(Some(&l.color), &l.glyph)),
             row.favorite.filter(|&f| f).map(|_| "*".to_string()),
             row.hotkey
                 .as_ref()
@@ -847,7 +864,21 @@ impl<M: GameModel> App<M> {
                     }
                     let pick = interaction.picks(id).iter().find(|p| p.id == row.id);
                     let on = row.enabled && row.selectable;
-                    let marked = Self::row_markup(list, row, pick.is_some());
+                    let cell = row
+                        .look
+                        .as_ref()
+                        .filter(|_| self.display.tiles())
+                        .and_then(|look| self.model.look_cell(look));
+                    if let Some(cell) = &cell {
+                        let size = egui::Vec2::splat(height);
+                        let (rect, _) = ui.allocate_exact_size(size, egui::Sense::hover());
+                        self.screens.icons.borrow_mut().push(RowIcon {
+                            painter: ui.painter_at(rect),
+                            rect,
+                            cell: cell.clone(),
+                        });
+                    }
+                    let marked = Self::row_markup(list, row, pick.is_some(), cell.is_some());
                     // A refused row is plain dim text: the game's colours would hide that it is.
                     let text = if row.enabled {
                         self.line(ui, &marked)
@@ -1022,8 +1053,9 @@ mod tests {
 
     #[test]
     fn a_switch_row_shows_whether_it_is_on_and_a_plain_row_shows_nothing() {
-        let text =
-            |toggled| App::<bn_client_core::EngineModel>::row_markup(&list(), &row(toggled), false);
+        let text = |toggled| {
+            App::<bn_client_core::EngineModel>::row_markup(&list(), &row(toggled), false, false)
+        };
         assert_eq!(text(Some(true)), "[x] Lighting");
         assert_eq!(text(Some(false)), "[ ] Lighting");
         assert_eq!(text(None), "Lighting");

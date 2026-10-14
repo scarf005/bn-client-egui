@@ -226,10 +226,19 @@ impl<M: GameModel> App<M> {
 /// The cell as its sprite when the tileset has one, else as its glyph, in a square of `ICON`.
 fn icon(ui: &mut egui::Ui, display: &mut Display, cell: &Cell, season: Option<&str>) {
     let (rect, _) = ui.allocate_exact_size(egui::Vec2::splat(ICON), egui::Sense::hover());
-    let painter = ui.painter_at(rect);
-    let sprite = display.tiles() && display.paint_icon(&painter, rect, cell, season);
-    if !sprite {
-        glyph_icon(&painter, rect, cell);
+    paint_cell(&ui.painter_at(rect), rect, display, cell, season);
+}
+
+/// The cell in `rect` as its sprite when the tileset has one, else as its glyph.
+pub(super) fn paint_cell(
+    painter: &egui::Painter,
+    rect: egui::Rect,
+    display: &mut Display,
+    cell: &Cell,
+    season: Option<&str>,
+) {
+    if !(display.tiles() && display.paint_icon(painter, rect, cell, season)) {
+        glyph_icon(painter, rect, cell);
     }
 }
 
@@ -242,7 +251,7 @@ fn glyph_icon(painter: &egui::Painter, rect: egui::Rect, cell: &Cell) {
         rect.center(),
         egui::Align2::CENTER_CENTER,
         cell.glyph,
-        egui::FontId::monospace(ICON - 4.0),
+        egui::FontId::monospace(rect.height() - 4.0),
         super::rgb(cell.color),
     );
 }
