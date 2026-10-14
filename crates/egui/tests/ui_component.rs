@@ -734,15 +734,15 @@ fn recipe_screen(tabs: &str, list: &str, select: &str) -> Value {
             "selectable": true, "selected": i == 0, "columns": []})
     });
     let root = json!({"id": tabs, "kind": "tabs", "select": "tab",
-        "tabs": [
-            {"id": "t1", "label": "Weapons", "selected": true, "enabled": true, "unread": true},
-            {"id": "t2", "label": "Tools", "selected": false, "enabled": true},
-        ],
-        "child": {"id": "body", "kind": "split", "relation": "detail", "active": list, "children": [
-            {"id": list, "kind": "list", "columns": [], "rows": rows.collect::<Vec<_>>(),
-                "total": 3, "selection": "single", "activate": "go"},
-            {"id": "detail", "kind": "panel", "title": "Detail of a", "stats": []},
-        ]}});
+    "tabs": [
+        {"id": "t1", "label": "Weapons", "selected": true, "enabled": true, "unread": true},
+        {"id": "t2", "label": "Tools", "selected": false, "enabled": true},
+    ],
+    "child": {"id": "body", "kind": "split", "relation": "detail", "active": list, "children": [
+        {"id": list, "kind": "list", "columns": [], "rows": rows.collect::<Vec<_>>(),
+            "total": 3, "selection": "single", "activate": "go"},
+        {"id": "detail", "kind": "panel", "title": "Detail of a", "stats": []},
+    ]}});
     let row = json!({"row": {"component_id": list}});
     let mut go = affordance("go", &["RETURN"], row.clone());
     go["label"] = json!("Go");
@@ -801,4 +801,69 @@ fn the_editmap_screen_draws_the_engines_cursor_parts_and_a_click_runs_its_edit_a
     h.get_by_label_contains("Edit terrain").click();
     h.run_steps(3);
     assert_eq!(submits(&script), [screen_invoke("EDIT_TERRAIN")]);
+}
+
+#[test]
+fn an_option_row_runs_the_options_activate_with_the_option_as_its_row() {
+    let screen = example(
+        "options.json",
+        "options screen with the editor of an integer option",
+    );
+    let (mut h, script) = harness(screen);
+    h.get_by_label("Dangerous pickups").click();
+    h.run_steps(3);
+    assert_eq!(
+        submits(&script),
+        [boundary_invoke(
+            "options:activate",
+            json!({"row": "option:DANGEROUS_PICKUPS"})
+        )]
+    );
+}
+
+#[test]
+fn the_editor_of_the_option_under_the_cursor_runs_the_options_set_with_the_option_and_the_text() {
+    let screen = example(
+        "options.json",
+        "options screen with the editor of an integer option",
+    );
+    let (mut h, script) = harness(screen);
+    let field = h
+        .get_all_by_role(egui::accesskit::Role::TextInput)
+        .find(|n| n.accesskit_node().value().as_deref() == Some("0"))
+        .unwrap();
+    field.focus();
+    field.type_text("5");
+    h.run_steps(2);
+    h.key_press(egui::Key::Enter);
+    h.run_steps(3);
+    let sent = submits(&script);
+    assert_eq!(sent.len(), 1, "{sent:?}");
+    assert_eq!(sent[0]["operation"]["affordance_id"], "options:set");
+    assert_eq!(
+        sent[0]["operation"]["args"]["row"],
+        "option:SAFEMODEPROXIMITY"
+    );
+    assert!(
+        sent[0]["operation"]["args"]["text"]
+            .as_str()
+            .unwrap()
+            .contains('5')
+    );
+}
+
+#[test]
+fn a_keybinding_row_runs_the_pick_with_its_action_and_the_screen_says_its_mode() {
+    let screen = example("keybindings.json", "keybindings screen in the remove mode");
+    let (mut h, script) = harness(screen);
+    h.get_by_label("Mode: Remove bindings");
+    h.get_by_label("Move East").click();
+    h.run_steps(3);
+    assert_eq!(
+        submits(&script),
+        [boundary_invoke(
+            "keybindings:pick",
+            json!({"row": "action:RIGHT"})
+        )]
+    );
 }
