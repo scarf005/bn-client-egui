@@ -165,3 +165,23 @@ fn a_click_on_a_spell_chooses_it_by_the_spells_identity() {
     assert_eq!(last["affordance_id"], list["activate"]);
     assert_eq!(last["args"]["row"], spell["id"]);
 }
+
+#[test]
+fn the_spell_list_draws_every_spell_row_and_the_engines_own_key_rows() {
+    let screen = example("spell menu");
+    let (h, script) = open(screen.clone());
+    let list = find(&screen["root"], "list:choices").unwrap();
+    let rows = list["rows"].as_array().unwrap();
+    assert!(
+        rows.iter()
+            .any(|r| r["id"].as_str().unwrap().starts_with("spell:"))
+    );
+    for row in rows
+        .iter()
+        .filter(|r| !r["header"].as_bool().unwrap_or(false))
+        .take(8)
+    {
+        first(&h, row["label"].as_str().unwrap());
+    }
+    assert!(operations(&script).is_empty(), "drawing sends nothing");
+}
