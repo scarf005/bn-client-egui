@@ -1,11 +1,12 @@
 /**
  * @module
- * Copies the engine's generated contract examples into the client's fixtures, byte for byte.
+ * Copies the engine's generated contract examples and its schema into the client, byte for byte, and pins the
+ * schema's hash in the wire test.
  *
  *   deno run --allow-read --allow-write tools/sync_contract.ts <engine checkout>
  *   deno run --allow-read tools/sync_contract.ts <engine checkout> --check
  *
- * Generate them first in the engine (`deno task contract:gen`). `--check` exits 1 when the fixtures differ
+ * Generate them first in the engine (`deno task contract:gen`). `--check` exits 1 when the fixtures, the schema or the hash differ
  * from the engine's files; a file the engine no longer has is removed from the fixtures.
  */
 import { toFileUrl } from "jsr:@std/path@1.1.2";
@@ -61,9 +62,45 @@ for (
   if (!check) await Deno.remove(new URL(name, target));
 }
 
+// The engine hashes the schema it was configured with and refuses a client that vendors another one, so the
+// schema and the hash the wire test pins move with the examples.
+const schemaSource = new URL(
+  "../0.2.schema.json",
+  source,
+);
+const schemaTarget = new URL(
+  "../crates/core/schema/0.2.schema.json",
+  import.meta.url,
+);
+const hashTest = new URL("../crates/core/tests/wire_02.rs", import.meta.url);
+const schema = await Deno.readFile(schemaSource);
+const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", schema));
+const hash = `sha256:${
+  [...digest.slice(0, 8)].map((b) => b.toString(16).padStart(2, "0")).join("")
+}`;
+const vendored = await Deno.readFile(schemaTarget).catch(() => undefined);
+if (
+  vendored === undefined || vendored.length !== schema.length ||
+  vendored.some((byte, i) => byte !== schema[i])
+) {
+  changed.push("0.2.schema.json");
+  if (!check) await Deno.writeFile(schemaTarget, schema);
+}
+const pinned = /protocol::SCHEMA_HASH, "sha256:[0-9a-f]{16}"/;
+const test = await Deno.readTextFile(hashTest);
+if (!test.includes(`protocol::SCHEMA_HASH, "${hash}"`)) {
+  changed.push("wire_02.rs");
+  if (!check) {
+    await Deno.writeTextFile(
+      hashTest,
+      test.replace(pinned, `protocol::SCHEMA_HASH, "${hash}"`),
+    );
+  }
+}
+
 if (check && changed.length > 0) {
   console.error(
-    `fixtures differ from the engine's examples: ${changed.join(", ")}`,
+    `client differs from the engine: ${changed.join(", ")}`,
   );
   Deno.exit(1);
 }
