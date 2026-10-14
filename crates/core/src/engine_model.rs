@@ -1005,6 +1005,44 @@ impl EngineModel {
             .find(|a| a.enabled && a.id.eq_ignore_ascii_case(id))
     }
 
+    /// Asks the engine what is on `pos`; the answer holds for the revision it was asked at.
+    fn ask_describe(&mut self, pos: WorldPos) {
+        let (Some(boundary), Some(now)) = (self.replica.boundary(), self.replica.at()) else {
+            return;
+        };
+        let params = serde_json::to_value(protocol::DescribeParams {
+            epoch: now.epoch.clone(),
+            boundary_id: boundary.boundary_id.clone(),
+            pos: pos.clone(),
+        })
+        .expect("describe params serialize");
+        self.hovered = Some(Hover {
+            pos,
+            revision: now.revision.clone(),
+            lines: None,
+        });
+        self.call("bn.world.describe", params, Pending::Describe);
+    }
+
+    /// Asks again for the hovered square once its answer is older than the world, such as after the
+    /// engine's window changed size, so a pointer that stays still keeps its description.
+    fn refresh_hover(&mut self) {
+        let stale = self.hovered.as_ref().filter(|h| {
+            h.lines.is_some()
+                && self
+                    .replica
+                    .at()
+                    .is_some_and(|now| now.revision != h.revision)
+        });
+        let free = self
+            .replica
+            .boundary()
+            .is_some_and(|b| b.interaction.is_none());
+        if let (Some(pos), true) = (stale.map(|h| h.pos.clone()), free) {
+            self.ask_describe(pos);
+        }
+    }
+
     fn refresh_actions(&mut self) {
         let offered = self.replica.boundary().map_or(&[][..], |b| &b.actions);
         if !offered.is_empty() || !self.busy {
@@ -1599,6 +1637,7 @@ impl GameModel for EngineModel {
         self.refresh_view();
         self.refresh_items();
         self.refresh_actions();
+        self.refresh_hover();
     }
 
     fn set_waker(&mut self, waker: crate::transport::Waker) {
@@ -2121,18 +2160,7 @@ impl GameModel for EngineModel {
         if asked || boundary.interaction.is_some() {
             return;
         }
-        let params = serde_json::to_value(protocol::DescribeParams {
-            epoch: now.epoch.clone(),
-            boundary_id: boundary.boundary_id.clone(),
-            pos: pos.clone(),
-        })
-        .expect("describe params serialize");
-        self.hovered = Some(Hover {
-            pos,
-            revision: now.revision.clone(),
-            lines: None,
-        });
-        self.call("bn.world.describe", params, Pending::Describe);
+        self.ask_describe(pos);
     }
 
     fn hover_text(&self, at: Pos) -> Option<Vec<String>> {

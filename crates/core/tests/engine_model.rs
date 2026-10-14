@@ -2562,3 +2562,40 @@ fn a_logged_sound_is_judged_by_its_flag_not_by_matching_native_text() {
     let texts = sound_texts(&m);
     assert_eq!(texts, ["Tick."]);
 }
+
+fn describes(h: &bn_client_core::transport::ScriptHandle) -> usize {
+    h.sent()
+        .iter()
+        .filter(|m| m["method"] == "bn.world.describe")
+        .count()
+}
+
+#[test]
+fn a_hovered_square_is_described_again_when_its_answer_is_for_an_older_revision() {
+    let (t, h) = session();
+    let reply = json!({"jsonrpc":"2.0","id":0,"result":{"lines":["Wall"]}});
+    let mut m = connected(
+        t.on("bn.world.describe", vec![reply.clone()])
+            .on("bn.world.describe", vec![reply]),
+    );
+    // Avatar (3, 4) is drawn at view (20, 12).
+    m.hover(Pos { x: 22, y: 12 });
+    m.poll();
+    assert_eq!(describes(&h), 1);
+    assert_eq!(
+        m.hover_text(Pos { x: 22, y: 12 }),
+        Some(vec!["Wall".into()])
+    );
+    m.poll();
+    assert_eq!(describes(&h), 1, "an unchanged world asks nothing more");
+    h.push(change(41, json!({"route": [pos(4, 4)]})));
+    m.poll();
+    assert_eq!(
+        describes(&h),
+        2,
+        "a new revision asks for the same square again"
+    );
+    m.poll();
+    assert_eq!(describes(&h), 2, "once per revision");
+    assert!(m.hover_text(Pos { x: 22, y: 12 }).is_some());
+}
