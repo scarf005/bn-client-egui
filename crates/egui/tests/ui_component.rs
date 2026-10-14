@@ -909,3 +909,36 @@ fn a_colour_row_runs_the_activate_affordance_with_the_colour_as_its_row() {
         )]
     );
 }
+
+#[test]
+fn a_worn_item_runs_the_armor_screens_pick_with_its_identity() {
+    let (mut h, script) = harness(example("armor.json", "armor layers screen"));
+    h.get_all_by_label("||\u{a0}jeans").next().unwrap().click();
+    h.run_steps(3);
+    assert_eq!(
+        submits(&script),
+        [boundary_invoke("armor:pick", json!({"row": "worn:jeans:0"}))]
+    );
+}
+
+#[test]
+fn a_body_part_tab_runs_the_armor_screens_part_pick_with_its_id() {
+    let (mut h, script) = harness(example("armor.json", "armor layers screen"));
+    h.get_all_by_label("Torso").next().unwrap().click();
+    h.run_steps(3);
+    assert_eq!(
+        submits(&script),
+        [boundary_invoke("armor:part", json!({"row": "part:torso"}))]
+    );
+}
+
+#[test]
+fn an_action_of_the_item_examine_menu_runs_the_menus_run_with_the_action_id() {
+    let (mut h, script) = harness(example("armor.json", "item examine menu"));
+    h.get_by_label("Wield").click();
+    h.run_steps(3);
+    assert_eq!(
+        submits(&script),
+        [boundary_invoke("examine:run", json!({"row": "WIELD"}))]
+    );
+}

@@ -694,3 +694,54 @@ fn the_construction_screen_marks_unread_tabs_and_selects_the_row_the_focus_moves
         "construct:select",
     );
 }
+
+fn large(app: &mut TuiApp<EngineModel>) -> Terminal<TestBackend> {
+    let mut t = Terminal::new(TestBackend::new(180, 50)).unwrap();
+    t.draw(|f| app.draw(f)).unwrap();
+    t
+}
+
+#[test]
+fn the_armor_layers_screen_draws_its_lists_and_details_and_down_runs_its_registered_action() {
+    let (mut app, h) = open(example("armor.json", "armor layers screen"));
+    let t = large(&mut app);
+    let text = lines(&t).join("\n");
+    for shown in [
+        "Torso",
+        "(Innermost)",
+        "Properties",
+        "Protection",
+        "Encumbrance and Warmth",
+        "||\u{a0}jeans",
+    ] {
+        assert!(text.contains(shown), "{shown:?} in {text}");
+    }
+    assert!(
+        modifier(&t, "All").contains(Modifier::REVERSED),
+        "the selected body part"
+    );
+    assert!(operations(&h).is_empty());
+    press(&mut app, KeyCode::Down);
+    large(&mut app);
+    assert_eq!(
+        operations(&h),
+        [json!({"kind": "invoke", "affordance_id": "DOWN", "args": {}})]
+    );
+}
+
+#[test]
+fn the_item_examine_menu_draws_the_item_beside_its_actions_and_down_runs_its_registered_action() {
+    let (mut app, h) = open(example("armor.json", "item examine menu"));
+    let t = large(&mut app);
+    let text = lines(&t).join("\n");
+    assert!(
+        text.contains("Wield") && text.contains("Take off"),
+        "{text}"
+    );
+    press(&mut app, KeyCode::Down);
+    large(&mut app);
+    assert_eq!(
+        operations(&h),
+        [json!({"kind": "invoke", "affordance_id": "DOWN", "args": {}})]
+    );
+}

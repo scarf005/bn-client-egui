@@ -185,7 +185,6 @@ screen!(item_list, "LIST_ITEMS");
 screen!(monster_list, "LIST_MONSTERS");
 screen!(vehicle_list, "LIST_VEHICLES");
 screen!(mission_list, "MISSIONS", tabs);
-screen!(armor_layers, "SORT_ARMOR", tabs);
 screen!(zone_manager, "ZONES_MANAGER");
 screen!(faction_manager, "FACTION MANAGER", tabs);
 screen!(scores, "SCORES", tabs);
