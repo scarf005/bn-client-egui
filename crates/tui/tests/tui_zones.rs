@@ -148,44 +148,6 @@ fn with_panes(mut interaction: Value, panes: Value) -> Value {
 }
 
 #[test]
-fn the_map_editors_tile_and_actions_panes_are_drawn_under_headings_and_an_action_row_is_clickable()
-{
-    let (mut app, h) = engine();
-    text(&mut app);
-    let mut terrain = row("tile:terrain", "tile", "Terrain", "grass", "");
-    terrain["selectable"] = false.into();
-    let editor = screen(
-        "target",
-        "EDITMAP",
-        "Map editor",
-        "",
-        vec![
-            terrain,
-            row("action:EDIT_TERRAIN", "actions", "Edit terrain", "", "e"),
-        ],
-    );
-    let panes = json!([{"id":"tile","label":"Tile","role":"current"},
-        {"id":"actions","label":"Actions","role":"controls"}]);
-    show(&mut app, &h, with_panes(editor, panes), json!([]));
-    let shown = text(&mut app);
-    let lines = shown.lines().collect::<Vec<_>>();
-    let at = |needle: &str| lines.iter().position(|l| l.contains(needle)).unwrap();
-    assert!(
-        at("Tile") < at("Terrain grass") && at("Terrain grass") < at("Actions"),
-        "{shown}"
-    );
-    assert!(at("Actions") < at("e Edit terrain"), "{shown}");
-    let (x, y) = (
-        lines[at("e Edit terrain")].find("e Edit terrain").unwrap() as u16,
-        at("e Edit terrain") as u16,
-    );
-    app.handle_mouse(mouse(x, at("Terrain grass") as u16));
-    assert!(chosen(&h).is_empty(), "a tile row is not an action");
-    app.handle_mouse(mouse(x, y));
-    assert_eq!(chosen(&h), ["action:EDIT_TERRAIN"]);
-}
-
-#[test]
 fn the_zone_manager_lists_its_zones_options_and_actions_under_headings() {
     let (mut app, h) = engine();
     text(&mut app);
@@ -356,23 +318,43 @@ fn enter_confirms_a_zone_point_after_a_click_moved_the_engines_cursor() {
 }
 
 #[test]
-fn native_look_shows_the_engines_description_and_its_keys_move_the_engines_cursor() {
+fn native_look_shows_the_engines_parts_and_its_keys_move_the_engines_cursor() {
     let (mut app, h) = engine();
     text(&mut app);
-    let mut look = screen("target", "LOOK", "Look Around", "", vec![]);
-    look["target"]["status"] = "look".into();
-    look["target"]["description"] = json!(["Grass; Lighting: bright", "There is a tree here."]);
-    show(
-        &mut app,
-        &h,
-        look,
-        json!([{"id":"RIGHT","name":"Move right","keys":["RIGHT"]}]),
-    );
+    for name in ["events_41_walk", "events_42_message"] {
+        h.push(fixture(name));
+    }
+    let mut menu = fixture("events_43_menu");
+    let change = &mut menu["params"]["events"][0]["changes"]["interaction"];
+    change["actions"] = json!([{"id":"RIGHT","name":"Move right","keys":["RIGHT"]}]);
+    change["interaction"] = Value::Null;
+    change["stack"] = json!([
+        {"screen_id":"screen:map","role":"map","root":null,"affordances":[]},
+        {"screen_id":"screen:7","role":"dialog","title":"Look Around",
+         "root":{"id":"target","kind":"panel","title":"Look Around","child":{"id":"target:map",
+             "kind":"map","affordances":["target:move"],"mode":"world",
+             "target":{"source":{"dim":"","x":2,"y":4,"z":0},"current":{"dim":"","x":3,"y":4,"z":0},
+                 "range":8,"distance_metric":"square","status":"look","candidates":[],
+                 "parts":[{"kind":"terrain","text":"Grass; Lighting: bright"},
+                     {"kind":"furniture","text":"There is a tree here."}]}}},
+         "affordances":[{"id":"target:move","label":"Select","keys":[],"enabled":true,
+             "args":{"pos":{"unit":"square"}},"expect":"boundary"},
+             {"id":"RIGHT","label":"Move right","keys":["RIGHT"],"enabled":true,
+              "args":{},"expect":"screen"}]}]);
+    h.push(menu);
+    app.model.poll();
     let shown = text(&mut app);
     assert!(
-        shown.contains("Look Around: Grass; Lighting: bright / There is a tree here."),
-        "the engine's look text beside the cursor\n{shown}"
+        shown.contains("Grass; Lighting: bright") && shown.contains("There is a tree here."),
+        "the engine's look parts beside the cursor\n{shown}"
     );
     app.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
-    assert_eq!(invoked(&h), ["RIGHT"], "the engine moves its own cursor");
+    let sent = h.sent();
+    let operation = sent
+        .iter()
+        .rev()
+        .find(|m| m["method"] == "bn.command.submit")
+        .map(|m| m["params"]["operation"].clone())
+        .unwrap();
+    assert_eq!(operation["affordance_id"], "RIGHT", "{operation}");
 }

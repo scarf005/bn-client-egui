@@ -894,35 +894,6 @@ fn the_status_line_lists_the_map_editors_square_and_its_keys() {
 }
 
 #[test]
-fn the_map_editors_tile_rows_and_clickable_actions_are_drawn_beside_the_map() {
-    let (mut h, script) = harness();
-    h.run_steps(5);
-    let mut terrain = choice("tile:terrain", "Terrain");
-    terrain["pane_id"] = "tile".into();
-    terrain["description"] = "grass".into();
-    terrain["selectable"] = false.into();
-    let mut edit = choice("action:EDIT_TERRAIN", "Edit terrain");
-    edit["pane_id"] = "actions".into();
-    edit["hotkey"] = "e".into();
-    let mut screen = target_screen("EDITMAP", "Map editor", "", json!([terrain, edit]));
-    let actions = h.get_all_by_label("Actions").count();
-    screen["compat"] = json!({"panes":[{"id":"tile","label":"Tile","role":"current"},
-        {"id":"actions","label":"Actions","role":"controls"}]});
-    script.push(show(41, json!([]), screen));
-    h.run_steps(4);
-    h.get_by_label("Tile");
-    assert_eq!(h.get_all_by_label("Actions").count(), actions + 1);
-    h.get_by_label("Terrain: grass");
-    h.get_by_role_and_label(egui::accesskit::Role::Button, "e Edit terrain")
-        .click();
-    h.run_steps(3);
-    assert_eq!(
-        submits(&script),
-        [json!({"kind":"choose","choice_id":"action:EDIT_TERRAIN"})]
-    );
-}
-
-#[test]
 fn the_zone_managers_panes_start_under_their_headings() {
     let (mut h, script) = harness();
     h.run_steps(5);

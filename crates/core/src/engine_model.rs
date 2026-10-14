@@ -607,7 +607,12 @@ impl EngineModel {
             let lines = result
                 .ok()
                 .and_then(|v| serde_json::from_value::<protocol::DescribeResult>(v).ok())
-                .map(|d| d.lines)
+                .map(|d| {
+                    d.parts
+                        .into_iter()
+                        .map(|p| markup::plain(&p.text))
+                        .collect()
+                })
                 .unwrap_or_default();
             if let Some(h) = self.hovered.as_mut() {
                 h.lines = Some(lines);
@@ -886,6 +891,21 @@ impl EngineModel {
             return false;
         };
         self.submit(Operation::Action { action_id })
+    }
+
+    /// The cursor map of the screen on top, when it puts a cursor on the streamed world.
+    fn cursor_map(&self) -> Option<&protocol::MapComponent> {
+        self.replica.stack().last()?.root.as_ref()?.cursor_map()
+    }
+
+    /// The affordance of the screen on top that puts the cursor on a square.
+    fn cursor_move(&self) -> Option<String> {
+        let top = self.replica.stack().last()?;
+        top.root.as_ref()?.cursor_map()?;
+        top.affordances
+            .iter()
+            .find(|a| a.args.as_ref().is_some_and(|args| args.pos.is_some()))
+            .map(|a| a.id.clone())
     }
 
     fn avatar_pos(&self) -> Option<&WorldPos> {
@@ -1500,8 +1520,7 @@ impl EngineModel {
 }
 
 /// What a target screen other than a shot says: the step of a zone's area (`message`), for the map
-/// editor the rows of the square under its cursor and the keys of its edit actions, and what the
-/// native look window prints of the square under the cursor.
+/// editor the rows of the square under its cursor and the keys of its edit actions.
 fn target_note(i: &protocol::Interaction) -> Option<String> {
     i.target.as_ref().filter(|_| i.overmap.is_none())?;
     let rows = |pane: &str| {
@@ -1521,15 +1540,7 @@ fn target_note(i: &protocol::Interaction) -> Option<String> {
         .map(|c| format!("{} {}", c.hotkey.as_deref().unwrap_or_default(), c.label))
         .collect::<Vec<_>>()
         .join(", ");
-    let described = i
-        .target
-        .as_ref()
-        .and_then(|t| t["description"].as_array())
-        .map_or_else(String::new, |lines| {
-            let lines = lines.iter().filter_map(Value::as_str).map(markup::plain);
-            lines.collect::<Vec<_>>().join(" / ")
-        });
-    let note = [markup::plain(&i.message), tile, keys, described]
+    let note = [markup::plain(&i.message), tile, keys]
         .into_iter()
         .filter(|part| !part.is_empty())
         .collect::<Vec<_>>()
@@ -1910,12 +1921,6 @@ impl GameModel for EngineModel {
         (i.kind != "target").then(|| self.menu_of(i))
     }
 
-    fn target_panel(&self) -> Option<Menu> {
-        let i = self.replica.boundary()?.interaction.as_ref()?;
-        (i.kind == "target" && i.overmap.is_none() && !i.choices.is_empty())
-            .then(|| self.menu_of(i))
-    }
-
     fn overmap(&self) -> Option<Overmap> {
         let i = self.replica.boundary()?.interaction.as_ref()?;
         let wire = i.overmap.as_ref()?;
@@ -2091,12 +2096,18 @@ impl GameModel for EngineModel {
     }
 
     fn focus(&self) -> Option<Pos> {
-        let i = self.replica.boundary()?.interaction.as_ref()?;
-        if i.overmap.is_some() {
-            // The overmap's cursor is an overmap square, not a map square.
-            return None;
-        }
-        let at = serde_json::from_value::<WorldPos>(i.target.as_ref()?["current"].clone()).ok()?;
+        let target = match self.cursor_map() {
+            Some(map) => map.target.clone()?,
+            None => {
+                let i = self.replica.boundary()?.interaction.as_ref()?;
+                if i.overmap.is_some() {
+                    // The overmap's cursor is an overmap square, not a map square.
+                    return None;
+                }
+                i.target.clone()?
+            }
+        };
+        let at = serde_json::from_value::<WorldPos>(target["current"].clone()).ok()?;
         let (ox, oy) = self.origin?;
         Some(Pos {
             x: at.x - ox,
@@ -2105,12 +2116,17 @@ impl GameModel for EngineModel {
     }
 
     fn aiming(&self) -> Option<String> {
-        let i = self.replica.boundary()?.interaction.as_ref()?;
-        if i.context != "TARGET" {
-            return target_note(i);
-        }
-        let status = i.target.as_ref()?["status_text"].as_str()?;
-        Some(format!("{}: {status}", markup::plain(&i.title)))
+        let Some(map) = self.cursor_map() else {
+            return target_note(self.replica.boundary()?.interaction.as_ref()?);
+        };
+        let lines = map
+            .cursor_lines()
+            .iter()
+            .map(|l| markup::plain(l))
+            .filter(|l| !l.is_empty())
+            .collect::<Vec<_>>();
+        let title = self.replica.stack().last()?.title.as_ref()?.shown();
+        (!lines.is_empty()).then(|| format!("{}: {}", markup::plain(&title), lines.join(" / ")))
     }
 
     fn styled(&self, text: &str) -> Vec<Run> {
@@ -2120,7 +2136,6 @@ impl GameModel for EngineModel {
     fn choose(&mut self, choice_id: &str) {
         let enabled = self
             .menu()
-            .or_else(|| self.target_panel())
             .is_some_and(|m| m.choices.iter().any(|c| c.id == choice_id && c.enabled));
         if enabled && !self.busy {
             self.submit(Operation::Choose {
@@ -2183,12 +2198,21 @@ impl GameModel for EngineModel {
                     self.invoke(&["CONFIRM".into()]);
                 }
             }
-            (false, Some(pos)) => {
-                self.submit(Operation::SetTarget {
-                    candidate_id: None,
-                    pos: Some(pos),
-                });
-            }
+            (false, Some(pos)) => match self.cursor_move() {
+                Some(id) => {
+                    let args = InvokeArgs {
+                        pos: Some(pos),
+                        ..InvokeArgs::default()
+                    };
+                    let _ = self.invoke_affordance(&id, args);
+                }
+                None => {
+                    self.submit(Operation::SetTarget {
+                        candidate_id: None,
+                        pos: Some(pos),
+                    });
+                }
+            },
             _ => {}
         }
         true

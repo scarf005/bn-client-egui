@@ -739,8 +739,16 @@ impl<M: GameModel> App<M> {
         });
     }
 
-    /// The map is the map view's; here it is the place it would take.
+    /// The map is the map view's; here it is the place it would take, or the words the engine says of the
+    /// cursor's square when the screen puts a cursor on it.
     fn map_slot(&self, ui: &mut egui::Ui, map: &MapComponent) {
+        let lines = map.cursor_lines();
+        if !lines.is_empty() {
+            let font = egui::TextStyle::Body.resolve(ui.style());
+            let job = text::job(&self.model.styled(&lines.join("\n")), &font);
+            ui.add(egui::Label::new(job).wrap_mode(egui::TextWrapMode::Wrap));
+            return;
+        }
         let name = match (&map.head.label, map.mode) {
             (Some(label), _) => markup::plain(&label.shown()),
             (None, MapMode::World) => "Map".into(),

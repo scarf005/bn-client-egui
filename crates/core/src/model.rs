@@ -622,11 +622,6 @@ pub trait GameModel {
     fn menu(&self) -> Option<Menu> {
         None
     }
-    /// The panes of a target screen (the map editor's tile and actions), drawn beside the map it moves a
-    /// cursor on; none when the screen lists nothing.
-    fn target_panel(&self) -> Option<Menu> {
-        None
-    }
     /// Where the engine's own cursor is (look mode), in view coordinates; none when it has no cursor.
     fn focus(&self) -> Option<Pos> {
         None

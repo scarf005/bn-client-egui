@@ -1320,9 +1320,19 @@ pub struct DescribeParams {
     pub pos: WorldPos,
 }
 
+/// One fact the engine's look view prints of a square.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TilePart {
+    pub kind: String,
+    /// Markup.
+    pub text: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DescribeResult {
-    pub lines: Vec<String>,
+    pub parts: Vec<TilePart>,
 }
 
 /// Params of `bn.command.result`; its result is a `CommandNotice`.
@@ -1735,6 +1745,14 @@ impl Component {
         }
     }
 
+    /// The streamed world's map in this component or inside it, when the screen puts a cursor on it.
+    pub fn cursor_map(&self) -> Option<&MapComponent> {
+        match self {
+            Component::Map(m) if m.mode == MapMode::World && m.target.is_some() => Some(m),
+            _ => self.children().into_iter().find_map(Component::cursor_map),
+        }
+    }
+
     /// This component or the one inside it with `id`.
     pub fn find(&self, id: &str) -> Option<&Component> {
         match self.id() == id {
@@ -2042,6 +2060,24 @@ pub struct MapComponent {
     pub target: Option<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub overmap: Option<OvermapWire>,
+}
+
+impl MapComponent {
+    /// What the engine says of the cursor's square: the screen's status in words, then each fact it prints of
+    /// the square with the long text of the creature on it, as markup lines.
+    pub fn cursor_lines(&self) -> Vec<String> {
+        let Some(target) = &self.target else {
+            return vec![];
+        };
+        let status = target["status_text"].as_str().map(String::from);
+        let parts = target["parts"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|p| serde_json::from_value::<TilePart>(p.clone()).ok())
+            .flat_map(|p| std::iter::once(p.text).chain(p.detail));
+        status.into_iter().chain(parts).collect()
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

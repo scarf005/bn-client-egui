@@ -962,11 +962,6 @@ pub const OVERRIDES: &[Override] = &[
         slice: "S9",
     },
     Override {
-        module: "crates/egui/src/app/target.rs",
-        screen: "target panes (map editor tile and actions)",
-        slice: "S6",
-    },
-    Override {
         module: "crates/egui/src/app/vehicle.rs",
         screen: "VEH_INTERACT",
         slice: "S8",

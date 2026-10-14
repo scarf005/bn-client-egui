@@ -492,7 +492,7 @@ impl<M: GameModel> TuiApp<M> {
 
     /// A left click on a row or tab of the open menu chooses it, as the engine's own choose does.
     fn menu_click(&mut self, ev: MouseEvent) -> bool {
-        let Some(menu) = self.model.menu().or_else(|| self.model.target_panel()) else {
+        let Some(menu) = self.model.menu() else {
             return false;
         };
         if menu.screen {
@@ -682,10 +682,7 @@ impl<M: GameModel> TuiApp<M> {
         for (panel, area) in panels.iter().zip(areas.iter()) {
             Self::draw_panel(f, *area, panel);
         }
-        match self.model.target_panel() {
-            Some(panel) => self.draw_target_panel(f, actions, &panel),
-            None => self.draw_actions(f, actions),
-        }
+        self.draw_actions(f, actions);
         self.draw_items(f, items);
         f.render_widget(Paragraph::new(self.status_line()), status);
         // The game's own lines in their colours with repeat counts, then the client's command results.
@@ -944,54 +941,6 @@ impl<M: GameModel> TuiApp<M> {
             Paragraph::new(lines).block(Block::bordered().title("Actions")),
             area,
         );
-    }
-
-    /// The panes of a target screen in the side column, one heading per pane; a click on an action row
-    /// chooses it.
-    fn draw_target_panel(&mut self, f: &mut Frame, area: Rect, panel: &Menu) {
-        let block = Block::bordered().title(plain(&panel.title));
-        let inner = block.inner(area);
-        let mut previous = None;
-        let (mut lines, mut ids) = (vec![], vec![]);
-        for row in panel.entries() {
-            if let Some(heading) = panel.heading(previous, row) {
-                lines.push(Line::styled(
-                    heading.to_string(),
-                    Style::new().add_modifier(Modifier::BOLD),
-                ));
-                ids.push(String::new());
-            }
-            previous = Some(row);
-            let values = row
-                .columns
-                .iter()
-                .filter(|c| !c.value.is_empty())
-                .map(|c| format!("{} {}", c.label, c.value))
-                .collect::<Vec<_>>()
-                .join(", ");
-            let text = match (row.hotkey.is_empty(), values.is_empty()) {
-                (false, _) => format!("{} {}", row.hotkey, plain(&row.label)),
-                (true, true) => format!("{} {}", plain(&row.label), plain(&row.description)),
-                (true, false) => format!(
-                    "{} {} ({values})",
-                    plain(&row.label),
-                    plain(&row.description)
-                ),
-            };
-            let style = match (row.selected, row.enabled) {
-                (true, _) => Style::new().add_modifier(Modifier::REVERSED),
-                (false, true) => Style::new(),
-                (false, false) => Style::new().fg(Color::DarkGray),
-            };
-            lines.push(Line::styled(text.trim_end().to_string(), style));
-            ids.push(row.id.clone());
-        }
-        f.render_widget(Paragraph::new(lines).block(block), area);
-        self.menu_hits = MenuHits {
-            list: inner,
-            rows: ids,
-            ..Default::default()
-        };
     }
 
     fn draw_items(&mut self, f: &mut Frame, area: Rect) {

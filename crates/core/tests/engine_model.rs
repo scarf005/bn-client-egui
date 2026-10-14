@@ -1353,6 +1353,32 @@ fn show(sequence: u64, actions: Value, interaction: Value) -> Value {
             "interaction": interaction}}}]}})
 }
 
+/// A boundary of the map with a target screen over it: the title, the cursor at `x`, what the screen says in
+/// words, the facts of the cursor's square, and the affordance that moves the cursor.
+fn target_stack(
+    sequence: u64,
+    title: &str,
+    x: i32,
+    status_text: Option<&str>,
+    parts: Value,
+) -> Value {
+    let mut target = json!({"source":{"dim":"","x":2,"y":4,"z":0},"current":{"dim":"","x":x,"y":6,"z":0},
+        "range":8,"distance_metric":"square","distance":(x - 2).abs(),"status":"look",
+        "candidates":[],"parts":parts});
+    if let Some(text) = status_text {
+        target["status_text"] = text.into();
+    }
+    let mut event = show(sequence, json!([]), Value::Null);
+    event["params"]["events"][0]["changes"]["interaction"]["stack"] = json!([
+        {"screen_id":"screen:map","role":"map","root":null,"affordances":[]},
+        {"screen_id":"screen:7","role":"dialog","title":title,
+         "root":{"id":"target","kind":"panel","title":title,"child":{"id":"target:map","kind":"map",
+             "affordances":["target:move"],"mode":"world","target":target}},
+         "affordances":[{"id":"target:move","label":"Select","keys":[],"enabled":true,
+             "args":{"pos":{"unit":"square"}},"expect":"boundary"}]}]);
+    event
+}
+
 fn operations(h: &bn_client_core::transport::ScriptHandle) -> Vec<Value> {
     submits(h)
         .iter()
@@ -1465,13 +1491,7 @@ fn the_selected_tab_picks_the_pane_and_a_target_interaction_is_a_cursor_not_a_me
     assert_eq!(menu.entries()[0].label, "Melee");
     assert_eq!(menu.entries()[0].description, "d");
     assert_eq!(menu.entries()[0].column("base"), "8");
-    h.push(show(
-        42,
-        json!([]),
-        json!({"schema_id":"s:l","kind":"target","context":"LOOK","title":"Look Around","message":"",
-            "allow_cancel":true,"choices":[],"choice_total":0,"allow_set_count":false,
-            "target":{"current":{"dim":"","x":5,"y":4,"z":0}}}),
-    ));
+    h.push(target_stack(42, "Look Around", 5, None, json!([])));
     m.poll();
     assert!(m.menu().is_none());
     let origin = m.origin();
@@ -1479,61 +1499,92 @@ fn the_selected_tab_picks_the_pane_and_a_target_interaction_is_a_cursor_not_a_me
         m.focus(),
         Some(Pos {
             x: 5 - origin.x,
-            y: 4 - origin.y
+            y: 6 - origin.y
         })
     );
 }
 
 #[test]
-fn aiming_reports_the_cursor_distance_against_the_range_and_the_shot_status_only_while_firing() {
-    let aim = |context: &str, status: &str, x: i32| {
-        json!({"schema_id":"s:a","kind":"target","context":context,"title":"Firing Uzi 9mm","message":"",
-            "allow_cancel":true,"choices":[],"choice_total":0,"allow_set_count":false,
-            "target":{"source":{"dim":"","x":2,"y":4,"z":0},"current":{"dim":"","x":x,"y":6,"z":0},
-                "range":8,"distance_metric":"square","status":status,"candidates":[],
-                "status_text": format!("range {}/8, {}", (x - 2).abs().max(2), match status { "good" => "ready to fire", "out_of_range" => "out of range", _ => "out of ammo" })}})
-    };
+fn aiming_says_the_screens_range_line_and_the_creature_under_the_cursor() {
     let (t, h) = session();
     let mut m = connected(t);
-    for (sequence, (context, status, x, want)) in (41..).zip([
+    for (sequence, (x, words, parts, want)) in (41..).zip([
         (
-            "TARGET",
-            "good",
             6,
+            Some("range 4/8, ready to fire"),
+            json!([]),
             Some("Firing Uzi 9mm: range 4/8, ready to fire"),
         ),
         (
-            "TARGET",
-            "out_of_range",
             12,
+            Some("range 10/8, out of range"),
+            json!([]),
             Some("Firing Uzi 9mm: range 10/8, out of range"),
         ),
         (
-            "TARGET",
-            "out_of_ammo",
             3,
-            Some("Firing Uzi 9mm: range 2/8, out of ammo"),
+            Some("range 2/8, out of ammo"),
+            json!([{"kind":"creature","text":"<color_c_red>zombie</color>","detail":"A walking corpse."}]),
+            Some("Firing Uzi 9mm: range 2/8, out of ammo / zombie / A walking corpse."),
         ),
-        ("LOOK", "good", 6, None),
+        (6, None, json!([]), None),
     ]) {
-        h.push(show(sequence, json!([]), aim(context, status, x)));
+        h.push(target_stack(sequence, "Firing Uzi 9mm", x, words, parts));
         m.poll();
-        assert_eq!(m.aiming().as_deref(), want, "{context} {status}");
+        assert_eq!(m.aiming().as_deref(), want, "{words:?}");
     }
 }
 
 #[test]
-fn a_target_screen_that_is_not_a_shot_says_its_zone_step_or_the_map_editors_square_and_keys() {
+fn looking_says_the_facts_of_the_cursor_square_and_moving_it_invokes_the_screens_move() {
+    let (t, h) = session();
+    let mut m = connected(t.on("bn.command.submit", walk_reply()));
+    let parts = json!([{"kind":"terrain","text":"<color_c_green>grass</color>"},
+        {"kind":"item","text":"rock [2]"}]);
+    h.push(target_stack(
+        41,
+        "Look Around",
+        3,
+        Some("Select first point."),
+        parts,
+    ));
+    m.poll();
+    assert_eq!(
+        m.aiming().as_deref(),
+        Some("Look Around: Select first point. / grass / rock [2]")
+    );
+    let origin = m.origin();
+    // The cursor is already on the square: a hover leaves it, and nothing is sent.
+    assert!(m.aim(
+        Pos {
+            x: 3 - origin.x,
+            y: 6 - origin.y
+        },
+        false
+    ));
+    assert!(operations(&h).is_empty());
+    // Another square is the screen's move, with the square as its argument.
+    assert!(m.aim(
+        Pos {
+            x: 5 - origin.x,
+            y: 6 - origin.y
+        },
+        false
+    ));
+    let sent = submits(&h);
+    assert_eq!(sent.len(), 1);
+    let operation = &sent[0]["params"]["operation"];
+    assert_eq!(operation["kind"], "invoke");
+    assert_eq!(operation["affordance_id"], "target:move");
+    assert_eq!(operation["args"]["pos"]["x"], 5);
+}
+
+#[test]
+fn the_map_editors_square_and_keys_are_said_as_a_note() {
     let row = |id: &str, pane: &str, label: &str, description: &str, hotkey: &str| {
         json!({"id":id,"label":label,"description":description,"denial":"","hotkey":hotkey,
             "pane_id":pane,"enabled":true,"selectable":hotkey.is_empty() == false,"selected":false,
             "columns":[]})
-    };
-    let screen = |context: &str, title: &str, message: &str, status: &str, choices: Value| {
-        json!({"schema_id":"s:n","kind":"target","context":context,"title":title,"message":message,
-            "allow_cancel":true,"choices":choices,"choice_total":0,"allow_set_count":false,
-            "target":{"source":{"dim":"","x":2,"y":4,"z":0},"current":{"dim":"","x":3,"y":4,"z":0},
-                "range":0,"distance_metric":"square","status":status,"candidates":[]}})
     };
     let (t, h) = session();
     let mut m = connected(t);
@@ -1543,37 +1594,19 @@ fn a_target_screen_that_is_not_a_shot_says_its_zone_step_or_the_map_editors_squa
         row("action:EDIT_TERRAIN", "actions", "Edit terrain", "", "e"),
         row("action:LEVEL_UP", "actions", "Up", "", ""),
     ]);
-    for (sequence, (screen, want)) in (41..).zip([
-        (
-            screen(
-                "LOOK",
-                "Look Around",
-                "Select first point.",
-                "zone_first",
-                json!([]),
-            ),
-            Some("Look Around: Select first point."),
-        ),
-        (
-            screen(
-                "LOOK",
-                "Look Around",
-                "Moving zone.",
-                "zone_move",
-                json!([]),
-            ),
-            Some("Look Around: Moving zone."),
-        ),
-        (screen("LOOK", "Look Around", "", "look", json!([])), None),
-        (
-            screen("EDITMAP", "Map editor", "", "editmap", editor),
-            Some("Map editor: Terrain grass, Trap bear trap. e Edit terrain"),
-        ),
-    ]) {
-        h.push(show(sequence, json!([]), screen));
-        m.poll();
-        assert_eq!(m.aiming().as_deref(), want, "{want:?}");
-    }
+    h.push(show(
+        41,
+        json!([]),
+        json!({"schema_id":"s:n","kind":"target","context":"EDITMAP","title":"Map editor","message":"",
+            "allow_cancel":true,"choices":editor,"choice_total":0,"allow_set_count":false,
+            "target":{"source":{"dim":"","x":2,"y":4,"z":0},"current":{"dim":"","x":3,"y":4,"z":0},
+                "range":0,"distance_metric":"square","status":"editmap","candidates":[]}}),
+    ));
+    m.poll();
+    assert_eq!(
+        m.aiming().as_deref(),
+        Some("Map editor: Terrain grass, Trap bear trap. e Edit terrain")
+    );
 }
 
 #[test]
@@ -2313,47 +2346,6 @@ fn paned(kind: &str, context: &str, panes: Value, rows: &[(&str, &str, bool)]) -
         "compat":{"panes":panes},
         "target":{"source":{"dim":"","x":2,"y":4,"z":0},"current":{"dim":"","x":3,"y":4,"z":0},
             "range":0,"distance_metric":"square","status":"editmap","candidates":[]}})
-}
-
-#[test]
-fn a_target_screen_with_rows_is_a_panel_and_choosing_its_action_row_is_sent() {
-    let (t, h) = session();
-    let mut m = connected(t.on("bn.command.submit", walk_reply()));
-    let panes = json!([{"id":"tile","label":"Tile","role":"current"},
-        {"id":"actions","label":"Actions","role":"controls"}]);
-    let rows = [
-        ("tile:terrain", "tile", false),
-        ("action:EDIT_TERRAIN", "actions", true),
-    ];
-    h.push(show(
-        41,
-        json!([]),
-        paned("target", "EDITMAP", panes.clone(), &rows),
-    ));
-    m.poll();
-    assert!(m.menu().is_none(), "the cursor stays on the map");
-    let panel = m
-        .target_panel()
-        .expect("the editor lists its tile and actions");
-    let groups = panel
-        .choices
-        .iter()
-        .map(|c| c.group.as_deref())
-        .collect::<Vec<_>>();
-    assert_eq!(groups, [Some("tile"), Some("actions")]);
-    m.choose("tile:terrain");
-    assert!(operations(&h).is_empty(), "a tile row is not selectable");
-    m.choose("action:EDIT_TERRAIN");
-    assert_eq!(
-        operations(&h),
-        [json!({"kind":"choose","choice_id":"action:EDIT_TERRAIN"})]
-    );
-    h.push(show(42, json!([]), paned("target", "LOOK", json!([]), &[])));
-    m.poll();
-    assert!(
-        m.target_panel().is_none(),
-        "a plain look cursor has no rows"
-    );
 }
 
 #[test]

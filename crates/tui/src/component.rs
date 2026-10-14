@@ -879,6 +879,16 @@ impl<M: GameModel> Painter<'_, M> {
         let block = Block::bordered();
         let inner = block.inner(area);
         f.render_widget(block, area);
+        let lines = map.cursor_lines();
+        if !lines.is_empty() {
+            let runs = self.model.styled(&lines.join("\n"));
+            let shown = flow(&runs, usize::from(inner.width))
+                .iter()
+                .map(|l| line_of(l, Style::new()))
+                .collect::<Vec<_>>();
+            f.render_widget(Paragraph::new(shown), inner);
+            return;
+        }
         let Some(om) = &map.overmap else {
             return;
         };

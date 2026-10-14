@@ -15,7 +15,7 @@ fn harness<'a>() -> (H<'a>, ScriptHandle) {
     described(&["Wall", "A zombie is here."])
 }
 
-/// A harness whose engine answers every `bn.world.describe` with `lines`.
+/// A harness whose engine answers every `bn.world.describe` with `lines` as parts.
 fn described<'a>(lines: &[&str]) -> (H<'a>, ScriptHandle) {
     let (t, h) = session();
     let t = t
@@ -23,7 +23,7 @@ fn described<'a>(lines: &[&str]) -> (H<'a>, ScriptHandle) {
         .on("bn.command.submit", vec![fixture("submit_result")])
         .on(
             "bn.world.describe",
-            vec![json!({"jsonrpc":"2.0","id":0,"result":{"lines":lines}})],
+            vec![json!({"jsonrpc":"2.0","id":0,"result":{"parts":lines.iter().map(|l| json!({"kind":"terrain","text":l})).collect::<Vec<_>>()}})],
         );
     let model = EngineModel::new(Box::new(t));
     let harness = Harness::builder()

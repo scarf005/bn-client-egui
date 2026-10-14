@@ -20,11 +20,11 @@ fn harness<'a>() -> (H<'a>, ScriptHandle) {
         .on("bn.command.submit", vec![fixture("submit_result")])
         .on(
             "bn.world.describe",
-            vec![json!({"jsonrpc":"2.0","id":0,"result":{"lines":["Floor"]}})],
+            vec![json!({"jsonrpc":"2.0","id":0,"result":{"parts":[{"kind":"terrain","text":"Floor"}]}})],
         )
         .on(
             "bn.world.describe",
-            vec![json!({"jsonrpc":"2.0","id":0,"result":{"lines":["Wall","A zombie is here."]}})],
+            vec![json!({"jsonrpc":"2.0","id":0,"result":{"parts":[{"kind":"terrain","text":"Wall"}, {"kind":"terrain","text":"A zombie is here."}]}})],
         );
     let clock = Clock::manual();
     let model = EngineModel::new(Box::new(t)).with_clock(clock.clone());
@@ -450,11 +450,11 @@ fn the_map_does_not_move_with_the_length_of_the_hovered_description() {
         .on("bn.command.submit", vec![fixture("submit_result")])
         .on(
             "bn.world.describe",
-            vec![json!({"jsonrpc":"2.0","id":0,"result":{"lines":[long, "Move cost: 150"]}})],
+            vec![json!({"jsonrpc":"2.0","id":0,"result":{"parts":[{"kind":"terrain","text":long}, {"kind":"terrain","text":"Move cost: 150"}]}})],
         )
         .on(
             "bn.world.describe",
-            vec![json!({"jsonrpc":"2.0","id":0,"result":{"lines":["floor"]}})],
+            vec![json!({"jsonrpc":"2.0","id":0,"result":{"parts":[{"kind":"terrain","text":"floor"}]}})],
         );
     let clock = Clock::manual();
     let model = EngineModel::new(Box::new(t)).with_clock(clock.clone());

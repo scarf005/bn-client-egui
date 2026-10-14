@@ -14,7 +14,6 @@ mod palette;
 mod sidebar;
 mod sounds;
 mod spells;
-mod target;
 mod vehicle;
 
 /// A command must outlast this before the controls show it; keeps short commands from blinking the UI.
@@ -447,7 +446,6 @@ impl<M: GameModel> App<M> {
             });
         self.palette(ui.ctx());
         self.menu_or_screen(ui.ctx());
-        self.target_panel(ui.ctx());
     }
 
     /// Typed characters and special keys are game keys; the first one that runs an action wins.
