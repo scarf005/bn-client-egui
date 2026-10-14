@@ -2074,6 +2074,16 @@ pub enum ScreenRole {
     Dialog,
 }
 
+/// The side of the window a list window asked to sit at.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ScreenDock {
+    Left,
+    Right,
+    Overlapping,
+    Cursor,
+}
+
 /// One screen of the interaction stack.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Screen {
@@ -2092,6 +2102,9 @@ pub struct Screen {
     /// The engine redraws the screen on its own this often, in milliseconds.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub refresh_ms: Option<u64>,
+    /// Where the player asked a list window to sit; none when the screen has no such choice.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dock: Option<ScreenDock>,
     /// For diagnostics and tests; a client never branches on it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context: Option<String>,

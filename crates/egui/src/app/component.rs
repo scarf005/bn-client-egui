@@ -5,14 +5,14 @@
 //! calls the interaction core (`bn_client_core::interaction`), which decides what is sent.
 
 use super::App;
-use crate::windows::{self, Shown, WindowSpec};
+use crate::windows::{self, Origin, Shown, WindowSpec};
 use crate::{a11y, editor, text};
 use bn_client_core::colors::ColorMap;
 use bn_client_core::interaction::{self, ArgKind, InvokeError, Reason};
 use bn_client_core::protocol::{
     Affordance, AffordanceRole, CanvasComponent, Component, Editor, EditorValue, FieldKind, Form,
-    FormField, Grid, List, MapComponent, MapMode, PanelStat, Row, Screen, ScreenRole, Selection,
-    Text, TextBlock, TextRole, Tone,
+    FormField, Grid, List, MapComponent, MapMode, PanelStat, Row, Screen, ScreenDock, ScreenRole,
+    Selection, Text, TextBlock, TextRole, Tone,
 };
 use bn_client_core::{Canvas, CanvasRun, GameModel, markup};
 use eframe::egui::{self, WidgetInfo, WidgetType};
@@ -84,6 +84,27 @@ fn walk(component: &Component) -> Vec<&Component> {
 
 fn find<'a>(screen: &'a Screen, id: &str) -> Option<&'a Affordance> {
     screen.affordances.iter().find(|a| a.id == id)
+}
+
+/// The kind of window and where it first appears for the side it asked for; the top centre for none, and
+/// for the cursor, which the client does not know.
+fn docked(ctx: &egui::Context, dock: Option<ScreenDock>) -> (&'static str, Option<Origin>) {
+    let screen = ctx.content_rect();
+    let at = |pivot, x| Origin {
+        pivot,
+        pos: egui::pos2(x, screen.top()),
+    };
+    match dock {
+        Some(ScreenDock::Left | ScreenDock::Overlapping) => (
+            "screen:left",
+            Some(at(egui::Align2::LEFT_TOP, screen.left())),
+        ),
+        Some(ScreenDock::Right) => (
+            "screen:right",
+            Some(at(egui::Align2::RIGHT_TOP, screen.right())),
+        ),
+        Some(ScreenDock::Cursor) | None => ("screen", None),
+    }
 }
 
 /// The ids of the affordances some component names.
@@ -304,13 +325,18 @@ impl<M: GameModel> App<M> {
     ) -> Shown<()> {
         let title = markup::plain(&screen.title.as_ref().map(Text::shown).unwrap_or_default());
         let frame = super::menu::list_frame(ctx);
-        let max_width = (ctx.content_rect().width() * 0.8).max(520.0);
+        let share = if screen.dock.is_some() { 0.4 } else { 0.8 };
+        let max_width = (ctx.content_rect().width() * share).max(520.0);
+        // A window that asked for a side starts there; one the player has moved stays where they left it.
+        let (kind, origin) = docked(ctx, screen.dock);
+        let base = self.window_spec(ctx, kind, &title);
         let spec = WindowSpec {
             closable: interaction::with_role(screen, AffordanceRole::Cancel).is_some(),
             frame: Some(frame),
             width: Some(max_width + frame.total_margin().sum().x),
             height: Some(super::dialog_scroll_height(ctx)),
-            ..self.window_spec(ctx, "screen", &title)
+            origin: origin.unwrap_or(base.origin),
+            ..base
         };
         let shown = windows::show(ctx, spec, |ui| {
             ui.set_min_width(520.0);

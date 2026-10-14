@@ -8,7 +8,7 @@ use bn_client_core::interaction::{self, ArgKind, Interaction, InvokeError, Reaso
 use bn_client_core::markup::Run;
 use bn_client_core::protocol::{
     AffordanceRole, Component, FieldKind, Form, Grid, GridCell, List, MapComponent, Panel, Row,
-    RowColumn, Screen, ScreenRole, Selection, Split, Tabs, TextBlock, TextRole, Tone,
+    RowColumn, Screen, ScreenDock, ScreenRole, Selection, Split, Tabs, TextBlock, TextRole, Tone,
 };
 use bn_client_core::{GameModel, Rgb};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -205,9 +205,16 @@ impl View {
             return;
         };
         let full = f.area();
-        let area = match placement {
-            Placement::Full => full,
-            Placement::Over => Rect::new(
+        let half = full.width / 2;
+        let area = match (placement, screen.dock) {
+            (Placement::Full, _) => full,
+            (Placement::Over, Some(ScreenDock::Left | ScreenDock::Overlapping)) => {
+                Rect::new(full.x, full.y, half, full.height)
+            }
+            (Placement::Over, Some(ScreenDock::Right)) => {
+                Rect::new(full.x + full.width - half, full.y, half, full.height)
+            }
+            (Placement::Over, _) => Rect::new(
                 full.x + full.width / 20,
                 full.y + full.height / 10,
                 full.width - full.width / 10,

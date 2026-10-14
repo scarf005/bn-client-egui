@@ -271,6 +271,23 @@ fn a_pickup_list_draws_its_stats_and_rows_and_a_click_runs_the_toggle_with_the_r
 }
 
 #[test]
+fn a_screen_with_a_dock_starts_at_that_side_of_the_window() {
+    let side = |dock: &str| {
+        let mut screen = pickup_screen();
+        screen["dock"] = dock.into();
+        screen["title"] = "Docked".into();
+        let (h, _) = harness(screen);
+        h.get_all_by_role(egui::accesskit::Role::Dialog)
+            .next()
+            .unwrap()
+            .rect()
+    };
+    let (left, right) = (side("left"), side("right"));
+    assert!(left.left() < 5.0, "{left:?}");
+    assert!(right.right() > 1095.0, "{right:?}");
+}
+
+#[test]
 fn form_field_set_by_the_player_runs_the_forms_affordance_with_the_field_and_text() {
     let screen = example("menu.json", "options page with each editor type");
     let (mut h, script) = harness(screen);
