@@ -947,19 +947,9 @@ pub struct Override {
 /// 0.1 `interaction` is gone.
 pub const OVERRIDES: &[Override] = &[
     Override {
-        module: "crates/egui/src/app/character.rs",
-        screen: "PLAYER_INFO, BIONICS, MUTATIONS",
-        slice: "S9",
-    },
-    Override {
         module: "crates/egui/src/app/menu.rs",
         screen: "context dispatch and the 0.1 generic menu",
         slice: "S0",
-    },
-    Override {
-        module: "crates/egui/src/app/spells.rs",
-        screen: "SPELL_SELECT",
-        slice: "S9",
     },
     Override {
         module: "crates/egui/src/editor.rs",

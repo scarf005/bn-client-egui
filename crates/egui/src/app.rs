@@ -7,13 +7,11 @@ use bn_client_core::protocol::SidebarSide;
 use bn_client_core::{Failure, GameModel, Loading, Overmap, Pos, interaction, keys};
 use eframe::egui::{self, accesskit};
 
-mod character;
 mod component;
 mod menu;
 mod palette;
 mod sidebar;
 mod sounds;
-mod spells;
 
 /// A command must outlast this before the controls show it; keeps short commands from blinking the UI.
 const SETTLE: std::time::Duration = std::time::Duration::from_millis(150);

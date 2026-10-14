@@ -31,16 +31,6 @@ impl<M: GameModel> App<M> {
         );
         let entered =
             self.focus_menu | (self.menu_title.replace(shown.clone()).as_ref() != Some(&shown));
-        if menu.context == "SPELL_SELECT" {
-            let focused = self.spells(ctx, &menu, entered);
-            self.focus_menu = entered && !focused;
-            return;
-        }
-        if super::character::CONTEXTS.contains(&menu.context.as_str()) {
-            let focused = self.character(ctx, &menu, entered);
-            self.focus_menu = entered && !focused;
-            return;
-        }
         a11y::trap_tab(
             ctx,
             self.trapped_by_menu(),
