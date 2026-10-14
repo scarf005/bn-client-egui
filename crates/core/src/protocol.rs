@@ -1328,6 +1328,12 @@ pub struct TilePart {
     pub text: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub detail: Option<String>,
+    /// What the fact is about, such as a terrain id.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    /// Numbers the fact reports, by name.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub values: std::collections::BTreeMap<String, i64>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -2064,7 +2070,7 @@ pub struct MapComponent {
 
 impl MapComponent {
     /// What the engine says of the cursor's square: the screen's status in words, then each fact it prints of
-    /// the square with the long text of the creature on it, as markup lines.
+    /// the square with what more it says of it, as markup lines.
     pub fn cursor_lines(&self) -> Vec<String> {
         let Some(target) = &self.target else {
             return vec![];
@@ -2242,4 +2248,7 @@ pub enum PosUnit {
 pub struct PosShape {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub unit: Option<PosUnit>,
+    /// The `map` component whose cursor bounds and range the square must lie within.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub component_id: Option<String>,
 }

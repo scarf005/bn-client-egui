@@ -358,3 +358,42 @@ fn native_look_shows_the_engines_parts_and_its_keys_move_the_engines_cursor() {
         .unwrap();
     assert_eq!(operation["affordance_id"], "RIGHT", "{operation}");
 }
+
+#[test]
+fn native_editmap_shows_the_engines_parts_and_its_edit_key_runs_the_engines_affordance() {
+    let (mut app, h) = engine();
+    text(&mut app);
+    for name in ["events_41_walk", "events_42_message"] {
+        h.push(fixture(name));
+    }
+    let mut menu = fixture("events_43_menu");
+    let change = &mut menu["params"]["events"][0]["changes"]["interaction"];
+    change["actions"] = json!([]);
+    change["interaction"] = Value::Null;
+    change["stack"] = json!([
+        {"screen_id":"screen:map","role":"map","root":null,"affordances":[]},
+        {"screen_id":"screen:7","role":"dialog","title":"Edit map",
+         "root":{"id":"editmap","kind":"panel","title":"Edit map","child":{"id":"editmap:map",
+             "kind":"map","affordances":["target:move"],"mode":"world",
+             "target":{"source":{"dim":"","x":2,"y":4,"z":0},"current":{"dim":"","x":3,"y":4,"z":0},
+                 "range":20,"distance_metric":"square","status":"edit","candidates":[],
+                 "parts":[{"kind":"terrain","text":"Grass","id":"t_grass"}]}}},
+         "affordances":[{"id":"EDIT_TERRAIN","label":"Edit terrain","keys":["e"],"enabled":true,
+              "args":{},"expect":"screen"}]}]);
+    h.push(menu);
+    app.model.poll();
+    let shown = text(&mut app);
+    assert!(
+        shown.contains("Grass"),
+        "the engine's editmap parts\n{shown}"
+    );
+    app.handle_key(KeyEvent::new(KeyCode::Char('e'), KeyModifiers::NONE));
+    let operation = h
+        .sent()
+        .iter()
+        .rev()
+        .find(|m| m["method"] == "bn.command.submit")
+        .map(|m| m["params"]["operation"].clone())
+        .unwrap();
+    assert_eq!(operation["affordance_id"], "EDIT_TERRAIN", "{operation}");
+}

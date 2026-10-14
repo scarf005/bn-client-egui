@@ -24,7 +24,7 @@ fn harness<'a>() -> (H<'a>, ScriptHandle) {
         )
         .on(
             "bn.world.describe",
-            vec![json!({"jsonrpc":"2.0","id":0,"result":{"parts":[{"kind":"terrain","text":"Wall"}, {"kind":"terrain","text":"A zombie is here."}]}})],
+            vec![json!({"jsonrpc":"2.0","id":0,"result":{"parts":[{"kind":"terrain","text":"Wall"}, {"kind":"creature","text":"A zombie is here.","detail":"Slow and hungry."}]}})],
         );
     let clock = Clock::manual();
     let model = EngineModel::new(Box::new(t)).with_clock(clock.clone());
@@ -121,6 +121,8 @@ fn hovering_a_map_square_asks_the_engine_for_its_native_description_and_shows_it
     assert_eq!(asked[1]["params"]["boundary_id"], "b:12");
     h.run_steps(3);
     h.get_by_label("A zombie is here.");
+    // What more the engine says of a fact is shown with it.
+    h.get_by_label("Slow and hungry.");
     // Staying on the square asks nothing more; moving to another asks again.
     h.run_steps(3);
     assert_eq!(

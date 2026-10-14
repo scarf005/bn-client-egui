@@ -774,3 +774,21 @@ fn the_construction_screen_marks_unread_tabs_and_selects_the_row_the_focus_moves
         "construct:select",
     );
 }
+
+#[test]
+fn the_editmap_screen_draws_the_engines_cursor_parts_and_a_click_runs_its_edit_affordance() {
+    let map = json!({"id": "editmap:map", "kind": "map", "affordances": ["target:move"],
+        "mode": "world", "target": {"source": {"dim": "", "x": 2, "y": 4, "z": 0},
+            "current": {"dim": "", "x": 3, "y": 4, "z": 0}, "range": 20, "status": "edit",
+            "candidates": [], "parts": [
+                {"kind": "terrain", "text": "Grass", "id": "t_grass"},
+                {"kind": "field", "text": "Smoke", "id": "fd_smoke", "values": {"intensity": 2}}]}});
+    let root = json!({"id": "editmap", "kind": "panel", "title": "Edit map", "child": map});
+    let edit = json!({"id": "EDIT_TERRAIN", "label": "Edit terrain", "keys": ["e"],
+        "enabled": true, "expect": "screen", "args": {}});
+    let (mut h, script) = harness(dialog(root, vec![edit]));
+    h.get_by_label_contains("Grass / Smoke");
+    h.get_by_label_contains("Edit terrain").click();
+    h.run_steps(3);
+    assert_eq!(submits(&script), [screen_invoke("EDIT_TERRAIN")]);
+}

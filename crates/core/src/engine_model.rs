@@ -610,7 +610,8 @@ impl EngineModel {
                 .map(|d| {
                     d.parts
                         .into_iter()
-                        .map(|p| markup::plain(&p.text))
+                        .flat_map(|p| std::iter::once(p.text).chain(p.detail))
+                        .map(|text| markup::plain(&text))
                         .collect()
                 })
                 .unwrap_or_default();
