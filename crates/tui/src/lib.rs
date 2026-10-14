@@ -681,6 +681,7 @@ impl<M: GameModel> TuiApp<M> {
                 Layout::horizontal([Constraint::Min(10), Constraint::Length(width)]).areas(main)
             }
         };
+        self.components.set_sidebar(side, left);
         // The game's panels, else the status rows alone.
         let panels = match &layout {
             Some(l) => l.panels.clone(),

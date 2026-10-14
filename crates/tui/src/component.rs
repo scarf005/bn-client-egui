@@ -62,6 +62,34 @@ fn nodes(screen: &Screen) -> Vec<&Component> {
     screen.root.iter().flat_map(flatten).collect()
 }
 
+/// The area of a window docked at `dock`: half the terminal, against the sidebar's inner edge on the sidebar's
+/// side, else against the terminal's edge; `overlapping` starts where the sidebar does.
+fn dock_area(full: Rect, dock: ScreenDock, sidebar: Option<(Rect, bool)>) -> Rect {
+    let half = full.width / 2;
+    let (left_edge, right_edge) = match sidebar {
+        Some((side, true)) => (side.x + side.width, full.x + full.width),
+        Some((side, false)) => (full.x, side.x),
+        None => (full.x, full.x + full.width),
+    };
+    let width = |room: u16| half.min(room);
+    match dock {
+        ScreenDock::Right => {
+            let w = width(right_edge.saturating_sub(full.x));
+            Rect::new(right_edge - w, full.y, w, full.height)
+        }
+        ScreenDock::Overlapping => {
+            let x = sidebar.map_or(full.x, |(side, _)| side.x);
+            Rect::new(x, full.y, width(full.x + full.width - x), full.height)
+        }
+        _ => Rect::new(
+            left_edge,
+            full.y,
+            width(full.x + full.width - left_edge),
+            full.height,
+        ),
+    }
+}
+
 /// The client-local state of the described screens: the core's focus and ask, and how much each scrolling
 /// component showed.
 #[derive(Default)]
@@ -73,6 +101,9 @@ pub(super) struct View {
     extents: HashMap<String, Window>,
     /// The text of the prompt on top, which goes out as it is typed.
     typing: Option<Typing>,
+    /// The sidebar of the last frame and whether it is on the left: a docked window sits beside its inner
+    /// edge.
+    sidebar: Option<(Rect, bool)>,
 }
 
 /// A text prompt the engine confirms with Return: a list filter, a name. Its text goes out with each key.
@@ -134,6 +165,11 @@ impl Typing {
 }
 
 impl View {
+    /// Where the sidebar was drawn, for the windows that dock beside it.
+    pub(super) fn set_sidebar(&mut self, area: Rect, left: bool) {
+        self.sidebar = Some((area, left));
+    }
+
     /// Follows the stack the engine published.
     fn sync<M: GameModel>(&mut self, model: &M) {
         self.ui.sync(model.screens());
@@ -205,15 +241,12 @@ impl View {
             return;
         };
         let full = f.area();
-        let half = full.width / 2;
         let area = match (placement, screen.dock) {
             (Placement::Full, _) => full,
-            (Placement::Over, Some(ScreenDock::Left | ScreenDock::Overlapping)) => {
-                Rect::new(full.x, full.y, half, full.height)
-            }
-            (Placement::Over, Some(ScreenDock::Right)) => {
-                Rect::new(full.x + full.width - half, full.y, half, full.height)
-            }
+            (
+                Placement::Over,
+                Some(dock @ (ScreenDock::Left | ScreenDock::Right | ScreenDock::Overlapping)),
+            ) => dock_area(full, dock, self.sidebar),
             (Placement::Over, _) => Rect::new(
                 full.x + full.width / 20,
                 full.y + full.height / 10,

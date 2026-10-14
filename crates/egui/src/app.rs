@@ -156,6 +156,8 @@ pub struct App<M: GameModel> {
     screens: component::Screens,
     crafting: crafting::Crafting,
     construction: construction::Construction,
+    /// The sidebar as last drawn: the side it is on and its rectangle, which a docked window sits beside.
+    sidebar: Option<(SidebarSide, egui::Rect)>,
     /// The engine's selected row of the open menu, to keep it in view when the wheel moves it.
     menu_cursor: Option<String>,
     /// The text prompt that already took the keyboard focus when it opened.
@@ -203,6 +205,7 @@ impl<M: GameModel> App<M> {
             screens: Default::default(),
             crafting: Default::default(),
             construction: Default::default(),
+            sidebar: None,
             menu_cursor: None,
             prompt_focused: None,
             scrolled_to: None,
@@ -429,7 +432,8 @@ impl<M: GameModel> App<M> {
             Some((SidebarSide::Left, ..)) => egui::Panel::left(egui::Id::new(&name)),
             _ => egui::Panel::right(egui::Id::new(&name)),
         };
-        panel
+        let side = native.map_or(SidebarSide::Right, |(side, ..)| side);
+        let sidebar = panel
             .default_size(initial.clamp(narrowest, widest))
             .size_range(narrowest..=widest)
             .show(ui, |ui| {
@@ -437,6 +441,7 @@ impl<M: GameModel> App<M> {
                 ui.set_min_width(ui.available_width());
                 self.sidebar_panel(ui, layout.as_ref())
             });
+        self.sidebar = Some((side, sidebar.response.rect));
         label_resize_handle(ui.ctx(), &name, "Resize sidebar");
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE.fill(egui::Color32::BLACK))

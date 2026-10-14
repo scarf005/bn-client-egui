@@ -12,7 +12,7 @@ use bn_client_core::interaction::{self, ArgKind, InvokeError, Reason};
 use bn_client_core::protocol::{
     Affordance, AffordanceRole, CanvasComponent, Component, Editor, EditorValue, FieldKind, Form,
     FormField, Grid, List, MapComponent, MapMode, PanelStat, Row, Screen, ScreenDock, ScreenRole,
-    Selection, Text, TextBlock, TextRole, Tone,
+    Selection, SidebarSide, Text, TextBlock, TextRole, Tone,
 };
 use bn_client_core::{Canvas, CanvasRun, GameModel, markup};
 use eframe::egui::{self, WidgetInfo, WidgetType};
@@ -86,24 +86,44 @@ fn find<'a>(screen: &'a Screen, id: &str) -> Option<&'a Affordance> {
     screen.affordances.iter().find(|a| a.id == id)
 }
 
-/// The kind of window and where it first appears for the side it asked for; the top centre for none, and
-/// for the cursor, which the client does not know.
-fn docked(ctx: &egui::Context, dock: Option<ScreenDock>) -> (&'static str, Option<Origin>) {
+/// The kind of window and where it first appears for the side it asked for: beside the sidebar's inner
+/// edge (the sidebar's own place for `overlapping`); the top centre for none, and for the cursor, which the
+/// client does not know.
+fn docked(
+    ctx: &egui::Context,
+    dock: Option<ScreenDock>,
+    sidebar: Option<(SidebarSide, egui::Rect)>,
+) -> (&'static str, Option<Origin>) {
     let screen = ctx.content_rect();
     let at = |pivot, x| Origin {
         pivot,
         pos: egui::pos2(x, screen.top()),
     };
-    match dock {
-        Some(ScreenDock::Left | ScreenDock::Overlapping) => (
+    match (dock, sidebar) {
+        (Some(ScreenDock::Left), Some((SidebarSide::Left, rect))) => (
+            "screen:left",
+            Some(at(egui::Align2::LEFT_TOP, rect.right())),
+        ),
+        (Some(ScreenDock::Left), _) => (
             "screen:left",
             Some(at(egui::Align2::LEFT_TOP, screen.left())),
         ),
-        Some(ScreenDock::Right) => (
+        (Some(ScreenDock::Right), Some((SidebarSide::Right, rect))) => (
+            "screen:right",
+            Some(at(egui::Align2::RIGHT_TOP, rect.left())),
+        ),
+        (Some(ScreenDock::Right), _) => (
             "screen:right",
             Some(at(egui::Align2::RIGHT_TOP, screen.right())),
         ),
-        Some(ScreenDock::Cursor) | None => ("screen", None),
+        (Some(ScreenDock::Overlapping), Some((_, rect))) => {
+            ("screen:over", Some(at(egui::Align2::LEFT_TOP, rect.left())))
+        }
+        (Some(ScreenDock::Overlapping), None) => (
+            "screen:over",
+            Some(at(egui::Align2::LEFT_TOP, screen.left())),
+        ),
+        (Some(ScreenDock::Cursor) | None, _) => ("screen", None),
     }
 }
 
@@ -328,7 +348,7 @@ impl<M: GameModel> App<M> {
         let share = if screen.dock.is_some() { 0.4 } else { 0.8 };
         let max_width = (ctx.content_rect().width() * share).max(520.0);
         // A window that asked for a side starts there; one the player has moved stays where they left it.
-        let (kind, origin) = docked(ctx, screen.dock);
+        let (kind, origin) = docked(ctx, screen.dock, self.sidebar);
         let base = self.window_spec(ctx, kind, &title);
         let spec = WindowSpec {
             closable: interaction::with_role(screen, AffordanceRole::Cancel).is_some(),

@@ -277,14 +277,15 @@ fn a_screen_with_a_dock_starts_at_that_side_of_the_window() {
         screen["dock"] = dock.into();
         screen["title"] = "Docked".into();
         let (h, _) = harness(screen);
-        h.get_all_by_role(egui::accesskit::Role::Dialog)
+        h.get_all_by_role(egui::accesskit::Role::Window)
             .next()
             .unwrap()
             .rect()
     };
     let (left, right) = (side("left"), side("right"));
     assert!(left.left() < 5.0, "{left:?}");
-    assert!(right.right() > 1095.0, "{right:?}");
+    // The sidebar is on the right: the window sits against its inner edge, not the window's.
+    assert!(right.right() < 1095.0 && right.right() > 500.0, "{right:?}");
 }
 
 #[test]

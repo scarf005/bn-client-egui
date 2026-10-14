@@ -544,3 +544,24 @@ fn a_screen_without_components_stays_with_the_0_1_drawing() {
     press(&mut app, KeyCode::Char('z'));
     assert!(operations(&h).iter().all(|op| op["kind"] != "invoke"));
 }
+
+#[test]
+fn a_docked_dialog_sits_beside_the_sidebars_inner_edge() {
+    let docked = |dock: &str| {
+        let mut dialog = screen(
+            json!({"id": "t", "kind": "text", "markup": "Hello"}),
+            json!([]),
+        );
+        dialog["role"] = "dialog".into();
+        dialog["title"] = "Docked".into();
+        dialog["dock"] = dock.into();
+        let (mut app, _) = open(dialog);
+        render(&mut app)
+    };
+    // The sidebar is on the right and 36 columns wide: the map is the first 44.
+    let left = docked("left");
+    assert_eq!(at(&left, "Docked").0, 1, "{:#?}", lines(&left));
+    let right = docked("right");
+    assert_eq!(at(&right, "Docked").0, 5, "{:#?}", lines(&right));
+    assert_eq!(right.backend().buffer()[(43, 0)].symbol(), "┐");
+}
