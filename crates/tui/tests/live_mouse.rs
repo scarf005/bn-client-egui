@@ -113,15 +113,22 @@ fn live_tui_mouse_ignores_the_wheel_in_the_main_menu_then_describes_and_right_cl
         std::thread::sleep(Duration::from_millis(200));
     }
 
+    // The world swap after choosing the Tutorial leaves no rejected command in the status line.
+    assert!(
+        app.model
+            .command()
+            .is_none_or(|c| !c.stage.starts_with("rejected")),
+        "{:?}",
+        app.model.command()
+    );
+
     // Hovering the square next to the avatar shows what the engine's mouse view prints for it.
     // The status line is one row, cut at the terminal's width after the last command's result, so the
     // first line of the description is what it is sure to show.
-    // The first frame sets the engine's window to the size of the drawn map, which moves the squares
-    // under the pointer and drops a description asked before; the pointer keeps coming back to the
-    // square next to the avatar until the description for the settled view shows.
+    let drawn = screen(&mut app);
+    let (x, y) = avatar(&drawn).expect("the avatar is drawn");
+    app.handle_mouse(mouse(MouseEventKind::Moved, x + 1, y));
     wait(&mut app, "the description", |a| {
-        let (x, y) = avatar(&screen(a)).expect("the avatar is drawn");
-        a.handle_mouse(mouse(MouseEventKind::Moved, x + 1, y));
         text(&screen(a)).contains("tutorial room")
     });
     let status = text(&screen(&mut app));
