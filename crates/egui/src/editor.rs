@@ -1,5 +1,5 @@
-//! Value editors for menu rows the engine lets a client set directly (the options menu) and the
-//! key prompt of the keybindings menu. Each draws one control and returns the value to send.
+//! Value editors for form fields and the key prompt of the keybindings screen. Each draws one control
+//! and returns the value to send.
 
 use bn_client_core::protocol::Editor;
 use eframe::egui::{self, accesskit};

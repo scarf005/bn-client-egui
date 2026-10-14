@@ -32,11 +32,7 @@ fn operations(h: &ScriptHandle) -> Vec<Value> {
         .collect()
 }
 
-fn editor(kind: &str, value: &str) -> Value {
-    json!({"type":kind,"value":value,"values":[],"max_length":-1})
-}
-
-/// An options-like menu with one row per editor kind and a plain row; `field` is the screen's field.
+/// A menu over `choices`; `field` is the screen's field.
 fn open(field: Option<Value>, choices: Vec<Value>) -> (TuiApp<EngineModel>, ScriptHandle) {
     let confirm = json!([{"id":"CONFIRM","name":"Confirm","keys":["RETURN"]}]);
     open_with(field, choices, confirm)
@@ -68,100 +64,13 @@ fn open_with(
     (app, h)
 }
 
-fn row(id: &str, label: &str, editor: Option<Value>) -> Value {
-    let mut c = json!({"id":id,"label":label,"description":"","denial":"","enabled":true,
-        "selectable":true,"selected":false,"columns":[]});
-    if let Some(editor) = editor {
-        c["editor"] = editor;
-    }
-    c
+fn row(id: &str, label: &str) -> Value {
+    json!({"id":id,"label":label,"description":"","denial":"","enabled":true,
+        "selectable":true,"selected":false,"columns":[]})
 }
 
 fn fill(id: &str, value: &str, submit: bool) -> Value {
     json!({"kind":"fill","field_id":id,"value":value,"submit":submit})
-}
-
-#[test]
-fn a_bool_row_shows_its_value_and_enter_fills_the_opposite() {
-    let (mut app, h) = open(
-        None,
-        vec![row("option:A", "Safe mode", Some(editor("bool", "true")))],
-    );
-    assert!(text(&mut app).contains("Safe mode: true"));
-    app.handle_key(key(KeyCode::Enter));
-    assert_eq!(operations(&h), [fill("option:A", "false", true)]);
-}
-
-#[test]
-fn a_select_row_shows_the_label_and_enter_and_backspace_step_through_its_values() {
-    let mut select = editor("select", "no");
-    select["values"] = json!([{"id":"no","label":"No"},{"id":"all","label":"All"}]);
-    let (mut app, h) = open(None, vec![row("option:D", "Drop", Some(select))]);
-    assert!(text(&mut app).contains("Drop: No"));
-    app.handle_key(key(KeyCode::Enter));
-    app.model.poll();
-    app.handle_key(key(KeyCode::Backspace));
-    // The first is refused while the command is in flight, so only one is sent.
-    assert_eq!(operations(&h), [fill("option:D", "all", true)]);
-}
-
-#[test]
-fn an_integer_row_is_typed_digits_only_and_enter_commits_and_esc_abandons() {
-    let (mut app, h) = open(
-        None,
-        vec![row("option:N", "Proximity", Some(editor("integer", "7")))],
-    );
-    app.handle_key(key(KeyCode::Enter));
-    for c in ['x', '1'] {
-        app.handle_key(key(KeyCode::Char(c)));
-    }
-    assert!(
-        text(&mut app).contains("Proximity: 71_"),
-        "{}",
-        text(&mut app)
-    );
-    app.handle_key(key(KeyCode::Backspace));
-    app.handle_key(key(KeyCode::Backspace));
-    app.handle_key(key(KeyCode::Char('9')));
-    app.handle_key(key(KeyCode::Enter));
-    assert_eq!(operations(&h), [fill("option:N", "9", true)]);
-}
-
-#[test]
-fn a_float_row_accepts_a_decimal_point_and_a_text_row_any_character() {
-    let (mut app, h) = open(
-        None,
-        vec![
-            row("option:F", "Ratio", Some(editor("float", "0.5"))),
-            row("option:T", "Name", Some(editor("text", ""))),
-        ],
-    );
-    app.handle_key(key(KeyCode::Enter));
-    app.handle_key(key(KeyCode::Char('1')));
-    app.handle_key(key(KeyCode::Enter));
-    assert_eq!(operations(&h), [fill("option:F", "0.51", true)]);
-    let (mut app, h) = open(
-        None,
-        vec![row("option:T", "Name", Some(editor("text", "")))],
-    );
-    app.handle_key(key(KeyCode::Enter));
-    app.handle_key(key(KeyCode::Char('a')));
-    app.handle_key(key(KeyCode::Char('-')));
-    app.handle_key(key(KeyCode::Enter));
-    assert_eq!(operations(&h), [fill("option:T", "a-", true)]);
-}
-
-#[test]
-fn esc_abandons_a_typed_value_without_sending_it() {
-    let (mut app, h) = open(
-        None,
-        vec![row("option:N", "Proximity", Some(editor("integer", "7")))],
-    );
-    app.handle_key(key(KeyCode::Enter));
-    app.handle_key(key(KeyCode::Char('5')));
-    app.handle_key(key(KeyCode::Esc));
-    assert!(operations(&h).is_empty());
-    assert!(text(&mut app).contains("Proximity: 7"));
 }
 
 fn key_field() -> Value {
@@ -237,7 +146,7 @@ fn a_prompt_submitted_while_the_engine_is_busy_is_sent_once_it_is_free() {
 #[test]
 fn tab_goes_to_the_engine_when_the_screen_binds_it() {
     let next_tab = json!([{"id":"NEXT_TAB","name":"Next tab","keys":["TAB"]}]);
-    let rows = vec![row("mode:add_local", "Add local", None)];
+    let rows = vec![row("mode:add_local", "Add local")];
     let (mut app, h) = open_with(None, rows, next_tab);
     app.handle_key(key(KeyCode::Tab));
     assert_eq!(
@@ -257,7 +166,7 @@ fn tab_goes_to_the_engine_when_the_screen_binds_it() {
 fn a_filter_beside_a_list_updates_the_screen_without_ending_it() {
     let field = json!({"id":"field:value","label":"Filter","description":"","value":"","type":"text",
         "max_length":-1,"printable":false});
-    let (mut app, h) = open(Some(field), vec![row("action:UP", "Move North", None)]);
+    let (mut app, h) = open(Some(field), vec![row("action:UP", "Move North")]);
     app.handle_key(key(KeyCode::Char('/')));
     app.handle_key(key(KeyCode::Char('m')));
     assert_eq!(operations(&h), [fill("field:value", "m", false)]);
@@ -267,7 +176,7 @@ fn a_filter_beside_a_list_updates_the_screen_without_ending_it() {
 fn a_filter_typed_while_the_engine_is_busy_is_sent_in_full_once_it_is_free() {
     let field = json!({"id":"field:value","label":"Filter","description":"","value":"","type":"text",
         "max_length":-1,"printable":false});
-    let (mut app, h) = open(Some(field), vec![row("action:UP", "Move North", None)]);
+    let (mut app, h) = open(Some(field), vec![row("action:UP", "Move North")]);
     for c in ['/', 'm', 'o', 'd', 'e'] {
         app.handle_key(key(KeyCode::Char(c)));
     }
@@ -288,7 +197,7 @@ fn a_filter_typed_while_the_engine_is_busy_is_sent_in_full_once_it_is_free() {
 
 #[test]
 fn a_plain_row_is_confirmed_by_the_engines_key_and_tab_opens_the_screens_actions() {
-    let (mut app, h) = open(None, vec![row("mode:add_local", "Add local", None)]);
+    let (mut app, h) = open(None, vec![row("mode:add_local", "Add local")]);
     let before = text(&mut app);
     app.handle_key(key(KeyCode::Tab));
     assert_ne!(
@@ -317,8 +226,8 @@ fn typing_a_filter_keeps_the_edit_when_the_engine_answers_with_fewer_rows() {
     let (mut app, h) = open(
         Some(field.clone()),
         vec![
-            row("action:UP", "Move North", None),
-            row("action:DOWN", "Move South", None),
+            row("action:UP", "Move North"),
+            row("action:DOWN", "Move South"),
         ],
     );
     app.handle_key(key(KeyCode::Char('/')));
@@ -327,7 +236,7 @@ fn typing_a_filter_keeps_the_edit_when_the_engine_answers_with_fewer_rows() {
     let mut menu = fixture("events_43_menu");
     let interaction = &mut menu["params"]["events"][0]["changes"]["interaction"]["interaction"];
     interaction["title"] = "Options".into();
-    interaction["choices"] = json!([row("action:UP", "Move North", None)]);
+    interaction["choices"] = json!([row("action:UP", "Move North")]);
     interaction["field"] = field;
     menu["params"]["events"][0]["sequence"] = "41".into();
     menu["params"]["events"][0]["revision"] = "40".into();
@@ -345,10 +254,7 @@ fn typing_a_filter_keeps_the_edit_when_the_engine_answers_with_fewer_rows() {
 
 #[test]
 fn a_typed_hotkey_chooses_its_row_but_not_a_disabled_one() {
-    let mut rows = vec![
-        row("first", "First row", None),
-        row("second", "Second row", None),
-    ];
+    let mut rows = vec![row("first", "First row"), row("second", "Second row")];
     rows[0]["hotkey"] = "4".into();
     rows[1]["hotkey"] = "b".into();
     rows[1]["enabled"] = false.into();

@@ -516,7 +516,8 @@ impl Interaction {
     fn track(&mut self, stack: &[Screen]) {
         let top = stack.last();
         let native = top.and_then(|s| s.focus.clone()).unwrap_or_default();
-        let known = |focus: &ScreenFocus| Some((focus.component_id.clone()?, focus.row_id.clone()?));
+        let known =
+            |focus: &ScreenFocus| Some((focus.component_id.clone()?, focus.row_id.clone()?));
         if top.map(|s| s.screen_id.as_str()) != self.screen_id.as_deref() {
             let focus = match native == ScreenFocus::default() {
                 true => input::selected_focus(top),
@@ -953,7 +954,7 @@ pub const OVERRIDES: &[Override] = &[
     },
     Override {
         module: "crates/egui/src/editor.rs",
-        screen: "option editors and the key prompt",
+        screen: "the key prompt",
         slice: "S0",
     },
     Override {
@@ -963,7 +964,7 @@ pub const OVERRIDES: &[Override] = &[
     },
     Override {
         module: "crates/tui/src/settings.rs",
-        screen: "option, key and rule screens",
+        screen: "key and rule screens",
         slice: "S0",
     },
 ];

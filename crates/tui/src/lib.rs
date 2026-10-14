@@ -998,11 +998,6 @@ impl<M: GameModel> TuiApp<M> {
                     true => Style::new(),
                     false => Style::new().fg(Color::DarkGray),
                 };
-                let value = match (&c.editor, &self.edit) {
-                    (Some(_), Some(edit)) if i == self.selected => format!(": {}", edit.shown()),
-                    (Some(e), _) => format!(": {}", settings::shown_value(e)),
-                    _ => String::new(),
-                };
                 // The row's values beside it, as the native lists print them.
                 let columns = c.values_markup();
                 // Chosen rows (an enabled panel or zone, an active mutation or mod) are lit white; the
@@ -1032,7 +1027,7 @@ impl<M: GameModel> TuiApp<M> {
                     ),
                     _ => c.label.clone(),
                 };
-                let text = format!("{name}{value}{columns}{hint}{denial}");
+                let text = format!("{name}{columns}{hint}{denial}");
                 // The cursor row is drawn whole in one colour, so it loses the markup.
                 let spans = match i == selected {
                     true => vec![Span::raw(plain(&text))],

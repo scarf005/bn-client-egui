@@ -1,8 +1,7 @@
-//! Settings screens in the terminal: editable option rows, the key prompt, text fields and the
-//! registered actions of rule screens.
+//! Settings screens in the terminal: the key prompt, text fields and the registered actions of rule
+//! screens.
 
 use crate::TuiApp;
-use bn_client_core::protocol::Editor;
 use bn_client_core::{GameModel, Menu};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
@@ -50,19 +49,6 @@ pub(super) fn engine_key(key: KeyEvent) -> Option<String> {
         KeyCode::Insert => "INSERT".into(),
         _ => return None,
     })
-}
-
-/// The row's value as the screen shows it: a select by its label.
-pub(super) fn shown_value(editor: &Editor) -> String {
-    editor
-        .values
-        .iter()
-        .find(|v| v.id == editor.value)
-        .map_or_else(|| editor.value.clone(), |v| v.label.clone())
-}
-
-fn numeric(editor: &Editor) -> bool {
-    matches!(editor.kind.as_str(), "integer" | "float")
 }
 
 impl<M: GameModel> TuiApp<M> {
@@ -118,50 +104,7 @@ impl<M: GameModel> TuiApp<M> {
             self.actions_open = Some(0);
             return true;
         }
-        let Some(row) = entries.get(self.selected).filter(|c| c.enabled) else {
-            return false;
-        };
-        let Some(editor) = &row.editor else {
-            return false;
-        };
-        let step = |forward: bool| {
-            let at = editor.values.iter().position(|v| v.id == editor.value);
-            let count = editor.values.len();
-            at.and_then(|i| match forward {
-                true => editor.values.get((i + 1) % count),
-                false => editor.values.get((i + count - 1) % count),
-            })
-            .map(|v| v.id.clone())
-        };
-        match (editor.kind.as_str(), key.code) {
-            ("bool", KeyCode::Enter | KeyCode::Char(' ')) => {
-                let next = (editor.value != "true").to_string();
-                self.model.fill(&row.id, &next, true);
-            }
-            ("select", KeyCode::Enter | KeyCode::Char(' ')) => {
-                if let Some(next) = step(true) {
-                    self.model.fill(&row.id, &next, true);
-                }
-            }
-            ("select", KeyCode::Backspace) => {
-                if let Some(next) = step(false) {
-                    self.model.fill(&row.id, &next, true);
-                }
-            }
-            (_, KeyCode::Enter) => {
-                self.edit = Some(Edit {
-                    id: row.id.clone(),
-                    text: editor.value.clone(),
-                    numeric: numeric(editor),
-                    prompt: false,
-                    submit: true,
-                    sent: None,
-                    entered: false,
-                });
-            }
-            _ => return false,
-        }
-        true
+        false
     }
 
     fn edit_key(&mut self, mut edit: Edit, key: KeyEvent) {

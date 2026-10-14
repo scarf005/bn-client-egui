@@ -41,7 +41,6 @@ impl<M: GameModel> App<M> {
         let mut focused = false;
         let mut chosen = None;
         let follows = self.menu_focus != menu.focus;
-        let mut edited = None;
         let mut key_chosen = None;
         let mut more = false;
         let mut cancel = self.palette.is_none()
@@ -142,19 +141,6 @@ impl<M: GameModel> App<M> {
                         }
                         let said =
                             std::mem::replace(&mut last_denial, &choice.denial) == choice.denial;
-                        if let Some(row) = &choice.editor {
-                            let usable = choice.enabled && self.idle();
-                            let label = markup::plain(&choice.label);
-                            if let Some(value) =
-                                editor::value_editor(ui, &choice.id, &label, row, usable)
-                            {
-                                edited = Some((choice.id.clone(), value));
-                            }
-                            if !choice.enabled && !choice.denial.is_empty() && !said {
-                                ui.label(self.rich(ui, &choice.denial));
-                            }
-                            continue;
-                        }
                         ui.horizontal(|ui| {
                             let whole_row = choice.id != "acknowledge" && choice.denial.is_empty();
                             if whole_row {
@@ -355,9 +341,6 @@ impl<M: GameModel> App<M> {
         if let (Some(field), Some(value)) = (&menu.field, key_chosen) {
             ctx.request_repaint();
             self.model.fill(&field.id, &value, true);
-        } else if let Some((id, value)) = edited {
-            ctx.request_repaint();
-            self.model.fill(&id, &value, true);
         } else if let Some(id) = chosen {
             ctx.request_repaint();
             self.model.choose(&id);

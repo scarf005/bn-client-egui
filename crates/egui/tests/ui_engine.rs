@@ -610,43 +610,6 @@ fn open_settings(h: &mut H, script: &ScriptHandle, field: Option<serde_json::Val
 }
 
 #[test]
-fn a_bool_editor_row_is_a_checkbox_and_toggling_it_fills_the_row_with_the_opposite_value() {
-    let (mut h, script) = harness();
-    open_settings(&mut h, &script, None);
-    h.get_by_label("Plain row");
-    h.get_by_label("Safe mode").click();
-    h.run_steps(2);
-    assert_eq!(
-        operations(&script),
-        [json!({"kind":"fill","field_id":"option:SAFEMODE","value":"false","submit":true})]
-    );
-}
-
-#[test]
-fn a_select_editor_offers_its_values_and_a_disabled_row_stays_inert_with_its_denial() {
-    let (mut h, script) = harness();
-    open_settings(&mut h, &script, None);
-    h.get_by_label("Prerequisite not met");
-    h.get_by_label("Locked").click();
-    h.run_steps(2);
-    assert!(
-        operations(&script).is_empty(),
-        "a row with an unmet prerequisite is inert"
-    );
-    h.get_all_by_role(accesskit::Role::ComboBox)
-        .find(|node| node.accesskit_node().value().as_deref() == Some("No"))
-        .expect("the editor's combo box shows its current value")
-        .click();
-    h.run_steps(2);
-    h.get_by_label("All").click();
-    h.run_steps(2);
-    assert_eq!(
-        operations(&script),
-        [json!({"kind":"fill","field_id":"option:DROP_EMPTY","value":"all","submit":true})]
-    );
-}
-
-#[test]
 fn a_key_prompt_fills_its_field_with_the_next_key_and_a_function_key_by_its_name() {
     let (mut h, script) = harness();
     let field = json!({"id":"field:key","label":"New key","description":"","value":"","type":"key",
