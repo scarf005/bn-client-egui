@@ -6,7 +6,7 @@ use bn_client_core::transport::StdioTransport;
 use bn_client_core::watchdog::Watchdog;
 use bn_client_core::{EngineModel, GameModel};
 use bn_client_tui::TuiApp;
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use std::time::Duration;
 
 type App = TuiApp<EngineModel>;
@@ -125,13 +125,15 @@ fn live_tui_starts_the_tutorial_opens_the_inventory_and_closes_it() {
     start_tutorial(&mut app);
 
     press(&mut app, KeyCode::Char('i'));
-    wait(&mut app, "the inventory menu", |a| {
-        a.model.menu().is_some_and(|m| m.title == "Inventory")
-    });
+    let inventory = |a: &App| {
+        a.model
+            .screens()
+            .last()
+            .is_some_and(|s| s.context.as_deref() == Some("INVENTORY"))
+    };
+    wait(&mut app, "the inventory screen", |a| inventory(a));
     press(&mut app, KeyCode::Esc);
-    wait(&mut app, "the inventory to close", |a| {
-        a.model.menu().is_none()
-    });
+    wait(&mut app, "the inventory to close", |a| !inventory(a));
 }
 
 fn absolute(app: &App) -> (i32, i32) {
@@ -141,7 +143,7 @@ fn absolute(app: &App) -> (i32, i32) {
 
 #[test]
 #[ignore = "requires BN_ENGINE pointing at an engine binary"]
-fn live_tui_walks_with_arrows_then_shows_and_walks_a_route_from_the_look_cursor() {
+fn live_tui_walks_with_arrows_then_plans_and_walks_a_route_by_clicking_a_square() {
     let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
     let transport =
         StdioTransport::spawn_with(engine.as_ref(), &common::cpu_profile()).expect("engine starts");
@@ -164,13 +166,27 @@ fn live_tui_walks_with_arrows_then_shows_and_walks_a_route_from_the_look_cursor(
     let east = absolute(&app);
     assert_eq!(east, (start.0 + 1, start.1), "one square east");
 
-    // Look cursor back on the start square, Enter shows the route, Enter again walks it.
-    press(&mut app, KeyCode::Char('x'));
-    press(&mut app, KeyCode::Char('h'));
-    press(&mut app, KeyCode::Enter);
+    // A click on the start square plans the engine's route to it; a second click walks it.
+    let click = |app: &mut App| {
+        let mut t = ratatui::Terminal::new(ratatui::backend::TestBackend::new(120, 40)).unwrap();
+        t.draw(|f| app.draw(f)).unwrap();
+        let buf = t.backend().buffer();
+        let (x, y) = (0..buf.area.height)
+            .flat_map(|y| (0..buf.area.width).map(move |x| (x, y)))
+            .find(|&(x, y)| buf[(x, y)].symbol() == "@")
+            .expect("the avatar is drawn");
+        wait(app, "idle", |a| !a.model.busy());
+        app.handle_mouse(MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: x - 1,
+            row: y,
+            modifiers: KeyModifiers::NONE,
+        });
+    };
+    click(&mut app);
     wait(&mut app, "a planned route", |a| !a.model.route().is_empty());
-    assert_eq!(absolute(&app), east, "the first Enter only plans");
-    press(&mut app, KeyCode::Enter);
+    assert_eq!(absolute(&app), east, "the first click only plans");
+    click(&mut app);
     wait(&mut app, "the walk", |a| absolute(a) == start);
 }
 

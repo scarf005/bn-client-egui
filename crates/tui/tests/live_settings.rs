@@ -202,6 +202,9 @@ fn live_tui_changes_an_option_and_rebinds_a_key_that_then_walks() {
             .is_some_and(|m| m.field.is_some_and(|f| f.kind == "key"))
     });
     press(&mut app, KeyCode::Char('z'));
+    // The engine's zoom-in action holds z: it asks to take the key from it.
+    wait(&mut app, "the conflict question", |a| context(a) == "YESNO");
+    answer_yes(&mut app);
     wait(&mut app, "the keybindings", |a| {
         context(a) == "HELP_KEYBINDINGS"
     });

@@ -79,7 +79,7 @@ fn live_pick_up_a_chosen_ground_item_wield_it_and_drop_it() {
     assert_eq!(model.inventory().len(), 0, "{:?}", model.inventory());
     let item = model.ground()[0].clone();
     assert!(
-        item.starts_with("lighter ("),
+        bn_client_core::markup::plain(&item).starts_with("lighter ("),
         "a display name, not the id: {item}"
     );
 
