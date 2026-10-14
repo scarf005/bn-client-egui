@@ -2083,6 +2083,9 @@ pub struct Affordance {
     pub role: Option<AffordanceRole>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub args: Option<ArgShape>,
+    /// A step of the map the player can hold down: `bn.hold` on key down, `bn.release` on key up.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub holdable: bool,
     pub expect: Scope,
 }
 

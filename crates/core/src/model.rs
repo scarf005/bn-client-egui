@@ -583,6 +583,13 @@ pub trait GameModel {
     fn press(&mut self, _key: &str) -> bool {
         false
     }
+    /// A game key went down (not a key repeat). When it is a step of the map the engine lets the player hold, the
+    /// engine is told to walk until `release_hold`; true then. Any other key is for `press`.
+    fn hold(&mut self, _key: &str) -> bool {
+        false
+    }
+    /// The held key came up, or the window lost the keyboard: the engine takes no further step.
+    fn release_hold(&mut self) {}
     /// Left click on view cell `at`: the engine plans a route, a repeat walks it.
     fn travel(&mut self, _at: Pos) {}
     /// The planned route in view coordinates, nearest first; empty when none.

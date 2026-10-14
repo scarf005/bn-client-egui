@@ -111,6 +111,8 @@ pub struct App<M: GameModel> {
     display: Display,
     /// A typed key already ran an engine action this frame.
     keys_consumed: bool,
+    /// The physical key whose press started the held walk; the walk ends when it is up.
+    walk_key: Option<egui::Key>,
     /// The action palette's search text while it is open.
     palette: Option<String>,
     /// The message log's height once the user has dragged its edge.
@@ -176,6 +178,7 @@ impl<M: GameModel> App<M> {
             settings: None,
             display: Display::new(None, None),
             keys_consumed: false,
+            walk_key: None,
             palette: None,
             log_height: None,
             menu_title: None,
@@ -535,6 +538,7 @@ impl<M: GameModel> App<M> {
         self.keys_consumed = false;
         self.focus_action_row(ctx);
         if self.palette.is_some() {
+            self.release_hold_when_up(ctx);
             return;
         }
         let mut keys = typed.into_iter().chain(named).collect::<Vec<_>>();
@@ -542,9 +546,36 @@ impl<M: GameModel> App<M> {
         if menu.as_ref().is_some_and(|m| m.acknowledges()) {
             keys.truncate(1);
         }
-        // The map's keys are screen-scoped affordances, which the engine queues behind the command in flight.
+        // A step of the map is held, not repeated: the engine walks from key down to key up. Any other key
+        // is a screen-scoped affordance, which the engine queues behind the command in flight.
+        let fresh = ctx.input(|i| {
+            i.events.iter().rev().find_map(|e| match e {
+                egui::Event::Key {
+                    key,
+                    pressed: true,
+                    repeat: false,
+                    ..
+                } => Some(*key),
+                _ => None,
+            })
+        });
         for key in keys {
-            self.keys_consumed |= self.model.press(&key) || self.model.key_bound(&key);
+            if self.model.hold(&key) {
+                self.walk_key = fresh.or(self.walk_key);
+                self.keys_consumed = true;
+            } else {
+                self.keys_consumed |= self.model.press(&key) || self.model.key_bound(&key);
+            }
+        }
+        self.release_hold_when_up(ctx);
+    }
+
+    /// The walk ends when the key that started it is up, or the window lost the keyboard (a key-up would never come).
+    fn release_hold_when_up(&mut self, ctx: &egui::Context) {
+        let walk_key = self.walk_key;
+        if ctx.input(|i| !i.focused || walk_key.is_none_or(|k| !i.keys_down.contains(&k))) {
+            self.walk_key = None;
+            self.model.release_hold();
         }
     }
 

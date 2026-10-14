@@ -53,6 +53,8 @@ enum Pending {
     Subscribe,
     Submit,
     Viewport,
+    /// `bn.hold` or `bn.release`; a refusal only ends the hold.
+    Hold,
     Interrupt,
     /// The outcome of the command in flight, asked for when the engine says it has nothing to interrupt.
     Outcome,
@@ -119,6 +121,8 @@ pub struct EngineModel {
     screen_queue: usize,
     /// Submits whose answer has not arrived; the engine queues screen-scoped ones behind a running command.
     unanswered: u32,
+    /// The affordance the engine was told to hold, until the key comes up.
+    holding: Option<String>,
     /// The commands the engine accepted that have not reached a terminal stage.
     running: HashSet<String>,
     command_id: Option<String>,
@@ -351,6 +355,7 @@ impl EngineModel {
             busy: false,
             screen_queue: 1,
             unanswered: 0,
+            holding: None,
             running: HashSet::new(),
             command_id: None,
             sent: None,
@@ -643,6 +648,13 @@ impl EngineModel {
             }
             return;
         }
+        if matches!(kind, Pending::Hold) {
+            // Held at the wrong moment (an activity, a popup): the key must go up and down again.
+            if result.is_err() {
+                self.holding = None;
+            }
+            return;
+        }
         if matches!(kind, Pending::Interrupt) {
             // The engine had no activity running; say so once, not per key press.
             if let Err(e) = &result {
@@ -702,6 +714,7 @@ impl EngineModel {
                 Err(e) => self.messages.push(format!("Bad snapshot: {e}")),
             },
             Pending::Viewport
+            | Pending::Hold
             | Pending::Interrupt
             | Pending::Outcome
             | Pending::Retile
@@ -1850,6 +1863,39 @@ impl GameModel for EngineModel {
         if cells != self.wanted {
             self.wanted = cells;
             self.resized = Some(self.clock.now());
+        }
+    }
+
+    fn hold(&mut self, key: &str) -> bool {
+        let Some(step) = self
+            .action_for(key)
+            .and_then(|id| self.map_affordance(&id))
+            .filter(|a| a.holdable)
+            .map(|a| a.id.clone())
+        else {
+            return false;
+        };
+        // The OS repeats a held key; the engine already walks.
+        if self.holding.as_deref() == Some(step.as_str()) {
+            return true;
+        }
+        let (Some(at), Some(screen), false) = (
+            self.replica.at(),
+            self.replica.stack().last(),
+            self.subscribing,
+        ) else {
+            return false;
+        };
+        let params =
+            json!({"epoch": at.epoch, "screen_id": screen.screen_id, "affordance_id": step});
+        self.holding = Some(step);
+        self.call("bn.hold", params, Pending::Hold);
+        true
+    }
+
+    fn release_hold(&mut self) {
+        if self.holding.take().is_some() {
+            self.call("bn.release", json!({}), Pending::Hold);
         }
     }
 

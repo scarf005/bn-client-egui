@@ -38,7 +38,9 @@ fn by_def(def: &str, v: &Value) -> Result<Value, String> {
         "viewport" => round_trip::<Viewport>(v),
         "credit_params" => round_trip::<CreditParams>(v),
         "credit_result" => round_trip::<CreditResult>(v),
-        "empty_params" => round_trip::<std::collections::BTreeMap<String, Value>>(v),
+        "empty_params" | "hold_params" => {
+            round_trip::<std::collections::BTreeMap<String, Value>>(v)
+        }
         "subscribe_result" => round_trip::<Snapshot>(v),
         "snapshot_part" => round_trip::<SnapshotPart>(v),
         "events_notification" => round_trip::<EventsParams>(v),
@@ -213,7 +215,7 @@ fn the_schema_hash_is_the_vendored_schemas_sha256_prefix() {
         .map(|b| format!("{b:02x}"))
         .collect::<String>();
     assert_eq!(protocol::SCHEMA_HASH, format!("sha256:{}", &hex[..16]));
-    assert_eq!(protocol::SCHEMA_HASH, "sha256:29548f9419e8ec48");
+    assert_eq!(protocol::SCHEMA_HASH, "sha256:ae6917bbef353554");
 }
 
 #[test]
