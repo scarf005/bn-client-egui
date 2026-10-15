@@ -461,6 +461,7 @@ impl<M: GameModel> App<M> {
             });
         self.sidebar = Some((side, sidebar.response.rect));
         label_resize_handle(ui.ctx(), &name, "Resize sidebar");
+        crate::toolbar::show(ui, &mut self.model);
         self.region = Some(ui.available_rect_before_wrap());
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE.fill(egui::Color32::BLACK))

@@ -14,6 +14,7 @@ pub mod text;
 pub mod theme;
 pub mod tileset;
 pub mod tint;
+pub mod toolbar;
 pub mod windows;
 
 pub use app::App;

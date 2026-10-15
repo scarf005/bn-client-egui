@@ -2,7 +2,9 @@ use crate::colors::ColorMap;
 use crate::interaction::InvokeError;
 use crate::markup::{self, Run};
 
-use crate::protocol::{Column, Editor, InvokeArgs, List, Look, Mark, ModTileset, Row, Screen};
+use crate::protocol::{
+    Column, Editor, InvokeArgs, List, Look, Mark, ModTileset, Row, Screen, ScreenRole, Shortcut,
+};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Pos {
     pub x: i32,
@@ -565,6 +567,13 @@ pub trait GameModel {
     /// The right click on a view square, as the engine's own SEC_SELECT; false when the model has none.
     fn context_click(&mut self, _at: Pos) -> bool {
         false
+    }
+    /// The shortcut bar the map screen publishes, in the engine's order.
+    fn shortcuts(&self) -> Vec<Shortcut> {
+        self.screens()
+            .iter()
+            .find(|s| s.role == ScreenRole::Map)
+            .map_or_else(Vec::new, |s| s.shortcuts.clone())
     }
     /// The engine's cursor (look mode, aiming) moves to view square `at`; a `click` on the square it is
     /// already on confirms it, a hover never does.

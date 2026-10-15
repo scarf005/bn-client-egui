@@ -2135,6 +2135,24 @@ pub struct Screen {
     /// For diagnostics and tests; a client never branches on it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context: Option<String>,
+    /// The shortcut bar of the map screen, in the order the data gives; empty on every other screen.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub shortcuts: Vec<Shortcut>,
+}
+
+/// A button of the map's shortcut bar.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Shortcut {
+    /// The registered action the button runs: the map's affordance of this id, while `enabled`.
+    pub affordance_id: String,
+    pub label: Text,
+    pub keys: Vec<String>,
+    /// An opaque sprite id the client may map to its own art.
+    pub icon: String,
+    /// What to draw when the client has no art for `icon`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub glyph: Option<String>,
+    pub enabled: bool,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
