@@ -2529,3 +2529,37 @@ fn no_command_leaves_for_the_old_world_while_the_new_one_is_being_fetched() {
     assert!(!m.invoke_action("RIGHT"), "the mirror is the old world's");
     assert!(submits(&h).is_empty());
 }
+
+#[test]
+fn only_the_terrain_layer_of_a_square_says_it_is_terrain() {
+    let m = tiled_session();
+    let origin = m.origin();
+    let cell = m.cell(Pos {
+        x: 6 - origin.x,
+        y: 4 - origin.y,
+    });
+    let terrain = cell.layers.iter().map(|l| l.terrain).collect::<Vec<_>>();
+    assert_eq!(
+        cell.layers
+            .iter()
+            .map(|l| l.id.as_str())
+            .collect::<Vec<_>>(),
+        ["t_dirt", "mon_zombie", "overlay_hostile_sees_player"]
+    );
+    assert_eq!(terrain, [true, false, false]);
+}
+
+#[test]
+fn the_map_version_changes_with_what_the_engine_publishes_and_with_nothing_else() {
+    let (t, h) = session();
+    let mut m = connected(t);
+    let first = m.map_version().expect("an engine model tells");
+    assert_eq!(
+        m.map_version(),
+        Some(first),
+        "reading the map does not change it"
+    );
+    h.push(fixture("events_41_walk"));
+    m.poll();
+    assert_ne!(m.map_version(), Some(first), "an event changed the map");
+}

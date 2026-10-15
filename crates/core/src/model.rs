@@ -29,6 +29,8 @@ pub struct Layer {
     pub mirrored: bool,
     /// Whether the thing is a character or monster, whose sprites keep their facing.
     pub creature: bool,
+    /// Whether this is the terrain of its square, which a 3D view draws as ground or as a wall.
+    pub terrain: bool,
     /// Picks between the weighted variants of a sprite, like the game's per-tile seed.
     pub seed: u32,
     /// Paint the tileset blends into the background and the foreground sprite.
@@ -461,6 +463,11 @@ pub trait GameModel {
     /// Absolute map position of view cell (0, 0); lets a walk target survive the view scrolling.
     fn origin(&self) -> Pos {
         Pos { x: 0, y: 0 }
+    }
+    /// Names the state `cell` and `size` are drawn from: equal values mean the same map. `None` when the model
+    /// cannot tell, so a view that caches what it draws redraws every frame.
+    fn map_version(&self) -> Option<u64> {
+        None
     }
     /// True while the model keeps changing on its own and needs periodic repaints.
     fn live(&self) -> bool {

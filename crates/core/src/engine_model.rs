@@ -1206,6 +1206,7 @@ impl EngineModel {
             rotation: look.rotation.unwrap_or(0),
             mirrored: look.facing.as_deref() == Some("left"),
             creature: matches!(look.kind.as_str(), "monster" | "npc" | "avatar"),
+            terrain: look.kind == "terrain",
             seed,
             tint_bg: paint(look, |t| t.bg.as_deref()),
             tint_fg: paint(look, |t| t.fg.as_deref()),
@@ -1724,6 +1725,21 @@ impl GameModel for EngineModel {
     fn origin(&self) -> Pos {
         let (x, y) = self.origin.unwrap_or_default();
         Pos { x, y }
+    }
+
+    fn map_version(&self) -> Option<u64> {
+        use std::hash::{Hash, Hasher};
+        let at = self.replica.at()?;
+        let mut hash = std::hash::DefaultHasher::new();
+        (
+            &at.epoch,
+            &at.sequence,
+            self.origin,
+            self.shown().x,
+            self.shown().y,
+        )
+            .hash(&mut hash);
+        Some(hash.finish())
     }
 
     fn live(&self) -> bool {
