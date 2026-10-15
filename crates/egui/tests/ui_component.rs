@@ -911,13 +911,67 @@ fn a_colour_row_runs_the_activate_affordance_with_the_colour_as_its_row() {
 }
 
 #[test]
+fn an_auto_pickup_row_runs_the_edit_with_the_rule_serial_as_its_row() {
+    let screen = example("autopickup.json", "auto pickup manager with two rules");
+    let (mut h, script) = harness(screen);
+    h.get_by_label("*axe*").click();
+    h.run_steps(3);
+    assert_eq!(
+        submits(&script),
+        [boundary_invoke("autopickup:edit", json!({"row": "rule:2"}))]
+    );
+}
+
+#[test]
+fn an_auto_pickup_tab_runs_the_tab_affordance_by_its_token() {
+    let screen = example("autopickup.json", "auto pickup manager with two rules");
+    let (mut h, script) = harness(screen);
+    h.get_by_label("[<Character>]").click();
+    h.run_steps(3);
+    assert_eq!(
+        submits(&script),
+        [boundary_invoke(
+            "autopickup:tab",
+            json!({"row": "character"})
+        )]
+    );
+}
+
+#[test]
+fn a_safe_mode_row_runs_the_edit_with_the_rule_serial_as_its_row() {
+    let screen = example("safemode.json", "safe mode manager with a rule");
+    let (mut h, script) = harness(screen);
+    h.get_by_label("zombie").click();
+    h.run_steps(3);
+    assert_eq!(
+        submits(&script),
+        [boundary_invoke("safemode:edit", json!({"row": "rule:1"}))]
+    );
+}
+
+#[test]
+fn a_safe_mode_tab_runs_the_tab_affordance_by_its_token() {
+    let screen = example("safemode.json", "safe mode manager with a rule");
+    let (mut h, script) = harness(screen);
+    h.get_by_label("Character").click();
+    h.run_steps(3);
+    assert_eq!(
+        submits(&script),
+        [boundary_invoke("safemode:tab", json!({"row": "character"}))]
+    );
+}
+
+#[test]
 fn a_worn_item_runs_the_armor_screens_pick_with_its_identity() {
     let (mut h, script) = harness(example("armor.json", "armor layers screen"));
     h.get_all_by_label("||\u{a0}jeans").next().unwrap().click();
     h.run_steps(3);
     assert_eq!(
         submits(&script),
-        [boundary_invoke("armor:pick", json!({"row": "worn:jeans:0"}))]
+        [boundary_invoke(
+            "armor:pick",
+            json!({"row": "worn:jeans:0"})
+        )]
     );
 }
 

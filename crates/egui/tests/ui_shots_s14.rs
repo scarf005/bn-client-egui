@@ -1,4 +1,4 @@
-//! Writes PNGs of the distraction and colour managers to
+//! Writes PNGs of the distraction, colour, auto pickup and safe mode managers to
 //! `$SHOT_DIR` for a person to look at. Needs a Vulkan adapter, so it only runs when asked:
 //! `cargo test --test ui_shots_s14 -- --ignored`.
 mod common;
@@ -65,5 +65,16 @@ fn rule_screens() {
     shot(
         example("colors.json", "colour manager with a custom colour set"),
         "colors.png",
+    );
+    shot(
+        example("autopickup.json", "auto pickup manager with two rules"),
+        "autopickup.png",
+    );
+    shot(
+        example(
+            "safemode.json",
+            "safe mode manager with the default ruleset",
+        ),
+        "safemode.png",
     );
 }
