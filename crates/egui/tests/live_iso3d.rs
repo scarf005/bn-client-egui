@@ -129,8 +129,16 @@ fn the_town_in_3d_from_every_side_and_what_a_frame_costs() {
         .with_settings(settings)
         .with_root(root.clone())
         .with_target_format(eframe::wgpu::TextureFormat::Rgba8Unorm);
+    // BN_ISO_SIZE=<width>x<height> sets the window, 1920x1080 otherwise.
+    let window = std::env::var("BN_ISO_SIZE")
+        .ok()
+        .and_then(|v| {
+            let (w, h) = v.split_once('x')?;
+            Some(egui::vec2(w.parse().ok()?, h.parse().ok()?))
+        })
+        .unwrap_or(egui::vec2(1920.0, 1080.0));
     let mut builder = Harness::builder()
-        .with_size(egui::vec2(1920.0, 1080.0))
+        .with_size(window)
         .with_step_dt(1.0 / 60.0);
     builder = match std::env::var_os("BN_ISO_GPU") {
         Some(_) => {
@@ -334,7 +342,9 @@ fn the_town_in_3d_from_every_side_and_what_a_frame_costs() {
         whole.push(start.elapsed().as_secs_f64() * 1e3);
     }
     println!(
-        "LIVE frame ms (1920x1080, camera turning): ui p50={:.2} p95={:.2}; ui+render+readback p50={:.2} p95={:.2} max={:.2}",
+        "LIVE frame ms ({}x{}, camera turning): ui p50={:.2} p95={:.2}; ui+render+readback p50={:.2} p95={:.2} max={:.2}",
+        window.x,
+        window.y,
         percentile(&mut ui.clone(), 0.5),
         percentile(&mut ui, 0.95),
         percentile(&mut whole.clone(), 0.5),
