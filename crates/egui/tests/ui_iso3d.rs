@@ -6,7 +6,7 @@ use bn_client_egui::iso::camera::{PITCH_MAX, PITCH_MIN, Viewport};
 use bn_client_egui::iso::scene::world_scale;
 use bn_client_egui::transport::{ScriptHandle, ScriptedTransport};
 use bn_client_egui::{App, EngineModel, GameModel, Pos};
-use common::{fixture, game_root, iso_root};
+use common::{fixture, game_root, iso_root, open_client_settings};
 use eframe::egui;
 use egui_kittest::Harness;
 use egui_kittest::kittest::Queryable;
@@ -88,11 +88,13 @@ fn saved(settings: &Path) -> Value {
 }
 
 fn pick_2d(h: &mut H) {
+    open_client_settings(h);
     h.get_by_label("2D").click();
     h.run_steps(3);
 }
 
 fn pick_3d(h: &mut H) {
+    open_client_settings(h);
     h.get_by_label("3D").click();
     h.run_steps(3);
 }

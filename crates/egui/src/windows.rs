@@ -38,6 +38,22 @@ impl Origin {
     }
 }
 
+/// Where a window sits by the screen's layout rather than where the player left it: such a window cannot be
+/// moved, is not remembered and never leaves the screen.
+#[derive(Clone, Copy, Debug)]
+pub enum Place {
+    /// The whole of `rect`.
+    Fill(egui::Rect),
+    /// The middle of `rect`, as large as its content and no larger than `rect`.
+    Center(egui::Rect),
+    /// `pivot` of the window at `pos`, as large as its content and no larger than `max`.
+    Side {
+        pivot: egui::Align2,
+        pos: egui::Pos2,
+        max: egui::Vec2,
+    },
+}
+
 pub struct WindowSpec {
     /// The kind of window whose place is kept: every window of a kind shares it.
     pub kind: String,
@@ -45,6 +61,7 @@ pub struct WindowSpec {
     pub id: egui::Id,
     pub saved: Option<WindowState>,
     pub origin: Origin,
+    pub place: Option<Place>,
     pub width: Option<f32>,
     pub height: Option<f32>,
     pub max_width: Option<f32>,
@@ -59,6 +76,14 @@ pub struct Shown<R> {
     pub inner: Option<R>,
     pub closed: bool,
     pub state: Option<WindowState>,
+}
+
+/// `window` with `width` as its default width, when there is one.
+fn widened(window: egui::Window<'_>, width: Option<f32>) -> egui::Window<'_> {
+    match width {
+        Some(width) => window.default_width(width),
+        None => window,
+    }
 }
 
 /// Shows the window `spec` describes around `add`.
@@ -80,13 +105,29 @@ pub fn show<R>(
             .unwrap_or(Placed { kept: spec.saved })
     });
     ctx.data_mut(|d| d.insert_temp(key, placed));
-    window = match placed.kept {
-        Some(s) => window
+    window = match (spec.place, placed.kept) {
+        (Some(Place::Fill(rect)), _) => window
+            .collapsible(false)
+            .fixed_pos(rect.min)
+            .fixed_size(rect.size()),
+        (Some(Place::Center(rect)), _) => widened(window, spec.width)
+            .collapsible(false)
+            .anchor(
+                egui::Align2::CENTER_CENTER,
+                rect.center() - ctx.content_rect().center(),
+            )
+            .max_size(rect.size()),
+        (Some(Place::Side { pivot, pos, max }), _) => widened(window, spec.width)
+            .collapsible(false)
+            .pivot(pivot)
+            .fixed_pos(pos)
+            .max_size(max),
+        (None, Some(s)) => window
             .pivot(egui::Align2::LEFT_TOP)
             .default_pos(s.pos)
             .default_size(s.size)
             .default_open(!s.collapsed),
-        None => {
+        (None, None) => {
             // With its width known the window starts from its top left corner, so that resizing it from an
             // edge moves only that edge; without, egui centres it on the origin once it has a size.
             let window = match spec.width {
@@ -119,19 +160,22 @@ pub fn show<R>(
     let shown = window.show(ctx, add);
     let collapsed = shown.as_ref().is_some_and(|s| s.inner.is_none());
     // A collapsed window is only its title bar, so it keeps the size it had expanded.
-    let state = shown.as_ref().and_then(|s| {
-        let pos = s.response.rect.min;
-        let size = match collapsed {
-            true => spec.saved.map(|p| p.size),
-            false => Some([s.response.rect.width(), s.response.rect.height()]),
-        };
-        size.filter(|s| s.iter().all(|n| *n > 1.0))
-            .map(|size| WindowState {
-                pos: [pos.x, pos.y],
-                size,
-                collapsed,
-            })
-    });
+    let state = shown
+        .as_ref()
+        .filter(|_| spec.place.is_none())
+        .and_then(|s| {
+            let pos = s.response.rect.min;
+            let size = match collapsed {
+                true => spec.saved.map(|p| p.size),
+                false => Some([s.response.rect.width(), s.response.rect.height()]),
+            };
+            size.filter(|s| s.iter().all(|n| *n > 1.0))
+                .map(|size| WindowState {
+                    pos: [pos.x, pos.y],
+                    size,
+                    collapsed,
+                })
+        });
     Shown {
         inner: shown.and_then(|s| s.inner),
         closed: !open,

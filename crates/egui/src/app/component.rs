@@ -5,8 +5,8 @@
 //! calls the interaction core (`bn_client_core::interaction`), which decides what is sent.
 
 use super::{App, sidebar};
-use crate::windows::{self, Origin, Shown, WindowSpec};
 use crate::layout::{self, Extent};
+use crate::windows::{self, Place, Shown, WindowSpec};
 use crate::{a11y, editor, text};
 use bn_client_core::interaction::{self, ArgKind, InvokeError, Reason};
 use bn_client_core::protocol::{
@@ -15,9 +15,9 @@ use bn_client_core::protocol::{
     Row, Screen, ScreenDock, ScreenRole, Selection, SidebarSide, Text, TextBlock, TextRole, Tone,
     WorldPos,
 };
-use bn_client_core::{Cell, GameModel, Rgb, markup};
+use bn_client_core::{Cell, GameModel, Pos, Rgb, markup};
 use eframe::egui::{self, WidgetInfo, WidgetType};
-use std::cell::RefCell;
+use std::cell::{Cell as Slot, RefCell};
 use std::collections::HashSet;
 
 /// The margin around each pane of a split, on every side.
@@ -39,6 +39,8 @@ pub(super) struct Screens {
     denial: Option<String>,
     /// The list the keys just moved the focus in, to be scrolled to it.
     reveal: Option<String>,
+    /// The height the list drawn last had, for the rows a page key moves.
+    list_height: Slot<f32>,
     /// The squares of this frame's list rows left for their item's sprite, painted once the window is drawn.
     icons: RefCell<Vec<RowIcon>>,
     /// What this frame's overmap draws, painted once the window is drawn, so that a tileset's sprites come
@@ -176,44 +178,80 @@ fn find<'a>(screen: &'a Screen, id: &str) -> Option<&'a Affordance> {
     screen.affordances.iter().find(|a| a.id == id)
 }
 
-/// The kind of window and where it first appears for the side it asked for: beside the sidebar's inner
-/// edge (the sidebar's own place for `overlapping`); the top centre for none, and for the cursor, which the
-/// client does not know.
-fn docked(
-    ctx: &egui::Context,
-    dock: Option<ScreenDock>,
+/// The room a window leaves the map's squares around the avatar and the engine's cursor, in whole squares.
+const KEEP_CLEAR: f32 = 1.0;
+/// The share of the map region a window beside the cursor, or docked to a side, takes in width.
+const SIDE_SHARE: f32 = 0.4;
+/// The space kept between a window and the edge of the map region.
+const REGION_MARGIN: f32 = 8.0;
+
+/// How a screen of the stack sits in `region` (the map panel; the sidebar stays visible): a full screen fills it, a
+/// dialog is centred, a window that asked for a side sits there, and a screen that puts a cursor on the map sits
+/// on the side away from it. `avoid` are the rectangles on the map that must stay uncovered.
+fn placement(
+    screen: &Screen,
+    region: egui::Rect,
     sidebar: Option<(SidebarSide, egui::Rect)>,
-) -> (&'static str, Option<Origin>) {
-    let screen = ctx.content_rect();
-    let at = |pivot, x| Origin {
-        pivot,
-        pos: egui::pos2(x, screen.top()),
+    avoid: &[egui::Rect],
+) -> Place {
+    let inner = region.shrink(REGION_MARGIN);
+    let max = egui::vec2(inner.width() * SIDE_SHARE, inner.height());
+    let side = |left: bool| Place::Side {
+        pivot: if left {
+            egui::Align2::LEFT_TOP
+        } else {
+            egui::Align2::RIGHT_TOP
+        },
+        pos: if left {
+            inner.left_top()
+        } else {
+            inner.right_top()
+        },
+        max,
     };
-    match (dock, sidebar) {
-        (Some(ScreenDock::Left), Some((SidebarSide::Left, rect))) => (
-            "screen:left",
-            Some(at(egui::Align2::LEFT_TOP, rect.right())),
-        ),
-        (Some(ScreenDock::Left), _) => (
-            "screen:left",
-            Some(at(egui::Align2::LEFT_TOP, screen.left())),
-        ),
-        (Some(ScreenDock::Right), Some((SidebarSide::Right, rect))) => (
-            "screen:right",
-            Some(at(egui::Align2::RIGHT_TOP, rect.left())),
-        ),
-        (Some(ScreenDock::Right), _) => (
-            "screen:right",
-            Some(at(egui::Align2::RIGHT_TOP, screen.right())),
-        ),
-        (Some(ScreenDock::Overlapping), Some((_, rect))) => {
-            ("screen:over", Some(at(egui::Align2::LEFT_TOP, rect.left())))
+    let beside = |left: bool| {
+        let (x0, x1) = if left {
+            (inner.left(), inner.left() + max.x)
+        } else {
+            (inner.right() - max.x, inner.right())
+        };
+        egui::Rect::from_x_y_ranges(x0..=x1, inner.y_range())
+    };
+    // Away from the cursor: the window's side is the one whose half of the room has none of `avoid`.
+    let away = || {
+        let covered = |left: bool| avoid.iter().any(|r| beside(left).intersects(*r));
+        let cursor_left = avoid
+            .first()
+            .is_some_and(|r| r.center().x < inner.center().x);
+        match (covered(!cursor_left), covered(cursor_left)) {
+            (false, _) => side(!cursor_left),
+            (true, false) => side(cursor_left),
+            (true, true) => side(!cursor_left),
         }
-        (Some(ScreenDock::Overlapping), None) => (
-            "screen:over",
-            Some(at(egui::Align2::LEFT_TOP, screen.left())),
-        ),
-        (Some(ScreenDock::Cursor) | None, _) => ("screen", None),
+    };
+    match (screen.dock, screen.role) {
+        (Some(ScreenDock::Left), _) => side(true),
+        (Some(ScreenDock::Right), _) => side(false),
+        // Over the sidebar: its own place, level with the map's top.
+        (Some(ScreenDock::Overlapping), _) => match sidebar {
+            Some((_, rect)) => Place::Side {
+                pivot: egui::Align2::LEFT_TOP,
+                pos: egui::pos2(rect.left(), inner.top()),
+                max: egui::vec2(rect.width(), inner.height()),
+            },
+            None => side(true),
+        },
+        (Some(ScreenDock::Cursor), _) => away(),
+        // A screen that puts a cursor on the map (look, aim) must not hide what the cursor is on.
+        _ if screen
+            .root
+            .as_ref()
+            .is_some_and(|r| r.cursor_map().is_some()) =>
+        {
+            away()
+        }
+        (None, ScreenRole::Dialog) => Place::Center(inner),
+        (None, _) => Place::Fill(inner),
     }
 }
 
@@ -383,16 +421,18 @@ impl<M: GameModel> App<M> {
         }
     }
 
-    /// The room a list has on the screen.
-    fn list_height(ctx: &egui::Context) -> f32 {
-        (super::dialog_scroll_height(ctx) - DESCRIPTION_HEIGHT).max(DESCRIPTION_HEIGHT)
+    /// The room a list has here: what the window has left, less its description and the buttons under it.
+    fn list_height(ui: &egui::Ui) -> f32 {
+        let spacing = ui.spacing();
+        let buttons = 2.0 * (spacing.interact_size.y + spacing.item_spacing.y);
+        (ui.available_height() - DESCRIPTION_HEIGHT - buttons).max(DESCRIPTION_HEIGHT)
     }
 
-    /// How many rows a list shows at once.
+    /// How many rows a list shows at once: the rows of the list drawn last.
     fn page_rows(&self, ctx: &egui::Context) -> usize {
         let spacing = &ctx.global_style().spacing;
         let row = spacing.interact_size.y + spacing.item_spacing.y;
-        ((Self::list_height(ctx) / row) as usize).max(1)
+        ((self.screens.list_height.get() / row) as usize).max(1)
     }
 
     /// Hands what the player did to the interaction core.
@@ -448,37 +488,71 @@ impl<M: GameModel> App<M> {
     ) -> Shown<()> {
         let title = markup::plain(&screen.title.as_ref().map(Text::shown).unwrap_or_default());
         let frame = super::menu::list_frame(ctx);
-        let share = if screen.dock.is_some() { 0.4 } else { 0.8 };
-        let max_width = (ctx.content_rect().width() * share).max(520.0);
-        // A window that asked for a side starts there; one the player has moved stays where they left it.
-        let (kind, origin) = docked(ctx, screen.dock, self.sidebar);
-        let base = self.window_spec(ctx, kind, &title);
+        let region = self.region.unwrap_or_else(|| ctx.content_rect());
+        // The squares to keep clear: the engine's cursor and the avatar, a square around each.
+        let avoid = self.map_view.map_or(vec![], |(origin, cell)| {
+            let square = |at: Pos| {
+                egui::Rect::from_min_size(
+                    origin + egui::vec2(at.x as f32, at.y as f32) * cell,
+                    egui::Vec2::splat(cell),
+                )
+                .expand(KEEP_CLEAR * cell)
+            };
+            self.model
+                .focus()
+                .into_iter()
+                .chain([self.model.player()])
+                .map(square)
+                .collect()
+        });
+        let place = placement(screen, region, self.sidebar, &avoid);
+        // A window that is not the whole room is as wide as its content, within the room.
+        let width = match (place, &screen.root) {
+            (Place::Fill(_), _) | (_, None) => None,
+            (_, Some(root)) => {
+                let builder = egui::UiBuilder::new().max_rect(region);
+                let ui = egui::Ui::new(ctx.clone(), egui::Id::new("measure"), builder);
+                let content = self.extent(&ui, root, region.width()).natural;
+                Some(content + frame.total_margin().sum().x + ui.spacing().window_margin.sum().x)
+            }
+        };
+        let base = self.window_spec(ctx, "screen", &title);
         let spec = WindowSpec {
             closable: interaction::with_role(screen, AffordanceRole::Cancel).is_some(),
             frame: Some(frame),
-            width: Some(max_width + frame.total_margin().sum().x),
-            height: Some(super::dialog_scroll_height(ctx)),
-            origin: origin.unwrap_or(base.origin),
+            place: Some(place),
+            width,
             ..base
         };
         let shown = windows::show(ctx, spec, |ui| {
-            ui.set_min_width(520.0);
-            ui.set_max_width(max_width);
             let Some(root) = &screen.root else {
                 return;
             };
-            self.component(ui, screen, root, out);
-            self.question(ui, screen, out);
-            if let Some(denial) = &self.screens.denial {
-                ui.colored_label(BAD, markup::plain(denial));
-            }
             let named = claimed(root);
             let rest = screen
                 .affordances
                 .iter()
                 .filter(|a| !named.contains(a.id.as_str()))
                 .collect::<Vec<_>>();
-            self.affordance_buttons(ui, &rest, None, out);
+            let footer = |ui: &mut egui::Ui, out: &mut Vec<Intent>| {
+                self.question(ui, screen, out);
+                if let Some(denial) = &self.screens.denial {
+                    ui.colored_label(BAD, markup::plain(denial));
+                }
+                self.affordance_buttons(ui, &rest, None, out);
+            };
+            // A screen that fills the room keeps its footer under its body, whatever the body's height.
+            if matches!(place, Place::Fill(_)) {
+                egui::Panel::bottom(egui::Id::new(("footer", &screen.screen_id)))
+                    .resizable(false)
+                    .frame(egui::Frame::NONE)
+                    .show_separator_line(false)
+                    .show(ui, |ui| footer(ui, out));
+                egui::CentralPanel::no_frame().show(ui, |ui| self.component(ui, screen, root, out));
+            } else {
+                self.component(ui, screen, root, out);
+                footer(ui, out);
+            }
         });
         shown
     }
@@ -925,7 +999,7 @@ impl<M: GameModel> App<M> {
             show(ui);
         } else {
             egui::ScrollArea::vertical()
-                .max_height(super::dialog_scroll_height(ui.ctx()))
+                .max_height(ui.available_height())
                 .auto_shrink(true)
                 .show(ui, show);
         }
@@ -1145,7 +1219,7 @@ impl<M: GameModel> App<M> {
         let fit = |cells: usize, space: f32| ((space / cell_px) as usize).clamp(1, cells.max(1));
         let (cols, rows) = (
             fit(om.cols, room.x * 0.7),
-            fit(om.rows, super::dialog_scroll_height(ui.ctx())),
+            fit(om.rows, ui.available_height()),
         );
         let (cursor_col, cursor_row) = om.cell_of(&cursor).unwrap_or((om.cols / 2, om.rows / 2));
         let first = |at: usize, shown: usize, all: usize| {
@@ -1536,10 +1610,12 @@ impl<M: GameModel> App<M> {
                 }
             });
         }
+        let list_height = Self::list_height(ui);
+        self.screens.list_height.set(list_height);
         let mut area = egui::ScrollArea::vertical()
             .id_salt(("list", id))
             .auto_shrink([false, true])
-            .max_height(Self::list_height(ui.ctx()));
+            .max_height(list_height);
         if self.screens.reveal.as_deref() == Some(id.as_str()) {
             let step = height + ui.spacing().item_spacing.y;
             area = area.vertical_scroll_offset(interaction.scroll(id) as f32 * step);

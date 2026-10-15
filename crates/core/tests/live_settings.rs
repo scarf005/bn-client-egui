@@ -91,7 +91,10 @@ fn invoke(model: &mut EngineModel, affordance: &str, row: Option<&str>, text: Op
 
 /// The rows of the list `id` on the top screen.
 fn rows_of(model: &EngineModel, id: &str) -> Vec<Row> {
-    let list = model.screens().last().and_then(|s| s.root.as_ref()?.find(id));
+    let list = model
+        .screens()
+        .last()
+        .and_then(|s| s.root.as_ref()?.find(id));
     match list {
         Some(Component::List(list)) => model.rows(list).into_iter().cloned().collect(),
         other => panic!("no list {id}: {other:?}"),
@@ -101,7 +104,11 @@ fn rows_of(model: &EngineModel, id: &str) -> Vec<Row> {
 /// The value of the column `key` of the row `id` of the list `list`.
 fn cell(model: &EngineModel, list: &str, id: &str, key: &str) -> String {
     let row = rows_of(model, list).into_iter().find(|r| r.id == id);
-    let column = row.and_then(|r| r.columns.into_iter().find(|c| c.key.as_deref() == Some(key)));
+    let column = row.and_then(|r| {
+        r.columns
+            .into_iter()
+            .find(|c| c.key.as_deref() == Some(key))
+    });
     column.map(|c| c.value.shown()).unwrap_or_default()
 }
 
@@ -159,7 +166,10 @@ fn live_rule_screens_add_edit_move_and_remove_rules() {
     let (knife, axe) = (rules[0].id.clone(), rules[1].id.clone());
     assert_ne!(knife, axe);
     invoke(&mut model, "MOVE_RULE_DOWN", None, None);
-    assert_eq!(ids_of(&model, "autopickup:rules"), [axe.clone(), knife.clone()]);
+    assert_eq!(
+        ids_of(&model, "autopickup:rules"),
+        [axe.clone(), knife.clone()]
+    );
     invoke(&mut model, "autopickup:mode", Some(&axe), None);
     assert_eq!(cell(&model, "autopickup:rules", &axe, "i_e"), "Exclude");
     assert_eq!(cell(&model, "autopickup:rules", &knife, "i_e"), "Include");
@@ -175,9 +185,15 @@ fn live_rule_screens_add_edit_move_and_remove_rules() {
     invoke(&mut model, "safemode:edit", Some(&rule), None);
     type_text(&mut model, "zombie");
     assert_eq!(rows_of(&model, "safemode:rules")[0].label.shown(), "zombie");
-    assert_eq!(cell(&model, "safemode:rules", &rule, "whitelist"), "Blacklist");
+    assert_eq!(
+        cell(&model, "safemode:rules", &rule, "whitelist"),
+        "Blacklist"
+    );
     invoke(&mut model, "safemode:list", Some(&rule), None);
-    assert_eq!(cell(&model, "safemode:rules", &rule, "whitelist"), "Whitelist");
+    assert_eq!(
+        cell(&model, "safemode:rules", &rule, "whitelist"),
+        "Whitelist"
+    );
     invoke(&mut model, "REMOVE_RULE", None, None);
     assert!(ids_of(&model, "safemode:rules").is_empty());
     quit(&mut model);
@@ -212,20 +228,31 @@ fn live_distraction_and_color_managers_are_driven_by_their_affordances_by_id() {
     open_screen(&mut model, "settings:colors", "COLORS");
     let colors = rows_of(&model, "colors:items");
     let (first, second) = (colors[0].clone(), colors[1].clone());
-    assert_eq!(cell(&model, "colors:items", &second.id, "invert_custom"), "");
+    assert_eq!(
+        cell(&model, "colors:items", &second.id, "invert_custom"),
+        ""
+    );
     invoke(&mut model, "colors:column", Some("invert"), None);
     invoke(&mut model, "colors:select", Some(&second.id), None);
     let name = first.label.shown();
     invoke(&mut model, "colors:set", Some(&second.id), Some(&name));
-    assert_eq!(cell(&model, "colors:items", &second.id, "invert_custom"), name);
+    assert_eq!(
+        cell(&model, "colors:items", &second.id, "invert_custom"),
+        name
+    );
     // The activation opens the native list of colors over the screen; leaving it returns to the screen.
     invoke(&mut model, "colors:activate", Some(&second.id), None);
     assert_ne!(top_context(&model), "COLORS", "the color list is open");
     settled(&mut model, "the color list");
     model.cancel_menu();
-    wait_for(&mut model, "the colors screen", |m| top_context(m) == "COLORS");
+    wait_for(&mut model, "the colors screen", |m| {
+        top_context(m) == "COLORS"
+    });
     quit(&mut model);
     open_screen(&mut model, "settings:colors", "COLORS");
-    assert_eq!(cell(&model, "colors:items", &second.id, "invert_custom"), name);
+    assert_eq!(
+        cell(&model, "colors:items", &second.id, "invert_custom"),
+        name
+    );
     quit(&mut model);
 }

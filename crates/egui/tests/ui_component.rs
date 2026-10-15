@@ -353,7 +353,8 @@ fn a_screen_with_a_dock_starts_at_that_side_of_the_window() {
             .rect()
     };
     let (left, right) = (side("left"), side("right"));
-    assert!(left.left() < 5.0, "{left:?}");
+    // At the room's edge, less the margin the room keeps (the harness adds its own 8 points).
+    assert!(left.left() < 20.0, "{left:?}");
     // The sidebar is on the right: the window sits against its inner edge, not the window's.
     assert!(right.right() < 1095.0 && right.right() > 500.0, "{right:?}");
 }

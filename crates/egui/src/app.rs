@@ -3,7 +3,7 @@ use crate::display::Display;
 use crate::effects::Effects;
 use crate::iso::{self, View3d};
 use crate::text;
-use crate::windows::{Origin, Shown, WindowSpec};
+use crate::windows::{self, Origin, Shown, WindowSpec};
 use bn_client_core::protocol::SidebarSide;
 use bn_client_core::{Failure, GameModel, Loading, Pos, interaction, keys};
 use eframe::egui::{self, accesskit};
@@ -45,6 +45,7 @@ impl<M: GameModel> App<M> {
             id: a11y::dialog_id(title),
             saved: self.display.window(kind),
             origin: Origin::top_center(ctx),
+            place: None,
             width: None,
             height: None,
             max_width: None,
@@ -65,14 +66,9 @@ impl<M: GameModel> App<M> {
     }
 }
 
-/// The tallest a dialog's list grows: the room under the dialog's top, less its title, tabs and description.
+/// The tallest a 0.1 menu's list grows: the room under the window's top, less its title, tabs and description.
 fn dialog_scroll_height(ctx: &egui::Context) -> f32 {
     (ctx.content_rect().height() * 0.88 - 150.0).max(150.0)
-}
-
-/// The height of the status block above the map: two lines, whatever the hovered square says; the rest scrolls.
-fn status_height(ui: &egui::Ui) -> f32 {
-    2.0 * ui.text_style_height(&egui::TextStyle::Body)
 }
 
 /// Names the drag handle of the panel with this id for screen readers.
@@ -114,6 +110,8 @@ pub struct App<M: GameModel> {
     walk_key: Option<egui::Key>,
     /// The action palette's search text while it is open.
     palette: Option<String>,
+    /// The client settings window is open.
+    client_settings: bool,
     /// The message log's height once the user has dragged its edge.
     log_height: Option<f32>,
     /// Title of the menu that last took focus, so a menu is entered once, not on every frame.
@@ -150,6 +148,10 @@ pub struct App<M: GameModel> {
     screens: component::Screens,
     /// The sidebar as last drawn: the side it is on and its rectangle, which a docked window sits beside.
     sidebar: Option<(SidebarSide, egui::Rect)>,
+    /// The room the map panel took in the last frame: where screens and dialogs sit.
+    region: Option<egui::Rect>,
+    /// The map canvas's top left corner and a square's side in the last frame, to place a window off the cursor.
+    map_view: Option<(egui::Pos2, f32)>,
     /// The engine's selected row of the open menu, to keep it in view when the wheel moves it.
     menu_cursor: Option<String>,
     /// The text prompt that already took the keyboard focus when it opened.
@@ -177,6 +179,7 @@ impl<M: GameModel> App<M> {
             keys_consumed: false,
             walk_key: None,
             palette: None,
+            client_settings: false,
             log_height: None,
             menu_title: None,
             focus_menu: false,
@@ -196,6 +199,8 @@ impl<M: GameModel> App<M> {
             status_live: a11y::Announcer::new(", "),
             screens: Default::default(),
             sidebar: None,
+            region: None,
+            map_view: None,
             menu_cursor: None,
             prompt_focused: None,
             scrolled_to: None,
@@ -413,6 +418,8 @@ impl<M: GameModel> App<M> {
             }
         }
         egui::Panel::top("bar").show(ui, |ui| self.bar(ui));
+        // Without a map the room is what the top bar leaves; with one, what the sidebar leaves.
+        self.region = Some(ui.available_rect_before_wrap());
         if interaction::titled(self.model.screens()) {
             // The title screen is only its menu: no map, sidebar or log of a game that is not running.
             self.menu_or_screen(ui.ctx());
@@ -444,11 +451,17 @@ impl<M: GameModel> App<M> {
             .size_range(narrowest..=widest)
             .show(ui, |ui| {
                 profiling::scope!("sidebar");
-                ui.set_min_width(ui.available_width());
-                self.sidebar_panel(ui, layout.as_ref())
+                // The panel is as wide as it was given, never as wide as its widest line: what does not fit is
+                // cut at its edge, not allowed to push the panel over the map.
+                let rect = ui.available_rect_before_wrap();
+                let mut inner = ui.new_child(egui::UiBuilder::new().max_rect(rect));
+                inner.set_clip_rect(rect.intersect(ui.clip_rect()));
+                self.sidebar_panel(&mut inner, layout.as_ref());
+                ui.allocate_rect(rect, egui::Sense::hover());
             });
         self.sidebar = Some((side, sidebar.response.rect));
         label_resize_handle(ui.ctx(), &name, "Resize sidebar");
+        self.region = Some(ui.available_rect_before_wrap());
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE.fill(egui::Color32::BLACK))
             .show(ui, |ui| {
@@ -456,7 +469,21 @@ impl<M: GameModel> App<M> {
                 self.map(ui)
             });
         self.palette(ui.ctx());
+        self.client_settings(ui.ctx());
         self.menu_or_screen(ui.ctx());
+    }
+
+    /// The client's own choices (view mode, tileset, motion), which are no part of the game.
+    fn client_settings(&mut self, ctx: &egui::Context) {
+        if !self.client_settings {
+            return;
+        }
+        let spec = WindowSpec {
+            closable: true,
+            id: a11y::dialog_id("Client settings"),
+            ..self.window_spec(ctx, "client-settings", "Client settings")
+        };
+        self.client_settings = !windows::show(ctx, spec, |ui| self.display.controls(ui)).closed;
     }
 
     /// Typed characters and special keys are game keys; the first one that runs an action wins.
@@ -628,27 +655,35 @@ impl<M: GameModel> App<M> {
             if ui.button("Actions").clicked() {
                 self.palette = self.palette.is_none().then(String::new);
             }
+            if ui.button("Client settings").clicked() {
+                self.client_settings = !self.client_settings;
+            }
             self.status(ui);
         });
     }
 
+    /// The command's name and stage is announced politely, with nothing drawn for it; only one that failed, or
+    /// the busy state with its interrupt, is shown.
     fn status(&mut self, ui: &mut egui::Ui) {
-        // A command that went well is over; only one still going or one that failed is worth showing.
-        let text = self
-            .model
-            .command()
+        let command = self.model.command();
+        let failed = command.as_ref().filter(|s| s.finished && s.stage != "done");
+        let text = command
+            .as_ref()
             .filter(|s| !(s.finished && s.stage == "done"))
             .map_or_else(|| "Ready".into(), |s| format!("{}: {}", s.label, s.stage));
         // Every stage reached since the last frame is said, even one that is not shown afterwards.
-        let news = self
-            .model
-            .command()
-            .map(|s| (s.label, self.status_live.update(&s.history).to_owned()))
+        let news = command
+            .as_ref()
+            .map(|s| (&s.label, self.status_live.update(&s.history).to_owned()))
             .filter(|_| self.status_live.changed());
         let text = news.map_or(text, |(label, stages)| format!("{label}: {stages}"));
-        let label = ui.label(text);
+        let live = match failed {
+            Some(_) => ui.label(&text),
+            None => ui.allocate_response(egui::Vec2::ZERO, egui::Sense::hover()),
+        };
+        live.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, &text));
         ui.ctx()
-            .accesskit_node_builder(label.id, |b| b.set_live(accesskit::Live::Polite));
+            .accesskit_node_builder(live.id, |b| b.set_live(accesskit::Live::Polite));
         // With the log panel off, the client's own results and errors are said here instead.
         if self.model.sidebar_layout().is_some_and(|l| !l.has_log()) {
             if let Some(said) = self.model.messages().last() {
@@ -765,11 +800,11 @@ impl<M: GameModel> App<M> {
 
     fn map(&mut self, ui: &mut egui::Ui) {
         self.display.update(ui.ctx());
-        self.display.controls(ui);
         let cell_px = self.display.cell(CELL) * self.display.zoom();
+        self.map_view = None;
         self.display.begin();
-        // The room left for the map, less the status block above it, in whole cells.
-        let room = ui.available_size() - egui::vec2(0.0, status_height(ui));
+        // The room left for the map, in whole cells.
+        let room = ui.available_size();
         let three = self.iso.active(&self.display);
         self.model.set_viewport(match three {
             true => Pos {
@@ -842,19 +877,16 @@ impl<M: GameModel> App<M> {
         if let Some(aiming) = self.model.aiming() {
             status = format!("{aiming}. {status}");
         }
-        // Always the same height, so the map does not move under the pointer as the text changes length.
-        let status_label = egui::ScrollArea::vertical()
-            .id_salt("map_status")
-            .min_scrolled_height(status_height(ui))
-            .max_height(status_height(ui))
-            .show(ui, |ui| {
-                ui.set_min_height(status_height(ui));
-                ui.set_min_width(ui.available_width());
-                ui.label(&status)
-            })
-            .inner;
+        // The cursor's square is said politely and never drawn; the map's own description says it too.
+        let said = ui.interact(
+            egui::Rect::from_min_size(ui.max_rect().min, egui::Vec2::ZERO),
+            ui.id().with("map_status"),
+            egui::Sense::hover(),
+        );
+        said.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, &status));
         ui.ctx()
-            .accesskit_node_builder(status_label.id, |b| b.set_live(accesskit::Live::Polite));
+            .accesskit_node_builder(said.id, |b| b.set_live(accesskit::Live::Polite));
+        // The squares fill whole cells, so what is left over is shared by both sides, not left as a band.
         // The 3D map fills the room and turns with the right button; the flat one is its squares.
         let (extent, sense) = match three {
             true => (ui.available_size(), egui::Sense::click_and_drag()),
@@ -863,8 +895,11 @@ impl<M: GameModel> App<M> {
                 egui::Sense::click(),
             ),
         };
-        let (response, painter) =
-            ui.allocate_painter(extent, sense.union(egui::Sense::focusable_noninteractive()));
+        let (response, painter) = ui
+            .with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
+                ui.allocate_painter(extent, sense.union(egui::Sense::focusable_noninteractive()))
+            })
+            .inner;
         let view = three.then(|| {
             let scale = self.display.tileset().map_or(cell_px, |(t, _)| {
                 iso::scene::world_scale(t, self.display.zoom())
@@ -909,6 +944,7 @@ impl<M: GameModel> App<M> {
             b.set_role(accesskit::Role::Canvas);
             b.set_description(status.as_str());
         });
+        self.map_view = Some((response.rect.min, cell_px));
         let cell_at = |p: egui::Pos2| {
             let at = match &view {
                 // The square the ray under the pointer meets first, else the ground of the avatar's level.

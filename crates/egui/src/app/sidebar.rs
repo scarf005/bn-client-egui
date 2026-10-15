@@ -108,7 +108,10 @@ impl<M: GameModel> App<M> {
             for creature in &direction.creatures {
                 ui.horizontal(|ui| {
                     icon(ui, &mut self.display, &creature.cell, season.as_deref());
-                    ui.label(format!("{} {}", creature.name, creature.distance));
+                    ui.add(
+                        egui::Label::new(format!("{} {}", creature.name, creature.distance))
+                            .truncate(),
+                    );
                 });
             }
         }
@@ -165,8 +168,30 @@ impl<M: GameModel> App<M> {
                                         if let Some(cell) = cell {
                                             icon(ui, &mut self.display, cell, season.as_deref());
                                         }
+                                        // The name is cut before it would push the button out of the panel.
+                                        let button_w = ui
+                                            .painter()
+                                            .layout_no_wrap(
+                                                verb.into(),
+                                                egui::TextStyle::Button.resolve(ui.style()),
+                                                egui::Color32::WHITE,
+                                            )
+                                            .size()
+                                            .x
+                                            + 2.0 * ui.spacing().button_padding.x
+                                            + ui.spacing().item_spacing.x;
                                         let grip = ui
-                                            .add(egui::Label::new(label).sense(egui::Sense::DRAG));
+                                            .scope(|ui| {
+                                                ui.set_max_width(
+                                                    (ui.available_width() - button_w).max(0.0),
+                                                );
+                                                ui.add(
+                                                    egui::Label::new(label)
+                                                        .truncate()
+                                                        .sense(egui::Sense::DRAG),
+                                                )
+                                            })
+                                            .inner;
                                         grip.dnd_set_drag_payload(Dragged {
                                             from: column,
                                             index,

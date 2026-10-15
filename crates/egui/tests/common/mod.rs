@@ -245,3 +245,12 @@ pub fn iso_root(tag: &str) -> std::path::PathBuf {
     std::fs::write(dir.join("tile_config.json"), config.to_string()).unwrap();
     root
 }
+
+/// Opens the client settings window, where the view mode, tileset and motion choices are, unless it is open.
+pub fn open_client_settings<S>(h: &mut egui_kittest::Harness<'_, S>) {
+    use egui_kittest::kittest::Queryable;
+    if h.query_by_label("Reduced motion").is_none() {
+        h.get_by_label("Client settings").click();
+        h.run_steps(3);
+    }
+}

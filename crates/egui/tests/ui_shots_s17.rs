@@ -55,11 +55,17 @@ fn shot(screen: Value, name: &str) {
 #[test]
 #[ignore = "needs a Vulkan adapter and SHOT_DIR"]
 fn diary_screen() {
-    shot(example("diary.json", "diary screen with two pages"), "diary.png");
+    shot(
+        example("diary.json", "diary screen with two pages"),
+        "diary.png",
+    );
 }
 
 #[test]
 #[ignore = "needs a Vulkan adapter and SHOT_DIR"]
 fn text_editor_screen() {
-    shot(example("diary.json", "text editor screen"), "text_editor.png");
+    shot(
+        example("diary.json", "text editor screen"),
+        "text_editor.png",
+    );
 }

@@ -93,6 +93,7 @@ fn switching_to_ascii_draws_glyphs_again_and_the_choice_survives_a_restart() {
     settle(&mut h);
     assert!(h.state().display().drawn() > 0);
 
+    common::open_client_settings(&mut h);
     h.get_by_label("ASCII").click();
     h.run_steps(3);
     assert!(!h.state().display().tiles());
@@ -106,6 +107,7 @@ fn switching_to_ascii_draws_glyphs_again_and_the_choice_survives_a_restart() {
     let again = harness(&root, settings.clone());
     assert!(!again.state().display().tiles());
 
+    common::open_client_settings(&mut h);
     h.get_by_label("Tiles").click();
     h.run_steps(2);
     settle(&mut h);
@@ -121,6 +123,7 @@ fn a_tileset_missing_from_the_game_root_is_said_and_ascii_is_drawn() {
     let mut h = harness(&root, root.join("settings.json"));
     h.run_steps(4);
     assert!(!h.state().display().tiles());
+    common::open_client_settings(&mut h);
     assert!(h.query_by_label_contains("Tileset unavailable").is_some());
 }
 
@@ -220,10 +223,12 @@ fn switching_between_tiles_and_ascii_tells_the_engine_without_a_restart() {
     };
     assert_eq!(tiles_said(&script), [true], "started with tiles");
 
+    common::open_client_settings(&mut h);
     h.get_by_label("ASCII").click();
     h.run_steps(4);
     assert_eq!(tiles_said(&script), [true, false]);
 
+    common::open_client_settings(&mut h);
     h.get_by_label("Tiles").click();
     h.run_steps(2);
     settle(&mut h);
@@ -349,6 +354,7 @@ fn starting_up_and_following_the_engine_write_no_settings_but_a_click_does() {
         !settings.exists(),
         "the engine's option is followed, not saved"
     );
+    common::open_client_settings(&mut h);
     h.get_by_label("Tiles").click();
     h.run_steps(3);
     assert!(settings.exists(), "the player's click is saved");

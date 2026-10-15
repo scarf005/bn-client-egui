@@ -275,11 +275,7 @@ macro_rules! action_rows {
     };
 }
 
-action_rows!(
-    action_rows_of_a_tabbed_menu,
-    "TABBED_ACTIONS",
-    true
-);
+action_rows!(action_rows_of_a_tabbed_menu, "TABBED_ACTIONS", true);
 action_rows!(action_rows_of_a_manager_list, "ZONES_MANAGER", false);
 action_rows!(action_rows_of_a_tabbed_text_screen, "MISSIONS", true);
 

@@ -218,11 +218,18 @@ fn the_town_in_3d_from_every_side_and_what_a_frame_costs() {
             size.x, size.y
         );
     }
-    h.get_by_label("2D").click();
-    h.run_steps(4);
+    // The view choice is in the client settings window, closed again so it does not cover the map.
+    let choose = |h: &mut egui_kittest::Harness<'_, _>, view: &str| {
+        h.get_by_label("Client settings").click();
+        h.run_steps(3);
+        h.get_by_label(view).click();
+        h.get_by_role_and_label(egui::accesskit::Role::Button, "Client settings")
+            .click();
+        h.run_steps(4);
+    };
+    choose(&mut h, "2D");
     save(&mut h, "town-flat.png");
-    h.get_by_label("3D").click();
-    h.run_steps(4);
+    choose(&mut h, "3D");
     turn(&mut h, 6);
     save(&mut h, "town-yaw135.png");
     turn(&mut h, 6);

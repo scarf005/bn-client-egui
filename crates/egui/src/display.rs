@@ -646,27 +646,29 @@ impl Display {
         }
     }
 
-    /// Mode and tileset choice, kept as soon as they change.
+    /// Mode, tileset and motion choice, kept as soon as they change.
     pub fn controls(&mut self, ui: &mut egui::Ui) {
         let before = self.settings.clone();
-        ui.horizontal_wrapped(|ui| {
-            for (tiles, label) in [(true, "Tiles"), (false, "ASCII")] {
-                if ui
-                    .selectable_label(self.wants_tiles() == tiles, label)
-                    .clicked()
-                {
-                    self.settings.tiles = Some(tiles);
-                }
-            }
-            ui.add_enabled_ui(self.wants_tiles(), |ui| {
-                for (three_d, label) in [(false, "2D"), (true, "3D")] {
+        ui.vertical(|ui| {
+            ui.horizontal(|ui| {
+                for (tiles, label) in [(true, "Tiles"), (false, "ASCII")] {
                     if ui
-                        .selectable_label(self.three_d() == three_d, label)
+                        .selectable_label(self.wants_tiles() == tiles, label)
                         .clicked()
                     {
-                        self.settings.three_d = Some(three_d);
+                        self.settings.tiles = Some(tiles);
                     }
                 }
+                ui.add_enabled_ui(self.wants_tiles(), |ui| {
+                    for (three_d, label) in [(false, "2D"), (true, "3D")] {
+                        if ui
+                            .selectable_label(self.three_d() == three_d, label)
+                            .clicked()
+                        {
+                            self.settings.three_d = Some(three_d);
+                        }
+                    }
+                });
             });
             let shown = self.chosen().map_or("none".to_string(), |t| t.view.clone());
             let mut pick = None;
