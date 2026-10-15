@@ -1,0 +1,519 @@
+//! What a sprite becomes in the 3D scene: the ground under a square, a box for a wall, or an upright board.
+//! Every shape is a parallelogram `origin + u * a + v * b` with an affine map from `(u, v)` to sprite pixels, so
+//! one instance format draws all of them.
+
+use crate::tileset::Turn;
+use bytemuck::{Pod, Zeroable};
+use glam::Vec2;
+
+/// A texture the scene draws from: one strip of rows of a tileset sheet.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct PageId {
+    pub sheet: u16,
+    pub strip: u16,
+}
+
+/// Where a sprite is and how the tileset places it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SpriteSource {
+    pub page: PageId,
+    /// The sprite's top left corner in the page's pixels.
+    pub at: Vec2,
+    /// The sprite's size in the sheet's pixels.
+    pub src: Vec2,
+    /// Where the sprite's top left corner lies from the top left corner of its square's tile.
+    pub offset: Vec2,
+    /// How many screen pixels one sheet pixel covers.
+    pub scale: f32,
+}
+
+impl SpriteSource {
+    /// The size the sprite is drawn at, in tile pixels.
+    pub fn size(&self) -> Vec2 {
+        self.src * self.scale
+    }
+}
+
+/// How tile pixels turn into world units. A square is one unit wide.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Metrics {
+    /// A tile in pixels: the diamond of an isometric tileset, else a square.
+    pub tile: Vec2,
+    pub iso: bool,
+    /// World units of one screen pixel across, and of one screen pixel up at the tileset's own tilt.
+    pub across: f32,
+    pub up: f32,
+    /// The height of one z-level in world units.
+    pub level: f32,
+}
+
+/// Without a tileset's own height, a z-level is this many squares tall.
+const LEVEL: f32 = 3.0;
+/// An upright sprite of an isometric tileset stands at the front corner of its square.
+const FRONT: f32 = std::f32::consts::FRAC_1_SQRT_2;
+/// Sprites of one square are drawn this far apart toward the eye, so the later one wins at equal depth.
+const LAYER_BIAS: f32 = 0.002;
+
+impl Metrics {
+    pub fn new(tile: (u32, u32), iso: bool, zlevel_height: Option<f32>) -> Self {
+        let tile = Vec2::new(tile.0.max(1) as f32, tile.1.max(1) as f32);
+        // A diamond `tile.x` wide and `tile.y` tall is a square seen from a height of asin(y / x); a vertical
+        // pixel then covers cos of that less of a world unit than a pixel across the diagonal.
+        let (across, up) = match iso {
+            true => {
+                let across = std::f32::consts::SQRT_2 / tile.x;
+                let tilt = (tile.y / tile.x).min(1.0).asin();
+                (across, across / tilt.cos().max(0.1))
+            }
+            false => (1.0 / tile.x, 1.0 / tile.y),
+        };
+        Self {
+            tile,
+            iso,
+            across,
+            up,
+            level: zlevel_height.map_or(LEVEL, |h| h * up),
+        }
+    }
+}
+
+/// What a sprite is drawn as.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Shape {
+    /// The ground of a square at a height.
+    Floor { z: f32 },
+    /// A box filling the square, between two heights.
+    Box { top: f32, bottom: f32 },
+    /// An upright board that faces the eye.
+    Board,
+}
+
+/// What `sprite` is drawn as. Terrain whose sprite is as wide as the tile is the ground when it hardly rises over
+/// its diamond and a box when it does, as a wall; anything else stands upright.
+pub fn shape(m: &Metrics, sprite: &SpriteSource, terrain: bool) -> Shape {
+    let size = sprite.size();
+    let rise = size.y - m.tile.y;
+    let bottom = -(sprite.offset.y + rise) * m.up;
+    match (terrain, (size.x - m.tile.x).abs() < 0.5) {
+        (true, true) if m.iso && rise > m.tile.y / 2.0 => Shape::Box {
+            top: -sprite.offset.y * m.up,
+            bottom,
+        },
+        (true, true) if m.iso || rise.abs() < 0.5 => Shape::Floor { z: bottom },
+        _ => Shape::Board,
+    }
+}
+
+/// One quad of the scene, as the shader reads it.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Pod, Zeroable)]
+pub struct Instance {
+    /// The corner `(u, v) = (0, 0)`. For a board, its square's centre on the ground.
+    pub origin: [f32; 3],
+    /// The edge along `u`. For a board: width, its left edge from the origin across the screen, and its offset
+    /// toward the eye.
+    pub a: [f32; 3],
+    /// The edge along `v`. For a board: height and its bottom edge over the origin.
+    pub b: [f32; 3],
+    /// The sprite pixel at `(0, 0)` and the pixels spanned by `u` and by `v`.
+    pub uv: [f32; 2],
+    pub uv_a: [f32; 2],
+    pub uv_b: [f32; 2],
+    /// Low byte: 0 for a plane, 1 for a board; next byte: the visibility filter. Then the haze of a level seen
+    /// through, 0 to 255.
+    pub flags: [u32; 2],
+}
+
+pub const BOARD: u32 = 1;
+
+/// A sprite in a square.
+pub struct Placement<'a> {
+    pub square: (i32, i32),
+    /// The height of the square's ground.
+    pub floor: f32,
+    pub terrain: bool,
+    pub turn: Turn,
+    pub sprite: &'a SpriteSource,
+    /// The visibility filter: 0 plain, 1 low light, 2 remembered.
+    pub filter: u32,
+    pub haze: u8,
+    /// The sprite's place in its square, bottom first.
+    pub order: u32,
+}
+
+fn instance(
+    origin: [f32; 3],
+    edges: ([f32; 3], [f32; 3]),
+    uv: [Vec2; 3],
+    flags: [u32; 2],
+) -> Instance {
+    Instance {
+        origin,
+        a: edges.0,
+        b: edges.1,
+        uv: uv[0].to_array(),
+        uv_a: uv[1].to_array(),
+        uv_b: uv[2].to_array(),
+        flags,
+    }
+}
+
+/// The sprite corners `[top left, top right, bottom right, bottom left]` as they are drawn: each is the corner of
+/// the sprite in its page that lands there under `turn`.
+fn corners(turn: Turn, s: &SpriteSource) -> [Vec2; 4] {
+    let [tl, tr, br, bl] = [
+        s.at,
+        s.at + Vec2::new(s.src.x, 0.0),
+        s.at + s.src,
+        s.at + Vec2::new(0.0, s.src.y),
+    ];
+    match turn {
+        Turn::None => [tl, tr, br, bl],
+        Turn::Left => [tr, br, bl, tl],
+        Turn::Right => [bl, tl, tr, br],
+        Turn::Half => [br, bl, tl, tr],
+        Turn::Mirror => [tr, tl, bl, br],
+    }
+}
+
+/// The instances that draw a sprite: one, or the five faces of a box.
+pub fn place(m: &Metrics, p: &Placement) -> Vec<Instance> {
+    let s = p.sprite;
+    let size = s.size();
+    let (x, y) = (p.square.0 as f32, p.square.1 as f32);
+    let flags = [p.filter << 8, u32::from(p.haze)];
+    // A point of the sprite given in tile pixels from its top left corner, in its page's pixels.
+    let at = |px: f32, py: f32| s.at + Vec2::new(px, py) / s.scale;
+    // A span of the sprite in tile pixels, in its page's pixels.
+    let span = |px: f32, py: f32| Vec2::new(px, py) / s.scale;
+    // An isometric tile is only ever mirrored, never turned.
+    let turn = match (m.iso, p.turn) {
+        (true, Turn::Mirror) => Turn::Mirror,
+        (true, _) => Turn::None,
+        (false, turn) => turn,
+    };
+    let ground = ([1.0, 0.0, 0.0], [0.0, 1.0, 0.0]);
+    match shape(m, s, p.terrain) {
+        Shape::Floor { z } => {
+            // The diamond of the tile lies in the lowest rows of an isometric sprite; a square sprite is all ground.
+            let uv = match m.iso {
+                true => {
+                    let (w, h, t) = (size.x, size.y, m.tile.y);
+                    [
+                        at(w / 2.0, h - t),
+                        span(w / 2.0, t / 2.0),
+                        span(-w / 2.0, t / 2.0),
+                    ]
+                }
+                false => {
+                    let [tl, tr, _, bl] = corners(turn, s);
+                    [tl, tr - tl, bl - tl]
+                }
+            };
+            vec![instance([x, y, p.floor + z], ground, uv, flags)]
+        }
+        Shape::Box { top, bottom } => {
+            let (w, h, t) = (size.x, size.y, m.tile.y);
+            let (top, drop) = (p.floor + top, top - bottom);
+            let down = [0.0, 0.0, -drop];
+            // The sprite shows the south and the east faces; the others reuse them, seen from behind.
+            let south = [at(0.0, t / 2.0), span(w / 2.0, t / 2.0), span(0.0, h - t)];
+            let east = [at(w / 2.0, t), span(w / 2.0, -t / 2.0), span(0.0, h - t)];
+            let lid = [
+                at(w / 2.0, 0.0),
+                span(w / 2.0, t / 2.0),
+                span(-w / 2.0, t / 2.0),
+            ];
+            vec![
+                instance([x, y, top], ground, lid, flags),
+                instance([x, y + 1.0, top], ([1.0, 0.0, 0.0], down), south, flags),
+                instance(
+                    [x + 1.0, y + 1.0, top],
+                    ([0.0, -1.0, 0.0], down),
+                    east,
+                    flags,
+                ),
+                instance([x + 1.0, y, top], ([-1.0, 0.0, 0.0], down), south, flags),
+                instance([x, y, top], ([0.0, 1.0, 0.0], down), east, flags),
+            ]
+        }
+        Shape::Board => {
+            let [tl, _, br, bl] = corners(turn, s);
+            // The sprite's bottom edge rests on the ground where its tile's bottom edge would.
+            let left = (s.offset.x - m.tile.x / 2.0) * m.across;
+            let rest = (m.tile.y - (s.offset.y + size.y)) * m.up;
+            let front = if m.iso { FRONT } else { 0.0 } + LAYER_BIAS * p.order as f32;
+            let edges = ([size.x * m.across, left, front], [size.y * m.up, rest, 0.0]);
+            // From the bottom left corner: along the width to the right, and up.
+            let flags = [flags[0] | BOARD, flags[1]];
+            vec![instance(
+                [x + 0.5, y + 0.5, p.floor],
+                edges,
+                [bl, br - bl, tl - bl],
+                flags,
+            )]
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::iso::camera::{Camera, Viewport};
+    use glam::Vec3;
+
+    const PAGE: PageId = PageId { sheet: 0, strip: 0 };
+
+    fn ultica() -> Metrics {
+        Metrics::new((48, 24), true, Some(108.0))
+    }
+
+    /// A sprite of the Ultica_iso sheets: `size` pixels at `(at)` in its page, placed `offset` from its tile.
+    fn sprite(size: (f32, f32), offset: (f32, f32)) -> SpriteSource {
+        SpriteSource {
+            page: PAGE,
+            at: Vec2::new(96.0, 240.0),
+            src: Vec2::new(size.0, size.1),
+            offset: Vec2::new(offset.0, offset.1),
+            scale: 1.0,
+        }
+    }
+
+    fn square(s: &SpriteSource, terrain: bool) -> Placement<'_> {
+        Placement {
+            square: (3, 5),
+            floor: 0.0,
+            terrain,
+            turn: Turn::None,
+            sprite: s,
+            filter: 0,
+            haze: 0,
+            order: 0,
+        }
+    }
+
+    #[test]
+    fn a_pixel_covers_the_world_the_tilt_of_the_tileset_implies() {
+        let m = ultica();
+        // 48 pixels across one diagonal of a square; 29.4 pixels up for one unit at 30 degrees.
+        assert!((m.across - std::f32::consts::SQRT_2 / 48.0).abs() < 1e-6);
+        assert!((1.0 / m.up - 29.394).abs() < 1e-2, "{}", 1.0 / m.up);
+        // A z-level of 108 pixels is 3.67 squares, about the 3.6 the tileset's author counts.
+        assert!((m.level - 3.674).abs() < 1e-2, "{}", m.level);
+        let flat = Metrics::new((16, 16), false, None);
+        assert_eq!(
+            (flat.across, flat.up, flat.level),
+            (1.0 / 16.0, 1.0 / 16.0, 3.0)
+        );
+    }
+
+    #[test]
+    fn terrain_is_ground_or_a_box_by_how_far_its_sprite_rises_over_its_diamond() {
+        let m = ultica();
+        let ground = sprite((48.0, 36.0), (0.0, -12.0));
+        assert!(matches!(shape(&m, &ground, true), Shape::Floor { z } if z.abs() < 1e-6));
+        let wall = sprite((48.0, 120.0), (0.0, -96.0));
+        assert_eq!(
+            shape(&m, &wall, true),
+            Shape::Box {
+                top: 96.0 * m.up,
+                bottom: 0.0
+            }
+        );
+        // A wall whose sprite reaches below its square's baseline goes down there.
+        let deep = sprite((48.0, 132.0), (0.0, -96.0));
+        assert_eq!(
+            shape(&m, &deep, true),
+            Shape::Box {
+                top: 96.0 * m.up,
+                bottom: -12.0 * m.up
+            }
+        );
+        // Not terrain, or not as wide as the tile: it stands upright.
+        assert_eq!(shape(&m, &wall, false), Shape::Board);
+        assert_eq!(
+            shape(&m, &sprite((200.0, 240.0), (-76.0, -216.0)), true),
+            Shape::Board
+        );
+        // A square tileset has ground only: no data tells a wall from a floor.
+        let flat = Metrics::new((16, 16), false, None);
+        let square_sprite = sprite((16.0, 16.0), (0.0, 0.0));
+        assert!(matches!(
+            shape(&flat, &square_sprite, true),
+            Shape::Floor { .. }
+        ));
+        assert_eq!(shape(&flat, &square_sprite, false), Shape::Board);
+    }
+
+    #[test]
+    fn ground_maps_the_diamond_of_the_sprite_onto_the_square() {
+        let m = ultica();
+        let s = sprite((48.0, 36.0), (0.0, -12.0));
+        let [floor] = place(&m, &square(&s, true))[..] else {
+            panic!("one quad")
+        };
+        assert_eq!(floor.origin, [3.0, 5.0, 0.0]);
+        // The diamond's corners in the page: top, right, bottom, left of the lowest 24 rows.
+        let corner = |u: f32, v: f32| {
+            Vec2::from(floor.uv) + Vec2::from(floor.uv_a) * u + Vec2::from(floor.uv_b) * v
+        };
+        let at = Vec2::new(96.0, 240.0);
+        assert_eq!(corner(0.0, 0.0), at + Vec2::new(24.0, 12.0));
+        assert_eq!(corner(1.0, 0.0), at + Vec2::new(48.0, 24.0));
+        assert_eq!(corner(1.0, 1.0), at + Vec2::new(24.0, 36.0));
+        assert_eq!(corner(0.0, 1.0), at + Vec2::new(0.0, 24.0));
+    }
+
+    #[test]
+    fn a_box_takes_its_top_from_the_top_diamond_and_its_sides_from_the_left_and_right_faces() {
+        let m = ultica();
+        let s = sprite((48.0, 120.0), (0.0, -96.0));
+        let faces = place(&m, &square(&s, true));
+        assert_eq!(faces.len(), 5);
+        let at = Vec2::new(96.0, 240.0);
+        let corner = |i: &Instance, u: f32, v: f32| {
+            Vec2::from(i.uv) + Vec2::from(i.uv_a) * u + Vec2::from(i.uv_b) * v - at
+        };
+        let top = 96.0 * m.up;
+        // Lid: the top diamond, rows 0 to 24.
+        assert_eq!(faces[0].origin, [3.0, 5.0, top]);
+        assert_eq!(corner(&faces[0], 0.0, 0.0), Vec2::new(24.0, 0.0));
+        assert_eq!(corner(&faces[0], 1.0, 1.0), Vec2::new(24.0, 24.0));
+        // South face: the left half of the faces, from the west corner to the south corner.
+        assert_eq!(faces[1].origin, [3.0, 6.0, top]);
+        assert_eq!(corner(&faces[1], 0.0, 0.0), Vec2::new(0.0, 12.0));
+        assert_eq!(corner(&faces[1], 1.0, 0.0), Vec2::new(24.0, 24.0));
+        assert_eq!(corner(&faces[1], 0.0, 1.0), Vec2::new(0.0, 108.0));
+        assert_eq!(corner(&faces[1], 1.0, 1.0), Vec2::new(24.0, 120.0));
+        // East face: the right half, from the south corner to the east corner.
+        assert_eq!(faces[2].origin, [4.0, 6.0, top]);
+        assert_eq!(corner(&faces[2], 0.0, 0.0), Vec2::new(24.0, 24.0));
+        assert_eq!(corner(&faces[2], 1.0, 0.0), Vec2::new(48.0, 12.0));
+        assert_eq!(corner(&faces[2], 1.0, 1.0), Vec2::new(48.0, 108.0));
+        // Each side face drops from the top to the bottom of the box.
+        assert!(faces[1..].iter().all(|f| (f.b[2] + top).abs() < 1e-5));
+    }
+
+    #[test]
+    fn a_scaled_sprite_is_cut_from_the_page_by_its_own_pixels() {
+        // A 24 x 18 sprite drawn at twice the size is a 48 x 36 ground.
+        let m = ultica();
+        let mut s = sprite((24.0, 18.0), (0.0, -12.0));
+        s.scale = 2.0;
+        let [floor] = place(&m, &square(&s, true))[..] else {
+            panic!("one quad")
+        };
+        assert_eq!(Vec2::from(floor.uv), s.at + Vec2::new(12.0, 6.0));
+        assert_eq!(Vec2::from(floor.uv_a), Vec2::new(12.0, 6.0));
+    }
+
+    /// Where the corner `(u, v)` of an instance lies on a screen that draws the world as the tileset does
+    /// (yaw 45, the 2:1 tilt, one tile pixel per point), from the top left of the square's tile.
+    fn screen(i: &Instance, m: &Metrics, u: f32, v: f32) -> Vec2 {
+        let tilt = (m.tile.y / m.tile.x).asin();
+        let view = Viewport {
+            camera: Camera {
+                yaw: std::f32::consts::FRAC_PI_4,
+                pitch: tilt,
+            },
+            target: Vec3::ZERO,
+            scale: m.tile.x / std::f32::consts::SQRT_2,
+            size: Vec2::new(1000.0, 1000.0),
+        };
+        let world = if i.flags[0] & 0xff == BOARD {
+            let (a, b) = (i.a, i.b);
+            Vec3::from(i.origin)
+                + view.right() * (a[1] + u * a[0])
+                + Vec3::Z * (b[1] + v * b[0])
+                + view.toward() * a[2]
+        } else {
+            Vec3::from(i.origin) + Vec3::from(i.a) * u + Vec3::from(i.b) * v
+        };
+        view.project(world)
+    }
+
+    /// The translation that takes the page's pixels to the screen: equal at every corner of a quad drawn as the
+    /// tileset's artist drew it.
+    fn drawn_as_in_the_sprite(i: &Instance, m: &Metrics) {
+        let shifts = [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0)].map(|(u, v)| {
+            let page = Vec2::from(i.uv) + Vec2::from(i.uv_a) * u + Vec2::from(i.uv_b) * v;
+            screen(i, m, u, v) - page
+        });
+        for shift in shifts {
+            assert!((shift - shifts[0]).length() < 0.05, "{shifts:?}");
+        }
+    }
+
+    #[test]
+    fn at_the_tilesets_own_view_every_quad_lands_where_its_sprite_pixels_are() {
+        let m = ultica();
+        let ground = sprite((48.0, 36.0), (0.0, -12.0));
+        let wall = sprite((48.0, 120.0), (0.0, -96.0));
+        let furniture = sprite((48.0, 72.0), (0.0, -48.0));
+        let item = sprite((32.0, 32.0), (8.0, -15.0));
+        let quads = [
+            (&ground, true),
+            (&wall, true),
+            (&furniture, false),
+            (&item, false),
+        ]
+        .iter()
+        .flat_map(|(s, terrain)| place(&m, &square(s, *terrain)))
+        .collect::<Vec<_>>();
+        assert_eq!(quads.len(), 1 + 5 + 1 + 1);
+        // The faces behind the box are seen from inside.
+        for quad in quads
+            .iter()
+            .enumerate()
+            .filter(|(n, _)| ![4, 5].contains(n))
+        {
+            drawn_as_in_the_sprite(quad.1, &m);
+        }
+    }
+
+    #[test]
+    fn a_board_stands_at_the_front_of_its_square_and_later_sprites_come_nearer_the_eye() {
+        let m = ultica();
+        let s = sprite((48.0, 72.0), (0.0, -48.0));
+        let mut first = square(&s, false);
+        let a = place(&m, &first)[0];
+        first.order = 3;
+        let b = place(&m, &first)[0];
+        assert_eq!(a.origin, [3.5, 5.5, 0.0]);
+        assert_eq!(a.flags[0] & 0xff, BOARD);
+        assert!((a.a[2] - FRONT).abs() < 1e-6);
+        assert!((b.a[2] - a.a[2] - 3.0 * LAYER_BIAS).abs() < 1e-6);
+        // 48 pixels wide is one diagonal of a square; 72 pixels tall at the tileset's tilt.
+        assert!((a.a[0] - std::f32::consts::SQRT_2).abs() < 1e-5);
+        assert!((a.b[0] - 72.0 * m.up).abs() < 1e-5);
+        // Its bottom edge rests on the ground at the baseline of the tile.
+        assert!(a.b[1].abs() < 1e-6);
+    }
+
+    #[test]
+    fn a_turned_or_mirrored_sprite_swaps_the_corners_it_is_cut_from() {
+        let flat = Metrics::new((16, 16), false, None);
+        let s = SpriteSource {
+            page: PAGE,
+            at: Vec2::new(32.0, 16.0),
+            src: Vec2::new(16.0, 16.0),
+            offset: Vec2::ZERO,
+            scale: 1.0,
+        };
+        let board = |turn| {
+            let mut p = square(&s, false);
+            p.turn = turn;
+            place(&flat, &p)[0]
+        };
+        let bottom_left = |i: Instance| Vec2::from(i.uv);
+        assert_eq!(bottom_left(board(Turn::None)), Vec2::new(32.0, 32.0));
+        assert_eq!(bottom_left(board(Turn::Mirror)), Vec2::new(48.0, 32.0));
+        // An isometric tile is never turned, only mirrored.
+        let iso = ultica();
+        let mut p = square(&s, false);
+        p.turn = Turn::Left;
+        assert_eq!(Vec2::from(place(&iso, &p)[0].uv), Vec2::new(32.0, 32.0));
+        p.turn = Turn::Mirror;
+        assert_eq!(Vec2::from(place(&iso, &p)[0].uv), Vec2::new(48.0, 32.0));
+    }
+}

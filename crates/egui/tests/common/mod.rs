@@ -152,3 +152,93 @@ pub fn with_tiles(mut event: Value) -> Value {
         json!({"cells": rows, "looks_like": {"forest": ["t_dirt"], "t_floor": []}});
     event
 }
+
+/// A game root holding one isometric tileset `iso` (sprites 0 and 1 are the ground, 2 the wall, 3 the person and
+/// 4 the table), drawn like Ultica_iso's sheets: 48 x 24 tiles, ground in
+/// 48 x 36 sprites, walls in 48 x 120 sprites, creatures and furniture in 48 x 72 sprites. `flat.png` has a
+/// light and a dark ground (the light with a red mark at its north corner), `tall.png` a wall with a white top,
+/// red left face and blue right face, and `upright.png` a yellow creature and a brown table. The root is new
+/// for every call.
+pub fn iso_root(tag: &str) -> std::path::PathBuf {
+    let root = std::env::temp_dir().join(format!("bn-client-iso-{}-{tag}", std::process::id()));
+    let dir = root.join("gfx/iso");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("tileset.txt"),
+        "NAME: iso\nVIEW: Iso Set\nJSON: tile_config.json\nTILESET: flat.png\n",
+    )
+    .unwrap();
+    // Whether (x, y) of a sprite `height` tall lies on the diamond in its lowest 24 rows.
+    let on_diamond = |x: u32, y: u32, height: u32| {
+        let (dx, dy) = (
+            (x as f32 + 0.5 - 24.0).abs() / 24.0,
+            (y as f32 + 0.5 - (height as f32 - 12.0)).abs() / 12.0,
+        );
+        dx + dy <= 1.0
+    };
+    let mut flat = image::RgbaImage::new(96, 36);
+    for (x, y, px) in flat.enumerate_pixels_mut() {
+        let (sprite, x) = (x / 48, x % 48);
+        let mark = x.abs_diff(24) < 3 && (14..18).contains(&y);
+        if on_diamond(x, y, 36) {
+            *px = match (sprite, mark) {
+                (0, true) => image::Rgba([220, 40, 40, 255]),
+                (0, false) => image::Rgba([120, 200, 90, 255]),
+                _ => image::Rgba([90, 70, 50, 255]),
+            };
+        }
+    }
+    flat.save(dir.join("flat.png")).unwrap();
+    // The wall: a white top diamond over a red left face and a blue right face, banded every 16 rows.
+    let mut tall = image::RgbaImage::new(48, 120);
+    for (x, y, px) in tall.enumerate_pixels_mut() {
+        let left = x < 24;
+        let slope = if left { x / 2 } else { (47 - x) / 2 };
+        let face_top = 12 + slope;
+        let band = ((y.saturating_sub(face_top)) / 16) % 2 == 0;
+        if on_diamond(x, y, 24) {
+            *px = image::Rgba([240, 240, 240, 255]);
+        } else if y >= face_top && y < face_top + 96 {
+            *px = match (left, band) {
+                (true, true) => image::Rgba([200, 50, 50, 255]),
+                (true, false) => image::Rgba([150, 30, 30, 255]),
+                (false, true) => image::Rgba([60, 90, 210, 255]),
+                (false, false) => image::Rgba([30, 50, 150, 255]),
+            };
+        }
+    }
+    tall.save(dir.join("tall.png")).unwrap();
+    // Upright things: a yellow person and a brown table standing on the tile's diamond.
+    let mut upright = image::RgbaImage::new(96, 72);
+    for (x, y, px) in upright.enumerate_pixels_mut() {
+        let (sprite, x) = (x / 48, x % 48);
+        let person = (16..32).contains(&x) && (14..62).contains(&y);
+        let table = (6..42).contains(&x) && (36..60).contains(&y);
+        if (sprite == 0 && person) || (sprite == 1 && table) {
+            *px = if sprite == 0 {
+                image::Rgba([240, 220, 40, 255])
+            } else {
+                image::Rgba([140, 90, 40, 255])
+            };
+        }
+    }
+    upright.save(dir.join("upright.png")).unwrap();
+    let config = serde_json::json!({
+        "tile_info": [{"width": 48, "height": 24, "iso": true, "zlevel_height": 108, "pixelscale": 1}],
+        "tiles-new": [
+            {"file": "flat.png", "sprite_width": 48, "sprite_height": 36, "sprite_offset_y": -12, "tiles": [
+                {"id": ["t_floor", "t_dirt"], "fg": 0},
+                {"id": "t_grass", "fg": 1}
+            ]},
+            {"file": "tall.png", "sprite_width": 48, "sprite_height": 120, "sprite_offset_y": -96, "tiles": [
+                {"id": "t_wall", "fg": 2}
+            ]},
+            {"file": "upright.png", "sprite_width": 48, "sprite_height": 72, "sprite_offset_y": -48, "tiles": [
+                {"id": ["mon_a", "mon_zombie"], "fg": 3},
+                {"id": "f_table", "fg": 4}
+            ]}
+        ]
+    });
+    std::fs::write(dir.join("tile_config.json"), config.to_string()).unwrap();
+    root
+}

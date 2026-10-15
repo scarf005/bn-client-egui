@@ -19,7 +19,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 /// The game's default `TILES` option value.
 const DEFAULT_TILESET: &str = "UNDEAD_PEOPLE_BASE";
 /// Sprite rows are uploaded in strips at most this tall, within every GPU's texture limit.
-const STRIP: u32 = 4096;
+pub(crate) const STRIP: u32 = 4096;
 /// Remembered squares draw darkened, squares in low light slightly less.
 const MEMORY: Color32 = Color32::from_gray(100);
 const SHADOW: Color32 = Color32::from_gray(170);
@@ -39,6 +39,9 @@ pub struct Settings {
     /// Play no shot, explosion or floating-text overlays on the map.
     #[serde(default)]
     pub reduced_motion: bool,
+    /// Draw the map as a 3D scene a camera can turn, instead of flat.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub three_d: bool,
     /// The map zoom in steps from the tileset's own size, which the zoom keys and the wheel move.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub zoom: i8,
@@ -322,7 +325,7 @@ impl Atlas {
 }
 
 /// A sheet's pixels with its transparency key made transparent.
-fn load(sheet: &tileset::Sheet) -> Option<image::RgbaImage> {
+pub(crate) fn load(sheet: &tileset::Sheet) -> Option<image::RgbaImage> {
     let mut image = image::open(&sheet.file).ok()?.into_rgba8();
     if let Some(key) = sheet.key {
         for px in image.pixels_mut().filter(|px| px.0[..3] == key) {
@@ -424,6 +427,8 @@ pub struct Display {
     rooted: bool,
     tilesets: Vec<TilesetInfo>,
     atlas: Option<Atlas>,
+    /// Counts the tilesets opened, so what is built from one knows when it is stale.
+    epoch: u32,
     /// The ids of the tints of the tileset in use.
     tint_ids: Vec<String>,
     /// Why the chosen tileset is not in use.
@@ -455,6 +460,7 @@ impl Display {
             rooted: root.is_some(),
             tilesets: root.map_or(vec![], tileset::available),
             atlas: None,
+            epoch: 0,
             tint_ids: vec![],
             problem: None,
             engine: None,
@@ -482,6 +488,7 @@ impl Display {
 
     /// Loads the chosen tileset when sprites are wanted.
     fn open(&mut self) {
+        self.epoch += 1;
         self.atlas = None;
         self.tint_ids.clear();
         self.problem = None;
@@ -540,6 +547,16 @@ impl Display {
     /// Sprites are being drawn, not glyphs.
     pub fn tiles(&self) -> bool {
         self.atlas.is_some()
+    }
+
+    /// The tileset in use, and a number that changes whenever another one is opened.
+    pub fn tileset(&self) -> Option<(&Tileset, u32)> {
+        Some((&self.atlas.as_ref()?.tileset, self.epoch))
+    }
+
+    /// The map is drawn as a 3D scene: asked for, and sprites to draw it with.
+    pub fn three_d(&self) -> bool {
+        self.settings.three_d && self.atlas.is_some()
     }
 
     /// The ids of the tints the tileset in use has; none without one.
@@ -637,6 +654,16 @@ impl Display {
                     self.settings.tiles = Some(tiles);
                 }
             }
+            ui.add_enabled_ui(self.wants_tiles(), |ui| {
+                for (three_d, label) in [(false, "2D"), (true, "3D")] {
+                    if ui
+                        .selectable_label(self.settings.three_d == three_d, label)
+                        .clicked()
+                    {
+                        self.settings.three_d = three_d;
+                    }
+                }
+            });
             let shown = self.chosen().map_or("none".to_string(), |t| t.view.clone());
             let mut pick = None;
             ui.add_enabled_ui(self.wants_tiles(), |ui| {
@@ -661,7 +688,10 @@ impl Display {
         });
         if self.settings != before {
             self.save();
-            self.open();
+            // Another view of the same tileset keeps it.
+            if (&self.settings.tiles, &self.settings.tileset) != (&before.tiles, &before.tileset) {
+                self.open();
+            }
         }
     }
 
@@ -894,7 +924,7 @@ impl Display {
 /// The layer as the game draws it with this tileset, and its paint for the background and the foreground: a
 /// mutation's, an item's, a bionic's or an effect's from the tileset, else the part's own. A hair style
 /// goes by the sprite of the hair color where the tileset paints no hair.
-fn resolve_layer<'a>(tileset: &Tileset, layer: &'a Layer) -> (Cow<'a, Layer>, Paints) {
+pub(crate) fn resolve_layer<'a>(tileset: &Tileset, layer: &'a Layer) -> (Cow<'a, Layer>, Paints) {
     if let Some(m) = &layer.mutation {
         let q = PaintQuery {
             id: &m.id,
@@ -918,7 +948,7 @@ fn resolve_layer<'a>(tileset: &Tileset, layer: &'a Layer) -> (Cow<'a, Layer>, Pa
     (Cow::Borrowed(layer), tileset.layer_paints(layer))
 }
 
-fn query<'a>(layer: &'a Layer, season: Option<&'a str>) -> Query<'a> {
+pub(crate) fn query<'a>(layer: &'a Layer, season: Option<&'a str>) -> Query<'a> {
     Query {
         id: &layer.id,
         fallbacks: &layer.fallbacks,
