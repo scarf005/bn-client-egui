@@ -63,6 +63,11 @@ struct Config {
 struct Info {
     width: u32,
     height: u32,
+    /// The sprites are drawn from an isometric view.
+    #[serde(default)]
+    iso: bool,
+    /// Pixels of one z-level's height on screen, for an isometric tileset.
+    zlevel_height: Option<f32>,
 }
 
 #[derive(Deserialize)]
@@ -297,6 +302,10 @@ pub struct Tileset {
     /// Width and height of one map square in the tileset's pixels.
     pub tile: (u32, u32),
     pub pixelscale: f32,
+    /// The sprites are drawn from an isometric view: a map square is a diamond of `tile` pixels.
+    pub iso: bool,
+    /// Pixels of one z-level's height on screen, when the tileset says.
+    pub zlevel_height: Option<f32>,
     pub sheets: Vec<Sheet>,
     tiles: HashMap<String, Tile>,
     /// Paints by mutation id, and the mutation types whose paints a type takes.
@@ -411,6 +420,8 @@ impl Tileset {
         let mut set = Self {
             tile,
             pixelscale: 1.0,
+            iso: info.iso,
+            zlevel_height: info.zlevel_height,
             sheets: vec![],
             tiles: HashMap::new(),
             tints: HashMap::new(),
