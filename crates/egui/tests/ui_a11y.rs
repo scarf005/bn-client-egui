@@ -23,7 +23,8 @@ fn described<'a>(lines: &[&str]) -> (H<'a>, ScriptHandle) {
         .on("bn.command.submit", vec![fixture("submit_result")])
         .on(
             "bn.world.describe",
-            vec![json!({"jsonrpc":"2.0","id":0,"result":{"parts":lines.iter().map(|l| json!({"kind":"terrain","text":l})).collect::<Vec<_>>()}})],
+            vec![json!({"jsonrpc":"2.0","id":0,"result":{"parts":lines.iter().map(|l| json!({"kind":"terrain","text":l})).collect::<Vec<_>>(),
+                "actions":[{"id":"look","label":"Look around","keys":[";"]}]}})],
         );
     let model = EngineModel::new(Box::new(t));
     let harness = Harness::builder()
@@ -510,21 +511,25 @@ fn the_keyboard_cursor_square_is_described_by_the_engines_native_text() {
 }
 
 #[test]
-fn shift_f10_on_the_map_is_the_right_click_on_the_cursor_square() {
+fn shift_f10_on_the_map_opens_the_right_click_menu_of_the_cursor_square() {
     let (mut h, script) = harness();
     h.run_steps(4);
     h.get_by_label("Map").focus();
     h.run_steps(2);
     h.key_press_modifiers(egui::Modifiers::SHIFT, egui::Key::F10);
     h.run_steps(3);
-    let contexts: Vec<_> = script
+    h.get_by_label("Map actions");
+    h.get_by_label("Look around [;]").click();
+    h.run_steps(3);
+    let operations: Vec<_> = script
         .sent()
         .into_iter()
         .filter(|m| m["method"] == "bn.command.submit")
         .map(|m| m["params"]["operation"].clone())
-        .filter(|o| o["kind"] == "context")
         .collect();
-    assert_eq!(contexts.len(), 1, "{contexts:?}");
+    assert_eq!(operations.len(), 1, "{operations:?}");
+    assert_eq!(operations[0]["kind"], "tile_action");
+    assert_eq!(operations[0]["action_id"], "look");
 }
 
 #[test]

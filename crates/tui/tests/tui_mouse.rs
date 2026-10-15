@@ -15,7 +15,7 @@ fn engine() -> (TuiApp<EngineModel>, ScriptHandle) {
         .on("bn.command.submit", vec![fixture("submit_result")])
         .on(
             "bn.world.describe",
-            vec![json!({"jsonrpc":"2.0","id":0,"result":{"parts":[{"kind":"terrain","text":"Wall"}, {"kind":"terrain","text":"A zombie is here."}]}})],
+            vec![json!({"jsonrpc":"2.0","id":0,"result":{"parts":[{"kind":"terrain","text":"Wall"}, {"kind":"terrain","text":"A zombie is here."}],"actions":[]}})],
         );
     (TuiApp::new(connected(t)), h)
 }

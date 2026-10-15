@@ -608,7 +608,8 @@ impl<M: GameModel> App<M> {
         );
         self.keys_consumed = false;
         self.focus_action_row(ctx);
-        if self.palette.is_some() {
+        // The palette and an open menu of the client (the map's right-click menu) have the keyboard; Escape closes them.
+        if self.palette.is_some() || egui::Popup::is_any_open(ctx) {
             self.release_hold_when_up(ctx);
             return;
         }
@@ -789,14 +790,6 @@ impl<M: GameModel> App<M> {
             x: view.x + origin.x,
             y: view.y + origin.y,
         });
-    }
-
-    fn look(&mut self, at: Pos) {
-        let text = self
-            .model
-            .hover_text(at)
-            .map_or_else(|| self.model.cell(at).desc, |lines| lines.join(" "));
-        self.model.say(text);
     }
 
     fn map(&mut self, ui: &mut egui::Ui) {
@@ -980,6 +973,7 @@ impl<M: GameModel> App<M> {
             }
         }
         self.last_hover = hover;
+        let mut menu_key = false;
         // A click goes to the square it landed on, not to where the pointer was last seen hovering.
         let clicked = response.interact_pointer_pos().map_or(cursor, cell_at);
         if response.clicked() {
@@ -989,7 +983,7 @@ impl<M: GameModel> App<M> {
             }
             ui.ctx().request_repaint();
         }
-        if response.secondary_clicked() && !self.model.context_click(clicked) {
+        if response.secondary_clicked() {
             self.menu_cell = clicked;
         }
         // With nothing focused, an arrow key would move egui's focus onto a toolbar widget and a later
@@ -1015,19 +1009,20 @@ impl<M: GameModel> App<M> {
             });
             // A keyboard cursor gets the same native description a hovering pointer does. The arrow keys
             // only walk: outside look and aim mode the cursor follows the mouse, else it is the player's square.
-            if self.model.focus().is_none() {
+            if self.model.focus().is_none() && !response.context_menu_opened() {
                 self.model.hover(cursor);
             }
             // Shift+F10, the keyboard's context-menu key, is the right click on the cursor square.
-            if ui.input(|i| i.modifiers.shift && i.key_pressed(egui::Key::F10))
-                && !self.model.context_click(cursor)
-            {
+            if ui.input(|i| i.modifiers.shift && i.key_pressed(egui::Key::F10)) {
                 self.menu_cell = cursor;
+                menu_key = true;
             }
         }
         self.cursor = to_abs(cursor);
         // A dialog on top owns the pointer; the tooltip would hang over it.
-        let tip = self.model.menu().is_none() && self.palette.is_none();
+        let tip = self.model.menu().is_none()
+            && self.palette.is_none()
+            && !response.context_menu_opened();
         // The tooltip is about the square under the pointer; keyboard moves of the cursor leave it alone.
         let under = response.hover_pos().map_or(cursor, cell_at);
         response.clone().on_hover_ui_at_pointer(|ui| {
@@ -1047,24 +1042,51 @@ impl<M: GameModel> App<M> {
                 }
             }
         });
-        let native_context = self.model.native_context();
-        let menu = response.context_menu(|ui| {
-            if native_context {
-                ui.close();
-                return;
-            }
+        // The right click lists what the engine says the avatar can do with the square; the choice is sent as
+        // that action. A keyboard cursor opens the same menu on its square. The menu sits at its square, which a
+        // keyboard has no pointer for.
+        let mut popup = egui::Popup::context_menu(&response).anchor(egui::Rect::from_min_size(
+            match view {
+                // The 3D scene has no square grid to place the menu on; it opens at the map's centre.
+                Some(_) => response.rect.center(),
+                None => {
+                    response.rect.min
+                        + egui::vec2(self.menu_cell.x as f32, self.menu_cell.y as f32) * cell_px
+                }
+            },
+            egui::Vec2::splat(cell_px),
+        ));
+        if menu_key {
+            popup = popup.open_memory(egui::SetOpenCommand::Bool(true));
+        }
+        let menu = popup.show(|ui| {
             let at = self.menu_cell;
-            if menu_item(ui, "Look") {
-                self.look(at);
+            let Some(actions) = self.model.tile_actions(at) else {
+                // The engine has not answered for this square yet.
+                ui.add_enabled(false, egui::Label::new("…"));
+                ui.ctx().request_repaint();
+                return;
+            };
+            if actions.is_empty() {
                 ui.close();
             }
-            if menu_item(ui, "Move here") {
-                self.go_to(at);
-                ui.ctx().request_repaint();
-                ui.close();
+            for action in actions {
+                let key = action
+                    .keys
+                    .first()
+                    .map_or(String::new(), |k| format!(" [{k}]"));
+                let label = format!(
+                    "{}{key}",
+                    bn_client_core::markup::plain(&action.label.shown())
+                );
+                if menu_item(ui, &label) {
+                    self.model.tile_action(at, &action.id);
+                    ui.ctx().request_repaint();
+                    ui.close();
+                }
             }
         });
-        if let Some(menu) = menu.filter(|_| !native_context) {
+        if let Some(menu) = menu {
             ui.ctx().accesskit_node_builder(menu.response.id, |b| {
                 b.set_role(accesskit::Role::Menu);
                 b.set_label("Map actions");

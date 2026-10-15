@@ -183,6 +183,8 @@ struct Hover {
     revision: String,
     /// None while the answer is outstanding.
     lines: Option<Vec<String>>,
+    /// What the avatar can do with the square; empty while the answer is outstanding.
+    actions: Vec<protocol::TileAction>,
 }
 
 /// The engine's id of an item row and how many items it stands for.
@@ -641,19 +643,18 @@ impl EngineModel {
         }
         if matches!(kind, Pending::Describe) {
             // A square outside the engine's window has no description; the cell's own name stands.
-            let lines = result
+            let described = result
                 .ok()
-                .and_then(|v| serde_json::from_value::<protocol::DescribeResult>(v).ok())
-                .map(|d| {
-                    d.parts
-                        .into_iter()
-                        .flat_map(|p| std::iter::once(p.text).chain(p.detail))
-                        .map(|text| markup::plain(&text))
-                        .collect()
-                })
-                .unwrap_or_default();
+                .and_then(|v| serde_json::from_value::<protocol::DescribeResult>(v).ok());
+            let lines = described
+                .iter()
+                .flat_map(|d| d.parts.iter())
+                .flat_map(|p| std::iter::once(&p.text).chain(p.detail.as_ref()))
+                .map(|text| markup::plain(text))
+                .collect();
             if let Some(h) = self.hovered.as_mut() {
                 h.lines = Some(lines);
+                h.actions = described.map(|d| d.actions).unwrap_or_default();
             }
             return;
         }
@@ -918,6 +919,7 @@ impl EngineModel {
             }
             Operation::Travel { .. } => (Some("Travel".into()), None),
             Operation::Context { .. } => (Some("Right click".into()), None),
+            Operation::TileAction { action_id, .. } => (None, Some(action_id.clone())),
             Operation::Cancel => (Some("Cancel".into()), None),
             _ => (None, None),
         };
@@ -1081,6 +1083,7 @@ impl EngineModel {
             pos,
             revision: now.revision.clone(),
             lines,
+            actions: Vec::new(),
         });
         self.call("bn.world.describe", params, Pending::Describe);
     }
@@ -2200,8 +2203,19 @@ impl GameModel for EngineModel {
             .filter(|l| !l.is_empty())
     }
 
-    fn native_context(&self) -> bool {
-        true
+    fn tile_actions(&mut self, at: Pos) -> Option<Vec<protocol::TileAction>> {
+        self.hover(at);
+        // Outside the map, without a game, or under a screen the map takes no action, so there is none to ask for.
+        let (Some(pos), Some(now), Some(boundary)) =
+            (self.abs(at), self.replica.at(), self.replica.boundary())
+        else {
+            return Some(Vec::new());
+        };
+        if boundary.interaction.is_some() {
+            return Some(Vec::new());
+        }
+        let h = self.hovered.as_ref()?;
+        (h.pos == pos && h.revision == now.revision && h.lines.is_some()).then(|| h.actions.clone())
     }
 
     fn context_click(&mut self, at: Pos) -> bool {
@@ -2213,6 +2227,20 @@ impl GameModel for EngineModel {
             self.submit(Operation::Context { pos });
         }
         true
+    }
+
+    fn tile_action(&mut self, at: Pos, action_id: &str) -> bool {
+        let free = self
+            .replica
+            .boundary()
+            .is_some_and(|b| b.interaction.is_none());
+        match (self.busy, free, self.abs(at)) {
+            (false, true, Some(pos)) => self.submit(Operation::TileAction {
+                action_id: action_id.into(),
+                pos,
+            }),
+            _ => false,
+        }
     }
 
     fn aim(&mut self, at: Pos, click: bool) -> bool {

@@ -4,6 +4,7 @@ use crate::markup::{self, Run};
 
 use crate::protocol::{
     Column, Editor, InvokeArgs, List, Look, Mark, ModTileset, Row, Screen, ScreenRole, Shortcut,
+    TileAction,
 };
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Pos {
@@ -560,8 +561,13 @@ pub trait GameModel {
     fn hover_text(&self, _at: Pos) -> Option<Vec<String>> {
         None
     }
-    /// The model answers a right click itself, so the client offers no menu of its own.
-    fn native_context(&self) -> bool {
+    /// What the avatar can do with view square `at`, in the order the engine lists it; asks the engine on
+    /// the first call and answers none until it has replied. A model without an engine has no actions.
+    fn tile_actions(&mut self, _at: Pos) -> Option<Vec<TileAction>> {
+        Some(Vec::new())
+    }
+    /// Takes the action `action_id` the engine listed for view square `at`; false when nothing was sent.
+    fn tile_action(&mut self, _at: Pos, _action_id: &str) -> bool {
         false
     }
     /// The right click on a view square, as the engine's own SEC_SELECT; false when the model has none.
@@ -748,6 +754,24 @@ impl GameModel for FakeModel {
 
     fn player(&self) -> Pos {
         self.player
+    }
+
+    fn tile_actions(&mut self, _at: Pos) -> Option<Vec<TileAction>> {
+        let action = |id: &str, label: &str| TileAction {
+            id: id.into(),
+            label: crate::protocol::Text::Plain(label.into()),
+            keys: vec![],
+        };
+        Some(vec![action("look", "Look"), action("travel", "Move here")])
+    }
+
+    fn tile_action(&mut self, at: Pos, action_id: &str) -> bool {
+        match action_id {
+            "look" => self.say(self.cell(at).desc),
+            "travel" => self.travel(at),
+            _ => return false,
+        }
+        true
     }
 
     fn travel(&mut self, target: Pos) {

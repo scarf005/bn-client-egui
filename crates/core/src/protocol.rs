@@ -1023,6 +1023,12 @@ pub enum Operation {
         item_id: String,
         count: u64,
     },
+    /// Takes one of the actions a described map square lists, as its native action does.
+    TileAction {
+        #[serde(deserialize_with = "opaque_id")]
+        action_id: String,
+        pos: WorldPos,
+    },
     /// Runs an affordance of the top screen, by id.
     Invoke {
         #[serde(deserialize_with = "opaque_id")]
@@ -1331,9 +1337,20 @@ pub struct TilePart {
     pub values: std::collections::BTreeMap<String, i64>,
 }
 
+/// Something the avatar can do with a described square now.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TileAction {
+    /// The native action's id, or `travel`, `attack` or `talk`; opaque to the client.
+    pub id: String,
+    pub label: Text,
+    /// The player's bindings of the native action.
+    pub keys: Vec<String>,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DescribeResult {
     pub parts: Vec<TilePart>,
+    pub actions: Vec<TileAction>,
 }
 
 /// Params of `bn.command.result`; its result is a `CommandNotice`.

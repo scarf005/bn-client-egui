@@ -2490,8 +2490,7 @@ fn describes(h: &bn_client_core::transport::ScriptHandle) -> usize {
 #[test]
 fn a_hovered_square_is_described_again_when_its_answer_is_for_an_older_revision() {
     let (t, h) = session();
-    let reply =
-        json!({"jsonrpc":"2.0","id":0,"result":{"parts":[{"kind":"terrain","text":"Wall"}]}});
+    let reply = json!({"jsonrpc":"2.0","id":0,"result":{"parts":[{"kind":"terrain","text":"Wall"}],"actions":[]}});
     let mut m = connected(
         t.on("bn.world.describe", vec![reply.clone()])
             .on("bn.world.describe", vec![reply]),
@@ -2521,8 +2520,7 @@ fn a_hovered_square_is_described_again_when_its_answer_is_for_an_older_revision(
 #[test]
 fn a_hovered_squares_description_stays_while_its_new_answer_is_pending() {
     let (t, h) = session();
-    let reply =
-        json!({"jsonrpc":"2.0","id":0,"result":{"parts":[{"kind":"terrain","text":"Wall"}]}});
+    let reply = json!({"jsonrpc":"2.0","id":0,"result":{"parts":[{"kind":"terrain","text":"Wall"}],"actions":[]}});
     // Only the first question is answered.
     let mut m = connected(t.on("bn.world.describe", vec![reply]));
     m.hover(Pos { x: 22, y: 12 });

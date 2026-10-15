@@ -20,11 +20,17 @@ fn harness<'a>() -> (H<'a>, ScriptHandle) {
         .on("bn.command.submit", vec![fixture("submit_result")])
         .on(
             "bn.world.describe",
-            vec![json!({"jsonrpc":"2.0","id":0,"result":{"parts":[{"kind":"terrain","text":"Floor"}]}})],
+            vec![json!({"jsonrpc":"2.0","id":0,"result":{"parts":[{"kind":"terrain","text":"Floor"}],"actions":[]}})],
         )
         .on(
             "bn.world.describe",
-            vec![json!({"jsonrpc":"2.0","id":0,"result":{"parts":[{"kind":"terrain","text":"Wall"}, {"kind":"creature","text":"A zombie is here.","detail":"Slow and hungry."}]}})],
+            vec![json!({"jsonrpc":"2.0","id":0,"result":{"parts":[{"kind":"terrain","text":"Wall"}, {"kind":"creature","text":"A zombie is here.","detail":"Slow and hungry."}],
+                "actions":[{"id":"open","label":"Open","keys":["o"]},{"id":"look","label":"Look around","keys":[";"]}]}})],
+        )
+        .on(
+            "bn.world.describe",
+            vec![json!({"jsonrpc":"2.0","id":0,"result":{"parts":[{"kind":"terrain","text":"Door"}],
+                "actions":[{"id":"open","label":"Open","keys":["o"]},{"id":"look","label":"Look around","keys":[";"]}]}})],
         );
     let clock = Clock::manual();
     let model = EngineModel::new(Box::new(t)).with_clock(clock.clone());
@@ -189,17 +195,49 @@ fn arrow_keys_leave_a_hovered_square_as_the_cursor() {
     h.get_by_label_contains("Cursor (5, 4)");
 }
 
+/// The square's own actions, as the engine described it, in the menu a right click opens.
 #[test]
-fn right_click_is_the_engines_context_click_and_opens_no_menu_of_its_own() {
+fn right_click_lists_the_engines_actions_for_the_square_and_choosing_one_sends_it() {
     let (mut h, script) = harness();
     h.run_steps(3);
     let at = square(&mut h, (22.5, 12.5));
     click(&mut h, at, egui::PointerButton::Secondary);
+    h.run_steps(3);
+    h.get_by_label("Look around [;]");
+    h.get_by_label("Open [o]").click();
+    h.run_steps(3);
     assert_eq!(
         operations(&script),
-        [json!({"kind":"context","pos":{"dim":"","x":5,"y":4,"z":0}})]
+        [json!({"kind":"tile_action","action_id":"open","pos":{"dim":"","x":5,"y":4,"z":0}})]
     );
-    assert!(h.query_by_label("Move here").is_none());
+    assert!(h.query_by_label("Open [o]").is_none(), "the menu closes");
+}
+
+#[test]
+fn the_menu_acts_on_the_square_the_press_landed_on_not_where_the_pointer_was_last_seen() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    // The pointer was last seen two squares east; the press arrives at another square in one frame.
+    let seen = square(&mut h, (22.5, 12.5));
+    h.hover_at(seen);
+    h.run_steps(2);
+    let landed = square(&mut h, (23.5, 12.5));
+    h.event(egui::Event::PointerMoved(landed));
+    for pressed in [true, false] {
+        h.event(egui::Event::PointerButton {
+            pos: landed,
+            button: egui::PointerButton::Secondary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        });
+    }
+    h.run_steps(4);
+    h.get_by_label("Look around [;]").click();
+    h.run_steps(3);
+    assert_eq!(
+        operations(&script),
+        [json!({"kind":"tile_action","action_id":"look","pos":{"dim":"","x":6,"y":4,"z":0}})]
+    );
 }
 
 #[test]
@@ -400,31 +438,6 @@ fn hovering_the_engines_cursor_square_does_not_confirm_it() {
 }
 
 #[test]
-fn a_click_goes_to_the_square_it_landed_on_even_when_the_pointer_just_arrived() {
-    let (mut h, script) = harness();
-    h.run_steps(3);
-    // The pointer was last seen two squares east; the press arrives at another square in one frame.
-    let seen = square(&mut h, (22.5, 12.5));
-    h.hover_at(seen);
-    h.run_steps(2);
-    let landed = square(&mut h, (23.5, 12.5));
-    h.event(egui::Event::PointerMoved(landed));
-    for pressed in [true, false] {
-        h.event(egui::Event::PointerButton {
-            pos: landed,
-            button: egui::PointerButton::Secondary,
-            pressed,
-            modifiers: egui::Modifiers::NONE,
-        });
-    }
-    h.run_steps(3);
-    assert_eq!(
-        operations(&script),
-        [json!({"kind":"context","pos":{"dim":"","x":6,"y":4,"z":0}})]
-    );
-}
-
-#[test]
 fn a_double_click_on_a_row_chooses_it_once_as_native_has_no_double_click() {
     let (mut h, script) = harness();
     let rows = json!([
@@ -462,11 +475,11 @@ fn the_map_does_not_move_with_the_length_of_the_hovered_description() {
         .on("bn.command.submit", vec![fixture("submit_result")])
         .on(
             "bn.world.describe",
-            vec![json!({"jsonrpc":"2.0","id":0,"result":{"parts":[{"kind":"terrain","text":long}, {"kind":"terrain","text":"Move cost: 150"}]}})],
+            vec![json!({"jsonrpc":"2.0","id":0,"result":{"parts":[{"kind":"terrain","text":long}, {"kind":"terrain","text":"Move cost: 150"}],"actions":[]}})],
         )
         .on(
             "bn.world.describe",
-            vec![json!({"jsonrpc":"2.0","id":0,"result":{"parts":[{"kind":"terrain","text":"floor"}]}})],
+            vec![json!({"jsonrpc":"2.0","id":0,"result":{"parts":[{"kind":"terrain","text":"floor"}],"actions":[]}})],
         );
     let clock = Clock::manual();
     let model = EngineModel::new(Box::new(t)).with_clock(clock.clone());
@@ -491,4 +504,44 @@ fn the_map_does_not_move_with_the_length_of_the_hovered_description() {
         map,
         "short text moved the map"
     );
+}
+
+#[test]
+fn a_square_under_an_open_screen_has_no_actions_and_asks_nothing() {
+    let (mut h, script) = harness();
+    open_menu(
+        &mut h,
+        &script,
+        json!([row("c:0", "entry", false, None)]),
+        json!([]),
+        None,
+    );
+    let asked = |script: &ScriptHandle| {
+        script
+            .sent()
+            .into_iter()
+            .filter(|m| m["method"] == "bn.world.describe")
+            .count()
+    };
+    let before = asked(&script);
+    let me = h.state().model.player();
+    assert_eq!(h.state_mut().model.tile_actions(me), Some(vec![]));
+    h.run_steps(3);
+    assert_eq!(asked(&script), before);
+}
+
+#[test]
+fn keys_go_to_the_square_menu_and_not_to_the_game_under_it() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    let at = square(&mut h, (22.5, 12.5));
+    click(&mut h, at, egui::PointerButton::Secondary);
+    h.run_steps(3);
+    h.get_by_label("Open [o]");
+    h.key_press(egui::Key::ArrowDown);
+    h.run_steps(3);
+    h.key_press(egui::Key::Escape);
+    h.run_steps(3);
+    assert!(h.query_by_label("Open [o]").is_none(), "the menu closes");
+    assert_eq!(operations(&script), Vec::<Value>::new());
 }
