@@ -997,3 +997,31 @@ fn an_action_of_the_item_examine_menu_runs_the_menus_run_with_the_action_id() {
         [boundary_invoke("examine:run", json!({"row": "WIELD"}))]
     );
 }
+
+#[test]
+fn a_response_runs_the_talk_screens_respond_with_its_data_name() {
+    let (mut h, script) = harness(example("npctalk.json", "NPC talk screen"));
+    h.get_by_label("Who are you?").click();
+    h.run_steps(3);
+    assert_eq!(
+        submits(&script),
+        [boundary_invoke(
+            "talk:respond",
+            json!({"row": "TALK_MARLOSS_VOICE:2"})
+        )]
+    );
+}
+
+#[test]
+fn a_special_key_runs_the_talk_screens_special_with_its_fixed_name() {
+    let (mut h, script) = harness(example("npctalk.json", "NPC talk screen"));
+    h.get_by_label("Yell").click();
+    h.run_steps(3);
+    assert_eq!(
+        submits(&script),
+        [boundary_invoke(
+            "talk:special:run",
+            json!({"row": "special:yell"})
+        )]
+    );
+}

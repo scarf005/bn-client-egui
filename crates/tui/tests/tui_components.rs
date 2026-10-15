@@ -748,3 +748,19 @@ fn the_item_examine_menu_draws_the_item_beside_its_actions_and_down_runs_its_reg
         [json!({"kind": "invoke", "affordance_id": "DOWN", "args": {}})]
     );
 }
+
+#[test]
+fn the_npc_talk_screen_draws_its_history_beside_its_responses_and_special_keys() {
+    let (mut app, h) = open(example("npctalk.json", "NPC talk screen"));
+    let t = large(&mut app);
+    let text = lines(&t).join("\n");
+    for shown in [
+        "Dialogue:",
+        "Your response:",
+        "Who are you?",
+        "Size up stats",
+    ] {
+        assert!(text.contains(shown), "{shown:?} in {text}");
+    }
+    assert!(operations(&h).is_empty());
+}
