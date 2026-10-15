@@ -1025,3 +1025,28 @@ fn a_special_key_runs_the_talk_screens_special_with_its_fixed_name() {
         )]
     );
 }
+
+#[test]
+fn a_diary_page_runs_the_diaries_page_with_its_serial_id() {
+    let (mut h, script) = harness(example("diary.json", "diary screen with two pages"));
+    let first = h
+        .get_all_by_label("Year 1, Spring, day 1 12:05:00PM")
+        .next()
+        .expect("a page row");
+    first.click();
+    h.run_steps(3);
+    assert_eq!(
+        submits(&script),
+        [boundary_invoke("diary:page", json!({"row": "page:1"}))]
+    );
+}
+
+#[test]
+fn the_text_editor_draws_its_text_in_a_text_box() {
+    let (mut h, _script) = harness(example("diary.json", "text editor screen"));
+    h.run_steps(3);
+    assert!(
+        h.query_by_role(eframe::egui::accesskit::Role::TextInput)
+            .is_some()
+    );
+}
