@@ -2573,6 +2573,13 @@
         "context": {
           "type": "string",
           "description": "Diagnostics and tests only. Clients must not branch on it."
+        },
+        "shortcuts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/shortcut"
+          },
+          "description": "The shortcut bar; only the map screen has one."
         }
       },
       "required": [
@@ -4733,10 +4740,18 @@
           "items": {
             "$ref": "#/$defs/tile_part"
           }
+        },
+        "actions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/tile_action"
+          },
+          "description": "What the avatar can do with the square now. Only the actions that apply are listed: `attack` and `talk` for a creature beside or in view, `fire` at a seen monster with a ranged weapon, `open`, `close`, `pickup` and `examine` for an adjacent square, `travel` for a square the avatar knows, and always `look`."
         }
       },
       "required": [
-        "parts"
+        "parts",
+        "actions"
       ],
       "additionalProperties": false
     },
@@ -5126,9 +5141,11 @@
             "confirm",
             "cancel",
             "any_key",
-            "select"
+            "select",
+            "navigate",
+            "help"
           ],
-          "description": "What the affordance means for the screen. `any_key` runs on a key no affordance binds. `select` moves the screen's cursor to the row named by `args.row` without activating it, so the detail that follows the cursor shows that row; a client invokes it when its focus moves in the list its `args.row` targets."
+          "description": "What the affordance means for the screen. `any_key` runs on a key no affordance binds. `select` moves the screen's cursor to the row named by `args.row` without activating it, so the detail that follows the cursor shows that row; a client invokes it when its focus moves in the list its `args.row` targets. `navigate` moves a cursor, page, tab or scroll position (a client already maps arrows, paging and the wheel to it and need not draw a button). `help` opens the native help or keybindings screen."
         },
         "args": {
           "$ref": "#/$defs/arg_shape"
@@ -5370,6 +5387,28 @@
             "pos"
           ],
           "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "tile_action"
+            },
+            "action_id": {
+              "$ref": "#/$defs/opaque_id",
+              "description": "The `id` of a `tile_action` the square's describe lists."
+            },
+            "pos": {
+              "$ref": "#/$defs/pos"
+            }
+          },
+          "required": [
+            "kind",
+            "action_id",
+            "pos"
+          ],
+          "additionalProperties": false,
+          "description": "Takes a described action on a map square, as its native action does. An action the square does not offer now is `validation_failed`."
         },
         {
           "$ref": "#/$defs/invoke"
@@ -6257,6 +6296,73 @@
       ],
       "additionalProperties": false,
       "description": "The creatures the native compass panel lists toward one direction."
+    },
+    "shortcut": {
+      "type": "object",
+      "properties": {
+        "affordance_id": {
+          "$ref": "#/$defs/opaque_id",
+          "description": "The registered action the button runs: invoke the map affordance of this id while `enabled`."
+        },
+        "label": {
+          "$ref": "#/$defs/text",
+          "description": "The action's native name."
+        },
+        "keys": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The player's bindings of the action in the map's input context."
+        },
+        "icon": {
+          "type": "string",
+          "description": "An opaque sprite id a client may map to its own art."
+        },
+        "glyph": {
+          "type": "string",
+          "description": "What a client without that art draws instead."
+        },
+        "enabled": {
+          "type": "boolean",
+          "description": "The map is on top and offers the action now."
+        }
+      },
+      "required": [
+        "affordance_id",
+        "label",
+        "keys",
+        "icon",
+        "enabled"
+      ],
+      "additionalProperties": false,
+      "description": "A button of the map's shortcut bar. The list is data (`client_shortcut` in the game's JSON), so mods add buttons; it keeps its order and is published whether or not the map is on top, so a client can leave the bar in place under a menu."
+    },
+    "tile_action": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/opaque_id",
+          "description": "The native action's id (`examine`, `open`, `close`, `pickup`, `fire`, `look`), or `travel`, `attack` or `talk`."
+        },
+        "label": {
+          "$ref": "#/$defs/text"
+        },
+        "keys": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The player's bindings of the native action; empty for an action that has none."
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "keys"
+      ],
+      "additionalProperties": false,
+      "description": "Something the avatar can do with a square now, in the order a menu lists it. Run it with the `tile_action` operation."
     }
   }
 }
