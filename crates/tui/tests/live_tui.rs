@@ -154,8 +154,8 @@ fn settle(app: &mut App, what: &str, done: impl Fn(&App) -> bool) {
     }
 }
 
-/// The rows of the advanced inventory list `id` on the top screen, by the engine's row ids.
-fn pane_rows(app: &App, id: &str) -> Vec<String> {
+/// The rows of the advanced inventory list `id` on the top screen: the engine's row id and the label.
+fn pane_rows(app: &App, id: &str) -> Vec<(String, String)> {
     let Some(Component::List(list)) = app
         .model
         .screens()
@@ -164,7 +164,10 @@ fn pane_rows(app: &App, id: &str) -> Vec<String> {
     else {
         return vec![];
     };
-    list.rows.iter().map(|r| r.id.clone()).collect()
+    list.rows
+        .iter()
+        .map(|r| (r.id.clone(), r.label.shown()))
+        .collect()
 }
 
 /// The tutorial gives its character no shirt, so the item moved is the lighter it starts with: from the
@@ -210,16 +213,17 @@ fn live_tui_advanced_inventory_moves_an_item_between_panes_with_the_move_afforda
     settle(&mut app, "the lighter listed", |a| {
         pane_rows(a, "aim:pane:left:items")
             .iter()
-            .any(|r| r.contains("lighter"))
+            .any(|(_, label)| label.contains("lighter"))
     });
     let lighter = pane_rows(&app, "aim:pane:left:items")
         .into_iter()
-        .find(|r| r.contains("lighter"))
-        .unwrap();
+        .find(|(_, label)| label.contains("lighter"))
+        .unwrap()
+        .0;
     assert!(
         pane_rows(&app, "aim:pane:right:items")
             .iter()
-            .all(|r| !r.contains("lighter"))
+            .all(|(_, label)| !label.contains("lighter"))
     );
     let rows = vec![RowPick {
         id: lighter,
@@ -237,11 +241,11 @@ fn live_tui_advanced_inventory_moves_an_item_between_panes_with_the_move_afforda
     settle(&mut app, "the lighter on the floor", |a| {
         pane_rows(a, "aim:pane:right:items")
             .iter()
-            .any(|r| r.contains("lighter"))
+            .any(|(_, label)| label.contains("lighter"))
     });
     assert!(
         pane_rows(&app, "aim:pane:left:items")
             .iter()
-            .all(|r| !r.contains("lighter"))
+            .all(|(_, label)| !label.contains("lighter"))
     );
 }
