@@ -2,6 +2,7 @@
 //! Every shape is a parallelogram `origin + u * a + v * b` with an affine map from `(u, v)` to sprite pixels, so
 //! one instance format draws all of them.
 
+use super::camera::{PITCH_ISO, PITCH_MAX};
 use crate::tileset::Turn;
 use bytemuck::{Pod, Zeroable};
 use glam::Vec2;
@@ -60,8 +61,13 @@ impl Metrics {
         let (across, up) = match iso {
             true => {
                 let across = std::f32::consts::SQRT_2 / tile.x;
-                let tilt = (tile.y / tile.x).min(1.0).asin();
-                (across, across / tilt.cos().max(0.1))
+                // A diamond cannot be taller than it is wide (nor look from beyond the camera's highest tilt):
+                // such a tileset is drawn as if it had the true isometric tilt.
+                let tilt = match (tile.y / tile.x).asin() {
+                    tilt if tilt <= PITCH_MAX => tilt,
+                    _ => PITCH_ISO,
+                };
+                (across, across / tilt.cos())
             }
             false => (1.0 / tile.x, 1.0 / tile.y),
         };
@@ -346,6 +352,20 @@ mod tests {
         assert_eq!(
             (flat.across, flat.up, flat.level),
             (1.0 / 16.0, 1.0 / 16.0, 3.0)
+        );
+    }
+
+    #[test]
+    fn a_tileset_whose_diamond_is_taller_than_wide_is_drawn_at_the_true_isometric_tilt() {
+        // HitButton_iso: 16 x 20 tiles.
+        let m = Metrics::new((16, 20), true, None);
+        let expected = std::f32::consts::SQRT_2 / 16.0 / PITCH_ISO.cos();
+        assert!((m.up - expected).abs() < 1e-6, "{}", m.up);
+        assert!(
+            m.up < 3.0 * m.across,
+            "no stretching into columns: {} {}",
+            m.up,
+            m.across
         );
     }
 
