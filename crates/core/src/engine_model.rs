@@ -1052,10 +1052,17 @@ impl EngineModel {
             pos: pos.clone(),
         })
         .expect("describe params serialize");
+        // The square's earlier answer stands until the new one comes, so its text does not flip to the bare
+        // cell and back with every revision.
+        let lines = self
+            .hovered
+            .take()
+            .filter(|h| h.pos == pos)
+            .and_then(|h| h.lines);
         self.hovered = Some(Hover {
             pos,
             revision: now.revision.clone(),
-            lines: None,
+            lines,
         });
         self.call("bn.world.describe", params, Pending::Describe);
     }
@@ -2165,9 +2172,9 @@ impl GameModel for EngineModel {
     }
 
     fn hover_text(&self, at: Pos) -> Option<Vec<String>> {
-        let (pos, now) = (self.abs(at)?, self.replica.at()?);
+        let pos = self.abs(at)?;
         let h = self.hovered.as_ref()?;
-        (h.pos == pos && h.revision == now.revision)
+        (h.pos == pos)
             .then(|| h.lines.clone())
             .flatten()
             .filter(|l| !l.is_empty())

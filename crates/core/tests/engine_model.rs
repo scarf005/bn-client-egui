@@ -2519,6 +2519,30 @@ fn a_hovered_square_is_described_again_when_its_answer_is_for_an_older_revision(
 }
 
 #[test]
+fn a_hovered_squares_description_stays_while_its_new_answer_is_pending() {
+    let (t, h) = session();
+    let reply =
+        json!({"jsonrpc":"2.0","id":0,"result":{"parts":[{"kind":"terrain","text":"Wall"}]}});
+    // Only the first question is answered.
+    let mut m = connected(t.on("bn.world.describe", vec![reply]));
+    m.hover(Pos { x: 22, y: 12 });
+    m.poll();
+    h.push(change(41, json!({"route": [pos(4, 4)]})));
+    m.poll();
+    assert_eq!(describes(&h), 2, "the new revision is asked about");
+    assert_eq!(
+        m.hover_text(Pos { x: 22, y: 12 }),
+        Some(vec!["Wall".into()]),
+        "the earlier answer is shown until the new one arrives"
+    );
+    assert_eq!(
+        m.hover_text(Pos { x: 23, y: 12 }),
+        None,
+        "another square has none"
+    );
+}
+
+#[test]
 fn no_command_leaves_for_the_old_world_while_the_new_one_is_being_fetched() {
     let (t, h) = session();
     // The engine has not answered the new subscription yet.
