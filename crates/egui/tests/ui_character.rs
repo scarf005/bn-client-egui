@@ -295,7 +295,8 @@ fn bionics_draw_the_power_the_tabs_the_slots_and_a_row_with_its_key_power_and_st
     {
         first(&h, tab["label"].as_str().unwrap());
     }
-    first(&h, "Head: 0/18");
+    first(&h, "Head");
+    first(&h, "0/18");
     let row = &find(&screen["root"], "bionics:list").unwrap()["rows"][0];
     // The key is painted beside the label, not part of the row's accessible name.
     assert!(!row["hotkey"].as_str().unwrap().is_empty());

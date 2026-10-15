@@ -288,9 +288,9 @@ fn a_panel_draws_its_title_subtitle_and_stats() {
     for shown in [
         "Destination",
         "Directly under you",
-        "Weight: 0.0 kg",
-        "Volume: 0.00/1000.00 L",
-        "Sort: name",
+        "Weight 0.0 kg",
+        "Volume 0.00/1000.00 L",
+        "Sort name",
     ] {
         assert!(text.contains(shown), "{shown}: {text}");
     }

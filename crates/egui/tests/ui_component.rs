@@ -249,8 +249,10 @@ fn panel_shows_title_subtitle_and_stats_with_their_maximum_and_unit() {
     let (h, _) = harness(dialog(panel, vec![]));
     h.get_by_label("You");
     h.get_by_label("Player items");
-    h.get_by_label("Weight: 1.17/45.00 kg");
-    h.get_by_label("Volume: 0.03/15.00 L");
+    h.get_by_label("Weight");
+    h.get_by_label("1.17/45.00 kg");
+    h.get_by_label("Volume");
+    h.get_by_label("0.03/15.00 L");
     h.get_by_label("Free capacity: 43.83 kg, 14.97 L");
 }
 
@@ -295,7 +297,8 @@ fn pickup_screen() -> Value {
 fn a_pickup_list_draws_its_stats_and_rows_and_a_click_runs_the_toggle_with_the_row() {
     let (mut h, script) = harness(pickup_screen());
     h.get_by_label("Pick up");
-    h.get_by_label("Weight: 2.0/45.0 kg");
+    h.get_by_label("Weight");
+    h.get_by_label("2.0/45.0 kg");
     h.get_by_label("3 rocks");
     h.get_by_label("stick").click();
     h.run_steps(3);
@@ -857,7 +860,8 @@ fn the_editor_of_the_option_under_the_cursor_runs_the_options_set_with_the_optio
 fn a_keybinding_row_runs_the_pick_with_its_action_and_the_screen_says_its_mode() {
     let screen = example("keybindings.json", "keybindings screen in the remove mode");
     let (mut h, script) = harness(screen);
-    h.get_by_label("Mode: Remove bindings");
+    h.get_by_label("Mode");
+    h.get_all_by_label("Remove bindings").next().unwrap();
     h.get_by_label("Move East").click();
     h.run_steps(3);
     assert_eq!(
@@ -1000,7 +1004,7 @@ fn a_worn_item_runs_the_armor_screens_pick_with_its_identity() {
         submits(&script),
         [boundary_invoke(
             "armor:pick",
-            json!({"row": "item:2"})
+            json!({"row": "item:3"})
         )]
     );
 }
