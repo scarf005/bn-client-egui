@@ -499,6 +499,9 @@ pub struct Editor {
     pub maximum: Option<serde_json::Number>,
     #[serde(default = "no_limit")]
     pub max_length: i64,
+    /// A text that may run over several lines.
+    #[serde(default)]
+    pub multiline: bool,
 }
 
 fn no_limit() -> i64 {
@@ -1970,6 +1973,12 @@ pub struct FormField {
     pub max_length: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub printable: Option<bool>,
+    /// The text may run over several lines.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub multiline: Option<bool>,
+    /// Where the cursor stands in the text, in characters from its start.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cursor: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub options: Option<Vec<FieldOption>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

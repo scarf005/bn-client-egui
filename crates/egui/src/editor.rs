@@ -58,7 +58,11 @@ pub fn value_editor(
             }
             _ => {
                 ui.label(label);
-                let edit = ui.add(egui::TextEdit::singleline(&mut draft.text));
+                let edit = ui.add(if editor.multiline {
+                    egui::TextEdit::multiline(&mut draft.text)
+                } else {
+                    egui::TextEdit::singleline(&mut draft.text)
+                });
                 edit.widget_info(|| {
                     egui::WidgetInfo::text_edit(true, draft.text.clone(), draft.text.clone(), label)
                 });

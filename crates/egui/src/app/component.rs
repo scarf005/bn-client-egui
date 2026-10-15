@@ -239,6 +239,7 @@ fn editor_of(field: &FormField) -> Editor {
         minimum: field.min.clone(),
         maximum: field.max.clone(),
         max_length: field.max_length.unwrap_or(-1),
+        multiline: field.multiline.unwrap_or(false),
     }
 }
 
