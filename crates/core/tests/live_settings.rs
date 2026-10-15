@@ -1,9 +1,9 @@
 //! Needs a real engine build: `BN_ENGINE=/path/to/cataclysm-bn-tiles cargo test --test live_settings -- --ignored`
 //! Edits the rule screens of the Settings tab through the client model, in a fresh temporary profile: the
-//! auto pickup and safe mode rules through the 0.1 menu, the distraction and colour managers through the
-//! affordances of their component screens.
+//! auto pickup and safe mode rules, the distraction and colour managers, through the affordances of their
+//! component screens.
 mod common;
-use bn_client_core::protocol::{Component, InvokeArgs, Row};
+use bn_client_core::protocol::{AffordanceRole, Component, InvokeArgs, Row};
 use bn_client_core::transport::StdioTransport;
 use bn_client_core::watchdog::Watchdog;
 use bn_client_core::{EngineModel, GameModel, MenuChoice};
@@ -27,10 +27,6 @@ fn settled(model: &mut EngineModel, what: &str) {
     model.poll();
 }
 
-fn context(model: &EngineModel) -> String {
-    model.menu().map(|m| m.context).unwrap_or_default()
-}
-
 fn row(model: &EngineModel, id: &str) -> Option<MenuChoice> {
     model.menu()?.choices.into_iter().find(|c| c.id == id)
 }
@@ -40,47 +36,6 @@ fn choose(model: &mut EngineModel, id: &str) {
     settled(model, "the previous command");
     model.choose(id);
     settled(model, id);
-}
-
-fn act(model: &mut EngineModel, id: &str) {
-    settled(model, "the previous command");
-    assert!(model.invoke_action(id), "{id} is offered");
-    settled(model, id);
-}
-
-fn fill(model: &mut EngineModel, field: &str, value: &str) {
-    settled(model, "the previous command");
-    model.fill(field, value, true);
-    settled(model, field);
-}
-
-fn open(model: &mut EngineModel, entry: &str, ctx: &str) {
-    common::main_menu_tab(model, "settings");
-    common::main_menu_entry(model, entry);
-    wait_for(model, ctx, |m| context(m) == ctx);
-}
-
-fn leave(model: &mut EngineModel) {
-    settled(model, "the previous command");
-    model.cancel_menu();
-    settled(model, "leaving");
-    // A changed screen asks to save; answering yes returns to the main menu.
-    if common::main_menu_tabs(model).is_empty() {
-        let yes = model
-            .menu()
-            .and_then(|m| m.choices.into_iter().find(|c| c.label == "Yes"))
-            .expect("save prompt");
-        choose(model, &yes.id);
-    }
-    wait_for(model, "the main menu", |m| {
-        !common::main_menu_tabs(m).is_empty()
-    });
-}
-
-fn value(model: &EngineModel, id: &str, column: usize) -> String {
-    row(model, id)
-        .map(|r| r.columns[column].value.clone())
-        .unwrap_or_default()
 }
 
 /// A fresh engine on the main menu.
@@ -165,43 +120,67 @@ fn quit(model: &mut EngineModel) {
     });
 }
 
+/// Answers the text entry on top of the screen with `text`, through its confirming affordance.
+fn type_text(model: &mut EngineModel, text: &str) {
+    let confirming = |m: &EngineModel| {
+        m.screens().last().and_then(|s| {
+            s.affordances
+                .iter()
+                .find(|a| a.role == Some(AffordanceRole::Confirm))
+                .map(|a| a.id.clone())
+        })
+    };
+    wait_for(model, "the text entry", |m| confirming(m).is_some());
+    let confirm = confirming(model).expect("the text entry confirms");
+    invoke(model, &confirm, None, Some(text));
+}
+
+/// The ids of the rows of the list `id` on the top screen, in order.
+fn ids_of(model: &EngineModel, id: &str) -> Vec<String> {
+    rows_of(model, id).into_iter().map(|r| r.id).collect()
+}
+
 #[test]
 #[ignore = "requires BN_ENGINE pointing at an engine binary"]
 fn live_rule_screens_add_edit_move_and_remove_rules() {
     let mut model = start();
 
-    // Auto pickup: add a rule, type its pattern, add a second, move it up, remove it.
-    open(&mut model, "settings:autopickup", "AUTO_PICKUP");
-    act(&mut model, "ADD_RULE");
-    fill(&mut model, "field:value", "*knife*");
-    assert_eq!(context(&model), "AUTO_PICKUP");
-    assert_eq!(row(&model, "rule:0").unwrap().label, "*knife*");
-    act(&mut model, "ADD_RULE");
-    fill(&mut model, "field:value", "*axe*");
-    assert_eq!(row(&model, "rule:1").unwrap().label, "*axe*");
-    act(&mut model, "MOVE_RULE_DOWN");
-    assert_eq!(row(&model, "rule:0").unwrap().label, "*axe*");
-    choose(&mut model, "column:2");
-    choose(&mut model, "rule:0");
-    assert_eq!(value(&model, "rule:0", 0), "Exclude");
-    act(&mut model, "REMOVE_RULE");
-    assert!(row(&model, "rule:1").is_none());
-    leave(&mut model);
+    // Auto pickup: add a rule, type its pattern, add a second, move it up, switch it to exclude, remove it.
+    // Every rule is named by the id the session gave it, which a move keeps.
+    open_screen(&mut model, "settings:autopickup", "AUTO_PICKUP");
+    invoke(&mut model, "ADD_RULE", None, None);
+    type_text(&mut model, "*knife*");
+    assert_eq!(top_context(&model), "AUTO_PICKUP");
+    invoke(&mut model, "ADD_RULE", None, None);
+    type_text(&mut model, "*axe*");
+    let rules = rows_of(&model, "autopickup:rules");
+    let labels = rules.iter().map(|r| r.label.shown()).collect::<Vec<_>>();
+    assert_eq!(labels, ["*knife*", "*axe*"]);
+    let (knife, axe) = (rules[0].id.clone(), rules[1].id.clone());
+    assert_ne!(knife, axe);
+    invoke(&mut model, "MOVE_RULE_DOWN", None, None);
+    assert_eq!(ids_of(&model, "autopickup:rules"), [axe.clone(), knife.clone()]);
+    invoke(&mut model, "autopickup:mode", Some(&axe), None);
+    assert_eq!(cell(&model, "autopickup:rules", &axe, "i_e"), "Exclude");
+    assert_eq!(cell(&model, "autopickup:rules", &knife, "i_e"), "Include");
+    invoke(&mut model, "autopickup:select", Some(&axe), None);
+    invoke(&mut model, "REMOVE_RULE", None, None);
+    assert_eq!(ids_of(&model, "autopickup:rules"), [knife.clone()]);
+    quit(&mut model);
 
-    // Safe mode: an empty rule is added, its pattern typed, its list kind switched.
-    open(&mut model, "settings:safemode", "SAFEMODE");
-    act(&mut model, "ADD_RULE");
-    choose(&mut model, "column:0");
-    choose(&mut model, "rule:0");
-    fill(&mut model, "field:value", "zombie");
-    assert_eq!(row(&model, "rule:0").unwrap().label, "zombie");
-    choose(&mut model, "column:3");
-    choose(&mut model, "rule:0");
-    assert_eq!(value(&model, "rule:0", 2), "Whitelist");
-    act(&mut model, "REMOVE_RULE");
-    assert!(row(&model, "rule:0").is_none());
-    leave(&mut model);
-
+    // Safe mode: an empty rule is added, its pattern typed, its list kind switched, the rule removed.
+    open_screen(&mut model, "settings:safemode", "SAFEMODE");
+    invoke(&mut model, "ADD_RULE", None, None);
+    let rule = ids_of(&model, "safemode:rules").remove(0);
+    invoke(&mut model, "safemode:edit", Some(&rule), None);
+    type_text(&mut model, "zombie");
+    assert_eq!(rows_of(&model, "safemode:rules")[0].label.shown(), "zombie");
+    assert_eq!(cell(&model, "safemode:rules", &rule, "whitelist"), "Blacklist");
+    invoke(&mut model, "safemode:list", Some(&rule), None);
+    assert_eq!(cell(&model, "safemode:rules", &rule, "whitelist"), "Whitelist");
+    invoke(&mut model, "REMOVE_RULE", None, None);
+    assert!(ids_of(&model, "safemode:rules").is_empty());
+    quit(&mut model);
 }
 
 #[test]

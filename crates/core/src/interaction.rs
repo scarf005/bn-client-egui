@@ -964,7 +964,7 @@ pub const OVERRIDES: &[Override] = &[
     },
     Override {
         module: "crates/tui/src/settings.rs",
-        screen: "key and rule screens",
+        screen: "the key prompt and text fields",
         slice: "S0",
     },
 ];

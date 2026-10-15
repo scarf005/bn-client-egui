@@ -1,5 +1,4 @@
-//! Settings screens in the terminal: the key prompt, text fields and the registered actions of rule
-//! screens.
+//! Settings screens in the terminal: the key prompt and text fields of the 0.1 prompts.
 
 use crate::TuiApp;
 use bn_client_core::{GameModel, Menu};
