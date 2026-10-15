@@ -6,6 +6,7 @@
 
 use super::{App, sidebar};
 use crate::windows::{self, Origin, Shown, WindowSpec};
+use crate::layout::{self, Extent};
 use crate::{a11y, editor, text};
 use bn_client_core::interaction::{self, ArgKind, InvokeError, Reason};
 use bn_client_core::protocol::{
@@ -19,8 +20,8 @@ use eframe::egui::{self, WidgetInfo, WidgetType};
 use std::cell::RefCell;
 use std::collections::HashSet;
 
-/// Share of a list's width its label takes when the list has columns.
-const LABEL_SHARE: f32 = 0.5;
+/// The margin around each pane of a split, on every side.
+const PANE_MARGIN: i8 = 2;
 /// Rows left below the last one shown before the next page is asked for.
 const PREFETCH: usize = 20;
 /// Height the description under a list may take.
@@ -84,6 +85,36 @@ struct OwnedTile {
     rotation: u8,
     subtile: String,
     fallbacks: Vec<String>,
+}
+
+/// The widths a list's label and its columns need.
+struct ListWidths {
+    label: f32,
+    columns: Vec<f32>,
+}
+
+/// The smallest font a canvas is drawn in.
+const CANVAS_MIN_FONT: f32 = 10.0;
+
+fn text_width(ui: &egui::Ui, text: &str, font: &egui::FontId) -> f32 {
+    ui.painter()
+        .layout_no_wrap(text.into(), font.clone(), egui::Color32::WHITE)
+        .size()
+        .x
+}
+
+/// The width of the longest line of `text`, unwrapped.
+fn line_width(ui: &egui::Ui, text: &str, font: &egui::FontId) -> f32 {
+    text.lines()
+        .map(|line| text_width(ui, line, font))
+        .fold(0.0, f32::max)
+}
+
+/// The width of the longest word of `text`: the least a wrapped label can be without breaking inside one.
+fn word_width(ui: &egui::Ui, text: &str, font: &egui::FontId) -> f32 {
+    text.split_whitespace()
+        .map(|word| text_width(ui, word, font))
+        .fold(0.0, f32::max)
 }
 
 /// A list row's item and the square it is drawn in.
@@ -563,20 +594,14 @@ impl<M: GameModel> App<M> {
                 for banner in banners {
                     self.component(ui, screen, banner, out);
                 }
-                ui.columns(parts.len(), |columns| {
-                    for (ui, child) in columns.iter_mut().zip(parts) {
-                        let active = split.active.as_deref() == Some(child.id());
-                        let stroke = if active {
-                            ui.visuals().selection.stroke
-                        } else {
-                            egui::Stroke::NONE
-                        };
-                        egui::Frame::NONE
-                            .stroke(stroke)
-                            .inner_margin(2)
-                            .show(ui, |ui| self.component(ui, screen, child, out));
-                    }
-                });
+                self.split(
+                    ui,
+                    screen,
+                    &split.head.id,
+                    &parts,
+                    split.active.as_deref(),
+                    out,
+                );
             }
             Component::Panel(panel) => {
                 egui::Frame::group(ui.style()).show(ui, |ui| {
@@ -608,6 +633,246 @@ impl<M: GameModel> App<M> {
         if !matches!(c, Component::List(_)) {
             self.component_buttons(ui, screen, c, None, out);
         }
+    }
+
+    /// The panes side by side, each as wide as its content needs (`layout::split_widths`); when even the
+    /// minimums do not fit, the split scrolls sideways instead of breaking words.
+    fn split(
+        &self,
+        ui: &mut egui::Ui,
+        screen: &Screen,
+        id: &str,
+        parts: &[&Component],
+        active: Option<&str>,
+        out: &mut Vec<Intent>,
+    ) {
+        let gap = ui.spacing().item_spacing.x;
+        let room = ui.available_width();
+        let margin = 2.0 * f32::from(PANE_MARGIN);
+        let extents = parts
+            .iter()
+            .map(|c| {
+                let e = self.extent(ui, c, room);
+                Extent {
+                    min: e.min + margin,
+                    natural: e.natural + margin,
+                    ..e
+                }
+            })
+            .collect::<Vec<_>>();
+        let widths = layout::split_widths(&extents, room, gap);
+        let mut panes = |ui: &mut egui::Ui| {
+            ui.horizontal_top(|ui| {
+                for (child, width) in parts.iter().zip(&widths) {
+                    let stroke = if active == Some(child.id()) {
+                        ui.visuals().selection.stroke
+                    } else {
+                        egui::Stroke::NONE
+                    };
+                    let size = egui::vec2(*width, ui.available_height());
+                    let down = egui::Layout::top_down(egui::Align::Min);
+                    ui.allocate_ui_with_layout(size, down, |ui| {
+                        egui::Frame::NONE
+                            .stroke(stroke)
+                            .inner_margin(PANE_MARGIN)
+                            .show(ui, |ui| {
+                                ui.set_width(width - margin);
+                                self.component(ui, screen, child, out)
+                            });
+                    });
+                }
+            });
+        };
+        match layout::overflows(&widths, room, gap) {
+            true => {
+                egui::ScrollArea::horizontal()
+                    .id_salt(("split", id))
+                    .auto_shrink([false, true])
+                    .show(ui, panes);
+            }
+            false => panes(ui),
+        }
+    }
+
+    /// What `c` needs in width, measured without laying it out: `room` is what its surroundings offer.
+    fn extent(&self, ui: &egui::Ui, c: &Component, room: f32) -> Extent {
+        let gap = ui.spacing().item_spacing.x;
+        let font = egui::TextStyle::Body.resolve(ui.style());
+        let stacked = |a: Extent, b: Extent| Extent {
+            min: a.min.max(b.min),
+            natural: a.natural.max(b.natural),
+            grows: a.grows || b.grows,
+        };
+        let fixed = |w: f32| Extent {
+            min: w,
+            natural: w,
+            grows: false,
+        };
+        let prose = |text: &str| Extent {
+            min: word_width(ui, text, &font),
+            natural: line_width(ui, text, &font),
+            grows: false,
+        };
+        let inside = |child: &Option<Box<Component>>| {
+            child.as_ref().map(|child| self.extent(ui, child, room))
+        };
+        match c {
+            Component::List(list) => {
+                let rows = self.model.rows(list);
+                let widths = self.list_widths(ui, list, &rows);
+                let natural = widths.label + widths.columns.iter().map(|w| w + gap).sum::<f32>();
+                Extent {
+                    min: natural.min(room / 2.0),
+                    natural,
+                    grows: true,
+                }
+            }
+            Component::Tabs(tabs) => {
+                let pad = 2.0 * ui.spacing().button_padding.x;
+                let labels = tabs
+                    .tabs
+                    .iter()
+                    .map(|t| text_width(ui, &markup::plain(&t.label.shown()), &font) + pad)
+                    .collect::<Vec<_>>();
+                let row = Extent {
+                    min: labels.iter().copied().fold(0.0, f32::max),
+                    natural: labels.iter().map(|w| w + gap).sum(),
+                    grows: false,
+                };
+                inside(&tabs.child).map_or(row, |child| stacked(row, child))
+            }
+            Component::Split(split) => {
+                let margin = 2.0 * f32::from(PANE_MARGIN);
+                let parts = split
+                    .children
+                    .iter()
+                    .map(|c| self.extent(ui, c, room))
+                    .map(|e| Extent {
+                        min: e.min + margin,
+                        natural: e.natural + margin,
+                        ..e
+                    })
+                    .collect::<Vec<_>>();
+                Extent {
+                    min: parts.iter().map(|p| p.min).sum::<f32>() + layout::gaps(parts.len(), gap),
+                    natural: parts.iter().map(|p| p.natural).sum::<f32>()
+                        + layout::gaps(parts.len(), gap),
+                    grows: parts.iter().any(|p| p.grows),
+                }
+            }
+            Component::Panel(panel) => {
+                let frame = egui::Frame::group(ui.style()).total_margin().sum().x;
+                let stats = panel.stats.iter().flatten().map(|stat| {
+                    let max = stat
+                        .max
+                        .as_ref()
+                        .map_or(String::new(), |m| format!("/{}", m.shown()));
+                    let unit = stat
+                        .unit
+                        .as_ref()
+                        .map_or(String::new(), |u| format!(" {}", u.shown()));
+                    let value = format!("{}{max}{unit}", markup::plain(&stat.value.shown()));
+                    let label = markup::plain(&stat.label.shown());
+                    fixed(text_width(ui, &label, &font) + gap + text_width(ui, &value, &font))
+                });
+                let lines = [Some(prose(&markup::plain(&panel.title.shown())))]
+                    .into_iter()
+                    .flatten()
+                    .chain(
+                        panel
+                            .subtitle
+                            .iter()
+                            .map(|t| prose(&markup::plain(&t.shown()))),
+                    )
+                    .chain(stats)
+                    .chain(inside(&panel.child))
+                    .fold(fixed(0.0), stacked);
+                Extent {
+                    min: lines.min + frame,
+                    natural: lines.natural + frame,
+                    ..lines
+                }
+            }
+            Component::Form(form) => {
+                let label = form
+                    .fields
+                    .iter()
+                    .map(|f| text_width(ui, &markup::plain(&f.label.shown()), &font))
+                    .fold(0.0, f32::max);
+                let w = label + ui.spacing().text_edit_width;
+                Extent {
+                    min: w,
+                    natural: w,
+                    grows: true,
+                }
+            }
+            Component::Text(block) => {
+                let text = markup::plain(&block.markup.shown());
+                match block.role {
+                    Some(TextRole::TerminalOutput | TextRole::Banner) => {
+                        let mono = egui::TextStyle::Monospace.resolve(ui.style());
+                        fixed(line_width(ui, &text, &mono))
+                    }
+                    None => Extent {
+                        grows: true,
+                        ..prose(&text)
+                    },
+                }
+            }
+            Component::Grid(grid) => fixed(grid.cols as f32 * (GRID_CELL + gap)),
+            Component::Map(_) => Extent {
+                min: 160.0,
+                natural: room.min(480.0),
+                grows: true,
+            },
+            Component::Canvas(canvas) => {
+                let mono = egui::FontId::monospace(CANVAS_MIN_FONT);
+                let cell = text_width(ui, "0", &mono);
+                Extent {
+                    grows: true,
+                    ..fixed(canvas.cols as f32 * cell)
+                }
+            }
+        }
+    }
+
+    /// The widths a list's label and each of its columns need: the widest caption or value in each.
+    fn list_widths(&self, ui: &egui::Ui, list: &List, rows: &[&Row]) -> ListWidths {
+        let font = egui::TextStyle::Body.resolve(ui.style());
+        let spacing = ui.spacing();
+        let height = spacing.interact_size.y;
+        let pad = 2.0 * spacing.button_padding.x;
+        let widest = |texts: &mut dyn Iterator<Item = f32>| texts.fold(0.0, f32::max);
+        let label = widest(
+            &mut rows.iter().filter(|r| r.header != Some(true)).map(|row| {
+                let square = row.look.is_some() && self.display.tiles();
+                let marked = Self::row_markup(list, row, false, square);
+                let icon = if square {
+                    height + spacing.item_spacing.x
+                } else {
+                    0.0
+                };
+                icon + text_width(ui, &markup::plain(&marked), &font) + pad
+            }),
+        );
+        let columns = list
+            .columns
+            .iter()
+            .map(|column| {
+                let caption = text_width(ui, &markup::plain(&column.label.shown()), &font);
+                let values = rows.iter().map(|row| {
+                    let value = row
+                        .columns
+                        .iter()
+                        .find(|c| c.key.as_deref() == Some(column.key.as_str()));
+                    value.map_or(0.0, |c| {
+                        text_width(ui, &markup::plain(&c.value.shown()), &font)
+                    })
+                });
+                caption.max(widest(&mut { values }))
+            })
+            .collect();
+        ListWidths { label, columns }
     }
 
     fn stat(&self, ui: &mut egui::Ui, stat: &PanelStat) {
@@ -1248,22 +1513,24 @@ impl<M: GameModel> App<M> {
             .as_deref()
             .filter(|_| focus.component_id.as_deref() == Some(id));
         let spacing = ui.spacing().item_spacing.x;
-        let width = ui.available_width();
-        let columns = list.columns.len();
-        let label_w = if columns == 0 {
-            width
-        } else {
-            width * LABEL_SHARE
-        };
-        let column_w = ((width - label_w) / columns.max(1) as f32 - spacing).max(0.0);
+        // The rows sit in a scroll area, which keeps room for its bar.
+        let width = ui.available_width() - ui.spacing().scroll.allocated_width();
         let height = ui.spacing().interact_size.y;
-        if columns > 0 {
+        // The columns take what their content needs; the label keeps the rest, less the item's square.
+        let widths = self.list_widths(ui, list, &rows);
+        let squares = rows
+            .iter()
+            .any(|r| r.look.is_some() && self.display.tiles());
+        let icon = if squares { height + spacing } else { 0.0 };
+        let columns_w = widths.columns.iter().map(|w| w + spacing).sum::<f32>();
+        let label_w = (width - columns_w - icon).max(0.0);
+        if !list.columns.is_empty() {
             ui.horizontal(|ui| {
-                ui.allocate_space(egui::vec2(label_w, height));
-                for column in &list.columns {
+                ui.allocate_space(egui::vec2(label_w + icon, height));
+                for (column, w) in list.columns.iter().zip(&widths.columns) {
                     let caption = markup::plain(&column.label.shown());
                     ui.add_sized(
-                        [column_w, height],
+                        [*w, height],
                         egui::Label::new(egui::RichText::new(caption).weak()).truncate(),
                     );
                 }
@@ -1358,7 +1625,7 @@ impl<M: GameModel> App<M> {
                             });
                         }
                     }
-                    for column in &list.columns {
+                    for (column, column_w) in list.columns.iter().zip(&widths.columns) {
                         let value = row
                             .columns
                             .iter()
@@ -1366,7 +1633,7 @@ impl<M: GameModel> App<M> {
                             .map(|c| tagged(c.color.as_deref(), &c.value.shown()))
                             .unwrap_or_default();
                         ui.add_sized(
-                            [column_w, height],
+                            [*column_w, height],
                             egui::Label::new(self.line(ui, &value)).truncate(),
                         );
                     }

@@ -5,6 +5,7 @@ pub mod editor;
 mod effects;
 pub mod fonts;
 pub mod iso;
+pub mod layout;
 #[cfg(feature = "profile")]
 pub mod profile;
 pub mod setup;
