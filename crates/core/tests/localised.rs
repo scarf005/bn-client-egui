@@ -141,3 +141,27 @@ fn a_snapshot_log_is_worded_the_same_way() {
     assert_eq!(shown(&model), ["좀비이(가) 죽었다!"]);
     std::fs::remove_dir_all(&root).unwrap();
 }
+
+/// Runs when `BN_ROOT` names a game root with compiled catalogues: every one of them is readable, whatever
+/// its plural rule.
+#[test]
+fn every_compiled_catalogue_of_the_game_root_is_readable() {
+    let Some(root) = std::env::var_os("BN_ROOT").map(PathBuf::from) else {
+        return;
+    };
+    let Ok(languages) = std::fs::read_dir(root.join("lang/mo")) else {
+        return;
+    };
+    for language in languages.flatten() {
+        let name = language.file_name();
+        let name = name.to_string_lossy();
+        let path = root
+            .join("lang/mo")
+            .join(&*name)
+            .join("LC_MESSAGES/cataclysm-bn.mo");
+        if let Ok(bytes) = std::fs::read(path) {
+            bn_client_core::localise::Catalogue::parse(&bytes)
+                .unwrap_or_else(|e| panic!("{name}: {e}"));
+        }
+    }
+}
