@@ -39,9 +39,10 @@ pub struct Settings {
     /// Play no shot, explosion or floating-text overlays on the map.
     #[serde(default)]
     pub reduced_motion: bool,
-    /// Draw the map as a 3D scene a camera can turn, instead of flat.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub three_d: bool,
+    /// Draw the map as a 3D scene a camera can turn, or flat; an isometric tileset is drawn in 3D unless this says
+    /// otherwise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub three_d: Option<bool>,
     /// The map zoom in steps from the tileset's own size, which the zoom keys and the wheel move.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub zoom: i8,
@@ -554,9 +555,12 @@ impl Display {
         Some((&self.atlas.as_ref()?.tileset, self.epoch))
     }
 
-    /// The map is drawn as a 3D scene: asked for, and sprites to draw it with.
+    /// The map is drawn as a 3D scene: asked for, or by default when the tileset is isometric, and sprites to
+    /// draw it with.
     pub fn three_d(&self) -> bool {
-        self.settings.three_d && self.atlas.is_some()
+        self.atlas
+            .as_ref()
+            .is_some_and(|a| self.settings.three_d.unwrap_or(a.tileset.iso))
     }
 
     /// The ids of the tints the tileset in use has; none without one.
@@ -657,10 +661,10 @@ impl Display {
             ui.add_enabled_ui(self.wants_tiles(), |ui| {
                 for (three_d, label) in [(false, "2D"), (true, "3D")] {
                     if ui
-                        .selectable_label(self.settings.three_d == three_d, label)
+                        .selectable_label(self.three_d() == three_d, label)
                         .clicked()
                     {
-                        self.settings.three_d = three_d;
+                        self.settings.three_d = Some(three_d);
                     }
                 }
             });

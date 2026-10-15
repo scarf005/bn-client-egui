@@ -6,7 +6,7 @@ use bn_client_egui::iso::camera::{PITCH_MAX, PITCH_MIN, Viewport};
 use bn_client_egui::iso::scene::world_scale;
 use bn_client_egui::transport::{ScriptHandle, ScriptedTransport};
 use bn_client_egui::{App, EngineModel, GameModel, Pos};
-use common::{fixture, iso_root};
+use common::{fixture, game_root, iso_root};
 use eframe::egui;
 use egui_kittest::Harness;
 use egui_kittest::kittest::Queryable;
@@ -87,6 +87,11 @@ fn saved(settings: &Path) -> Value {
     serde_json::from_slice(&std::fs::read(settings).unwrap_or_default()).unwrap_or_default()
 }
 
+fn pick_2d(h: &mut H) {
+    h.get_by_label("2D").click();
+    h.run_steps(3);
+}
+
 fn pick_3d(h: &mut H) {
     h.get_by_label("3D").click();
     h.run_steps(3);
@@ -138,20 +143,30 @@ fn click(h: &mut H, pos: egui::Pos2) {
 }
 
 #[test]
-fn the_view_switch_is_kept_in_the_settings_and_is_flat_by_default() {
+fn an_isometric_tileset_is_drawn_in_3d_by_default_and_the_choice_is_kept_in_the_settings() {
     let root = iso_root("switch");
     let settings = root.join("settings.json");
     let (mut h, _) = harness(&root, &settings, true);
     settle(&mut h);
-    assert!(!h.state().display().three_d(), "flat until asked");
+    assert!(
+        h.state().display().three_d(),
+        "isometric: 3D until told not to"
+    );
     assert_eq!(saved(&settings).get("three_d"), None);
+    pick_2d(&mut h);
+    assert!(!h.state().display().three_d());
+    assert_eq!(saved(&settings)["three_d"], false);
     pick_3d(&mut h);
     assert!(h.state().display().three_d());
     assert_eq!(saved(&settings)["three_d"], true);
-    h.get_by_label("2D").click();
-    h.run_steps(3);
+}
+
+#[test]
+fn a_tileset_that_is_not_isometric_stays_flat_unless_3d_is_asked_for() {
+    let root = game_root("flat-set");
+    let (mut h, _) = harness(&root, &root.join("settings.json"), true);
+    settle(&mut h);
     assert!(!h.state().display().three_d());
-    assert_eq!(saved(&settings).get("three_d"), None);
 }
 
 #[test]
@@ -201,6 +216,7 @@ fn alt_arrows_turn_the_3d_camera_and_none_of_the_games_keys_do() {
     let (mut h, script) = harness(&root, &root.join("settings.json"), true);
     settle(&mut h);
     let before = h.state().camera();
+    pick_2d(&mut h);
     alt(&mut h, egui::Key::ArrowLeft);
     assert_eq!(h.state().camera(), before, "flat: no turn");
     pick_3d(&mut h);
@@ -296,6 +312,7 @@ fn a_click_on_a_3d_square_sends_what_a_click_on_that_square_sends_in_the_flat_ma
     // The flat map's click on the square east of the avatar.
     let (mut flat, script) = harness(&root, &root.join("flat.json"), true);
     settle(&mut flat);
+    pick_2d(&mut flat);
     let me = flat.state().model.player();
     let target = Pos {
         x: me.x + 2,

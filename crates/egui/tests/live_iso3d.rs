@@ -117,9 +117,11 @@ fn the_town_in_3d_from_every_side_and_what_a_frame_costs() {
     let dir = std::env::temp_dir().join(format!("bn-iso3d-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let settings = dir.join("settings.json");
+    // No "three_d": an isometric tileset is drawn in 3D by itself.
+    let tileset = std::env::var("BN_ISO_TILESET").unwrap_or("Ultica_iso".into());
     std::fs::write(
         &settings,
-        r#"{"tiles":true,"tileset":"Ultica_iso","three_d":true}"#,
+        format!(r#"{{"tiles":true,"tileset":"{tileset}"}}"#),
     )
     .unwrap();
     let transport = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
@@ -161,6 +163,15 @@ fn the_town_in_3d_from_every_side_and_what_a_frame_costs() {
     });
     dismiss_popups(&mut h);
     run_until(&mut h, "quiet", 180, |h| !h.state().model.busy());
+    // The start is random: BN_ISO_WANT names a word of the start story the run is for, and others end here.
+    let story = h.state().model.messages().join(" ");
+    println!("LIVE start {story:?}");
+    if let Some(want) = std::env::var_os("BN_ISO_WANT")
+        && !story.contains(want.to_str().unwrap())
+    {
+        println!("LIVE skipped");
+        return;
+    }
     // The engine turns off the game's safe mode for steps that this test does not take; sprites arrive.
     let drawn = |h: &H| {
         h.state()
