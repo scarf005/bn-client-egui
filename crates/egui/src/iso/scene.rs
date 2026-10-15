@@ -3,6 +3,7 @@
 use super::geometry::{
     Instance, Kind, Metrics, PageId, Placement, Shape, SpriteSource, place, shape,
 };
+use super::pages::Pages;
 use crate::display::{STRIP, query, resolve_layer};
 use crate::tileset::{Tileset, Turn};
 use bn_client_core::{GameModel, Pos};
@@ -105,6 +106,7 @@ pub fn world_scale(tileset: &Tileset, zoom: f32) -> f32 {
 pub fn build(
     model: &(impl GameModel + ?Sized),
     tileset: &Tileset,
+    pages: Option<&Pages>,
     season: Option<&str>,
     version: u64,
 ) -> Scene {
@@ -138,7 +140,7 @@ pub fn build(
             };
             let mut order = 0;
             for layer in &cell.layers {
-                let (layer, _) = resolve_layer(tileset, layer);
+                let (layer, paints) = resolve_layer(tileset, layer);
                 let Some(chosen) = tileset.choose(&query(&layer, season)) else {
                     continue;
                 };
@@ -147,10 +149,20 @@ pub fn build(
                     (true, false) => Kind::Terrain,
                     (true, true) => Kind::Joined,
                 };
-                for placed in [chosen.bg, chosen.fg].into_iter().flatten() {
-                    let Some(sprite) = source(tileset, placed.sprite) else {
+                for (placed, paint) in [(chosen.bg, paints.0), (chosen.fg, paints.1)] {
+                    let Some(placed) = placed else {
                         continue;
                     };
+                    let Some(mut sprite) = source(tileset, placed.sprite) else {
+                        continue;
+                    };
+                    // Painted the way the flat map paints it, once the pages it is cut from are decoded.
+                    if let (Some(paint), Some(pages)) = (paint, pages) {
+                        let mask = placed.mask.and_then(|m| source(tileset, m));
+                        sprite = pages
+                            .painted(&sprite, mask.as_ref(), paint)
+                            .unwrap_or(sprite);
+                    }
                     if let Shape::Box { top, bottom } = shape(&m, &sprite, kind) {
                         column.solid = Some((floor + bottom, floor + top));
                     }

@@ -5,8 +5,10 @@ use bn_client_egui::EngineModel;
 use bn_client_egui::GameModel;
 use bn_client_egui::iso::camera::{Camera, Viewport};
 use bn_client_egui::iso::geometry::{BOARD, Instance, PageId};
+use bn_client_egui::iso::pages::Pages;
 use bn_client_egui::iso::scene::{self, Scene};
 use bn_client_egui::tileset::Tileset;
+use bn_client_egui::tint::Paint;
 use bn_client_egui::transport::ScriptedTransport;
 use common::{fixture, iso_root};
 use serde_json::{Value, json};
@@ -44,7 +46,7 @@ fn model(cells: Vec<Value>) -> EngineModel {
 
 fn scene_of(m: &EngineModel, tag: &str) -> Scene {
     let tileset = Tileset::load(&iso_root(tag).join("gfx/iso")).unwrap();
-    scene::build(m, &tileset, None, 1)
+    scene::build(m, &tileset, None, None, 1)
 }
 
 fn all(scene: &Scene) -> Vec<Instance> {
@@ -296,4 +298,41 @@ fn a_square_seen_through_open_air_is_picked_where_its_lowered_ground_is_drawn() 
         ground,
     ));
     assert_eq!(scene.pick(&v, on), Some(lowered));
+}
+
+#[test]
+fn a_painted_sprite_is_a_page_of_its_own_with_the_paint_in_its_pixels_and_is_made_once() {
+    let tileset = Tileset::load(&iso_root("paint").join("gfx/iso")).unwrap();
+    let pages = Pages::start(tileset.sheets.clone(), eframe::egui::Context::default());
+    for _ in 0..500 {
+        if !pages.loading() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    // The light ground, sprite 0, painted red.
+    let ground = scene::source(&tileset, 0).unwrap();
+    let red = Paint::of([220, 30, 30]);
+    let painted = pages.painted(&ground, None, red).unwrap();
+    assert_ne!(painted.page, ground.page);
+    assert_eq!(painted.src, ground.src);
+    assert_eq!(painted.offset, ground.offset);
+    assert_eq!(
+        pages.painted(&ground, None, red).unwrap().page,
+        painted.page,
+        "once"
+    );
+    let other = pages
+        .painted(&ground, None, Paint::of([30, 30, 220]))
+        .unwrap();
+    assert_ne!(other.page, painted.page);
+    // The middle of the diamond was green and is red now; the corner outside the diamond is still clear.
+    let (before, after) = (
+        pages.get(ground.page).unwrap(),
+        pages.get(painted.page).unwrap(),
+    );
+    let middle = after.get_pixel(24, 24).0;
+    assert!(middle[0] > middle[1] && middle[0] > middle[2], "{middle:?}");
+    assert_ne!(middle, before.get_pixel(24, 24).0);
+    assert_eq!(after.get_pixel(0, 0).0[3], 0, "outside the diamond");
 }

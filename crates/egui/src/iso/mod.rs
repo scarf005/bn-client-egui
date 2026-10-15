@@ -43,6 +43,8 @@ struct Key {
     tileset: u32,
     size: (i32, i32),
     season: Option<String>,
+    /// The sheets are decoded, so what is painted can be.
+    decoded: bool,
 }
 
 impl View3d {
@@ -89,6 +91,7 @@ impl View3d {
             tileset: epoch,
             size: (model.size().x, model.size().y),
             season: season.map(str::to_owned),
+            decoded: !pages.loading(),
         };
         let stale = self
             .scene
@@ -96,7 +99,7 @@ impl View3d {
             .is_none_or(|(k, _)| key.map.is_none() || *k != key);
         if stale {
             self.built += 1;
-            let scene = scene::build(model, tileset, season, self.built);
+            let scene = scene::build(model, tileset, Some(&pages), season, self.built);
             self.scene = Some((key, Arc::new(scene)));
         }
         let scene = self.scene.as_ref().map(|(_, s)| s.clone())?;
