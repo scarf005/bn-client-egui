@@ -733,6 +733,34 @@ fn the_armor_layers_screen_draws_its_lists_and_details_and_down_runs_its_registe
 }
 
 #[test]
+fn the_auto_notes_manager_draws_its_extras_and_enter_runs_its_registered_action() {
+    let (mut app, h) = open(example(
+        "autonote.json",
+        "auto notes manager with three discovered map extras",
+    ));
+    let t = large(&mut app);
+    let text = lines(&t).join("\n");
+    for shown in [
+        "Crater",
+        "Lost Campers",
+        "Helicopter Crash",
+        "Auto notes enabled: True",
+        "Symbol",
+        "Enabled",
+    ] {
+        assert!(text.contains(shown), "{shown:?} in {text}");
+    }
+    assert!(!text.contains("::"), "{text}");
+    assert!(operations(&h).is_empty());
+    press(&mut app, KeyCode::Enter);
+    large(&mut app);
+    assert_eq!(
+        operations(&h),
+        [json!({"kind": "invoke", "affordance_id": "CONFIRM", "args": {}})]
+    );
+}
+
+#[test]
 fn the_item_examine_menu_draws_the_item_beside_its_actions_and_down_runs_its_registered_action() {
     let (mut app, h) = open(example("armor.json", "item examine menu"));
     let t = large(&mut app);

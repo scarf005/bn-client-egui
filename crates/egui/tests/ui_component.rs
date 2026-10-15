@@ -912,6 +912,34 @@ fn a_colour_row_runs_the_activate_affordance_with_the_colour_as_its_row() {
 }
 
 #[test]
+fn a_stat_label_that_ends_with_a_colon_is_not_given_a_second() {
+    let screen = example(
+        "autonote.json",
+        "auto notes manager with three discovered map extras",
+    );
+    let (h, _script) = harness(screen);
+    let _ = h.get_by_label("Auto notes enabled: True");
+}
+
+#[test]
+fn an_auto_notes_row_runs_the_toggle_with_the_map_extra_id_as_its_row() {
+    let screen = example(
+        "autonote.json",
+        "auto notes manager with three discovered map extras",
+    );
+    let (mut h, script) = harness(screen);
+    h.get_by_label("Lost Campers").click();
+    h.run_steps(3);
+    assert_eq!(
+        submits(&script),
+        [boundary_invoke(
+            "autonote:toggle",
+            json!({"row": "extra:mx_collegekids"})
+        )]
+    );
+}
+
+#[test]
 fn an_auto_pickup_row_runs_the_edit_with_the_rule_serial_as_its_row() {
     let screen = example("autopickup.json", "auto pickup manager with two rules");
     let (mut h, script) = harness(screen);

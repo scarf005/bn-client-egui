@@ -189,7 +189,6 @@ screen!(zone_manager, "ZONES_MANAGER");
 screen!(faction_manager, "FACTION MANAGER", tabs);
 screen!(scores, "SCORES", tabs);
 screen!(diary, "DIARY");
-screen!(auto_notes, "AUTO_NOTES");
 screen!(panel_manager, "PANEL_MGMT");
 
 #[test]
