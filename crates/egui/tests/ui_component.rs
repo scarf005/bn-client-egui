@@ -1004,7 +1004,7 @@ fn a_worn_item_runs_the_armor_screens_pick_with_its_identity() {
         submits(&script),
         [boundary_invoke(
             "armor:pick",
-            json!({"row": "item:3"})
+            json!({"row": "item:2"})
         )]
     );
 }
