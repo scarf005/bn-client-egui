@@ -219,7 +219,7 @@ impl<M: GameModel> App<M> {
         self
     }
 
-    /// The 3D map's camera, which the right button, Q and E turn.
+    /// The 3D map's camera, which the right button and Alt+Left and Alt+Right turn.
     pub fn camera(&self) -> iso::camera::Camera {
         self.iso.camera
     }
@@ -492,23 +492,39 @@ impl<M: GameModel> App<M> {
         } else {
             typed
         };
-        // In the 3D map Q and E turn the camera; they are not the game's keys there.
-        let typed = if menu.is_none() && self.iso.active(&self.display) {
-            let (turns, rest): (Vec<_>, Vec<_>) = typed
-                .into_iter()
-                .partition(|t| t.eq_ignore_ascii_case("q") || t.eq_ignore_ascii_case("e"));
-            for turn in turns {
-                let sign = if turn.eq_ignore_ascii_case("q") {
+        // In the 3D map Alt+Left and Alt+Right turn the camera, unless the engine binds those keys; no other key
+        // of the game is taken.
+        let turning = menu.is_none() && self.iso.active(&self.display);
+        let turn_key = |key: egui::Key, mods: egui::Modifiers| {
+            let name = match key {
+                egui::Key::ArrowLeft => "LEFT",
+                egui::Key::ArrowRight => "RIGHT",
+                _ => return None,
+            };
+            let chord = format!("ALT+{name}");
+            (turning && mods.alt && !self.model.key_bound(&chord)).then(|| {
+                if key == egui::Key::ArrowLeft {
                     1.0
                 } else {
                     -1.0
-                };
-                self.iso.camera.orbit(sign * iso::TURN, 0.0);
-            }
-            rest
-        } else {
-            typed
+                }
+            })
         };
+        let turns = ctx.input(|i| {
+            i.events
+                .iter()
+                .filter_map(|e| match e {
+                    egui::Event::Key {
+                        key,
+                        pressed: true,
+                        modifiers,
+                        ..
+                    } => turn_key(*key, *modifiers),
+                    _ => None,
+                })
+                .sum::<f32>()
+        });
+        self.iso.camera.orbit(turns * iso::TURN, 0.0);
         // A menu is an engine input context: its navigation, paging, confirm and cancel keys are the
         // player's bindings, and the engine moves its own cursor. The exceptions are the toolkit's
         // accessibility keys: Tab and Shift+Tab move focus, and Space and Enter act on a focused widget.
@@ -546,7 +562,8 @@ impl<M: GameModel> App<M> {
                             ..
                         } if !(*key == Key::Escape && (interrupted || esc_cancels))
                             // Alt with an arrow moves the focus among the action rows, not the engine's cursor.
-                            && !(modifiers.alt && matches!(key, Key::ArrowUp | Key::ArrowDown)) =>
+                            && !(modifiers.alt && matches!(key, Key::ArrowUp | Key::ArrowDown))
+                            && turn_key(*key, *modifiers).is_none() =>
                         {
                             key_name(*key, *modifiers)
                         }

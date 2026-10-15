@@ -15,8 +15,15 @@ use std::path::Path;
 
 type H<'a> = Harness<'a, App<EngineModel>>;
 
-fn session() -> (ScriptedTransport, ScriptHandle) {
+/// The fixture session; `bound` are keys the engine binds to an action of its own, `drink`.
+fn session(bound: &[&str]) -> (ScriptedTransport, ScriptHandle) {
     let mut subscribe = fixture("subscribe_result");
+    if !bound.is_empty() {
+        let actions = subscribe["result"]["interaction"]["actions"]
+            .as_array_mut()
+            .unwrap();
+        actions.push(json!({"id": "drink", "name": "Drink", "keys": bound}));
+    }
     subscribe["result"]["avatar"]["look"] = json!({
         "kind": "avatar", "id": "avatar", "glyph": "@", "color": "white", "tile": "mon_a"
     });
@@ -41,7 +48,16 @@ fn session() -> (ScriptedTransport, ScriptHandle) {
 /// A client with the isometric test tileset; `renderer` says whether it knows the format of a window to draw
 /// the 3D map into, as one with a GPU does.
 fn harness<'a>(root: &Path, settings: &Path, renderer: bool) -> (H<'a>, ScriptHandle) {
-    let (t, handle) = session();
+    harness_bound(root, settings, renderer, &[])
+}
+
+fn harness_bound<'a>(
+    root: &Path,
+    settings: &Path,
+    renderer: bool,
+    bound: &[&str],
+) -> (H<'a>, ScriptHandle) {
+    let (t, handle) = session(bound);
     let model = EngineModel::new(Box::new(t));
     let mut app = App::new(model)
         .with_root(root.to_path_buf())
@@ -159,30 +175,85 @@ fn without_a_renderer_for_it_the_map_stays_flat_even_when_3d_is_chosen() {
     assert!(h.state().display().drawn() > 30);
 }
 
+/// Presses `key` with Alt held.
+fn alt(h: &mut H, key: egui::Key) {
+    h.event(egui::Event::Key {
+        key,
+        physical_key: Some(key),
+        pressed: true,
+        repeat: false,
+        modifiers: egui::Modifiers::ALT,
+    });
+    h.run_steps(2);
+}
+
+fn keys_sent(script: &ScriptHandle) -> usize {
+    script
+        .sent()
+        .into_iter()
+        .filter(|m| m["method"] == "bn.command.submit")
+        .count()
+}
+
 #[test]
-fn q_and_e_turn_the_3d_camera_and_are_the_games_keys_in_the_flat_map() {
+fn alt_arrows_turn_the_3d_camera_and_none_of_the_games_keys_do() {
     let root = iso_root("keys");
     let (mut h, script) = harness(&root, &root.join("settings.json"), true);
     settle(&mut h);
     let before = h.state().camera();
-    press(&mut h, "q");
-    assert_eq!(h.state().camera(), before, "flat: the game's key");
+    alt(&mut h, egui::Key::ArrowLeft);
+    assert_eq!(h.state().camera(), before, "flat: no turn");
     pick_3d(&mut h);
-    press(&mut h, "q");
+    let sent = keys_sent(&script);
+    alt(&mut h, egui::Key::ArrowLeft);
     let turned = h.state().camera();
     assert!((turned.yaw - before.yaw - 15f32.to_radians()).abs() < 1e-4);
     assert_eq!(turned.pitch, before.pitch);
-    press(&mut h, "E");
-    press(&mut h, "e");
+    alt(&mut h, egui::Key::ArrowRight);
+    alt(&mut h, egui::Key::ArrowRight);
     let back = h.state().camera();
     assert!((back.yaw - before.yaw + 15f32.to_radians()).abs() < 1e-4);
-    // Neither 3D key reached the game.
-    let keys = script
+    assert_eq!(
+        keys_sent(&script),
+        sent,
+        "the turn keys did not reach the game"
+    );
+}
+
+fn drinks(script: &ScriptHandle) -> usize {
+    script
         .sent()
         .into_iter()
-        .filter(|m| m["method"] == "bn.command.submit")
-        .count();
-    assert_eq!(keys, 0, "{:?}", script.sent());
+        .filter(|m| m["params"]["operation"]["action_id"] == "drink")
+        .count()
+}
+
+#[test]
+fn with_the_3d_view_on_the_keys_the_engine_binds_still_reach_it() {
+    for (n, key) in ["q", "e", "E"].into_iter().enumerate() {
+        let root = iso_root(&format!("bound-{n}"));
+        let (mut h, script) = harness_bound(&root, &root.join("settings.json"), true, &[key]);
+        settle(&mut h);
+        pick_3d(&mut h);
+        let before = h.state().camera();
+        press(&mut h, key);
+        assert_eq!(drinks(&script), 1, "{key}: {:?}", script.sent());
+        assert_eq!(h.state().camera(), before, "{key} did not turn the camera");
+    }
+}
+
+#[test]
+fn an_alt_arrow_the_engine_binds_is_the_engines_and_does_not_turn_the_camera() {
+    let root = iso_root("alt-bound");
+    let (mut h, script) = harness_bound(&root, &root.join("settings.json"), true, &["ALT+LEFT"]);
+    settle(&mut h);
+    pick_3d(&mut h);
+    let before = h.state().camera();
+    alt(&mut h, egui::Key::ArrowLeft);
+    assert_eq!(h.state().camera(), before);
+    alt(&mut h, egui::Key::ArrowRight);
+    assert_ne!(h.state().camera(), before, "the unbound one still turns it");
+    let _ = script;
 }
 
 #[test]
