@@ -2,7 +2,6 @@
 //! Every shape is a parallelogram `origin + u * a + v * b` with an affine map from `(u, v)` to sprite pixels, so
 //! one instance format draws all of them.
 
-use super::camera::{PITCH_ISO, PITCH_MAX};
 use crate::tileset::Turn;
 use bytemuck::{Pod, Zeroable};
 use glam::Vec2;
@@ -38,9 +37,12 @@ impl SpriteSource {
 /// How tile pixels turn into world units. A square is one unit wide.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Metrics {
-    /// A tile in pixels: the diamond of an isometric tileset, else a square.
+    /// A tile in pixels. The diamond of an isometric tileset is as wide as the tile and, whatever the tile's height,
+    /// half as tall: the sprite's own height only says how far it reaches above its square.
     pub tile: Vec2,
     pub iso: bool,
+    /// The height of the square's diamond in pixels: half its width for an isometric tileset, else the tile's height.
+    pub diamond: f32,
     /// World units of one screen pixel across, and of one screen pixel up at the tileset's own tilt.
     pub across: f32,
     pub up: f32,
@@ -56,24 +58,20 @@ const LAYER_BIAS: f32 = 0.002;
 impl Metrics {
     pub fn new(tile: (u32, u32), iso: bool, zlevel_height: Option<f32>) -> Self {
         let tile = Vec2::new(tile.0.max(1) as f32, tile.1.max(1) as f32);
-        // A diamond `tile.x` wide and `tile.y` tall is a square seen from a height of asin(y / x); a vertical
-        // pixel then covers cos of that less of a world unit than a pixel across the diagonal.
+        let diamond = if iso { tile.x / 2.0 } else { tile.y };
+        // A diamond `tile.x` wide and `diamond` tall is a square seen from a height of asin(diamond / tile.x); a
+        // vertical pixel then covers cos of that less of a world unit than a pixel across the diagonal.
         let (across, up) = match iso {
             true => {
                 let across = std::f32::consts::SQRT_2 / tile.x;
-                // A diamond cannot be taller than it is wide (nor look from beyond the camera's highest tilt):
-                // such a tileset is drawn as if it had the true isometric tilt.
-                let tilt = match (tile.y / tile.x).asin() {
-                    tilt if tilt <= PITCH_MAX => tilt,
-                    _ => PITCH_ISO,
-                };
-                (across, across / tilt.cos())
+                (across, across / (diamond / tile.x).asin().cos())
             }
             false => (1.0 / tile.x, 1.0 / tile.y),
         };
         Self {
             tile,
             iso,
+            diamond,
             across,
             up,
             level: zlevel_height.map_or(LEVEL, |h| h * up),
@@ -108,12 +106,13 @@ pub enum Kind {
 /// upright.
 pub fn shape(m: &Metrics, sprite: &SpriteSource, kind: Kind) -> Shape {
     let size = sprite.size();
-    let rise = size.y - m.tile.y;
-    let bottom = -(sprite.offset.y + rise) * m.up;
-    let half = m.tile.y / 2.0;
+    let rise = size.y - m.diamond;
+    // The sprite's bottom edge, over the baseline of its tile.
+    let bottom = (m.tile.y - sprite.offset.y - size.y) * m.up;
+    let half = m.diamond / 2.0;
     match (kind, (size.x - m.tile.x).abs() < 0.5) {
         (Kind::Joined, true) if m.iso && rise > half => Shape::Box {
-            top: -sprite.offset.y * m.up,
+            top: (m.tile.y - m.diamond - sprite.offset.y) * m.up,
             bottom,
         },
         (Kind::Joined | Kind::Terrain, true)
@@ -238,7 +237,7 @@ pub fn place(m: &Metrics, p: &Placement) -> Vec<Instance> {
             // The diamond of the tile lies in the lowest rows of an isometric sprite; a square sprite is all ground.
             let uv = match m.iso {
                 true => {
-                    let (w, h, t) = (size.x, size.y, m.tile.y);
+                    let (w, h, t) = (size.x, size.y, m.diamond);
                     [
                         at(w / 2.0, h - t),
                         span(w / 2.0, t / 2.0),
@@ -253,7 +252,7 @@ pub fn place(m: &Metrics, p: &Placement) -> Vec<Instance> {
             vec![instance([x, y, p.floor + z], ground, uv, flags)]
         }
         Shape::Box { top, bottom } => {
-            let (w, h, t) = (size.x, size.y, m.tile.y);
+            let (w, h, t) = (size.x, size.y, m.diamond);
             let (top, drop) = (p.floor + top, top - bottom);
             let down = [0.0, 0.0, -drop];
             // The sprite shows the south and the east faces; the others reuse them, seen from behind.
@@ -356,17 +355,65 @@ mod tests {
     }
 
     #[test]
-    fn a_tileset_whose_diamond_is_taller_than_wide_is_drawn_at_the_true_isometric_tilt() {
-        // HitButton_iso: 16 x 20 tiles.
+    fn the_diamond_of_an_isometric_tile_is_half_as_tall_as_wide_however_tall_the_tile_is() {
+        // HitButton_iso: 16 x 20 tiles whose diamond is 16 x 8, as the game draws it.
         let m = Metrics::new((16, 20), true, None);
-        let expected = std::f32::consts::SQRT_2 / 16.0 / PITCH_ISO.cos();
+        assert_eq!(m.diamond, 8.0);
+        let expected = std::f32::consts::SQRT_2 / 16.0 / 30f32.to_radians().cos();
         assert!((m.up - expected).abs() < 1e-6, "{}", m.up);
-        assert!(
-            m.up < 3.0 * m.across,
-            "no stretching into columns: {} {}",
-            m.up,
-            m.across
+        assert_eq!(Metrics::new((16, 16), false, None).diamond, 16.0);
+    }
+
+    /// A sprite of HitButton_iso: 16 x 20 pixels from the top left of the tile.
+    fn hit_button(size: (f32, f32), offset: (f32, f32)) -> (Metrics, SpriteSource) {
+        (Metrics::new((16, 20), true, None), sprite(size, offset))
+    }
+
+    #[test]
+    fn a_floor_whose_sprite_is_as_tall_as_the_tile_takes_its_diamond_from_the_bottom_rows() {
+        // Sprite rows 12 to 19 hold the diamond; the transparent rows above are trimmed off.
+        let (m, s) = hit_button((16.0, 8.0), (0.0, 12.0));
+        assert!(matches!(shape(&m, &s, Kind::Terrain), Shape::Floor { z } if z.abs() < 1e-6));
+        let [floor] = place(&m, &square(&s, Kind::Terrain))[..] else {
+            panic!("one quad")
+        };
+        let corner = |u: f32, v: f32| {
+            Vec2::from(floor.uv) + Vec2::from(floor.uv_a) * u + Vec2::from(floor.uv_b) * v
+        };
+        let at = Vec2::new(96.0, 240.0);
+        assert!(near(corner(0.0, 0.0), at + Vec2::new(8.0, 0.0)));
+        assert!(near(corner(1.0, 0.0), at + Vec2::new(16.0, 4.0)));
+        assert!(near(corner(1.0, 1.0), at + Vec2::new(8.0, 8.0)));
+        assert!(near(corner(0.0, 1.0), at + Vec2::new(0.0, 4.0)));
+        // Left untrimmed it is a box: the sprite alone does not say there is nothing in the top rows.
+        let (m, s) = hit_button((16.0, 20.0), (0.0, 0.0));
+        assert!(matches!(shape(&m, &s, Kind::Joined), Shape::Box { .. }));
+        assert!(matches!(shape(&m, &s, Kind::Terrain), Shape::Board));
+    }
+
+    #[test]
+    fn a_wall_as_tall_as_the_tile_rises_by_what_is_over_its_diamond() {
+        let (m, s) = hit_button((16.0, 20.0), (0.0, 0.0));
+        // Rows 0 to 7 are the lid, rows 12 to 19 the foot of the faces: 12 pixels from the ground to the lid.
+        assert_eq!(
+            shape(&m, &s, Kind::Joined),
+            Shape::Box {
+                top: 12.0 * m.up,
+                bottom: 0.0
+            }
         );
+        let faces = place(&m, &square(&s, Kind::Joined));
+        assert_eq!(faces.len(), 5);
+        let at = Vec2::new(96.0, 240.0);
+        let corner = |i: &Instance, u: f32, v: f32| {
+            Vec2::from(i.uv) + Vec2::from(i.uv_a) * u + Vec2::from(i.uv_b) * v - at
+        };
+        assert!(near(corner(&faces[0], 0.0, 0.0), Vec2::new(8.0, 0.0)));
+        assert!(near(corner(&faces[0], 1.0, 1.0), Vec2::new(8.0, 8.0)));
+        assert!(near(corner(&faces[1], 0.0, 0.0), Vec2::new(0.0, 4.0)));
+        assert!(near(corner(&faces[1], 1.0, 1.0), Vec2::new(8.0, 20.0)));
+        assert_eq!(faces[1].origin[2], 12.0 * m.up);
+        assert!((faces[1].b[2] + 12.0 * m.up).abs() < 1e-5);
     }
 
     #[test]
@@ -483,7 +530,7 @@ mod tests {
     /// Where the corner `(u, v)` of an instance lies on a screen that draws the world as the tileset does
     /// (yaw 45, the 2:1 tilt, one tile pixel per point), from the top left of the square's tile.
     fn screen(i: &Instance, m: &Metrics, u: f32, v: f32) -> Vec2 {
-        let tilt = (m.tile.y / m.tile.x).asin();
+        let tilt = (m.diamond / m.tile.x).asin();
         let view = Viewport {
             camera: Camera {
                 yaw: std::f32::consts::FRAC_PI_4,
@@ -541,6 +588,31 @@ mod tests {
         .collect::<Vec<_>>();
         assert_eq!(quads.len(), 1 + 5 + 1 + 1);
         // The faces behind the box are seen from inside.
+        for quad in quads
+            .iter()
+            .enumerate()
+            .filter(|(n, _)| ![4, 5].contains(n))
+        {
+            drawn_as_in_the_sprite(quad.1, &m);
+        }
+    }
+
+    #[test]
+    fn at_the_tilesets_own_view_a_tile_taller_than_its_diamond_lands_where_its_sprite_pixels_are() {
+        // HitButton_iso: a floor trimmed to its diamond, a wall and a piece of furniture, all 16 pixels wide.
+        let m = Metrics::new((16, 20), true, None);
+        let ground = sprite((16.0, 8.0), (0.0, 12.0));
+        let wall = sprite((16.0, 20.0), (0.0, 0.0));
+        let furniture = sprite((16.0, 20.0), (0.0, 0.0));
+        let quads = [
+            (&ground, Kind::Terrain),
+            (&wall, Kind::Joined),
+            (&furniture, Kind::Thing),
+        ]
+        .iter()
+        .flat_map(|(s, kind)| place(&m, &square(s, *kind)))
+        .collect::<Vec<_>>();
+        assert_eq!(quads.len(), 1 + 5 + 1);
         for quad in quads
             .iter()
             .enumerate()

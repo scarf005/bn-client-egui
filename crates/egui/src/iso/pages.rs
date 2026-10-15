@@ -115,6 +115,34 @@ impl Pages {
         })
     }
 
+    /// `sprite` without the transparent rows above its first opaque one, which draw nothing; as it is while its page
+    /// is being decoded. An isometric sprite is as tall as its tile, whatever it draws: a floor's diamond lies at
+    /// the bottom of it, and only what is left tells ground from a wall.
+    pub fn trimmed(&self, sprite: SpriteSource) -> SpriteSource {
+        let Some(image) = self.get(sprite.page) else {
+            return sprite;
+        };
+        let at = [sprite.at.x as u32, sprite.at.y as u32];
+        let size = [sprite.src.x as u32, sprite.src.y as u32];
+        let opaque = |row: u32| {
+            (0..size[0]).any(|col| {
+                let pixel = image.get_pixel_checked(at[0] + col, at[1] + row);
+                pixel.is_some_and(|px| px.0[3] >= 128)
+            })
+        };
+        // The fragment shader discards what is less opaque than half.
+        let blank = (0..size[1]).take_while(|row| !opaque(*row)).count() as f32;
+        match blank < sprite.src.y {
+            true => SpriteSource {
+                at: sprite.at + glam::Vec2::new(0.0, blank),
+                src: sprite.src - glam::Vec2::new(0.0, blank),
+                offset: sprite.offset + glam::Vec2::new(0.0, blank * sprite.scale),
+                ..sprite
+            },
+            false => sprite,
+        }
+    }
+
     /// Some sheet is still being decoded.
     pub fn loading(&self) -> bool {
         self.waiting.load(Ordering::Acquire) > 0

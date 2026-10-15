@@ -177,6 +177,9 @@ pub fn build(
                             .painted(&sprite, mask.as_ref(), paint)
                             .unwrap_or(sprite);
                     }
+                    if let Some(pages) = pages {
+                        sprite = pages.trimmed(sprite);
+                    }
                     if let Shape::Box { top, bottom } = shape(&m, &sprite, kind) {
                         column.solid = Some((floor + bottom, floor + top));
                     }

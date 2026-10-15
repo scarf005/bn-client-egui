@@ -338,6 +338,35 @@ fn a_painted_sprite_is_a_page_of_its_own_with_the_paint_in_its_pixels_and_is_mad
 }
 
 #[test]
+fn a_sprite_loses_the_transparent_rows_above_its_first_opaque_one_and_keeps_its_place_on_the_screen()
+ {
+    let tileset = Tileset::load(&iso_root("trim").join("gfx/iso")).unwrap();
+    let pages = Pages::start(tileset.sheets.clone(), eframe::egui::Context::default());
+    for _ in 0..500 {
+        if !pages.loading() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    // The ground is a diamond in the lowest 24 of its 36 rows.
+    let ground = scene::source(&tileset, 0).unwrap();
+    let trimmed = pages.trimmed(ground);
+    assert_eq!(trimmed.src.y, 24.0);
+    assert_eq!(trimmed.at, ground.at + glam::Vec2::new(0.0, 12.0));
+    assert_eq!(trimmed.offset, ground.offset + glam::Vec2::new(0.0, 12.0));
+    assert_eq!(trimmed.src.x, ground.src.x);
+    // Its bottom edge is where it was.
+    assert_eq!(
+        trimmed.offset.y + trimmed.size().y,
+        ground.offset.y + ground.size().y
+    );
+    // A trimmed sprite has no row to lose, and a sprite on a page not decoded yet stays whole.
+    assert_eq!(pages.trimmed(trimmed), trimmed);
+    let undecoded = Pages::start(vec![], eframe::egui::Context::default());
+    assert_eq!(undecoded.trimmed(ground), ground);
+}
+
+#[test]
 fn terrain_the_tileset_has_no_sprite_for_stands_as_its_glyph_where_a_looks_like_sprite_stands_as_that()
  {
     let mut bare = look("terrain", "t_unknown");
