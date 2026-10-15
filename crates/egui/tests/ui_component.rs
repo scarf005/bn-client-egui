@@ -26,6 +26,37 @@ fn example(file: &str, name: &str) -> Value {
         .clone()
 }
 
+/// The id of the row of an item whose label ends with `label`: the engine numbers items by session, so a
+/// test reads it from the screen.
+fn item_row_id(screen: &Value, label: &str) -> String {
+    match screen {
+        Value::Object(map) => {
+            let own = map
+                .get("id")
+                .and_then(Value::as_str)
+                .filter(|id| id.starts_with("item:"));
+            let named = map
+                .get("label")
+                .and_then(Value::as_str)
+                .is_some_and(|l| l.ends_with(label));
+            match own {
+                Some(id) if named => id.to_string(),
+                _ => map
+                    .values()
+                    .map(|v| item_row_id(v, label))
+                    .find(|id| !id.is_empty())
+                    .unwrap_or_default(),
+            }
+        }
+        Value::Array(list) => list
+            .iter()
+            .map(|v| item_row_id(v, label))
+            .find(|id| !id.is_empty())
+            .unwrap_or_default(),
+        _ => String::new(),
+    }
+}
+
 fn affordance(id: &str, keys: &[&str], args: Value) -> Value {
     json!({"id": id, "label": id, "keys": keys, "enabled": true, "expect": "boundary", "args": args})
 }
@@ -997,15 +1028,15 @@ fn a_safe_mode_tab_runs_the_tab_affordance_by_its_token() {
 
 #[test]
 fn a_worn_item_runs_the_armor_screens_pick_with_its_identity() {
-    let (mut h, script) = harness(example("armor.json", "armor layers screen"));
+    let screen = example("armor.json", "armor layers screen");
+    let jeans = item_row_id(&screen, "jeans");
+    assert!(jeans.starts_with("item:"), "no row of jeans in the fixture");
+    let (mut h, script) = harness(screen);
     h.get_all_by_label("||\u{a0}jeans").next().unwrap().click();
     h.run_steps(3);
     assert_eq!(
         submits(&script),
-        [boundary_invoke(
-            "armor:pick",
-            json!({"row": "item:2"})
-        )]
+        [boundary_invoke("armor:pick", json!({"row": jeans}))]
     );
 }
 
