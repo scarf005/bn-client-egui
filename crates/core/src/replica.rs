@@ -2,7 +2,7 @@
 
 use crate::protocol::{
     At, Avatar, Boundary, Cell, Changes, Coverage, Entity, Environment, EventsParams, Resync,
-    Screen, Snapshot, SnapshotPart, WorldPos,
+    Screen, Snapshot, SnapshotPart, Text, WorldPos,
 };
 use std::collections::HashMap;
 
@@ -97,10 +97,10 @@ impl Replica {
                 .into_iter()
                 .map(|m| LoggedLine {
                     id: m.id,
-                    text: m.text,
+                    text: m.text.shown(),
                     color: Some(m.color),
                     count: m.count.max(1),
-                    label: m.label,
+                    label: m.label.shown(),
                 })
                 .collect(),
             ..Self::default()
@@ -168,27 +168,38 @@ impl Replica {
                         .map_or(0, |d| d["duration_ms"].as_u64().unwrap_or(0)),
                 });
             }
-            if let Some(data) = &e.data
-                && let Some(text) = data["text"].as_str()
-            {
+            if let Some(data) = &e.data {
+                let shown = |name: &str| {
+                    serde_json::from_value::<Text>(data[name].clone())
+                        .ok()
+                        .map(|text| text.shown())
+                };
                 match e.kind.as_str() {
-                    "message.logged" => self.lines.push(LoggedLine {
-                        id: data["id"].as_str().unwrap_or_default().to_string(),
-                        label: data["label"].as_str().unwrap_or(text).to_string(),
-                        text: text.to_string(),
-                        color: data["color"].as_str().map(str::to_string),
-                        count: data["count"]
-                            .as_u64()
-                            .map_or(1, |n| n.clamp(1, 1 << 31) as u32),
-                    }),
+                    "message.logged" => {
+                        if let Some(text) = shown("text") {
+                            self.lines.push(LoggedLine {
+                                id: data["id"].as_str().unwrap_or_default().to_string(),
+                                label: shown("label").unwrap_or_else(|| text.clone()),
+                                text,
+                                color: data["color"].as_str().map(str::to_string),
+                                count: data["count"]
+                                    .as_u64()
+                                    .map_or(1, |n| n.clamp(1, 1 << 31) as u32),
+                            });
+                        }
+                    }
                     // A sound the engine also wrote to the message log is already shown there.
-                    "sound.heard" if data["logged"] != true => self.sounds.push(Sound {
-                        text: text.to_string(),
-                        direction: data["direction"]["name"].as_str().map(str::to_string),
-                        distance: data["distance"]
-                            .as_u64()
-                            .map(|n| n.min(u32::MAX as u64) as u32),
-                    }),
+                    "sound.heard" if data["logged"] != true => {
+                        if let Some(text) = shown("text") {
+                            self.sounds.push(Sound {
+                                text,
+                                direction: data["direction"]["name"].as_str().map(str::to_string),
+                                distance: data["distance"]
+                                    .as_u64()
+                                    .map(|n| n.min(u32::MAX as u64) as u32),
+                            });
+                        }
+                    }
                     _ => {}
                 }
             }

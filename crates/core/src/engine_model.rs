@@ -4,6 +4,7 @@ use crate::clock::Clock;
 use crate::colors::ColorMap;
 use crate::interaction::{self, InvokeError, Pages};
 use crate::keys;
+use crate::localise::{self, Catalogue};
 use crate::markup::{self, Run};
 use crate::model::{
     ActionEntry, Cell, CommandStatus, Effect, Failure, FailureKind, GameModel, Heard, Layer,
@@ -17,6 +18,7 @@ use crate::replica::{Outcome, Replica};
 use crate::transport::{Transport, request};
 use serde_json::{Value, json};
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 /// The map window asked for until the UI reports its own size.
@@ -97,6 +99,10 @@ pub struct EngineModel {
     max_hz: u16,
     /// The language the client asked the engine to word its text in, asked in every hello.
     locale: Option<String>,
+    /// The game root whose catalogues word the engine's LocalisedStrings, and the catalogue of the locale the
+    /// last hello granted.
+    data_root: Option<std::path::PathBuf>,
+    catalogue: Option<Arc<Catalogue>>,
     /// The ids of the tints the client's tileset has, and what the engine was last told.
     tint_ids: Vec<String>,
     tints_told: Vec<String>,
@@ -350,6 +356,8 @@ impl EngineModel {
         let mut m = Self {
             max_hz,
             locale,
+            data_root: None,
+            catalogue: None,
             tiles,
             tiles_told: tiles,
             tint_ids: vec![],
@@ -451,6 +459,12 @@ impl EngineModel {
 
     pub fn set_stall(&mut self, stall: Duration) {
         self.stall = stall;
+    }
+
+    /// Words the engine's LocalisedStrings from the catalogues under this game root.
+    pub fn with_data_root(mut self, root: Option<std::path::PathBuf>) -> Self {
+        self.data_root = root;
+        self
     }
 
     /// Uses the game's own palette for look colours.
@@ -722,6 +736,10 @@ impl EngineModel {
                     ))
                 });
                 self.mark("hello");
+                self.catalogue = self.data_root.as_deref().and_then(|root| {
+                    Catalogue::load(root, value["locale"].as_str()?).map(Arc::new)
+                });
+                localise::install(self.catalogue.clone());
                 self.screen_queue = serde_json::from_value::<protocol::Hello>(value.clone())
                     .map_or(1, |hello| hello.screen_queue());
                 self.set_credits(&value);
@@ -1590,6 +1608,7 @@ fn target_note(i: &protocol::Interaction) -> Option<String> {
 impl GameModel for EngineModel {
     fn poll(&mut self) {
         profiling::scope!("model.poll");
+        localise::install(self.catalogue.clone());
         let now = self.clock.now();
         while let Some(msg) = self.transport.recv() {
             self.received += 1;
@@ -1709,6 +1728,7 @@ impl GameModel for EngineModel {
                 let mut fresh = EngineModel::open(transport, options)
                     .with_clock(self.clock.clone())
                     .with_colors(self.colors.clone())
+                    .with_data_root(self.data_root.clone())
                     .with_stall(self.stall);
                 fresh.engine = self.engine.clone();
                 fresh.heard = self.clock.now();

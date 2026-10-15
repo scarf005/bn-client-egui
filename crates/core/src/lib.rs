@@ -5,6 +5,7 @@ pub mod engine_model;
 pub mod interaction;
 pub mod keys;
 pub mod launch;
+pub mod localise;
 pub mod markup;
 pub mod model;
 pub mod protocol;

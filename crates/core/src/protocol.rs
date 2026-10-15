@@ -769,12 +769,12 @@ pub struct Event {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct LoggedMessage {
     pub id: String,
-    pub text: String,
+    pub text: Text,
     pub kind: String,
     pub color: String,
     pub count: u32,
     /// The line as the native log prints it, with the repeat suffix.
-    pub label: String,
+    pub label: Text,
     /// The BN language id of a line that is not in the connection locale.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lang: Option<String>,
@@ -1640,7 +1640,7 @@ pub struct Sidebar {
 }
 
 /// Player-facing text: a string already localized for the connection, or a message key with its arguments
-/// for the client to render from the engine's catalogues. A 0.2 engine sends strings only.
+/// for the client to render from the engine's catalogues.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum Text {
@@ -1672,21 +1672,11 @@ pub enum TextArg {
 }
 
 impl Text {
-    /// What is shown: a string as it is, a message by its key until the catalogues render it (the empty
-    /// key shows its arguments joined).
+    /// What is shown: a string as it is, a message rendered from the engine's catalogue.
     pub fn shown(&self) -> String {
         match self {
             Text::Plain(text) => text.clone(),
-            Text::Localised(message) if message.key.is_empty() => message
-                .args
-                .iter()
-                .flatten()
-                .map(|arg| match arg {
-                    TextArg::Number(n) => n.to_string(),
-                    TextArg::Text(text) => text.shown(),
-                })
-                .collect(),
-            Text::Localised(message) => message.key.clone(),
+            Text::Localised(message) => crate::localise::render(message),
         }
     }
 }

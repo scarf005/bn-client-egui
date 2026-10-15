@@ -193,6 +193,7 @@ pub fn open_engine(
     let model = EngineModel::open(Box::new(transport), options)
         .with_colors(colors)
         .with_respawn(respawn)
+        .with_data_root(root.clone())
         .with_engine(engine.to_path_buf());
     Ok(Opened { model, root })
 }
