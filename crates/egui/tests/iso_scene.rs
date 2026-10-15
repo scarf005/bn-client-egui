@@ -10,7 +10,7 @@ use bn_client_egui::iso::scene::{self, Scene};
 use bn_client_egui::tileset::Tileset;
 use bn_client_egui::tint::Paint;
 use bn_client_egui::transport::ScriptedTransport;
-use common::{fixture, iso_root};
+use common::{fixture, flat_root, iso_root};
 use serde_json::{Value, json};
 
 fn look(kind: &str, id: &str) -> Value {
@@ -381,4 +381,37 @@ fn terrain_the_tileset_has_no_sprite_for_stands_as_its_glyph_where_a_looks_like_
     assert_eq!(scene.glyphs.len(), 1, "only the bare one");
     assert_eq!(scene.glyphs[0].layer.glyph, '%');
     assert_eq!(planes(&scene).len(), 1, "the looks-like square is a quad");
+}
+
+/// The pages of `tileset`, decoded.
+fn decoded(tileset: &Tileset) -> std::sync::Arc<Pages> {
+    let pages = Pages::start(tileset.sheets.clone(), eframe::egui::Context::default());
+    for _ in 0..500 {
+        if !pages.loading() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    pages
+}
+
+/// The scene of `m` with the tileset drawn from above, its pages decoded as a running client has them.
+fn flat_scene_of(m: &EngineModel, tag: &str) -> Scene {
+    let tileset = Tileset::load(&flat_root(tag).join("gfx/flat")).unwrap();
+    let pages = decoded(&tileset);
+    scene::build(m, &tileset, Some(&pages), None, 1)
+}
+
+#[test]
+fn terrain_of_a_tileset_drawn_from_above_lies_on_the_ground_even_with_clear_rows_on_top() {
+    let m = model(vec![cell(4, 4, 0, "t_shrub"), cell(5, 4, 0, "t_grass")]);
+    let scene = flat_scene_of(&m, "flat-shrub");
+    let shrub = at(&scene, &m, (4, 4));
+    assert_eq!(
+        shrub.len(),
+        2,
+        "the grass under it and the shrub: {shrub:?}"
+    );
+    assert!(shrub.iter().all(|i| i.flags[0] & BOARD == 0), "{shrub:?}");
+    assert!(shrub.iter().all(|i| i.origin[2] == 0.0), "{shrub:?}");
 }
