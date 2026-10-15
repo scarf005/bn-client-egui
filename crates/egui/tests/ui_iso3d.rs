@@ -2,6 +2,7 @@
 //! The 3D map: switching to it, turning its camera, and picking the square under the pointer, checked in the
 //! egui client against the wire the flat map uses. The pictures of the scene itself are in `ui_iso3d_shots`.
 mod common;
+use bn_client_egui::app::CELL;
 use bn_client_egui::iso::camera::{PITCH_MAX, PITCH_MIN, Viewport};
 use bn_client_egui::iso::scene::world_scale;
 use bn_client_egui::transport::{ScriptHandle, ScriptedTransport};
@@ -122,7 +123,7 @@ fn screen_of(h: &mut H, at: Pos) -> egui::Pos2 {
     let view = Viewport {
         camera: app.camera(),
         target: glam::Vec3::new(player.x as f32 + 0.5, player.y as f32 + 0.5, 0.0),
-        scale: world_scale(tileset, app.display().zoom()),
+        scale: world_scale(tileset, app.display().cell(CELL) * app.display().zoom()),
         size: glam::Vec2::new(rect.width(), rect.height()),
     };
     let on = view.project(glam::Vec3::new(at.x as f32 + 0.5, at.y as f32 + 0.5, 0.0));
@@ -376,4 +377,77 @@ fn hovering_a_3d_square_asks_the_engine_to_describe_that_square() {
         described["params"]["pos"],
         json!({"dim": "", "x": 4, "y": 4, "z": 0})
     );
+}
+
+/// How wide a map square's diamond is on the screen of the 3D map: the horizontal distance between the middles
+/// of the squares left and right of it, which the camera at its default turn sees one diagonal apart.
+fn diamond_width(h: &mut H) -> f32 {
+    let player = h.state().model.player();
+    let (right, left) = (
+        screen_of(
+            h,
+            Pos {
+                x: player.x + 1,
+                y: player.y,
+            },
+        ),
+        screen_of(
+            h,
+            Pos {
+                x: player.x,
+                y: player.y + 1,
+            },
+        ),
+    );
+    (right.x - left.x).abs()
+}
+
+/// Scrolls the wheel over the map by `steps` notches, closer for positive.
+fn wheel(h: &mut H, steps: i32) {
+    h.hover_at(h.get_by_label("Map").rect().center());
+    h.run_steps(2);
+    for _ in 0..steps.abs() {
+        h.event(egui::Event::MouseWheel {
+            unit: egui::MouseWheelUnit::Line,
+            phase: egui::TouchPhase::Move,
+            delta: egui::vec2(0.0, steps.signum() as f32),
+            modifiers: egui::Modifiers::NONE,
+        });
+        h.run_steps(2);
+    }
+}
+
+/// Rewrites the fixture tileset's `tile_info` to `width`, `height` and `pixelscale`.
+fn retile(root: &Path, width: u32, height: u32, pixelscale: u32) {
+    let path = root.join("gfx/iso/tile_config.json");
+    let mut config: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    config["tile_info"][0]["width"] = width.into();
+    config["tile_info"][0]["height"] = height.into();
+    config["tile_info"][0]["pixelscale"] = pixelscale.into();
+    std::fs::write(&path, config.to_string()).unwrap();
+}
+
+#[test]
+fn a_tile_is_as_wide_in_3d_as_in_the_flat_map_at_every_zoom_for_any_tile_size_and_pixelscale() {
+    // The glyph square is 16 points: a tile of 48 is three of them, one of 16 is one, and 16 doubled is two.
+    for (tag, width, scale) in [
+        ("size-big", 48, 1),
+        ("size-small", 16, 1),
+        ("size-doubled", 16, 2),
+    ] {
+        let root = iso_root(tag);
+        retile(&root, width, width / 2, scale);
+        let (mut h, _) = harness(&root, &root.join("settings.json"), true);
+        settle(&mut h);
+        for zoom in [0, 2, -4] {
+            wheel(&mut h, zoom);
+            let display = h.state().display();
+            let flat = display.cell(CELL) * display.zoom();
+            let drawn = diamond_width(&mut h);
+            assert!(
+                (drawn - flat).abs() <= 1.0,
+                "{tag} zoom {zoom}: {drawn} against {flat}"
+            );
+        }
+    }
 }

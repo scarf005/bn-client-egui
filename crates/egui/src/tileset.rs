@@ -68,6 +68,8 @@ struct Info {
     iso: bool,
     /// Pixels of one z-level's height on screen, for an isometric tileset.
     zlevel_height: Option<f32>,
+    /// How many times the map square is drawn at its size, as the game does.
+    pixelscale: Option<f32>,
 }
 
 #[derive(Deserialize)]
@@ -301,6 +303,7 @@ pub struct Sheet {
 pub struct Tileset {
     /// Width and height of one map square in the tileset's pixels.
     pub tile: (u32, u32),
+    /// How many times a map square is drawn at the size of `tile`.
     pub pixelscale: f32,
     /// The sprites are drawn from an isometric view: a map square is a diamond of `tile` pixels.
     pub iso: bool,
@@ -421,7 +424,7 @@ impl Tileset {
         }
         let mut set = Self {
             tile,
-            pixelscale: 1.0,
+            pixelscale: info.pixelscale.filter(|p| *p > 0.0).unwrap_or(1.0),
             iso: info.iso,
             zlevel_height: info.zlevel_height,
             sheets: vec![],

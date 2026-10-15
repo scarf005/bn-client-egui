@@ -5,7 +5,7 @@ use crate::tint::{Paint, tint_pixel};
 use crate::windows::WindowState;
 use bn_client_core::protocol::ModTileset;
 use bn_client_core::protocol::OvermapTile;
-use bn_client_core::{Cell, Layer};
+use bn_client_core::{Cell, Layer, Rgb};
 use eframe::egui::{self, Color32, Mesh, Rect, Shape, TextureHandle, TextureId, TextureOptions};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
@@ -81,7 +81,7 @@ impl Fx {
     }
 
     /// The colour a plain sprite is multiplied by until the filtered sheets have arrived.
-    fn stand_in(self) -> Color32 {
+    pub(crate) fn stand_in(self) -> Color32 {
         match self {
             Fx::Plain => Color32::WHITE,
             Fx::Shadow => SHADOW,
@@ -611,7 +611,7 @@ impl Display {
     /// The side of a map square in points: a tile of the tileset, or the glyph square.
     pub fn cell(&self, glyph: f32) -> f32 {
         self.atlas.as_ref().map_or(glyph, |a| {
-            (a.tileset.tile.0 as f32).clamp(glyph, 3.0 * glyph)
+            (a.tileset.tile.0 as f32 * a.tileset.pixelscale).clamp(glyph, 3.0 * glyph)
         })
     }
 
@@ -954,7 +954,7 @@ pub(crate) fn resolve_layer<'a>(tileset: &Tileset, layer: &'a Layer) -> (Cow<'a,
     (Cow::Borrowed(layer), tileset.layer_paints(layer))
 }
 
-pub(crate) fn query<'a>(layer: &'a Layer, season: Option<&'a str>) -> Query<'a> {
+pub fn query<'a>(layer: &'a Layer, season: Option<&'a str>) -> Query<'a> {
     Query {
         id: &layer.id,
         fallbacks: &layer.fallbacks,
@@ -967,22 +967,22 @@ pub(crate) fn query<'a>(layer: &'a Layer, season: Option<&'a str>) -> Query<'a> 
     }
 }
 
+/// A glyph's or its background's colour, darkened by `tint` as the filter of its square asks.
+pub(crate) fn glyph_color(c: Rgb, tint: Color32) -> Color32 {
+    Color32::from_rgb(c.0, c.1, c.2).gamma_multiply(f32::from(tint.r()) / 255.0)
+}
+
 /// The ASCII stand-in of a thing the tileset has no sprite for.
 fn glyph(painter: &egui::Painter, rect: Rect, layer: &Layer, tint: Color32) {
-    let c = layer.color;
     if let Some(bg) = layer.bg {
-        painter.rect_filled(
-            rect,
-            0.0,
-            Color32::from_rgb(bg.0, bg.1, bg.2).gamma_multiply(f32::from(tint.r()) / 255.0),
-        );
+        painter.rect_filled(rect, 0.0, glyph_color(bg, tint));
     }
     painter.text(
         rect.center(),
         egui::Align2::CENTER_CENTER,
         layer.glyph,
         egui::FontId::monospace(rect.height() - 2.0),
-        Color32::from_rgb(c.0, c.1, c.2).gamma_multiply(f32::from(tint.r()) / 255.0),
+        glyph_color(layer.color, tint),
     );
 }
 

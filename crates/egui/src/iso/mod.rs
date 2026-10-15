@@ -7,7 +7,7 @@ pub mod pages;
 mod pick;
 pub mod scene;
 
-use crate::display::Display;
+use crate::display::{Display, glyph_color};
 use bn_client_core::GameModel;
 use camera::{Camera, Viewport};
 use eframe::egui;
@@ -126,4 +126,40 @@ pub fn callback(
             stats,
         },
     ))
+}
+
+/// Draws the glyphs of what the tileset has no sprite for, each on its square, as the flat map draws them: the
+/// background over the square's diamond and the glyph at its middle, `cell_px` points tall.
+pub fn paint_glyphs(
+    painter: &egui::Painter,
+    rect: egui::Rect,
+    view: &Viewport,
+    scene: &Scene,
+    cell_px: f32,
+) {
+    let origin = rect.min;
+    let at = |x: f32, y: f32, z: f32| {
+        let p = view.project(Vec3::new(x, y, z));
+        origin + egui::vec2(p.x, p.y)
+    };
+    for mark in &scene.glyphs {
+        let (x, y) = (mark.square.0 as f32, mark.square.1 as f32);
+        let tint = mark.filter.stand_in();
+        if let Some(bg) = mark.layer.bg {
+            let corners = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]
+                .map(|(dx, dy)| at(x + dx, y + dy, mark.floor));
+            painter.add(egui::Shape::convex_polygon(
+                corners.to_vec(),
+                glyph_color(bg, tint),
+                egui::Stroke::NONE,
+            ));
+        }
+        painter.text(
+            at(x + 0.5, y + 0.5, mark.floor),
+            egui::Align2::CENTER_CENTER,
+            mark.layer.glyph,
+            egui::FontId::monospace(cell_px - 2.0),
+            glyph_color(mark.layer.color, tint),
+        );
+    }
 }

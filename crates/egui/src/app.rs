@@ -217,7 +217,6 @@ impl<M: GameModel> App<M> {
         })
     }
 
-    /// Times the settle delay with `clock`, so tests can advance it instead of sleeping.
     /// The pass format the 3D map is drawn into; the window's renderer tells it, so only a test sets it.
     pub fn with_target_format(mut self, format: egui_wgpu::wgpu::TextureFormat) -> Self {
         self.iso.target = Some(format);
@@ -234,6 +233,7 @@ impl<M: GameModel> App<M> {
         &self.iso.stats
     }
 
+    /// Times the settle delay with `clock`, so tests can advance it instead of sleeping.
     pub fn with_clock(mut self, clock: bn_client_core::Clock) -> Self {
         self.clock = clock;
         self
@@ -901,9 +901,10 @@ impl<M: GameModel> App<M> {
             })
             .inner;
         let view = three.then(|| {
-            let scale = self.display.tileset().map_or(cell_px, |(t, _)| {
-                iso::scene::world_scale(t, self.display.zoom())
-            });
+            let scale = self
+                .display
+                .tileset()
+                .map_or(cell_px, |(t, _)| iso::scene::world_scale(t, cell_px));
             self.iso.viewport(player, scale, response.rect.size())
         });
         let season = self.model.season();
@@ -1077,7 +1078,9 @@ impl<M: GameModel> App<M> {
         if let (Some(v), Some(target)) = (&view, self.iso.target) {
             if let Some(shown) = shown {
                 let stats = self.iso.stats.clone();
+                let scene = shown.0.clone();
                 painter.add(iso::callback(response.rect, v, target, shown, stats));
+                iso::paint_glyphs(&painter, response.rect, v, &scene, cell_px);
             }
         } else {
             for y in 0..size.y {

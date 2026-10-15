@@ -3,6 +3,7 @@
 //! pixels where a known part of the scene must be. Needs a Vulkan adapter, so it only runs when asked:
 //! `SHOT_DIR=<dir> cargo test --test ui_iso3d_shots -- --ignored`.
 mod common;
+use bn_client_egui::app::CELL;
 use bn_client_egui::iso::camera::Viewport;
 use bn_client_egui::iso::scene::world_scale;
 use bn_client_egui::transport::ScriptedTransport;
@@ -101,7 +102,7 @@ fn pixel(h: &mut H, image: &egui::ColorImage, world: (f32, f32, f32)) -> egui::C
     let view = Viewport {
         camera: app.camera(),
         target: glam::Vec3::new(me.x as f32 + 0.5, me.y as f32 + 0.5, 0.0),
-        scale: world_scale(tileset, app.display().zoom()),
+        scale: world_scale(tileset, app.display().cell(CELL) * app.display().zoom()),
         size: glam::Vec2::new(rect.width(), rect.height()),
     };
     let on = view.project(glam::Vec3::new(

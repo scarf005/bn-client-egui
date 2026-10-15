@@ -336,3 +336,20 @@ fn a_painted_sprite_is_a_page_of_its_own_with_the_paint_in_its_pixels_and_is_mad
     assert_ne!(middle, before.get_pixel(24, 24).0);
     assert_eq!(after.get_pixel(0, 0).0[3], 0, "outside the diamond");
 }
+
+#[test]
+fn terrain_the_tileset_has_no_sprite_for_stands_as_its_glyph_where_a_looks_like_sprite_stands_as_that()
+ {
+    let mut bare = look("terrain", "t_unknown");
+    bare["glyph"] = "%".into();
+    let mut like = look("terrain", "t_unknown_too");
+    like["looks_like"] = json!(["t_dirt"]);
+    let mut first = cell(4, 4, 0, "t_dirt");
+    first["terrain"] = bare;
+    let mut second = cell(5, 4, 0, "t_dirt");
+    second["terrain"] = like;
+    let scene = scene_of(&model(vec![first, second]), "scene-glyph");
+    assert_eq!(scene.glyphs.len(), 1, "only the bare one");
+    assert_eq!(scene.glyphs[0].layer.glyph, '%');
+    assert_eq!(planes(&scene).len(), 1, "the looks-like square is a quad");
+}

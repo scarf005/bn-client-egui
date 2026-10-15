@@ -164,11 +164,43 @@ fn the_town_in_3d_from_every_side_and_what_a_frame_costs() {
     dismiss_popups(&mut h);
     run_until(&mut h, "quiet", 180, |h| !h.state().model.busy());
     // The start is random: BN_ISO_WANT names a word of the start story the run is for, and others end here.
-    let story = h.state().model.messages().join(" ");
+    let story = h
+        .state()
+        .model
+        .native_log()
+        .iter()
+        .map(|l| l.shown().to_string())
+        .collect::<Vec<_>>()
+        .join(" ");
     println!("LIVE start {story:?}");
     if let Some(want) = std::env::var_os("BN_ISO_WANT")
         && !story.contains(want.to_str().unwrap())
     {
+        println!("LIVE skipped");
+        return;
+    }
+    // BN_ISO_TINTED: only a start with painted layers in view is shot, as a vehicle or an item has.
+    let painted = {
+        let m = &h.state().model;
+        let size = m.size();
+        let mut ids = std::collections::BTreeMap::<String, usize>::new();
+        for y in 0..size.y {
+            for x in 0..size.x {
+                for l in &m.cell(bn_client_egui::Pos { x, y }).layers {
+                    if l.tint_fg.is_some()
+                        || l.tint_bg.is_some()
+                        || !l.tint_keys.is_empty()
+                        || l.tint_vars.is_some()
+                    {
+                        *ids.entry(l.id.clone()).or_default() += 1;
+                    }
+                }
+            }
+        }
+        println!("LIVE painted layers {ids:?}");
+        ids.len()
+    };
+    if std::env::var_os("BN_ISO_TINTED").is_some() && painted == 0 {
         println!("LIVE skipped");
         return;
     }
@@ -199,6 +231,27 @@ fn the_town_in_3d_from_every_side_and_what_a_frame_costs() {
             .load(std::sync::atomic::Ordering::Relaxed)
     );
     save(&mut h, "town-yaw45.png");
+    // BN_FLAT_ZOOMS: the flat map at every zoom step from the farthest to the closest, and nothing more.
+    if std::env::var_os("BN_FLAT_ZOOMS").is_some() {
+        h.hover_at(h.get_by_label("Map").rect().center());
+        for step in -4..=4 {
+            let zoom = h.state().display().settings().zoom;
+            for _ in 0..(step - zoom).abs() {
+                h.event(egui::Event::MouseWheel {
+                    unit: egui::MouseWheelUnit::Line,
+                    delta: egui::vec2(0.0, (step - zoom).signum() as f32),
+                    modifiers: egui::Modifiers::NONE,
+                    phase: egui::TouchPhase::Move,
+                });
+                h.run_steps(2);
+            }
+            h.hover_at(egui::pos2(1800.0, 1000.0));
+            h.run_steps(3);
+            save(&mut h, &format!("town-zoom{step}.png"));
+            h.hover_at(h.get_by_label("Map").rect().center());
+        }
+        return;
+    }
     {
         let m = &h.state().model;
         let size = m.size();
@@ -212,6 +265,27 @@ fn the_town_in_3d_from_every_side_and_what_a_frame_costs() {
                     false => *ids.entry(cell.layers[0].id.clone()).or_default() += 1,
                 }
             }
+        }
+        // The terrain the tileset has no sprite for, with what the engine says to draw instead.
+        if let Some((tileset, _)) = h.state().display().tileset() {
+            let season = m.season();
+            let mut bare = std::collections::BTreeMap::<String, (usize, Vec<String>, char)>::new();
+            for y in 0..size.y {
+                for x in 0..size.x {
+                    for l in &m.cell(bn_client_egui::Pos { x, y }).layers {
+                        let q = bn_client_egui::display::query(l, season.as_deref());
+                        if l.terrain && tileset.choose(&q).is_none() {
+                            let e = bare.entry(l.id.clone()).or_insert((
+                                0,
+                                l.fallbacks.clone(),
+                                l.glyph,
+                            ));
+                            e.0 += 1;
+                        }
+                    }
+                }
+            }
+            println!("LIVE bare terrain {bare:?}");
         }
         println!(
             "LIVE model {}x{}, {empty} squares without layers; first layers {ids:?}",

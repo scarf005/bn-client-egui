@@ -4,9 +4,9 @@ use super::geometry::{
     Instance, Kind, Metrics, PageId, Placement, Shape, SpriteSource, place, shape,
 };
 use super::pages::Pages;
-use crate::display::{STRIP, query, resolve_layer};
+use crate::display::{Fx, STRIP, query, resolve_layer};
 use crate::tileset::{Tileset, Turn};
-use bn_client_core::{GameModel, Pos};
+use bn_client_core::{GameModel, Layer, Pos};
 use glam::Vec2;
 use std::collections::BTreeMap;
 
@@ -26,6 +26,16 @@ pub struct Scene {
     pub width: i32,
     pub height: i32,
     columns: Vec<Option<Column>>,
+    /// The things the tileset has no sprite for, which stand as their glyphs as on the flat map.
+    pub glyphs: Vec<Mark>,
+}
+
+/// A glyph standing on a square.
+pub struct Mark {
+    pub square: (i32, i32),
+    pub floor: f32,
+    pub filter: Fx,
+    pub layer: Layer,
 }
 
 /// What a square is for picking: the ground of its level, and the box standing on it if it has one.
@@ -91,10 +101,10 @@ pub fn metrics(tileset: &Tileset) -> Metrics {
     Metrics::new(tileset.tile, tileset.iso, tileset.zlevel_height)
 }
 
-/// Points per world unit when the tileset's tile is drawn `zoom` times its size: a diagonal of a square across
-/// the tile of an isometric tileset, else a square the tile.
-pub fn world_scale(tileset: &Tileset, zoom: f32) -> f32 {
-    let across = tileset.tile.0 as f32 * zoom;
+/// Points per world unit when a tile is drawn `cell_px` points wide, as the flat map draws it: a diagonal of a
+/// square across the tile of an isometric tileset, else a square the tile.
+pub fn world_scale(tileset: &Tileset, cell_px: f32) -> f32 {
+    let across = cell_px;
     match tileset.iso {
         true => across / std::f32::consts::SQRT_2,
         false => across,
@@ -115,6 +125,7 @@ pub fn build(
     let (width, height) = (size.x.max(0), size.y.max(0));
     let mut columns = vec![None; (width * height) as usize];
     let mut items = vec![];
+    let mut glyphs = vec![];
     let mut squares = 0;
     for y in 0..height {
         for x in 0..width {
@@ -124,11 +135,12 @@ pub fn build(
             }
             squares += 1;
             // The same filters the flat map puts on what is remembered or poorly lit.
-            let filter = match (cell.remembered, cell.light) {
-                (true, _) => 2,
-                (false, Some(light)) if light <= 1 => 1,
-                _ => 0,
+            let fx = match (cell.remembered, cell.light) {
+                (true, _) => Fx::Memory,
+                (false, Some(light)) if light <= 1 => Fx::Shadow,
+                _ => Fx::Plain,
             };
+            let filter = fx as u32;
             let haze = match cell.depth {
                 0 => 0,
                 depth => (24 * (u32::from(depth) + 1)).min(192) as u8,
@@ -141,15 +153,17 @@ pub fn build(
             let mut order = 0;
             for layer in &cell.layers {
                 let (layer, paints) = resolve_layer(tileset, layer);
-                let Some(chosen) = tileset.choose(&query(&layer, season)) else {
-                    continue;
-                };
-                let kind = match (layer.terrain, chosen.joined) {
+                let drawn = items.len();
+                let chosen = tileset.choose(&query(&layer, season));
+                let kind = match (layer.terrain, chosen.as_ref().is_some_and(|c| c.joined)) {
                     (false, _) => Kind::Thing,
                     (true, false) => Kind::Terrain,
                     (true, true) => Kind::Joined,
                 };
-                for (placed, paint) in [(chosen.bg, paints.0), (chosen.fg, paints.1)] {
+                for (placed, paint) in chosen
+                    .iter()
+                    .flat_map(|c| [(c.bg, paints.0), (c.fg, paints.1)])
+                {
                     let Some(placed) = placed else {
                         continue;
                     };
@@ -177,6 +191,14 @@ pub fn build(
                         order,
                     });
                     order += 1;
+                }
+                if items.len() == drawn && layer.glyph != '\0' {
+                    glyphs.push(Mark {
+                        square: (x, y),
+                        floor,
+                        filter: fx,
+                        layer: layer.into_owned(),
+                    });
                 }
             }
             columns[(y * width + x) as usize] = Some(column);
@@ -225,5 +247,6 @@ pub fn build(
         width,
         height,
         columns,
+        glyphs,
     }
 }
