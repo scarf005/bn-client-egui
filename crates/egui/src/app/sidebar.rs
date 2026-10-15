@@ -238,13 +238,24 @@ impl<M: GameModel> App<M> {
         let shown = native.iter().map(LogLine::shown).collect::<Vec<_>>();
         let native_live = self.native_live.update(&shown).to_owned();
         let command_live = self.command_live.update(self.model.messages()).to_owned();
-        message_log(
-            ui,
-            native,
-            self.model.messages(),
-            [&native_live, &command_live],
-        );
-        super::sounds::show(ui, &self.model.sounds());
+        // The log's lines, commands and sounds scroll inside the panel: content taller than the panel would
+        // otherwise make the panel report a lower edge, and the panels above it would be drawn under it.
+        let room = ui.available_height();
+        egui::ScrollArea::vertical()
+            .id_salt("log_panel")
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                message_log(
+                    ui,
+                    LogOptions {
+                        native,
+                        commands: self.model.messages(),
+                        live: [&native_live, &command_live],
+                        room,
+                    },
+                );
+                super::sounds::show(ui, &self.model.sounds());
+            });
     }
 }
 
@@ -281,15 +292,24 @@ fn glyph_icon(painter: &egui::Painter, rect: egui::Rect, cell: &Cell) {
     );
 }
 
+/// What the message log shows, and the height of the panel it sits in.
+pub(super) struct LogOptions<'a> {
+    pub native: &'a [LogLine],
+    pub commands: &'a [String],
+    pub live: [&'a str; 2],
+    pub room: f32,
+}
+
 /// The message log panel: the game's own lines in their native colours, then the client's command
 /// results and errors in a separate scroll area. What each list gained since the last frame is a
 /// polite live region, so history is never re-announced.
-pub(super) fn message_log(
-    ui: &mut egui::Ui,
-    native: &[LogLine],
-    commands: &[String],
-    live: [&str; 2],
-) {
+pub(super) fn message_log(ui: &mut egui::Ui, options: LogOptions) {
+    let LogOptions {
+        native,
+        commands,
+        live,
+        room,
+    } = options;
     ui.heading("Message log");
     if !native.is_empty() {
         a11y::live_region(ui, live[0]);
@@ -297,7 +317,7 @@ pub(super) fn message_log(
     // The tops of last frame's lines, so the area ends between two of them and shows no half line.
     let key = egui::Id::new("native_log_tops");
     let (tops, total): (Vec<f32>, f32) = ui.data(|d| d.get_temp(key)).unwrap_or_default();
-    let room = whole_lines_height(&tops, total, ui.available_height() * 0.7);
+    let room = whole_lines_height(&tops, total, room * 0.7);
     let output = egui::ScrollArea::vertical()
         .id_salt("native_log")
         .max_height(room)
