@@ -11,6 +11,7 @@ use bn_client_egui::watchdog::Watchdog;
 use bn_client_egui::{App, EngineModel, GameModel};
 use eframe::egui;
 use egui_kittest::Harness;
+use egui_kittest::kittest::Queryable;
 use std::time::{Duration, Instant};
 
 type H<'a> = Harness<'a, App<EngineModel>>;
@@ -140,7 +141,6 @@ fn the_town_in_3d_from_every_side_and_what_a_frame_costs() {
         None => builder.wgpu(),
     };
     let mut h = builder.build_ui_state(|ui, app: &mut App<EngineModel>| app.show(ui), app);
-    h.input_mut().max_texture_side = Some(16384);
     bn_client_egui::fonts::install(&h.ctx, &root);
 
     run_until(&mut h, "the main menu", 120, |h| {
@@ -181,6 +181,30 @@ fn the_town_in_3d_from_every_side_and_what_a_frame_costs() {
             .load(std::sync::atomic::Ordering::Relaxed)
     );
     save(&mut h, "town-yaw45.png");
+    {
+        let m = &h.state().model;
+        let size = m.size();
+        let mut empty = 0;
+        let mut ids = std::collections::BTreeMap::<String, usize>::new();
+        for y in 0..size.y {
+            for x in 0..size.x {
+                let cell = m.cell(bn_client_egui::Pos { x, y });
+                match cell.layers.is_empty() {
+                    true => empty += 1,
+                    false => *ids.entry(cell.layers[0].id.clone()).or_default() += 1,
+                }
+            }
+        }
+        println!(
+            "LIVE model {}x{}, {empty} squares without layers; first layers {ids:?}",
+            size.x, size.y
+        );
+    }
+    h.get_by_label("2D").click();
+    h.run_steps(4);
+    save(&mut h, "town-flat.png");
+    h.get_by_label("3D").click();
+    h.run_steps(4);
     press(&mut h, "q", 6);
     save(&mut h, "town-yaw135.png");
     press(&mut h, "q", 6);
