@@ -146,52 +146,15 @@ fn turn(h: &mut H, n: usize) {
 
 #[test]
 #[ignore = "needs a Vulkan adapter"]
-fn the_room_seen_from_the_south_east_and_from_the_south_west() {
+fn the_room_seen_from_the_south_west_as_the_game_draws_it_and_from_the_north_west() {
     let mut h = harness("shots");
     settle(&mut h);
     // The wall x = 5, y = 2 to 4: its south end is (5, 4), two squares east of the avatar at (3, 4), and its
     // north end (5, 2). Faces between two wall squares are not seen.
     let (south_end, north_end) = ((2.0, 0.0), (2.0, -2.0));
     let top = 96.0 * 0.034_026;
-    let at_45 = save(&mut h, "iso3d-yaw45.png");
-    // The top is white, the south face red and the east face blue.
-    assert!(
-        whitish(pixel(
-            &mut h,
-            &at_45,
-            (south_end.0 + 0.5, south_end.1 + 0.5, top)
-        )),
-        "top"
-    );
-    assert!(
-        reddish(pixel(
-            &mut h,
-            &at_45,
-            (south_end.0 + 0.5, south_end.1 + 1.0, top / 2.0)
-        )),
-        "south face"
-    );
-    assert!(
-        bluish(pixel(
-            &mut h,
-            &at_45,
-            (north_end.0 + 1.0, north_end.1 + 0.5, top / 2.0)
-        )),
-        "east face"
-    );
-    // The floor turns with the world: the mark on a floor diamond's north corner stays there.
-    let floor = (0.0, 1.0);
-    assert!(
-        reddish(pixel(&mut h, &at_45, (floor.0 + 0.17, floor.1 + 0.17, 0.0))),
-        "mark at 45"
-    );
-    assert!(
-        greenish(pixel(&mut h, &at_45, (floor.0 + 0.55, floor.1 + 0.5, 0.0))),
-        "floor at 45"
-    );
-
-    // 90 degrees more: the camera is south-west of the room, and sees the south and the west faces.
-    turn(&mut h, 6);
+    // The top is white, the sprite's left face red and its right face blue; the game draws the west face on the
+    // left and the south face on the right.
     let at_135 = save(&mut h, "iso3d-yaw135.png");
     assert!(
         whitish(pixel(
@@ -202,7 +165,7 @@ fn the_room_seen_from_the_south_east_and_from_the_south_west() {
         "top"
     );
     assert!(
-        reddish(pixel(
+        bluish(pixel(
             &mut h,
             &at_135,
             (south_end.0 + 0.5, south_end.1 + 1.0, top / 2.0)
@@ -210,9 +173,51 @@ fn the_room_seen_from_the_south_east_and_from_the_south_west() {
         "south face"
     );
     assert!(
-        bluish(pixel(
+        reddish(pixel(
             &mut h,
             &at_135,
+            (north_end.0, north_end.1 + 0.5, top / 2.0)
+        )),
+        "west face"
+    );
+    // The floor turns with the world: the mark on a floor diamond's top corner, its north-east one, stays there.
+    let floor = (0.0, 1.0);
+    assert!(
+        reddish(pixel(
+            &mut h,
+            &at_135,
+            (floor.0 + 0.83, floor.1 + 0.17, 0.0)
+        )),
+        "mark at 135"
+    );
+    assert!(
+        greenish(pixel(&mut h, &at_135, (floor.0 + 0.45, floor.1 + 0.5, 0.0))),
+        "floor at 135"
+    );
+
+    // 90 degrees more: the camera is north-west of the room and sees the north and the west faces.
+    turn(&mut h, 6);
+    let at_225 = save(&mut h, "iso3d-yaw225.png");
+    assert!(
+        whitish(pixel(
+            &mut h,
+            &at_225,
+            (north_end.0 + 0.5, north_end.1 + 0.5, top)
+        )),
+        "top"
+    );
+    assert!(
+        bluish(pixel(
+            &mut h,
+            &at_225,
+            (north_end.0 + 0.5, north_end.1, top / 2.0)
+        )),
+        "north face"
+    );
+    assert!(
+        reddish(pixel(
+            &mut h,
+            &at_225,
             (north_end.0, north_end.1 + 0.5, top / 2.0)
         )),
         "west face"
@@ -220,19 +225,11 @@ fn the_room_seen_from_the_south_east_and_from_the_south_west() {
     assert!(
         reddish(pixel(
             &mut h,
-            &at_135,
-            (floor.0 + 0.17, floor.1 + 0.17, 0.0)
+            &at_225,
+            (floor.0 + 0.83, floor.1 + 0.17, 0.0)
         )),
-        "mark at 135"
+        "mark at 225"
     );
-    assert!(
-        greenish(pixel(&mut h, &at_135, (floor.0 + 0.55, floor.1 + 0.5, 0.0))),
-        "floor at 135"
-    );
-
-    // From the north-west the wall stands between the camera and the zombie east of it.
-    turn(&mut h, 6);
-    save(&mut h, "iso3d-yaw225.png");
 }
 
 #[test]

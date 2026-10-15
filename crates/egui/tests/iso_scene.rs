@@ -263,7 +263,7 @@ fn a_click_on_the_ground_picks_the_square_whose_ground_it_is() {
     let m = room();
     let scene = scene_of(&m, "pick-ground");
     let v = view(&m);
-    for abs in [(3, 5), (7, 2), (6, 6), (2, 7)] {
+    for abs in [(3, 5), (7, 6), (6, 6), (2, 7)] {
         let at = square(&m, abs);
         let on = v.project(glam::Vec3::new(at.0 as f32 + 0.5, at.1 as f32 + 0.5, 0.0));
         assert_eq!(scene.pick(&v, on), Some(at), "{abs:?}");
@@ -275,13 +275,13 @@ fn a_click_on_the_ground_picks_the_square_whose_ground_it_is() {
 #[test]
 fn a_square_seen_through_open_air_is_picked_where_its_lowered_ground_is_drawn() {
     let mut air =
-        json!({"at": {"dim": "", "x": 4, "y": 4, "z": 0}, "known": "visible", "below": 1});
+        json!({"at": {"dim": "", "x": 6, "y": 4, "z": 0}, "known": "visible", "below": 1});
     air["terrain"] = serde_json::Value::Null;
-    let mut cells = vec![air, cell(4, 4, -1, "t_dirt")];
+    let mut cells = vec![air, cell(6, 4, -1, "t_dirt")];
     // Ground only on the far side of the lowered square, so that none stands between it and the camera.
-    for x in 2..=4 {
+    for x in 6..=8 {
         for y in 2..=4 {
-            if (x, y) != (4, 4) {
+            if (x, y) != (6, 4) {
                 cells.push(cell(x, y, 0, "t_dirt"));
             }
         }
@@ -289,7 +289,7 @@ fn a_square_seen_through_open_air_is_picked_where_its_lowered_ground_is_drawn() 
     let m = model(cells);
     let scene = scene_of(&m, "pick-lowered");
     let v = view(&m);
-    let lowered = square(&m, (4, 4));
+    let lowered = square(&m, (6, 4));
     let ground = scene.column(lowered.0, lowered.1).unwrap().ground;
     assert!(ground < -1.0, "{ground}");
     let on = v.project(glam::Vec3::new(

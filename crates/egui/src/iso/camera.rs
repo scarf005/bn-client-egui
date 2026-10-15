@@ -8,14 +8,15 @@ pub const PITCH_MIN: f32 = 20.0 * std::f32::consts::PI / 180.0;
 pub const PITCH_MAX: f32 = 75.0 * std::f32::consts::PI / 180.0;
 /// The true isometric tilt, `atan(1 / sqrt(2))`.
 pub const PITCH_ISO: f32 = 0.615_479_7;
-pub const YAW_ISO: f32 = std::f32::consts::FRAC_PI_4;
+/// The yaw the game draws an isometric tileset from: the eye south-west of the target.
+pub const YAW_ISO: f32 = 3.0 * std::f32::consts::FRAC_PI_4;
 /// How far the eye sits from the target; orthographic, so it only has to clear the scene.
 const EYE_DISTANCE: f32 = 200.0;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Camera {
-    /// Direction of the eye around the target, counter-clockwise from east on the map: 45 degrees looks from
-    /// the south-east, as an isometric tileset is drawn.
+    /// Direction of the eye around the target, counter-clockwise from east on the map: 135 degrees looks from
+    /// the south-west, as the game draws an isometric tileset.
     pub yaw: f32,
     /// Elevation of the eye above the ground, within `PITCH_MIN..=PITCH_MAX`.
     pub pitch: f32,
@@ -119,7 +120,7 @@ mod tests {
     #[test]
     fn the_default_camera_is_the_true_isometric_view() {
         let camera = Camera::default();
-        assert!((camera.yaw.to_degrees() - 45.0).abs() < 1e-4);
+        assert!((camera.yaw.to_degrees() - 135.0).abs() < 1e-4);
         assert!((camera.pitch.to_degrees() - 35.264).abs() < 1e-3);
     }
 
@@ -144,16 +145,16 @@ mod tests {
     }
 
     #[test]
-    fn at_the_default_yaw_east_is_down_right_and_south_is_down_left() {
-        let v = view(45.0, 35.264);
+    fn at_the_default_yaw_east_is_up_right_and_south_is_down_right_as_the_game_draws_it() {
+        let v = view(135.0, 35.264);
         let origin = v.project(v.target);
         let east = v.project(v.target + Vec3::X) - origin;
         let south = v.project(v.target + Vec3::Y) - origin;
-        assert!(east.x > 0.0 && east.y > 0.0, "{east}");
-        assert!(south.x < 0.0 && south.y > 0.0, "{south}");
+        assert!(east.x > 0.0 && east.y < 0.0, "{east}");
+        assert!(south.x > 0.0 && south.y > 0.0, "{south}");
         // A tile is a 2:1-ish diamond: width is wider than height by 1/sin(pitch).
         assert!(
-            (east.x / east.y - 1.0 / 0.5774).abs() < 1e-2 * 2.0,
+            (east.x / east.y.abs() - 1.0 / 0.5774).abs() < 1e-2 * 2.0,
             "{east}"
         );
         assert!(

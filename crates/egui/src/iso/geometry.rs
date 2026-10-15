@@ -234,14 +234,15 @@ pub fn place(m: &Metrics, p: &Placement) -> Vec<Instance> {
     let ground = ([1.0, 0.0, 0.0], [0.0, 1.0, 0.0]);
     match shape(m, s, p.kind) {
         Shape::Floor { z } => {
-            // The diamond of the tile lies in the lowest rows of an isometric sprite; a square sprite is all ground.
+            // The diamond of the tile lies in the lowest rows of an isometric sprite, drawn as the game draws it:
+            // the square's north-west corner at its left corner, so its north-east corner is at the top.
             let uv = match m.iso {
                 true => {
                     let (w, h, t) = (size.x, size.y, m.diamond);
                     [
-                        at(w / 2.0, h - t),
+                        at(0.0, h - t / 2.0),
+                        span(w / 2.0, -t / 2.0),
                         span(w / 2.0, t / 2.0),
-                        span(-w / 2.0, t / 2.0),
                     ]
                 }
                 false => {
@@ -255,19 +256,20 @@ pub fn place(m: &Metrics, p: &Placement) -> Vec<Instance> {
             let (w, h, t) = (size.x, size.y, m.diamond);
             let (top, drop) = (p.floor + top, top - bottom);
             let down = [0.0, 0.0, -drop];
-            // The sprite shows the south and the east faces; the others reuse them, seen from behind.
-            let south = [at(0.0, t / 2.0), span(w / 2.0, t / 2.0), span(0.0, h - t)];
-            let east = [at(w / 2.0, t), span(w / 2.0, -t / 2.0), span(0.0, h - t)];
+            // The sprite shows the west face on its left and the south face on its right; the others reuse them,
+            // seen from behind.
+            let west = [at(0.0, t / 2.0), span(w / 2.0, t / 2.0), span(0.0, h - t)];
+            let south = [at(w / 2.0, t), span(w / 2.0, -t / 2.0), span(0.0, h - t)];
             let lid = [
-                at(w / 2.0, 0.0),
+                at(0.0, t / 2.0),
+                span(w / 2.0, -t / 2.0),
                 span(w / 2.0, t / 2.0),
-                span(-w / 2.0, t / 2.0),
             ];
             let faces = [
                 ([x, y + 1.0, top], ([1.0, 0.0, 0.0], down), south),
-                ([x + 1.0, y + 1.0, top], ([0.0, -1.0, 0.0], down), east),
+                ([x + 1.0, y + 1.0, top], ([0.0, -1.0, 0.0], down), west),
                 ([x + 1.0, y, top], ([-1.0, 0.0, 0.0], down), south),
-                ([x, y, top], ([0.0, 1.0, 0.0], down), east),
+                ([x, y, top], ([0.0, 1.0, 0.0], down), west),
             ];
             let seen = faces
                 .into_iter()
@@ -300,7 +302,7 @@ pub fn place(m: &Metrics, p: &Placement) -> Vec<Instance> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::iso::camera::{Camera, Viewport};
+    use crate::iso::camera::{Camera, Viewport, YAW_ISO};
     use glam::Vec3;
 
     const PAGE: PageId = PageId { sheet: 0, strip: 0 };
@@ -381,10 +383,10 @@ mod tests {
             Vec2::from(floor.uv) + Vec2::from(floor.uv_a) * u + Vec2::from(floor.uv_b) * v
         };
         let at = Vec2::new(96.0, 240.0);
-        assert!(near(corner(0.0, 0.0), at + Vec2::new(8.0, 0.0)));
-        assert!(near(corner(1.0, 0.0), at + Vec2::new(16.0, 4.0)));
-        assert!(near(corner(1.0, 1.0), at + Vec2::new(8.0, 8.0)));
-        assert!(near(corner(0.0, 1.0), at + Vec2::new(0.0, 4.0)));
+        assert!(near(corner(0.0, 0.0), at + Vec2::new(0.0, 4.0)));
+        assert!(near(corner(1.0, 0.0), at + Vec2::new(8.0, 0.0)));
+        assert!(near(corner(1.0, 1.0), at + Vec2::new(16.0, 4.0)));
+        assert!(near(corner(0.0, 1.0), at + Vec2::new(8.0, 8.0)));
         // Left untrimmed it is a box: the sprite alone does not say there is nothing in the top rows.
         let (m, s) = hit_button((16.0, 20.0), (0.0, 0.0));
         assert!(matches!(shape(&m, &s, Kind::Joined), Shape::Box { .. }));
@@ -408,10 +410,11 @@ mod tests {
         let corner = |i: &Instance, u: f32, v: f32| {
             Vec2::from(i.uv) + Vec2::from(i.uv_a) * u + Vec2::from(i.uv_b) * v - at
         };
-        assert!(near(corner(&faces[0], 0.0, 0.0), Vec2::new(8.0, 0.0)));
-        assert!(near(corner(&faces[0], 1.0, 1.0), Vec2::new(8.0, 8.0)));
-        assert!(near(corner(&faces[1], 0.0, 0.0), Vec2::new(0.0, 4.0)));
-        assert!(near(corner(&faces[1], 1.0, 1.0), Vec2::new(8.0, 20.0)));
+        assert!(near(corner(&faces[0], 0.0, 0.0), Vec2::new(0.0, 4.0)));
+        assert!(near(corner(&faces[0], 1.0, 1.0), Vec2::new(16.0, 4.0)));
+        // The south face, on the right of the sprite, from its bottom corner to its right corner.
+        assert!(near(corner(&faces[1], 0.0, 0.0), Vec2::new(8.0, 8.0)));
+        assert!(near(corner(&faces[1], 1.0, 1.0), Vec2::new(16.0, 16.0)));
         assert_eq!(faces[1].origin[2], 12.0 * m.up);
         assert!((faces[1].b[2] + 12.0 * m.up).abs() < 1e-5);
     }
@@ -473,15 +476,16 @@ mod tests {
             panic!("one quad")
         };
         assert_eq!(floor.origin, [3.0, 5.0, 0.0]);
-        // The diamond's corners in the page: top, right, bottom, left of the lowest 24 rows.
+        // The diamond's corners in the page, from the lowest 24 rows: the north-west corner is the left one, the
+        // north-east the top one, the south-east the right one and the south-west the bottom one.
         let corner = |u: f32, v: f32| {
             Vec2::from(floor.uv) + Vec2::from(floor.uv_a) * u + Vec2::from(floor.uv_b) * v
         };
         let at = Vec2::new(96.0, 240.0);
-        assert!(near(corner(0.0, 0.0), at + Vec2::new(24.0, 12.0)));
-        assert!(near(corner(1.0, 0.0), at + Vec2::new(48.0, 24.0)));
-        assert!(near(corner(1.0, 1.0), at + Vec2::new(24.0, 36.0)));
-        assert!(near(corner(0.0, 1.0), at + Vec2::new(0.0, 24.0)));
+        assert!(near(corner(0.0, 0.0), at + Vec2::new(0.0, 24.0)));
+        assert!(near(corner(1.0, 0.0), at + Vec2::new(24.0, 12.0)));
+        assert!(near(corner(1.0, 1.0), at + Vec2::new(48.0, 24.0)));
+        assert!(near(corner(0.0, 1.0), at + Vec2::new(24.0, 36.0)));
     }
 
     #[test]
@@ -495,21 +499,25 @@ mod tests {
             Vec2::from(i.uv) + Vec2::from(i.uv_a) * u + Vec2::from(i.uv_b) * v - at
         };
         let top = 96.0 * m.up;
-        // Lid: the top diamond, rows 0 to 24.
+        // Lid: the top diamond, rows 0 to 24, its north-west corner at the left.
         assert_eq!(faces[0].origin, [3.0, 5.0, top]);
-        assert!(near(corner(&faces[0], 0.0, 0.0), Vec2::new(24.0, 0.0)));
-        assert!(near(corner(&faces[0], 1.0, 1.0), Vec2::new(24.0, 24.0)));
-        // South face: the left half of the faces, from the west corner to the south corner.
+        assert!(near(corner(&faces[0], 0.0, 0.0), Vec2::new(0.0, 12.0)));
+        assert!(near(corner(&faces[0], 1.0, 0.0), Vec2::new(24.0, 0.0)));
+        assert!(near(corner(&faces[0], 1.0, 1.0), Vec2::new(48.0, 12.0)));
+        // South face: the right half of the faces, from the south corner to the east corner.
         assert_eq!(faces[1].origin, [3.0, 6.0, top]);
-        assert!(near(corner(&faces[1], 0.0, 0.0), Vec2::new(0.0, 12.0)));
-        assert!(near(corner(&faces[1], 1.0, 0.0), Vec2::new(24.0, 24.0)));
-        assert!(near(corner(&faces[1], 0.0, 1.0), Vec2::new(0.0, 108.0)));
-        assert!(near(corner(&faces[1], 1.0, 1.0), Vec2::new(24.0, 120.0)));
-        // East face: the right half, from the south corner to the east corner.
+        assert!(near(corner(&faces[1], 0.0, 0.0), Vec2::new(24.0, 24.0)));
+        assert!(near(corner(&faces[1], 1.0, 0.0), Vec2::new(48.0, 12.0)));
+        assert!(near(corner(&faces[1], 1.0, 1.0), Vec2::new(48.0, 108.0)));
+        // East face, behind: the left half, as the west face has it.
         assert_eq!(faces[2].origin, [4.0, 6.0, top]);
-        assert!(near(corner(&faces[2], 0.0, 0.0), Vec2::new(24.0, 24.0)));
-        assert!(near(corner(&faces[2], 1.0, 0.0), Vec2::new(48.0, 12.0)));
-        assert!(near(corner(&faces[2], 1.0, 1.0), Vec2::new(48.0, 108.0)));
+        assert!(near(corner(&faces[2], 0.0, 0.0), Vec2::new(0.0, 12.0)));
+        assert!(near(corner(&faces[2], 1.0, 0.0), Vec2::new(24.0, 24.0)));
+        assert!(near(corner(&faces[2], 1.0, 1.0), Vec2::new(24.0, 120.0)));
+        // West face: the left half, from the west corner to the south corner.
+        assert_eq!(faces[4].origin, [3.0, 5.0, top]);
+        assert!(near(corner(&faces[4], 0.0, 0.0), Vec2::new(0.0, 12.0)));
+        assert!(near(corner(&faces[4], 1.0, 0.0), Vec2::new(24.0, 24.0)));
         // Each side face drops from the top to the bottom of the box.
         assert!(faces[1..].iter().all(|f| (f.b[2] + top).abs() < 1e-5));
     }
@@ -523,17 +531,17 @@ mod tests {
         let [floor] = place(&m, &square(&s, Kind::Terrain))[..] else {
             panic!("one quad")
         };
-        assert!(near(Vec2::from(floor.uv), s.at + Vec2::new(12.0, 6.0)));
-        assert!(near(Vec2::from(floor.uv_a), Vec2::new(12.0, 6.0)));
+        assert!(near(Vec2::from(floor.uv), s.at + Vec2::new(0.0, 12.0)));
+        assert!(near(Vec2::from(floor.uv_a), Vec2::new(12.0, -6.0)));
     }
 
     /// Where the corner `(u, v)` of an instance lies on a screen that draws the world as the tileset does
-    /// (yaw 45, the 2:1 tilt, one tile pixel per point), from the top left of the square's tile.
+    /// (the game's yaw, the 2:1 tilt, one tile pixel per point), from the top left of the square's tile.
     fn screen(i: &Instance, m: &Metrics, u: f32, v: f32) -> Vec2 {
         let tilt = (m.diamond / m.tile.x).asin();
         let view = Viewport {
             camera: Camera {
-                yaw: std::f32::consts::FRAC_PI_4,
+                yaw: YAW_ISO,
                 pitch: tilt,
             },
             target: Vec3::ZERO,
@@ -587,11 +595,11 @@ mod tests {
         .flat_map(|(s, kind)| place(&m, &square(s, *kind)))
         .collect::<Vec<_>>();
         assert_eq!(quads.len(), 1 + 5 + 1 + 1);
-        // The faces behind the box are seen from inside.
+        // The east and north faces are behind the box, seen from inside.
         for quad in quads
             .iter()
             .enumerate()
-            .filter(|(n, _)| ![4, 5].contains(n))
+            .filter(|(n, _)| ![3, 4].contains(n))
         {
             drawn_as_in_the_sprite(quad.1, &m);
         }
@@ -616,7 +624,7 @@ mod tests {
         for quad in quads
             .iter()
             .enumerate()
-            .filter(|(n, _)| ![4, 5].contains(n))
+            .filter(|(n, _)| ![3, 4].contains(n))
         {
             drawn_as_in_the_sprite(quad.1, &m);
         }

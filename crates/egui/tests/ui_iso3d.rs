@@ -380,22 +380,22 @@ fn hovering_a_3d_square_asks_the_engine_to_describe_that_square() {
 }
 
 /// How wide a map square's diamond is on the screen of the 3D map: the horizontal distance between the middles
-/// of the squares left and right of it, which the camera at its default turn sees one diagonal apart.
+/// of the squares north and south of it, which the camera at its default turn sees one diagonal apart.
 fn diamond_width(h: &mut H) -> f32 {
     let player = h.state().model.player();
     let (right, left) = (
         screen_of(
             h,
             Pos {
-                x: player.x + 1,
-                y: player.y,
+                x: player.x,
+                y: player.y + 1,
             },
         ),
         screen_of(
             h,
             Pos {
                 x: player.x,
-                y: player.y + 1,
+                y: player.y - 1,
             },
         ),
     );

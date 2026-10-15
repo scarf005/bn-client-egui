@@ -238,7 +238,7 @@ fn the_town_in_3d_from_every_side_and_what_a_frame_costs() {
             .instances
             .load(std::sync::atomic::Ordering::Relaxed)
     );
-    save(&mut h, "town-yaw45.png");
+    save(&mut h, "town-yaw135.png");
     // BN_FLAT_ZOOMS: the flat map at every zoom step from the farthest to the closest, and nothing more.
     if std::env::var_os("BN_FLAT_ZOOMS").is_some() {
         h.hover_at(h.get_by_label("Map").rect().center());
@@ -313,11 +313,11 @@ fn the_town_in_3d_from_every_side_and_what_a_frame_costs() {
     save(&mut h, "town-flat.png");
     choose(&mut h, "3D");
     turn(&mut h, 6);
-    save(&mut h, "town-yaw135.png");
-    turn(&mut h, 6);
     save(&mut h, "town-yaw225.png");
     turn(&mut h, 6);
     save(&mut h, "town-yaw315.png");
+    turn(&mut h, 6);
+    save(&mut h, "town-yaw45.png");
     turn(&mut h, 6);
     drag(&mut h, egui::vec2(0.0, -400.0));
     save(&mut h, "town-pitch-high.png");
