@@ -70,6 +70,8 @@ struct Gpu {
     copy_layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
     sheets: HashMap<PageId, wgpu::BindGroup>,
+    /// The pages the uploaded `sheets` came from; another tileset's pages replace them.
+    pages: Option<Arc<Pages>>,
     instances: Option<wgpu::Buffer>,
     version: Option<u64>,
     /// The instances of each page: first and count.
@@ -238,6 +240,7 @@ impl Gpu {
             copy_layout,
             sampler,
             sheets: HashMap::new(),
+            pages: None,
             instances: None,
             version: None,
             runs: vec![],
@@ -377,7 +380,16 @@ impl Gpu {
         paint: &Paint,
         size: [u32; 2],
     ) {
-        self.resize(device, size);
+        if !self
+            .pages
+            .as_ref()
+            .is_some_and(|p| Arc::ptr_eq(p, &paint.pages))
+        {
+            self.sheets.clear();
+            self.pages = Some(paint.pages.clone());
+        }
+        let limit = device.limits().max_texture_dimension_2d;
+        self.resize(device, size.map(|n| n.min(limit)));
         self.upload(device, &paint.scene);
         queue.write_buffer(&self.camera, 0, bytemuck::bytes_of(&paint.camera));
         // Pages still being decoded are left out until they arrive.
