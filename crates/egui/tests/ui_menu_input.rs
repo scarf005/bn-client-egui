@@ -73,25 +73,6 @@ fn a_menu_with_more_choices_than_listed_fetches_the_next_page_and_shows_it() {
 }
 
 #[test]
-fn a_character_creation_list_fetches_its_missing_pages_without_a_click() {
-    let reply = json!({"jsonrpc":"2.0","id":4,"result":{"boundary_id":"b:13","total":3,"choices":[
-        {"id":"profession:last","label":"Used Car Salesman","enabled":true,"description":"","denial":"",
-         "selectable":true,"selected":false,"columns":[]}]}});
-    let (mut h, script) = harness(vec![reply]);
-    let menu = menu_event(|i| {
-        i["choice_total"] = json!(3);
-        i["context"] = json!("NEW_CHAR_PROFESSION");
-    });
-    open(&mut h, &script, menu);
-    h.run_steps(4);
-    let asked = sent(&script, "bn.interaction.choices");
-    assert_eq!(asked.len(), 1, "the missing page is asked for once");
-    assert_eq!(asked[0]["params"]["offset"], 2);
-    h.get_by_label("Used Car Salesman");
-    assert_eq!(h.state().model.menu().unwrap().choices.len(), 3);
-}
-
-#[test]
 fn typing_in_a_text_prompt_fills_the_field_and_enter_submits_it() {
     let (mut h, script) = harness(vec![]);
     let menu = menu_event(|i| {

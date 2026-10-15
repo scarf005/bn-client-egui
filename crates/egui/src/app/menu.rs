@@ -282,9 +282,6 @@ impl<M: GameModel> App<M> {
             let (shown, all) = (listed.inner_rect.height(), listed.content_size.y);
             more |= paged && all > shown && listed.state.offset.y + shown + 1.0 >= all;
             if menu.total > menu.choices.len() {
-                // A character creation list is all there is to pick from, so its pages are fetched
-                // as they are missing; any other long list comes one page per click.
-                more |= menu.context.starts_with("NEW_CHAR_");
                 let rest = ui.button(format!(
                     "Load more ({} of {})",
                     menu.choices.len(),

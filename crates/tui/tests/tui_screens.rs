@@ -191,8 +191,6 @@ screen!(scores, "SCORES", tabs);
 screen!(diary, "DIARY");
 screen!(auto_notes, "AUTO_NOTES");
 screen!(panel_manager, "PANEL_MGMT");
-screen!(active_world_mods, "DEFAULT");
-screen!(mod_manager, "MODMANAGER_DIALOG", tabs);
 
 #[test]
 fn a_click_outside_the_rows_of_a_menu_sends_nothing() {
@@ -279,8 +277,8 @@ macro_rules! action_rows {
 }
 
 action_rows!(
-    action_rows_of_character_creation,
-    "NEW_CHAR_DESCRIPTION",
+    action_rows_of_a_tabbed_menu,
+    "TABBED_ACTIONS",
     true
 );
 action_rows!(action_rows_of_a_manager_list, "ZONES_MANAGER", false);

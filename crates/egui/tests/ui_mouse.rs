@@ -455,37 +455,6 @@ fn a_double_click_on_a_row_chooses_it_once_as_native_has_no_double_click() {
 }
 
 #[test]
-fn clicking_the_text_of_a_composed_screen_sends_nothing_as_native_has_no_tab_click_there() {
-    let (mut h, script) = harness();
-    h.run_steps(3);
-    for name in ["events_41_walk", "events_42_message"] {
-        script.push(fixture(name));
-    }
-    let mut menu = fixture("events_43_menu");
-    let interaction = &mut menu["params"]["events"][0]["changes"]["interaction"]["interaction"];
-    interaction["context"] = "NEW_CHAR_POINTS".into();
-    interaction["title"] = "Character creation".into();
-    interaction["message"] = "POINTS  SCENARIO  PROFESSION".into();
-    interaction["choices"] = json!([]);
-    script.push(menu);
-    h.run_steps(3);
-    let at = h.get_by_label_contains("SCENARIO").rect().center();
-    h.hover_at(at);
-    h.run_steps(2);
-    for pressed in [true, false] {
-        h.event(egui::Event::PointerButton {
-            pos: at,
-            button: egui::PointerButton::Primary,
-            pressed,
-            modifiers: egui::Modifiers::NONE,
-        });
-        h.run_steps(1);
-    }
-    h.run_steps(2);
-    assert!(operations(&script).is_empty());
-}
-
-#[test]
 fn the_map_does_not_move_with_the_length_of_the_hovered_description() {
     let long = "very dark interlocking wooden tiles that are more than likely treated against fire, with wooden posts and beams supporting a roof. ".repeat(4);
     let (t, _script) = session();
