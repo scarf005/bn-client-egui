@@ -1,6 +1,7 @@
 //! The engine's classic sidebar values, laid out by the client as coloured lines.
 
 use crate::colors::ColorMap;
+use crate::markup;
 use crate::model::{Cell, Rgb};
 use crate::protocol::{Avatar, Look, SidebarSide, SidebarText};
 
@@ -8,6 +9,24 @@ use crate::protocol::{Avatar, Look, SidebarSide, SidebarText};
 pub struct Span {
     pub text: String,
     pub color: Rgb,
+}
+
+impl Span {
+    /// The text as one span per colour run of its inline markup, the span's own colour where the markup names none.
+    pub fn runs(&self) -> Vec<Span> {
+        markup::runs(&self.text, &ColorMap::default())
+            .into_iter()
+            .map(|run| Span {
+                text: run.text,
+                color: run.color.unwrap_or(self.color),
+            })
+            .collect()
+    }
+
+    /// The characters the text takes once printed, its colour tags not counted.
+    pub fn width(&self) -> usize {
+        markup::plain(&self.text).chars().count()
+    }
 }
 
 /// One sidebar row; its spans read left to right. A value with nothing to print stays as an empty

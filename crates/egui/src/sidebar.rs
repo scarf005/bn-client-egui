@@ -55,9 +55,7 @@ pub fn rows(ui: &mut egui::Ui, panel: &str, lines: &[Line], table: bool) {
         columns.resize(columns.len().max(line.len()), 0);
         for (i, span) in line.iter().enumerate() {
             let floor = MIN_COLUMNS.get(i).filter(|_| table && group == 0).copied();
-            columns[i] = columns[i]
-                .max(floor.unwrap_or(0))
-                .max(span.text.chars().count());
+            columns[i] = columns[i].max(floor.unwrap_or(0)).max(span.width());
         }
     }
     ui.data_mut(|d| d.insert_temp(key, groups.clone()));
@@ -104,12 +102,17 @@ fn job_of(spans: &[&Span], gap: &str, breaks: &[usize], grid: &Grid) -> LayoutJo
         }
         let lead = if has { gap } else { "" };
         let pad = start.saturating_sub(at + lead.len());
-        job.append(
-            &format!("{lead}{}", span.text),
-            pad as f32 * grid.char_width,
-            format_of(span),
-        );
-        at += pad + lead.len() + span.text.chars().count();
+        let mut lead_in = pad as f32 * grid.char_width;
+        for (n, run) in span.runs().iter().enumerate() {
+            let text = if n == 0 {
+                format!("{lead}{}", run.text)
+            } else {
+                run.text.clone()
+            };
+            job.append(&text, lead_in, format_of(run));
+            lead_in = 0.0;
+        }
+        at += pad + lead.len() + span.width();
         has = true;
     }
     job

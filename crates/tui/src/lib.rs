@@ -802,10 +802,11 @@ impl<M: GameModel> TuiApp<M> {
         let lines = rows.iter().map(|row| {
             let spans = row.iter().filter(|s| !s.text.is_empty());
             let spans = spans.flat_map(|s| {
-                [
-                    Span::raw(" "),
-                    Span::styled(s.text.as_str(), Style::new().fg(color(s.color))),
-                ]
+                let runs = s.runs().into_iter();
+                let runs = runs.map(|r| Span::styled(r.text, Style::new().fg(color(r.color))));
+                std::iter::once(Span::raw(" "))
+                    .chain(runs)
+                    .collect::<Vec<_>>()
             });
             Line::from(spans.skip(1).collect::<Vec<_>>())
         });

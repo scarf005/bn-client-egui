@@ -246,3 +246,19 @@ fn the_labels_layouts_split_the_health_rows_into_limbs_needs_stats_and_movement_
     assert_eq!(by_id("Stats"), ["Str 8 POWER --", "SAFE"]);
     assert_eq!(by_id("Movement"), [":) Focus 100", "Stm ||||| Spd 100 0 W"]);
 }
+
+#[test]
+fn a_spans_colour_tags_split_it_into_runs_and_do_not_count_as_width() {
+    let span = bn_client_core::sidebar::Span {
+        text: "<color_c_magenta>|. </color>broadsword".into(),
+        color: Rgb(200, 200, 200),
+    };
+    let runs = span.runs();
+    assert_eq!(
+        runs.iter().map(|r| r.text.as_str()).collect::<Vec<_>>(),
+        ["|. ", "broadsword"]
+    );
+    assert_ne!(runs[0].color, span.color, "the tag's colour");
+    assert_eq!(runs[1].color, span.color, "untagged text keeps the span's");
+    assert_eq!(span.width(), "|. broadsword".len());
+}

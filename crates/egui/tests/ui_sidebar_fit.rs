@@ -149,3 +149,23 @@ fn a_wide_row_below_the_table_never_widens_the_table() {
     };
     assert_eq!(width(true), width(false));
 }
+
+#[test]
+fn colour_tags_in_a_value_are_painted_as_colours_and_never_as_text() {
+    let lines = vec![vec![
+        span("Weapon  :"),
+        span("<color_c_magenta>|. </color>broadsword"),
+    ]];
+    let h = Harness::builder()
+        .with_size(egui::vec2(600.0, 200.0))
+        .build_ui(move |ui| bn_client_egui::sidebar::show(ui, &lines));
+    let label = h.get_by_label_contains("Weapon");
+    let text = label.accesskit_node().value().unwrap_or_default();
+    assert_eq!(text, "Weapon  :  |. broadsword");
+    let magenta = h.output().shapes.iter().any(|clipped| {
+        matches!(&clipped.shape, egui::Shape::Text(t)
+            if t.galley.job.sections.iter().any(|s| s.format.color != egui::Color32::WHITE)
+                && t.galley.text().contains("broadsword"))
+    });
+    assert!(magenta, "the tagged run keeps a colour of its own");
+}
