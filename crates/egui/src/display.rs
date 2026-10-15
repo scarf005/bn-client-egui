@@ -1032,6 +1032,13 @@ fn draw_sprite(
     );
     let min = cell.min + egui::vec2(offset.0 * scale.0, offset.1 * scale.1);
     let dest = Rect::from_min_size(min, size);
+    // A sample on the edge of a sprite can land in the sprite next to it in the sheet, at a zoom where the
+    // renderer draws the rectangle off the pixel grid: the source stops half a texel short of each edge.
+    let texel = egui::vec2(
+        uv.width() / sheet.sprite.0 as f32,
+        uv.height() / sheet.sprite.1 as f32,
+    );
+    let uv = uv.shrink2(texel / 2.0);
     // Source corners for the destination's top left, top right, bottom right and bottom left.
     let [tl, tr, br, bl] = [
         uv.left_top(),
