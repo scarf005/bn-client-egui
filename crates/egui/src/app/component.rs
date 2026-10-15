@@ -536,13 +536,18 @@ impl<M: GameModel> App<M> {
     fn stat(&self, ui: &mut egui::Ui, stat: &PanelStat) {
         let max = stat.max.as_ref().map(|m| format!("/{}", m.shown()));
         let unit = stat.unit.as_ref().map(|u| format!(" {}", u.shown()));
-        let shown = format!(
-            "{}: {}{}{}",
-            markup::plain(&stat.label.shown()),
-            markup::plain(&stat.value.shown()),
-            max.unwrap_or_default(),
-            unit.unwrap_or_default()
-        );
+        let value = markup::plain(&stat.value.shown());
+        let shown = if value.is_empty() && max.is_none() && unit.is_none() {
+            markup::plain(&stat.label.shown())
+        } else {
+            format!(
+                "{}: {}{}{}",
+                markup::plain(&stat.label.shown()),
+                value,
+                max.unwrap_or_default(),
+                unit.unwrap_or_default()
+            )
+        };
         let tone = stat.tone.map(|t| if t == Tone::Good { GOOD } else { BAD });
         ui.label(egui::RichText::new(shown).color(tone.unwrap_or(ui.visuals().text_color())));
     }
