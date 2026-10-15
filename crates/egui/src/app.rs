@@ -1,6 +1,7 @@
 use crate::a11y;
 use crate::display::Display;
 use crate::effects::Effects;
+use crate::iso::{self, View3d};
 use crate::text;
 use crate::windows::{Origin, Shown, WindowSpec};
 use bn_client_core::protocol::SidebarSide;
@@ -143,6 +144,8 @@ pub struct App<M: GameModel> {
     prompt_composing: bool,
     /// Shots, explosions and floating text now playing on the map.
     effects: Effects,
+    /// The map as a 3D scene, when asked for.
+    iso: View3d,
     /// The client-local state of the top screen when the engine describes it by components.
     screens: component::Screens,
     /// The sidebar as last drawn: the side it is on and its rectangle, which a docked window sits beside.
@@ -183,6 +186,7 @@ impl<M: GameModel> App<M> {
             prompt_sent: Vec::new(),
             prompt_composing: false,
             effects: Effects::default(),
+            iso: View3d::default(),
             menu_ids: Vec::new(),
             action_ids: Vec::new(),
             palette_ids: Vec::new(),
@@ -209,6 +213,22 @@ impl<M: GameModel> App<M> {
     }
 
     /// Times the settle delay with `clock`, so tests can advance it instead of sleeping.
+    /// The pass format the 3D map is drawn into; the window's renderer tells it, so only a test sets it.
+    pub fn with_target_format(mut self, format: egui_wgpu::wgpu::TextureFormat) -> Self {
+        self.iso.target = Some(format);
+        self
+    }
+
+    /// The 3D map's camera, which the right button, Q and E turn.
+    pub fn camera(&self) -> iso::camera::Camera {
+        self.iso.camera
+    }
+
+    /// What the last paint of the 3D map drew.
+    pub fn iso_stats(&self) -> &iso::gpu::Stats {
+        &self.iso.stats
+    }
+
     pub fn with_clock(mut self, clock: bn_client_core::Clock) -> Self {
         self.clock = clock;
         self
@@ -472,6 +492,23 @@ impl<M: GameModel> App<M> {
         } else {
             typed
         };
+        // In the 3D map Q and E turn the camera; they are not the game's keys there.
+        let typed = if menu.is_none() && self.iso.active(&self.display) {
+            let (turns, rest): (Vec<_>, Vec<_>) = typed
+                .into_iter()
+                .partition(|t| t.eq_ignore_ascii_case("q") || t.eq_ignore_ascii_case("e"));
+            for turn in turns {
+                let sign = if turn.eq_ignore_ascii_case("q") {
+                    1.0
+                } else {
+                    -1.0
+                };
+                self.iso.camera.orbit(sign * iso::TURN, 0.0);
+            }
+            rest
+        } else {
+            typed
+        };
         // A menu is an engine input context: its navigation, paging, confirm and cancel keys are the
         // player's bindings, and the engine moves its own cursor. The exceptions are the toolkit's
         // accessibility keys: Tab and Shift+Tab move focus, and Space and Enter act on a focused widget.
@@ -716,9 +753,16 @@ impl<M: GameModel> App<M> {
         self.display.begin();
         // The room left for the map, less the status block above it, in whole cells.
         let room = ui.available_size() - egui::vec2(0.0, status_height(ui));
-        self.model.set_viewport(Pos {
-            x: (room.x / cell_px) as i32,
-            y: (room.y / cell_px) as i32,
+        let three = self.iso.active(&self.display);
+        self.model.set_viewport(match three {
+            true => Pos {
+                x: iso::REACH,
+                y: iso::REACH,
+            },
+            false => Pos {
+                x: (room.x / cell_px) as i32,
+                y: (room.y / cell_px) as i32,
+            },
         });
         // Facts are always taken, so a long pause never replays them; reduced motion drops them.
         let now = ui.input(|i| i.time);
@@ -794,10 +838,26 @@ impl<M: GameModel> App<M> {
             .inner;
         ui.ctx()
             .accesskit_node_builder(status_label.id, |b| b.set_live(accesskit::Live::Polite));
-        let (response, painter) = ui.allocate_painter(
-            egui::vec2(size.x as f32 * cell_px, size.y as f32 * cell_px),
-            egui::Sense::click().union(egui::Sense::focusable_noninteractive()),
-        );
+        // The 3D map fills the room and turns with the right button; the flat one is its squares.
+        let (extent, sense) = match three {
+            true => (ui.available_size(), egui::Sense::click_and_drag()),
+            false => (
+                egui::vec2(size.x as f32 * cell_px, size.y as f32 * cell_px),
+                egui::Sense::click(),
+            ),
+        };
+        let (response, painter) =
+            ui.allocate_painter(extent, sense.union(egui::Sense::focusable_noninteractive()));
+        let view = three.then(|| {
+            let scale = self.display.tileset().map_or(cell_px, |(t, _)| {
+                iso::scene::world_scale(t, self.display.zoom())
+            });
+            self.iso.viewport(player, scale, response.rect.size())
+        });
+        if view.is_some() && response.dragged_by(egui::PointerButton::Secondary) {
+            self.iso.drag(response.drag_delta());
+            ui.ctx().request_repaint();
+        }
         response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Other, true, "Map"));
         // One zoom step per wheel event over the map, not per smoothed frame.
         if response.hovered() {
@@ -823,10 +883,21 @@ impl<M: GameModel> App<M> {
             b.set_description(status.as_str());
         });
         let cell_at = |p: egui::Pos2| {
-            let v = (p - response.rect.min) / cell_px;
+            let at = match &view {
+                // The square of the avatar's level under the pointer.
+                Some(v) => {
+                    let p = p - response.rect.min;
+                    let hit = v.pick(glam::Vec2::new(p.x, p.y), 0.0);
+                    hit.map_or(glam::Vec2::ZERO, |h| h.floor())
+                }
+                None => {
+                    let v = (p - response.rect.min) / cell_px;
+                    glam::Vec2::new(v.x.floor(), v.y.floor())
+                }
+            };
             Pos {
-                x: (v.x as i32).clamp(0, size.x - 1),
-                y: (v.y as i32).clamp(0, size.y - 1),
+                x: (at.x as i32).clamp(0, size.x - 1),
+                y: (at.y as i32).clamp(0, size.y - 1),
             }
         };
         // Only a moving pointer moves the cursor, so it cannot undo keyboard navigation.
@@ -937,56 +1008,94 @@ impl<M: GameModel> App<M> {
             painter.rect_filled(response.rect, 0.0, egui::Color32::BLACK);
         }
         profiling::scope!("map cells");
-        for y in 0..size.y {
-            for x in 0..size.x {
-                let cell = self.model.cell(Pos { x, y });
-                let origin = response.rect.min + egui::vec2(x as f32, y as f32) * cell_px;
-                let square = egui::Rect::from_min_size(origin, egui::Vec2::splat(cell_px));
-                if tiles
-                    && self
-                        .display
-                        .paint(&painter, square, &cell, season.as_deref())
-                {
-                    continue;
+        if let (Some(v), Some(target)) = (&view, self.iso.target) {
+            let ctx = ui.ctx().clone();
+            let shown = self
+                .iso
+                .scene(&ctx, &self.model, &self.display, season.as_deref());
+            if let Some(shown) = shown {
+                let stats = self.iso.stats.clone();
+                painter.add(iso::callback(response.rect, v, target, shown, stats));
+            }
+        } else {
+            for y in 0..size.y {
+                for x in 0..size.x {
+                    let cell = self.model.cell(Pos { x, y });
+                    let origin = response.rect.min + egui::vec2(x as f32, y as f32) * cell_px;
+                    let square = egui::Rect::from_min_size(origin, egui::Vec2::splat(cell_px));
+                    if tiles
+                        && self
+                            .display
+                            .paint(&painter, square, &cell, season.as_deref())
+                    {
+                        continue;
+                    }
+                    if let Some(bg) = cell.bg {
+                        painter.rect_filled(square, 0.0, rgb(bg));
+                    }
+                    painter.text(
+                        square.center(),
+                        egui::Align2::CENTER_CENTER,
+                        cell.glyph,
+                        font.clone(),
+                        rgb(cell.color),
+                    );
                 }
-                if let Some(bg) = cell.bg {
-                    painter.rect_filled(square, 0.0, rgb(bg));
-                }
-                painter.text(
-                    square.center(),
-                    egui::Align2::CENTER_CENTER,
-                    cell.glyph,
-                    font.clone(),
-                    rgb(cell.color),
-                );
             }
         }
-        let rect = |p: Pos| {
-            egui::Rect::from_min_size(
+        // A square on the screen: its rectangle on the flat map, the diamond of its ground in the 3D one.
+        let rect = |p: Pos| match &view {
+            Some(v) => egui::Rect::from_center_size(
+                ground_point(v, response.rect, p, (0.5, 0.5), 0.5),
+                egui::Vec2::splat(cell_px),
+            ),
+            None => egui::Rect::from_min_size(
                 response.rect.min + egui::vec2(p.x as f32, p.y as f32) * cell_px,
                 egui::Vec2::splat(cell_px),
-            )
+            ),
+        };
+        let corners = |v: &iso::camera::Viewport, p: Pos| {
+            [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]
+                .map(|(dx, dy)| ground_point(v, response.rect, p, (dx, dy), 0.0))
+        };
+        let fill = |p: Pos, color: egui::Color32| match &view {
+            Some(v) => {
+                painter.add(egui::Shape::convex_polygon(
+                    corners(v, p).to_vec(),
+                    color,
+                    egui::Stroke::NONE,
+                ));
+            }
+            None => {
+                painter.rect_filled(rect(p), 0.0, color);
+            }
+        };
+        let outline = |p: Pos, stroke: egui::Stroke| match &view {
+            Some(v) => {
+                painter.add(egui::Shape::closed_line(corners(v, p).to_vec(), stroke));
+            }
+            None => {
+                painter.rect_stroke(rect(p), 0.0, stroke, egui::StrokeKind::Inside);
+            }
         };
         for (i, p) in route.iter().enumerate() {
             let in_view = (0..size.x).contains(&p.x) && (0..size.y).contains(&p.y);
             if in_view {
                 let alpha = if i + 1 == route.len() { 140 } else { 70 };
-                painter.rect_filled(
-                    rect(*p),
-                    0.0,
+                fill(
+                    *p,
                     egui::Color32::from_rgba_unmultiplied(0, 200, 255, alpha),
                 );
             }
         }
         if let Some(m) = self.marker.filter(|_| self.model.busy()) {
-            painter.rect_stroke(
-                rect(Pos {
-                    x: m.x - origin.x,
-                    y: m.y - origin.y,
-                }),
-                0.0,
+            let at = Pos {
+                x: m.x - origin.x,
+                y: m.y - origin.y,
+            };
+            outline(
+                at,
                 egui::Stroke::new(2.0, egui::Color32::from_rgb(0, 200, 255)),
-                egui::StrokeKind::Inside,
             );
         }
         // The tile view draws the avatar as its own sprite.
@@ -1002,12 +1111,7 @@ impl<M: GameModel> App<M> {
             );
         }
         if looking.is_some() || hover.is_some() {
-            painter.rect_stroke(
-                rect(cursor),
-                0.0,
-                egui::Stroke::new(1.0, egui::Color32::WHITE),
-                egui::StrokeKind::Inside,
-            );
+            outline(cursor, egui::Stroke::new(1.0, egui::Color32::WHITE));
         }
         let ascii = !self.display.tiles();
         self.effects
@@ -1016,6 +1120,19 @@ impl<M: GameModel> App<M> {
             ui.ctx().request_repaint();
         }
     }
+}
+
+/// Where the point `at` (across and down the square, 0 to 1) of square `p`, `z` over its ground, lies on the
+/// screen of a 3D map drawn into `rect`.
+fn ground_point(
+    v: &iso::camera::Viewport,
+    rect: egui::Rect,
+    p: Pos,
+    at: (f32, f32),
+    z: f32,
+) -> egui::Pos2 {
+    let on = v.project(glam::Vec3::new(p.x as f32 + at.0, p.y as f32 + at.1, z));
+    rect.min + egui::vec2(on.x, on.y)
 }
 
 /// The engine's name for a pressed key, with Ctrl and Shift folded in (`CTRL+S`, `BACKTAB`). Named like the
@@ -1077,7 +1194,8 @@ fn menu_forwards_keys(menu: Option<&bn_client_core::Menu>) -> bool {
 }
 
 impl<M: GameModel> eframe::App for App<M> {
-    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+    fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
+        self.iso.target = frame.wgpu_render_state().map(|s| s.target_format);
         self.show(ui);
     }
 }
