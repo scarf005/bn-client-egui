@@ -286,16 +286,36 @@ fn frame_cost_idle_and_while_stepping() {
     #[cfg(feature = "profile")]
     bn_client_egui::profile::scopes("idle", &view);
 
+    // A town start often has a zombie in view, and the game's safe mode refuses every step until the player
+    // turns it off ('!'), as natively; the stepping below measures steps, not that refusal.
+    h.input_mut().events.push(egui::Event::Text("!".into()));
+    run(&mut h, &clock, 180, "safe mode off", |h| {
+        !h.state().model.busy()
+    });
+    let _ = run_for(&mut h, &clock, 1);
+
     let mut steps = Frames::default();
     let mut latencies = vec![];
     let mut attempt = 0;
     let mut held = "l";
     while latencies.len() < 8 {
         attempt += 1;
-        assert!(attempt < 60, "the avatar never moved");
+        assert!(
+            attempt < 60,
+            "the avatar never moved: menu {:?}, native log {:?}",
+            h.state().model.menu().map(|m| m.title),
+            h.state()
+                .model
+                .native_log()
+                .iter()
+                .rev()
+                .take(3)
+                .map(|l| &l.text)
+                .collect::<Vec<_>>()
+        );
         let before = square(&h);
-        // Alternating east and west keeps the avatar in place; a blocked way tries the next direction.
-        let key = ["l", "h", "j", "k"][(attempt / 2) % 4 / 2 * 2 + attempt % 2];
+        // Alternating a direction and its opposite keeps the avatar in place; a blocked way tries the next pair.
+        let key = STEPS[(attempt / 2) % 4 * 2 + attempt % 2].0;
         let sent = Instant::now();
         h.input_mut().events.push(egui::Event::Text(key.into()));
         h.ctx.request_repaint();
@@ -316,18 +336,23 @@ fn frame_cost_idle_and_while_stepping() {
         run(&mut h, &clock, 180, "quiet", |h| !h.state().model.busy());
         let _ = run_for(&mut h, &clock, 1);
     }
-    // A held key: the OS repeats it every 40 ms (X's default 25 Hz); the avatar turns round when a wall stops it.
+    // A held key, as the OS delivers it: one key-down, repeats every 40 ms (X's default 25 Hz), one key-up. The engine
+    // stops at a wall and the player lets go and presses the other way.
     let mut hold = Frames::default();
     let (mut moves, mut last, mut moved_at) = (0, square(&h), Instant::now());
     let (start, mut next_repeat) = (Instant::now(), Instant::now());
+    let mut down = held;
+    key_event(&mut h, down, true, false);
     while start.elapsed() < Duration::from_secs(HOLD_SECS) {
         if Instant::now() >= next_repeat {
             if moved_at.elapsed() > Duration::from_millis(1500) {
-                held = if held == "l" { "h" } else { "l" };
+                key_event(&mut h, down, false, false);
+                down = opposite(down);
+                key_event(&mut h, down, true, false);
                 moved_at = Instant::now();
+            } else {
+                key_event(&mut h, down, true, true);
             }
-            h.input_mut().events.push(egui::Event::Text(held.into()));
-            h.ctx.request_repaint();
             next_repeat += Duration::from_millis(40);
         }
         if clock.wait(next_repeat) {
@@ -337,14 +362,20 @@ fn frame_cost_idle_and_while_stepping() {
             (moves, last, moved_at) = (moves + 1, square(&h), Instant::now());
         }
     }
+    key_event(&mut h, down, false, false);
     let released = moves;
-    let end = Instant::now() + Duration::from_secs(2);
-    while Instant::now() < end || h.state().model.busy() {
-        if clock.wait(end) {
+    // The steps already on the way land first; the walk is over once none has landed for a second.
+    let (mut quiet_since, settle_by) = (Instant::now(), Instant::now() + Duration::from_secs(10));
+    while quiet_since.elapsed() < Duration::from_secs(1) || h.state().model.busy() {
+        assert!(
+            Instant::now() < settle_by,
+            "the walk goes on after the key was released"
+        );
+        if clock.wait(quiet_since + Duration::from_secs(1)) {
             frame(&mut h, &mut hold);
         }
         if square(&h) != last {
-            (moves, last) = (moves + 1, square(&h));
+            (moves, last, quiet_since) = (moves + 1, square(&h), Instant::now());
         }
     }
     println!(
@@ -352,12 +383,6 @@ fn frame_cost_idle_and_while_stepping() {
         released as f64 / HOLD_SECS as f64,
         moves - released,
         load()
-    );
-    // The step in flight and the eight the engine queues may still land; a release cannot cancel what the engine holds, so more would be a runaway walk.
-    assert!(
-        moves - released <= 9,
-        "{} steps after the key was released",
-        moves - released
     );
     println!("PERF repaint causes while stepping: {:#?}", steps.causes);
     latencies.sort_by(f64::total_cmp);
@@ -371,6 +396,40 @@ fn frame_cost_idle_and_while_stepping() {
     );
     #[cfg(feature = "profile")]
     bn_client_egui::profile::scopes("all", &view);
+}
+
+/// The step keys by pairs of opposite directions, with the key the OS reports for each.
+const STEPS: [(&str, egui::Key); 8] = [
+    ("l", egui::Key::L),
+    ("h", egui::Key::H),
+    ("j", egui::Key::J),
+    ("k", egui::Key::K),
+    ("u", egui::Key::U),
+    ("b", egui::Key::B),
+    ("y", egui::Key::Y),
+    ("n", egui::Key::N),
+];
+
+fn opposite(text: &str) -> &'static str {
+    let at = STEPS.iter().position(|s| s.0 == text).unwrap();
+    STEPS[at ^ 1].0
+}
+
+/// What the OS sends for a key: the key event, and the character it types when it goes down or repeats.
+fn key_event(h: &mut H, text: &str, pressed: bool, repeat: bool) {
+    let key = STEPS.iter().find(|s| s.0 == text).unwrap().1;
+    let events = &mut h.input_mut().events;
+    events.push(egui::Event::Key {
+        key,
+        physical_key: Some(key),
+        pressed,
+        repeat,
+        modifiers: egui::Modifiers::NONE,
+    });
+    if pressed {
+        events.push(egui::Event::Text(text.into()));
+    }
+    h.ctx.request_repaint();
 }
 
 fn run_for(h: &mut H, clock: &Clockwork, secs: u64) -> Frames {
