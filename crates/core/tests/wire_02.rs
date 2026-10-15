@@ -170,13 +170,13 @@ fn the_02_invalid_examples_the_types_can_reject_are_rejected() {
 }
 
 #[test]
-fn a_message_key_is_shown_until_the_catalogues_render_it() {
+fn a_message_without_a_catalogue_shows_its_key_with_the_values_filled() {
     let shown = |v: Value| serde_json::from_value::<Text>(v).unwrap().shown();
     assert_eq!(shown(json!("Cancel")), "Cancel");
     assert_eq!(shown(json!({"key": "Yes", "ctx": "confirm"})), "Yes");
     assert_eq!(
         shown(json!({"key": "%d items", "plural": 3, "args": [3]})),
-        "%d items"
+        "3 items"
     );
     assert_eq!(
         shown(json!({"key": "", "args": ["Hit ", {"key": "the zombie"}, 2, "!"]})),
