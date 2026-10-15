@@ -69,13 +69,52 @@ pub struct WindowSpec {
     pub title_bar: bool,
     /// The title bar offers a close button.
     pub closable: bool,
+    /// The title bar offers a help button.
+    pub help: Option<TitleHelp>,
+}
+
+/// The help button of a title bar: read as `label`, with `tip` on hover.
+pub struct TitleHelp {
+    pub label: String,
+    pub tip: String,
 }
 
 pub struct Shown<R> {
     /// What the contents returned; none while the window is collapsed.
     pub inner: Option<R>,
     pub closed: bool,
+    /// The title bar's help button was pressed.
+    pub help: bool,
     pub state: Option<WindowState>,
+}
+
+/// The help button over the title bar of the window at `rect`, left of its close button; true when pressed.
+fn help_button(ctx: &egui::Context, spec: &WindowSpec, rect: egui::Rect, help: &TitleHelp) -> bool {
+    let style = ctx.global_style();
+    let margin = spec
+        .frame
+        .unwrap_or_else(|| egui::Frame::window(&style))
+        .total_margin();
+    // egui gives each title bar button a square as high as the heading.
+    let side = ctx.fonts_mut(|f| f.row_height(&egui::TextStyle::Heading.resolve(&style)));
+    let close = if spec.closable {
+        side + style.spacing.item_spacing.x
+    } else {
+        0.0
+    };
+    let at = egui::pos2(
+        rect.right() - margin.right - close - side,
+        rect.top() + margin.top,
+    );
+    egui::Area::new(spec.id.with("help"))
+        .order(egui::Order::Foreground)
+        .fixed_pos(at)
+        .show(ctx, |ui| {
+            let button = ui.add_sized([side, side], egui::Button::new("?").frame(false));
+            crate::a11y::named_button(ctx, button.id, &help.label);
+            button.on_hover_text(&help.tip).clicked()
+        })
+        .inner
 }
 
 /// `window` with `width` as its default width, when there is one.
@@ -158,6 +197,10 @@ pub fn show<R>(
         window = window.open(&mut open);
     }
     let shown = window.show(ctx, add);
+    let help = match (&spec.help, &shown) {
+        (Some(help), Some(s)) if spec.title_bar => help_button(ctx, &spec, s.response.rect, help),
+        _ => false,
+    };
     let collapsed = shown.as_ref().is_some_and(|s| s.inner.is_none());
     // A collapsed window is only its title bar, so it keeps the size it had expanded.
     let state = shown
@@ -179,6 +222,7 @@ pub fn show<R>(
     Shown {
         inner: shown.and_then(|s| s.inner),
         closed: !open,
+        help,
         state,
     }
 }

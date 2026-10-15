@@ -50,6 +50,22 @@ pub fn button(ctx: &egui::Context, id: egui::Id, pressed: bool) {
     });
 }
 
+/// A button whose drawn text is a symbol, read as `label`.
+pub fn named_button(ctx: &egui::Context, id: egui::Id, label: &str) {
+    ctx.accesskit_node_builder(id, |b| {
+        b.set_role(accesskit::Role::Button);
+        b.set_label(label);
+    });
+}
+
+/// A button that opens a menu, read as `label`.
+pub fn menu_button(ctx: &egui::Context, id: egui::Id, label: &str) {
+    ctx.accesskit_node_builder(id, |b| {
+        b.set_role(accesskit::Role::MenuItem);
+        b.set_label(label);
+    });
+}
+
 /// Keeps Tab and Shift+Tab inside `ids` (a modal's controls, in order): focus wraps at either end
 /// and returns from outside; `arrows` also keeps the arrow keys from moving focus, for a modal whose
 /// arrows belong to the game. Call every frame the modal is open, before it is drawn. A text field

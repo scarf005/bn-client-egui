@@ -254,3 +254,21 @@ pub fn open_client_settings<S>(h: &mut egui_kittest::Harness<'_, S>) {
         h.run_steps(3);
     }
 }
+
+/// Runs frames until no window moves: a window smaller than the room grows to its size over a few frames, and a
+/// click aimed before that lands on a neighbour.
+pub fn settle_windows<S>(h: &mut egui_kittest::Harness<'_, S>) {
+    use egui_kittest::kittest::Queryable;
+    let windows = |h: &egui_kittest::Harness<'_, S>| {
+        h.get_all_by_role(eframe::egui::accesskit::Role::Window)
+            .map(|n| n.rect())
+            .collect::<Vec<_>>()
+    };
+    for _ in 0..60 {
+        let before = windows(h);
+        h.run_steps(1);
+        if windows(h) == before {
+            return;
+        }
+    }
+}

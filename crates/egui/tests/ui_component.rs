@@ -96,6 +96,7 @@ fn stacked<'a>(stack: Vec<Value>) -> (H<'a>, ScriptHandle) {
             App::new(model).with_clock(clock),
         );
     harness.run_steps(4);
+    common::settle_windows(&mut harness);
     (harness, script)
 }
 
@@ -1039,7 +1040,10 @@ fn a_worn_item_runs_the_armor_screens_pick_with_its_identity() {
     h.run_steps(3);
     assert_eq!(
         submits(&script),
-        [boundary_invoke("bn:activate:armor:pick", json!({"row": jeans}))]
+        [boundary_invoke(
+            "bn:activate:armor:pick",
+            json!({"row": jeans})
+        )]
     );
 }
 
@@ -1116,4 +1120,84 @@ fn the_text_editor_draws_its_text_in_a_text_box() {
         h.query_by_role(eframe::egui::accesskit::Role::TextInput)
             .is_some()
     );
+}
+
+fn chrome(extra: usize) -> Vec<Value> {
+    let mut all = vec![
+        screen_action("CONFIRM", "Confirm", Some("confirm")),
+        screen_action("QUIT", "Quit", Some("cancel")),
+        screen_action("UP", "Move up", Some("navigate")),
+        screen_action("HELP_KEYBINDINGS", "Help", Some("help")),
+    ];
+    all.extend((0..extra).map(|i| screen_action(&format!("A{i}"), &format!("Act{i}"), None)));
+    all
+}
+
+fn chrome_body() -> Value {
+    json!({"id": "t", "kind": "text", "markup": "body"})
+}
+
+fn top(h: &H<'_>, label: &str) -> f32 {
+    h.get_by_label(label).rect().top()
+}
+
+#[test]
+fn the_footer_has_the_confirm_first_and_no_navigation_cancel_or_help_chips() {
+    let (mut h, script) = harness(dialog(chrome_body(), chrome(2)));
+    h.get_by_label("Act0");
+    h.get_by_label("Act1");
+    assert!(h.query_by_label("Move up").is_none());
+    assert!(h.query_by_label("Quit").is_none());
+    assert!(
+        top(&h, "Help") < top(&h, "body"),
+        "the help is in the title bar, above the body"
+    );
+    assert!(top(&h, "Confirm") > top(&h, "body"));
+    h.get_by_label("Confirm").click();
+    h.run_steps(3);
+    h.get_by_label("Help").click();
+    h.run_steps(3);
+    assert_eq!(
+        submits(&script),
+        [screen_invoke("CONFIRM"), screen_invoke("HELP_KEYBINDINGS")]
+    );
+}
+
+#[test]
+fn a_screen_without_a_title_has_its_cancel_and_help_in_the_footer() {
+    let mut screen = dialog(chrome_body(), chrome(2));
+    screen.as_object_mut().unwrap().remove("title");
+    let (mut h, script) = harness(screen);
+    assert!(top(&h, "Help") > top(&h, "body"));
+    let at = |label| (top(&h, label), h.get_by_label(label).rect().left());
+    assert!(at("Quit") < at("Act0"), "the cancel follows the confirm");
+    assert!(at("Help") > at("Act1"), "the help follows the actions");
+    h.get_by_label("Help").click();
+    h.run_steps(3);
+    h.get_by_label("Quit").click();
+    h.run_steps(3);
+    assert_eq!(
+        submits(&script),
+        [screen_invoke("HELP_KEYBINDINGS"), screen_invoke("QUIT")]
+    );
+}
+
+#[test]
+fn the_footer_shows_at_most_six_buttons_and_puts_the_rest_in_a_menu() {
+    let (mut h, script) = harness(dialog(chrome_body(), chrome(9)));
+    let buttons = h
+        .get_all_by_role(egui::accesskit::Role::Button)
+        .filter(|n| {
+            n.accesskit_node()
+                .label()
+                .is_some_and(|l| l == "Confirm" || l.starts_with("Act"))
+        })
+        .count();
+    assert!(buttons <= 6, "{buttons} buttons");
+    assert!(h.query_by_label("Act8").is_none(), "folded into the menu");
+    h.get_by_label("More").click();
+    h.run_steps(3);
+    h.get_by_label_contains("Act8").click();
+    h.run_steps(3);
+    assert_eq!(submits(&script), [screen_invoke("A8")]);
 }

@@ -52,6 +52,7 @@ impl<M: GameModel> App<M> {
             frame: None,
             title_bar: !title.is_empty(),
             closable: false,
+            help: None,
         }
     }
 

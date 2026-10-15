@@ -50,6 +50,7 @@ fn open<'a>(screen: Value) -> (H<'a>, ScriptHandle) {
             App::new(model).with_clock(clock),
         );
     h.run_steps(4);
+    common::settle_windows(&mut h);
     (h, script)
 }
 
@@ -278,6 +279,9 @@ fn a_click_on_a_stat_row_moves_the_engines_cursor_to_it_by_the_rows_id() {
 fn the_sheets_own_controls_are_the_engines_affordances_run_by_id() {
     let screen = example("character sheet");
     let (mut h, script) = open(screen);
+    // The sheet has more actions than the footer shows; the rest are in its menu.
+    h.get_by_label("More").click();
+    h.run_steps(3);
     first(&h, "Change name").click();
     h.run_steps(3);
     assert_eq!(last_invoke(&script)["affordance_id"], "CHANGE_NAME");

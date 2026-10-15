@@ -28,6 +28,8 @@ const PREFETCH: usize = 20;
 const DESCRIPTION_HEIGHT: f32 = 96.0;
 /// Side of a grid cell in points.
 const GRID_CELL: f32 = 26.0;
+/// The most buttons a screen's footer shows; the rest of its actions go in a menu.
+const FOOTER_BUTTONS: usize = 6;
 const GOOD: egui::Color32 = egui::Color32::from_rgb(110, 210, 110);
 const BAD: egui::Color32 = egui::Color32::from_rgb(235, 95, 95);
 
@@ -268,6 +270,11 @@ fn claimed(root: &Component) -> HashSet<&str> {
             c.head().affordances.iter().map(String::as_str).chain(extra)
         })
         .collect()
+}
+
+/// ` [key]` after an affordance's label, the first key the player has bound to it.
+fn key_hint(a: &Affordance) -> String {
+    a.keys.first().map_or(String::new(), |k| format!(" [{k}]"))
 }
 
 /// Whether a component's own widgets run the affordance, so it needs no button.
@@ -517,11 +524,19 @@ impl<M: GameModel> App<M> {
             }
         };
         let base = self.window_spec(ctx, "screen", &title);
+        // The help sits in the title bar, or last in the footer of a window that has none.
+        let titled = interaction::with_role(screen, AffordanceRole::Help)
+            .filter(|a| a.enabled && base.title_bar);
+        let title_bar = base.title_bar;
         let spec = WindowSpec {
             closable: interaction::with_role(screen, AffordanceRole::Cancel).is_some(),
             frame: Some(frame),
             place: Some(place),
             width,
+            help: titled.map(|a| windows::TitleHelp {
+                label: markup::plain(&a.label.shown()),
+                tip: format!("{}{}", markup::plain(&a.label.shown()), key_hint(a)),
+            }),
             ..base
         };
         let shown = windows::show(ctx, spec, |ui| {
@@ -539,7 +554,7 @@ impl<M: GameModel> App<M> {
                 if let Some(denial) = &self.screens.denial {
                     ui.colored_label(BAD, markup::plain(denial));
                 }
-                self.affordance_buttons(ui, &rest, None, out);
+                self.footer(ui, &rest, title_bar, out);
             };
             // A screen that fills the room keeps its footer under its body, whatever the body's height.
             if matches!(place, Place::Fill(_)) {
@@ -554,6 +569,9 @@ impl<M: GameModel> App<M> {
                 footer(ui, out);
             }
         });
+        if let Some(a) = titled.filter(|_| shown.help) {
+            out.push(Intent::Run(a.id.clone()));
+        }
         shown
     }
 
@@ -572,7 +590,7 @@ impl<M: GameModel> App<M> {
     }
 
     /// Buttons for the affordances: enabled as the affordance (and the row, when it overrides) says, with the
-    /// engine's reason on hover when off.
+    /// engine's reason on hover when off. Selecting and navigating are the clicks and keys the client maps.
     fn affordance_buttons(
         &self,
         ui: &mut egui::Ui,
@@ -584,24 +602,90 @@ impl<M: GameModel> App<M> {
             return;
         }
         ui.horizontal_wrapped(|ui| {
-            for a in affordances
-                .iter()
-                .filter(|a| a.role != Some(AffordanceRole::Select))
-            {
-                let availability = interaction::row_availability(a, row);
-                let (enabled, denial) =
-                    (availability.enabled, availability.denial.map(|d| d.shown()));
-                let key = a
-                    .keys
-                    .first()
-                    .map(|k| format!(" [{k}]"))
-                    .unwrap_or_default();
-                let label = format!("{}{key}", markup::plain(&a.label.shown()));
-                let button = self.control(ui, label, &a.id, enabled, false);
-                let button = match (enabled, denial) {
-                    (false, Some(why)) => button.on_disabled_hover_text(why),
-                    _ => button,
-                };
+            for a in affordances.iter().filter(|a| {
+                !matches!(
+                    a.role,
+                    Some(AffordanceRole::Select | AffordanceRole::Navigate)
+                )
+            }) {
+                self.affordance_button(ui, a, row, out);
+            }
+        });
+    }
+
+    /// One affordance as a button labelled with the engine's name and the key bound to it.
+    fn affordance_button(
+        &self,
+        ui: &mut egui::Ui,
+        a: &Affordance,
+        row: Option<&Row>,
+        out: &mut Vec<Intent>,
+    ) {
+        let availability = interaction::row_availability(a, row);
+        let (enabled, denial) = (availability.enabled, availability.denial.map(|d| d.shown()));
+        let label = format!("{}{}", markup::plain(&a.label.shown()), key_hint(a));
+        let button = self.control(ui, label, &a.id, enabled, false);
+        let button = match (enabled, denial) {
+            (false, Some(why)) => button.on_disabled_hover_text(why),
+            _ => button,
+        };
+        if button.clicked() {
+            out.push(Intent::Run(a.id.clone()));
+        }
+    }
+
+    /// The screen's own actions under its content: the confirm and the cancel first, at most `FOOTER_BUTTONS`
+    /// buttons with the rest in a menu, and the help last. The navigation actions are the keys, the wheel and the
+    /// clicks the client already maps, so they are not drawn; in a window with a `title_bar` the cancel is its close
+    /// button and the help is there too.
+    fn footer(
+        &self,
+        ui: &mut egui::Ui,
+        affordances: &[&Affordance],
+        title_bar: bool,
+        out: &mut Vec<Intent>,
+    ) {
+        let role = |a: &&Affordance, role| a.role == Some(role);
+        let shown = affordances.iter().copied().filter(|a| match a.role {
+            Some(AffordanceRole::Select | AffordanceRole::Navigate) => false,
+            Some(AffordanceRole::Cancel | AffordanceRole::Help) => !title_bar,
+            _ => true,
+        });
+        let (help, actions): (Vec<_>, Vec<_>) = shown.partition(|a| role(a, AffordanceRole::Help));
+        let help = help.into_iter().find(|a| a.enabled);
+        let (first, rest): (Vec<_>, Vec<_>) = actions
+            .into_iter()
+            .partition(|a| role(a, AffordanceRole::Confirm) || role(a, AffordanceRole::Cancel));
+        let direct = [first, rest].concat();
+        let slots = FOOTER_BUTTONS - usize::from(help.is_some());
+        let fits = direct.len() <= slots;
+        let (direct, more) = direct.split_at(if fits { direct.len() } else { slots - 1 });
+        if direct.is_empty() && help.is_none() {
+            return;
+        }
+        ui.horizontal_wrapped(|ui| {
+            for a in direct {
+                self.affordance_button(ui, a, None, out);
+            }
+            if !more.is_empty() {
+                let menu = ui.menu_button("⋯", |ui| {
+                    for a in more {
+                        let enabled = interaction::row_availability(a, None).enabled;
+                        let label = format!("{}{}", markup::plain(&a.label.shown()), key_hint(a));
+                        if ui.add_enabled(enabled, egui::Button::new(label)).clicked() {
+                            out.push(Intent::Run(a.id.clone()));
+                            ui.close();
+                        }
+                    }
+                });
+                a11y::menu_button(ui.ctx(), menu.response.id, "More");
+            }
+            if let Some(a) = help {
+                let label = markup::plain(&a.label.shown());
+                let button = ui
+                    .button("?")
+                    .on_hover_text(format!("{label}{}", key_hint(a)));
+                a11y::named_button(ui.ctx(), button.id, &label);
                 if button.clicked() {
                     out.push(Intent::Run(a.id.clone()));
                 }

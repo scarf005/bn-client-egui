@@ -2189,6 +2189,10 @@ pub enum AffordanceRole {
     AnyKey,
     /// Moves the screen's cursor to the row it is given, which the client invokes when its focus moves.
     Select,
+    /// Moves a cursor, page, tab or scroll position; arrows, paging and the wheel already do it.
+    Navigate,
+    /// Opens the native help or keybindings screen.
+    Help,
 }
 
 /// Which expectation an invoke of the affordance carries; the engine assigns it.
