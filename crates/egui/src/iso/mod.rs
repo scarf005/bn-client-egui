@@ -158,7 +158,7 @@ pub fn paint_glyphs(
             at(x + 0.5, y + 0.5, mark.floor),
             egui::Align2::CENTER_CENTER,
             mark.layer.glyph,
-            egui::FontId::monospace(cell_px - 2.0),
+            egui::FontId::monospace(cell_px / 2.0),
             glyph_color(mark.layer.color, tint),
         );
     }
