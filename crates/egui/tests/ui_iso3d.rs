@@ -368,8 +368,7 @@ fn hovering_a_3d_square_asks_the_engine_to_describe_that_square() {
     let described = script
         .sent()
         .into_iter()
-        .filter(|m| m["method"] == "bn.world.describe")
-        .next_back()
+        .rfind(|m| m["method"] == "bn.world.describe")
         .expect("asked");
     assert_eq!(
         described["params"]["pos"],

@@ -49,10 +49,10 @@ impl Scene {
         ];
         for _ in 0..self.width + self.height + 2 {
             let out = next[0].min(next[1]).min(t1);
-            if let Some(column) = self.column(cell[0], cell[1]) {
-                if at_t(out).z <= column.top() {
-                    return Some((cell[0], cell[1]));
-                }
+            if let Some(column) = self.column(cell[0], cell[1])
+                && at_t(out).z <= column.top()
+            {
+                return Some((cell[0], cell[1]));
             }
             if out >= t1 {
                 return None;
