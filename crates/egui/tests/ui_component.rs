@@ -912,13 +912,14 @@ fn a_colour_row_runs_the_activate_affordance_with_the_colour_as_its_row() {
 }
 
 #[test]
-fn a_stat_label_that_ends_with_a_colon_is_not_given_a_second() {
+fn a_stat_draws_the_engines_label_and_value_as_parts_of_their_own() {
     let screen = example(
         "autonote.json",
         "auto notes manager with three discovered map extras",
     );
     let (h, _script) = harness(screen);
-    let _ = h.get_by_label("Auto notes enabled: True");
+    let _ = h.get_by_label("Auto notes enabled:");
+    let _ = h.get_by_label("True");
 }
 
 #[test]

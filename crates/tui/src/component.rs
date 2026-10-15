@@ -779,7 +779,8 @@ impl<M: GameModel> Painter<'_, M> {
                 .map(|u| format!(" {}", u.shown()))
                 .collect::<String>();
             lines.push(Line::from(vec![
-                Span::raw(format!("{}: ", stat.label.shown())),
+                Span::raw(stat.label.shown()),
+                Span::raw(" "),
                 Span::styled(format!("{}{max}{unit}", stat.value.shown()), style),
             ]));
         }

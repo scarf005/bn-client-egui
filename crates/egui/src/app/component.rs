@@ -614,19 +614,24 @@ impl<M: GameModel> App<M> {
         let max = stat.max.as_ref().map(|m| format!("/{}", m.shown()));
         let unit = stat.unit.as_ref().map(|u| format!(" {}", u.shown()));
         let value = markup::plain(&stat.value.shown());
-        let shown = if value.is_empty() && max.is_none() && unit.is_none() {
-            markup::plain(&stat.label.shown())
-        } else {
-            format!(
-                "{}: {}{}{}",
-                markup::plain(&stat.label.shown()),
-                value,
-                max.unwrap_or_default(),
-                unit.unwrap_or_default()
-            )
-        };
+        let label = markup::plain(&stat.label.shown());
+        if value.is_empty() && max.is_none() && unit.is_none() {
+            let tone = stat.tone.map(|t| if t == Tone::Good { GOOD } else { BAD });
+            ui.label(egui::RichText::new(label).color(tone.unwrap_or(ui.visuals().text_color())));
+            return;
+        }
+        let shown = format!(
+            "{value}{}{}",
+            max.unwrap_or_default(),
+            unit.unwrap_or_default()
+        );
         let tone = stat.tone.map(|t| if t == Tone::Good { GOOD } else { BAD });
-        ui.label(egui::RichText::new(shown).color(tone.unwrap_or(ui.visuals().text_color())));
+        // The label and the value are parts of their own; the engine's text carries any punctuation.
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 4.0;
+            ui.label(label);
+            ui.label(egui::RichText::new(shown).color(tone.unwrap_or(ui.visuals().text_color())));
+        });
     }
 
     fn text_block(&self, ui: &mut egui::Ui, block: &TextBlock) {

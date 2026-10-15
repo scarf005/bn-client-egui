@@ -750,7 +750,6 @@ fn the_auto_notes_manager_draws_its_extras_and_enter_runs_its_registered_action(
     ] {
         assert!(text.contains(shown), "{shown:?} in {text}");
     }
-    assert!(!text.contains("::"), "{text}");
     assert!(operations(&h).is_empty());
     press(&mut app, KeyCode::Enter);
     large(&mut app);
