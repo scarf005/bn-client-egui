@@ -351,6 +351,8 @@ pub struct Placed {
 pub struct Chosen {
     pub bg: Option<Placed>,
     pub fg: Option<Placed>,
+    /// The tile has parts for how it joins its neighbours, as walls do.
+    pub joined: bool,
 }
 
 /// The game's mix of a seed into the integer that picks a weighted variant.
@@ -669,6 +671,7 @@ impl Tileset {
     /// The sprites the game would draw for `q`; none when the tileset has no tile for it.
     pub fn choose(&self, q: &Query) -> Option<Chosen> {
         let (found, mut tile) = self.find(q)?;
+        let joined = tile.multitile;
         if let Some(key) = q.subtile
             && tile.multitile
             && tile.subtiles.iter().any(|s| s == key)
@@ -698,6 +701,7 @@ impl Tileset {
         Some(Chosen {
             bg: place(&tile.bg, &tile.bg_mask, false),
             fg: place(&tile.fg, &tile.fg_mask, true),
+            joined,
         })
     }
 

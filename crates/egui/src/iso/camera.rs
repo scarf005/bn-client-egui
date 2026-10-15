@@ -10,7 +10,7 @@ pub const PITCH_MAX: f32 = 75.0 * std::f32::consts::PI / 180.0;
 pub const PITCH_ISO: f32 = 0.615_479_7;
 pub const YAW_ISO: f32 = std::f32::consts::FRAC_PI_4;
 /// How far the eye sits from the target; orthographic, so it only has to clear the scene.
-const REACH: f32 = 200.0;
+const EYE_DISTANCE: f32 = 200.0;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Camera {
@@ -61,10 +61,10 @@ impl Viewport {
 
     pub fn view_proj(&self) -> Mat4 {
         let (sin, cos) = self.camera.pitch.sin_cos();
-        let eye = self.target + (self.toward() * cos + Vec3::Z * sin) * REACH;
+        let eye = self.target + (self.toward() * cos + Vec3::Z * sin) * EYE_DISTANCE;
         let look = view::look_at_mat4(eye, self.target, Vec3::Z);
         let half = self.size / (2.0 * self.scale);
-        let proj = directx::orthographic(-half.x, half.x, -half.y, half.y, 0.0, 2.0 * REACH);
+        let proj = directx::orthographic(-half.x, half.x, -half.y, half.y, 0.0, 2.0 * EYE_DISTANCE);
         proj * look
     }
 
@@ -74,8 +74,9 @@ impl Viewport {
         Vec2::new((clip.x + 1.0) * 0.5, (1.0 - clip.y) * 0.5) * self.size
     }
 
-    /// The point of the plane at height `z` under the view point `at` (points from the top left corner).
-    pub fn pick(&self, at: Vec2, z: f32) -> Option<Vec2> {
+    /// The ray under the view point `at` (points from the top left corner): its start at the near plane, and the
+    /// way from there to the far plane.
+    pub fn ray(&self, at: Vec2) -> (Vec3, Vec3) {
         let inverse = self.view_proj().inverse();
         let ndc = Vec2::new(
             at.x / self.size.x * 2.0 - 1.0,
@@ -85,8 +86,13 @@ impl Viewport {
             let p = inverse * Vec4::new(ndc.x, ndc.y, depth, 1.0);
             p.truncate() / p.w
         };
-        let (near, far) = (unproject(0.0), unproject(1.0));
-        let along = far - near;
+        let near = unproject(0.0);
+        (near, unproject(1.0) - near)
+    }
+
+    /// The point of the plane at height `z` under the view point `at`.
+    pub fn pick(&self, at: Vec2, z: f32) -> Option<Vec2> {
+        let (near, along) = self.ray(at);
         (along.z.abs() > f32::EPSILON).then(|| {
             let hit = near + along * ((z - near.z) / along.z);
             Vec2::new(hit.x, hit.y)

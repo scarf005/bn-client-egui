@@ -871,6 +871,16 @@ impl<M: GameModel> App<M> {
             });
             self.iso.viewport(player, scale, response.rect.size())
         });
+        let season = self.model.season();
+        // The scene is built before the pointer is read: picking casts its ray into it.
+        let shown = match (&view, self.iso.target) {
+            (Some(_), Some(_)) => {
+                let ctx = ui.ctx().clone();
+                self.iso
+                    .scene(&ctx, &self.model, &self.display, season.as_deref())
+            }
+            _ => None,
+        };
         if view.is_some() && response.dragged_by(egui::PointerButton::Secondary) {
             self.iso.drag(response.drag_delta());
             ui.ctx().request_repaint();
@@ -901,11 +911,15 @@ impl<M: GameModel> App<M> {
         });
         let cell_at = |p: egui::Pos2| {
             let at = match &view {
-                // The square of the avatar's level under the pointer.
+                // The square the ray under the pointer meets first, else the ground of the avatar's level.
                 Some(v) => {
                     let p = p - response.rect.min;
-                    let hit = v.pick(glam::Vec2::new(p.x, p.y), 0.0);
-                    hit.map_or(glam::Vec2::ZERO, |h| h.floor())
+                    let p = glam::Vec2::new(p.x, p.y);
+                    let drawn = shown.as_ref().and_then(|(scene, _)| scene.pick(v, p));
+                    drawn.map_or_else(
+                        || v.pick(p, 0.0).map_or(glam::Vec2::ZERO, |h| h.floor()),
+                        |(x, y)| glam::Vec2::new(x as f32, y as f32),
+                    )
                 }
                 None => {
                     let v = (p - response.rect.min) / cell_px;
@@ -1020,16 +1034,11 @@ impl<M: GameModel> App<M> {
         }
         let font = egui::FontId::monospace(cell_px - 2.0);
         let tiles = self.display.tiles();
-        let season = self.model.season();
         if tiles {
             painter.rect_filled(response.rect, 0.0, egui::Color32::BLACK);
         }
         profiling::scope!("map cells");
         if let (Some(v), Some(target)) = (&view, self.iso.target) {
-            let ctx = ui.ctx().clone();
-            let shown = self
-                .iso
-                .scene(&ctx, &self.model, &self.display, season.as_deref());
             if let Some(shown) = shown {
                 let stats = self.iso.stats.clone();
                 painter.add(iso::callback(response.rect, v, target, shown, stats));

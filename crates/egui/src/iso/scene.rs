@@ -1,8 +1,10 @@
 //! The scene of the 3D map: what the model shows in each square, as quads grouped by the page they sample.
 
-use super::geometry::{Instance, Metrics, PageId, Placement, SpriteSource, place};
+use super::geometry::{
+    Instance, Kind, Metrics, PageId, Placement, Shape, SpriteSource, place, shape,
+};
 use crate::display::{STRIP, query, resolve_layer};
-use crate::tileset::Tileset;
+use crate::tileset::{Tileset, Turn};
 use bn_client_core::{GameModel, Pos};
 use glam::Vec2;
 use std::collections::BTreeMap;
@@ -19,14 +21,56 @@ pub struct Scene {
     pub batches: Vec<Batch>,
     /// The squares of the model's view with something to draw.
     pub squares: usize,
+    /// The size of the view in squares, and what each square drawn is, row by row.
+    pub width: i32,
+    pub height: i32,
+    columns: Vec<Option<Column>>,
 }
+
+/// What a square is for picking: the ground of its level, and the box standing on it if it has one.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Column {
+    pub ground: f32,
+    /// The bottom and the top of the box.
+    pub solid: Option<(f32, f32)>,
+}
+
+impl Column {
+    /// How high the square reaches.
+    pub fn top(&self) -> f32 {
+        self.solid
+            .map_or(self.ground, |(_, top)| top.max(self.ground))
+    }
+}
+
+impl Scene {
+    pub fn column(&self, x: i32, y: i32) -> Option<&Column> {
+        let inside = (0..self.width).contains(&x) && (0..self.height).contains(&y);
+        inside.then(|| self.columns[(y * self.width + x) as usize].as_ref())?
+    }
+}
+
+/// A sprite of a square, found before any is placed: the boxes next to one another hide each other's faces.
+struct Item {
+    square: (i32, i32),
+    floor: f32,
+    kind: Kind,
+    turn: Turn,
+    sprite: SpriteSource,
+    filter: u32,
+    haze: u8,
+    order: u32,
+}
+
+/// The directions of a box's faces, in the order `place` lists them: south, east, north, west.
+const FACES: [(i32, i32); 4] = [(0, 1), (1, 0), (0, -1), (-1, 0)];
 
 /// Where sprite number `sprite` of the tileset is: its page and the place in it.
 pub fn source(tileset: &Tileset, sprite: u32) -> Option<SpriteSource> {
     let (n, local) = tileset.locate(sprite)?;
     let sheet = &tileset.sheets[n];
-    let rows = (STRIP / sheet.sprite.1).max(1);
-    let (col, row) = (local % sheet.columns, local / sheet.columns);
+    let rows = (STRIP / sheet.sprite.1.max(1)).max(1);
+    let (col, row) = (local % sheet.columns.max(1), local / sheet.columns.max(1));
     Some(SpriteSource {
         page: PageId {
             sheet: n as u16,
@@ -66,10 +110,12 @@ pub fn build(
 ) -> Scene {
     let m = metrics(tileset);
     let size = model.size();
-    let mut pages = BTreeMap::<PageId, Vec<Instance>>::new();
+    let (width, height) = (size.x.max(0), size.y.max(0));
+    let mut columns = vec![None; (width * height) as usize];
+    let mut items = vec![];
     let mut squares = 0;
-    for y in 0..size.y {
-        for x in 0..size.x {
+    for y in 0..height {
+        for x in 0..width {
             let cell = model.cell(Pos { x, y });
             if cell.layers.is_empty() {
                 continue;
@@ -85,34 +131,77 @@ pub fn build(
                 0 => 0,
                 depth => (24 * (u32::from(depth) + 1)).min(192) as u8,
             };
+            let floor = -f32::from(cell.depth) * m.level;
+            let mut column = Column {
+                ground: floor,
+                solid: None,
+            };
             let mut order = 0;
             for layer in &cell.layers {
                 let (layer, _) = resolve_layer(tileset, layer);
                 let Some(chosen) = tileset.choose(&query(&layer, season)) else {
                     continue;
                 };
+                let kind = match (layer.terrain, chosen.joined) {
+                    (false, _) => Kind::Thing,
+                    (true, false) => Kind::Terrain,
+                    (true, true) => Kind::Joined,
+                };
                 for placed in [chosen.bg, chosen.fg].into_iter().flatten() {
                     let Some(sprite) = source(tileset, placed.sprite) else {
                         continue;
                     };
-                    let placement = Placement {
+                    if let Shape::Box { top, bottom } = shape(&m, &sprite, kind) {
+                        column.solid = Some((floor + bottom, floor + top));
+                    }
+                    items.push(Item {
                         square: (x, y),
-                        floor: -f32::from(cell.depth) * m.level,
-                        terrain: layer.terrain,
+                        floor,
+                        kind,
                         turn: placed.turn,
-                        sprite: &sprite,
+                        sprite,
                         filter,
                         haze,
                         order,
-                    };
-                    pages
-                        .entry(sprite.page)
-                        .or_default()
-                        .extend(place(&m, &placement));
+                    });
                     order += 1;
                 }
             }
+            columns[(y * width + x) as usize] = Some(column);
         }
+    }
+    let solid_at = |x: i32, y: i32| {
+        let inside = (0..width).contains(&x) && (0..height).contains(&y);
+        inside
+            .then(|| columns[(y * width + x) as usize]?.solid)
+            .flatten()
+    };
+    let mut pages = BTreeMap::<PageId, Vec<Instance>>::new();
+    for item in &items {
+        // A face is not seen where the next square holds a box at least as tall, down to at least as low.
+        let covered = match shape(&m, &item.sprite, item.kind) {
+            Shape::Box { top, bottom } => FACES.map(|(dx, dy)| {
+                solid_at(item.square.0 + dx, item.square.1 + dy).is_some_and(|(low, high)| {
+                    high >= item.floor + top - 1e-3 && low <= item.floor + bottom + 1e-3
+                })
+            }),
+            _ => [false; 4],
+        };
+        let placement = Placement {
+            square: item.square,
+            floor: item.floor,
+            kind: item.kind,
+            turn: item.turn,
+            sprite: &item.sprite,
+            filter: item.filter,
+            haze: item.haze,
+            order: item.order,
+            covered,
+        };
+        pages
+            .entry(item.sprite.page)
+            .or_default()
+            .extend(place(&m, &placement));
     }
     Scene {
         version,
@@ -121,5 +210,8 @@ pub fn build(
             .map(|(page, instances)| Batch { page, instances })
             .collect(),
         squares,
+        width,
+        height,
+        columns,
     }
 }

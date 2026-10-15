@@ -33,13 +33,17 @@ fn vs_main(q: Quad) -> Varying {
     // A strip of two triangles: (0, 0), (1, 0), (0, 1), (1, 1).
     let c = vec2<f32>(f32(q.corner & 1u), f32(q.corner >> 1u));
     var world: vec3<f32>;
-    if (q.flags.x & 255u) == 1u {
+    if (q.flags.x & 1u) != 0u {
         // A board: width across the screen from its left edge, height up from its bottom edge, and a step toward
-        // the eye.
+        // the eye; a board at the near edge of its square steps there first, as `edge_push` does.
+        var step = q.a.z;
+        if (q.flags.x & 2u) != 0u {
+            step += 0.5 / max(max(abs(camera.toward.x), abs(camera.toward.y)), 1e-6);
+        }
         world = q.origin
             + camera.right.xyz * (q.a.y + c.x * q.a.x)
             + vec3<f32>(0.0, 0.0, q.b.y + c.y * q.b.x)
-            + camera.toward.xyz * q.a.z;
+            + camera.toward.xyz * step;
     } else {
         world = q.origin + q.a * c.x + q.b * c.y;
     }

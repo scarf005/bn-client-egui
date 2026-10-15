@@ -4,6 +4,7 @@ pub mod camera;
 pub mod geometry;
 pub mod gpu;
 pub mod pages;
+mod pick;
 pub mod scene;
 
 use crate::display::Display;
@@ -36,10 +37,12 @@ pub struct View3d {
 }
 
 /// What the scene was built from.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 struct Key {
     map: Option<u64>,
     tileset: u32,
+    size: (i32, i32),
+    season: Option<String>,
 }
 
 impl View3d {
@@ -84,6 +87,8 @@ impl View3d {
         let key = Key {
             map: model.map_version(),
             tileset: epoch,
+            size: (model.size().x, model.size().y),
+            season: season.map(str::to_owned),
         };
         let stale = self
             .scene

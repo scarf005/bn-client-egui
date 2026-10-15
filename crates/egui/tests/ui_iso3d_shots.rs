@@ -129,10 +129,16 @@ fn greenish(c: egui::Color32) -> bool {
     c.g() > 150 && c.r() < 160 && c.b() < 130
 }
 
-/// Presses Q `n` times: 15 degrees each.
+/// Presses Alt+Left `n` times: 15 degrees each.
 fn turn(h: &mut H, n: usize) {
     for _ in 0..n {
-        h.event(egui::Event::Text("q".into()));
+        h.event(egui::Event::Key {
+            key: egui::Key::ArrowLeft,
+            physical_key: Some(egui::Key::ArrowLeft),
+            pressed: true,
+            repeat: false,
+            modifiers: egui::Modifiers::ALT,
+        });
         h.run_steps(2);
     }
 }
@@ -239,6 +245,6 @@ fn one_instanced_draw_per_sheet_page_draws_every_sprite_of_the_view() {
         3,
         "flat, tall and upright sheets"
     );
-    // 63 ground quads (the wall squares have none), 3 wall boxes of 5 faces, the table, the zombie and the avatar.
-    assert!(stats.instances.load(Ordering::Relaxed) >= 60 + 15 + 3);
+    // 63 ground quads (the wall squares have none), 3 wall boxes in a row, whose touching faces are left out, the table, the zombie and the avatar.
+    assert!(stats.instances.load(Ordering::Relaxed) >= 60 + 11 + 3);
 }

@@ -154,7 +154,7 @@ pub fn with_tiles(mut event: Value) -> Value {
 }
 
 /// A game root holding one isometric tileset `iso` (sprites 0 and 1 are the ground, 2 the wall, 3 the person and
-/// 4 the table), drawn like Ultica_iso's sheets: 48 x 24 tiles, ground in
+/// 4 the table; `t_mound` is a tall sprite that is not joined to its neighbours), drawn like Ultica_iso's sheets: 48 x 24 tiles, ground in
 /// 48 x 36 sprites, walls in 48 x 120 sprites, creatures and furniture in 48 x 72 sprites. `flat.png` has a
 /// light and a dark ground (the light with a red mark at its north corner), `tall.png` a wall with a white top,
 /// red left face and blue right face, and `upright.png` a yellow creature and a brown table. The root is new
@@ -231,7 +231,10 @@ pub fn iso_root(tag: &str) -> std::path::PathBuf {
                 {"id": "t_grass", "fg": 1}
             ]},
             {"file": "tall.png", "sprite_width": 48, "sprite_height": 120, "sprite_offset_y": -96, "tiles": [
-                {"id": "t_wall", "fg": 2}
+                {"id": "t_wall", "fg": 2, "multitile": true, "additional_tiles": [
+                    {"id": "center", "fg": 2}
+                ]},
+                {"id": "t_mound", "fg": 2}
             ]},
             {"file": "upright.png", "sprite_width": 48, "sprite_height": 72, "sprite_offset_y": -48, "tiles": [
                 {"id": ["mon_a", "mon_zombie"], "fg": 3},

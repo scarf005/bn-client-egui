@@ -3,6 +3,7 @@
 mod common;
 use bn_client_egui::EngineModel;
 use bn_client_egui::GameModel;
+use bn_client_egui::iso::camera::{Camera, Viewport};
 use bn_client_egui::iso::geometry::{BOARD, Instance, PageId};
 use bn_client_egui::iso::scene::{self, Scene};
 use bn_client_egui::tileset::Tileset;
@@ -58,7 +59,7 @@ fn all(scene: &Scene) -> Vec<Instance> {
 fn planes(scene: &Scene) -> Vec<Instance> {
     all(scene)
         .into_iter()
-        .filter(|i| i.flags[0] & 0xff != BOARD)
+        .filter(|i| i.flags[0] & BOARD == 0)
         .collect()
 }
 
@@ -173,5 +174,126 @@ fn every_page_is_one_batch_and_sprites_that_stand_are_boards() {
     assert!(pages.len() >= 2, "the ground sheet and the wall sheet");
     // The avatar is drawn with a sprite of its tileset, standing: a board.
     let me = at(&scene, &m, (3, 4));
-    assert!(me.iter().any(|i| i.flags[0] & 0xff == BOARD), "{me:?}");
+    assert!(me.iter().any(|i| i.flags[0] & BOARD != 0), "{me:?}");
+}
+
+#[test]
+fn tall_terrain_that_is_not_joined_to_its_neighbours_stands_upright_where_a_wall_is_a_box() {
+    let m = model(vec![cell(5, 4, 0, "t_mound")]);
+    let scene = scene_of(&m, "scene-mound");
+    assert!(planes(&scene).len() <= 1, "no box: {:?}", planes(&scene));
+    assert!(
+        at(&scene, &m, (5, 4))
+            .iter()
+            .any(|i| i.flags[0] & BOARD != 0)
+    );
+}
+
+#[test]
+fn faces_where_two_walls_touch_are_not_drawn() {
+    let m = model(vec![
+        cell(4, 4, 0, "t_wall"),
+        cell(5, 4, 0, "t_wall"),
+        cell(6, 4, 0, "t_wall"),
+    ]);
+    // Three lids, a south and a north face each, and the two ends.
+    assert_eq!(planes(&scene_of(&m, "scene-touch")).len(), 3 + 3 + 3 + 2);
+    let alone = model(vec![cell(5, 4, 0, "t_wall")]);
+    assert_eq!(planes(&scene_of(&alone, "scene-alone")).len(), 5);
+}
+
+/// A camera that looks at the avatar at the default tilt over a view the size of a window.
+fn view(m: &EngineModel) -> Viewport {
+    let me = m.player();
+    Viewport {
+        camera: Camera::default(),
+        target: glam::Vec3::new(me.x as f32 + 0.5, me.y as f32 + 0.5, 0.0),
+        scale: 34.0,
+        size: glam::Vec2::new(1100.0, 800.0),
+    }
+}
+
+/// The view square of absolute square `abs`.
+fn square(m: &EngineModel, abs: (i32, i32)) -> (i32, i32) {
+    (abs.0 - m.origin().x, abs.1 - m.origin().y)
+}
+
+fn room() -> EngineModel {
+    let mut cells = vec![];
+    for x in 2..=8 {
+        for y in 1..=7 {
+            cells.push(cell(x, y, 0, "t_dirt"));
+        }
+    }
+    cells.retain(|c| c["at"]["x"] != 5 || c["at"]["y"] != 4);
+    cells.push(cell(5, 4, 0, "t_wall"));
+    model(cells)
+}
+
+#[test]
+fn a_click_on_a_wall_picks_that_wall_on_its_lid_and_on_its_faces_not_the_square_behind() {
+    let m = room();
+    let scene = scene_of(&m, "pick-wall");
+    let v = view(&m);
+    let wall = square(&m, (5, 4));
+    let (_, top) = scene.column(wall.0, wall.1).unwrap().solid.unwrap();
+    let (x, y) = (wall.0 as f32, wall.1 as f32);
+    for (what, point) in [
+        ("lid", glam::Vec3::new(x + 0.5, y + 0.5, top)),
+        ("south face", glam::Vec3::new(x + 0.5, y + 1.0, top / 2.0)),
+        ("east face", glam::Vec3::new(x + 1.0, y + 0.5, top / 2.0)),
+    ] {
+        let on = v.project(point);
+        assert_eq!(scene.pick(&v, on), Some(wall), "{what}");
+    }
+    // The ground plane alone would have named a square behind the wall for the south face.
+    let on_face = v.project(glam::Vec3::new(x + 0.5, y + 1.0, top / 2.0));
+    let plane = v.pick(on_face, 0.0).unwrap();
+    assert_ne!(
+        (plane.x.floor() as i32, plane.y.floor() as i32),
+        wall,
+        "the face is above ground that is not the wall's"
+    );
+}
+
+#[test]
+fn a_click_on_the_ground_picks_the_square_whose_ground_it_is() {
+    let m = room();
+    let scene = scene_of(&m, "pick-ground");
+    let v = view(&m);
+    for abs in [(3, 5), (7, 2), (6, 6), (2, 7)] {
+        let at = square(&m, abs);
+        let on = v.project(glam::Vec3::new(at.0 as f32 + 0.5, at.1 as f32 + 0.5, 0.0));
+        assert_eq!(scene.pick(&v, on), Some(at), "{abs:?}");
+    }
+    // Outside everything the scene draws there is nothing to pick.
+    assert_eq!(scene.pick(&v, glam::Vec2::new(5.0, 5.0)), None);
+}
+
+#[test]
+fn a_square_seen_through_open_air_is_picked_where_its_lowered_ground_is_drawn() {
+    let mut air =
+        json!({"at": {"dim": "", "x": 4, "y": 4, "z": 0}, "known": "visible", "below": 1});
+    air["terrain"] = serde_json::Value::Null;
+    let mut cells = vec![air, cell(4, 4, -1, "t_dirt")];
+    // Ground only on the far side of the lowered square, so that none stands between it and the camera.
+    for x in 2..=4 {
+        for y in 2..=4 {
+            if (x, y) != (4, 4) {
+                cells.push(cell(x, y, 0, "t_dirt"));
+            }
+        }
+    }
+    let m = model(cells);
+    let scene = scene_of(&m, "pick-lowered");
+    let v = view(&m);
+    let lowered = square(&m, (4, 4));
+    let ground = scene.column(lowered.0, lowered.1).unwrap().ground;
+    assert!(ground < -1.0, "{ground}");
+    let on = v.project(glam::Vec3::new(
+        lowered.0 as f32 + 0.5,
+        lowered.1 as f32 + 0.5,
+        ground,
+    ));
+    assert_eq!(scene.pick(&v, on), Some(lowered));
 }

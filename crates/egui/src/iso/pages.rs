@@ -56,8 +56,9 @@ fn strips(sheet: &Sheet) -> Vec<image::RgbaImage> {
     let Some(image) = load(sheet) else {
         return vec![];
     };
-    let rows = (STRIP / sheet.sprite.1).max(1) * sheet.sprite.1;
-    let usable = image.height() / sheet.sprite.1 * sheet.sprite.1;
+    let tall = sheet.sprite.1.max(1);
+    let rows = (STRIP / tall).max(1) * tall;
+    let usable = image.height() / tall * tall;
     (0..usable)
         .step_by(rows as usize)
         .map(|y| {

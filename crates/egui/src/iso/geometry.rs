@@ -49,8 +49,6 @@ pub struct Metrics {
 
 /// Without a tileset's own height, a z-level is this many squares tall.
 const LEVEL: f32 = 3.0;
-/// An upright sprite of an isometric tileset stands at the front corner of its square.
-const FRONT: f32 = std::f32::consts::FRAC_1_SQRT_2;
 /// Sprites of one square are drawn this far apart toward the eye, so the later one wins at equal depth.
 const LAYER_BIAS: f32 = 0.002;
 
@@ -88,18 +86,38 @@ pub enum Shape {
     Board,
 }
 
+/// What a sprite is the picture of.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Kind {
+    /// Anything that is not a square's terrain.
+    Thing,
+    /// The terrain of a square.
+    Terrain,
+    /// Terrain the engine joined to its neighbours, as walls are: the tileset picked the variant for how they meet.
+    Joined,
+}
+
 /// What `sprite` is drawn as. Terrain whose sprite is as wide as the tile is the ground when it hardly rises over
-/// its diamond and a box when it does, as a wall; anything else stands upright.
-pub fn shape(m: &Metrics, sprite: &SpriteSource, terrain: bool) -> Shape {
+/// its diamond; joined terrain that rises is a box, as a wall; anything else, a shrub or a mound as well, stands
+/// upright.
+pub fn shape(m: &Metrics, sprite: &SpriteSource, kind: Kind) -> Shape {
     let size = sprite.size();
     let rise = size.y - m.tile.y;
     let bottom = -(sprite.offset.y + rise) * m.up;
-    match (terrain, (size.x - m.tile.x).abs() < 0.5) {
-        (true, true) if m.iso && rise > m.tile.y / 2.0 => Shape::Box {
+    let half = m.tile.y / 2.0;
+    match (kind, (size.x - m.tile.x).abs() < 0.5) {
+        (Kind::Joined, true) if m.iso && rise > half => Shape::Box {
             top: -sprite.offset.y * m.up,
             bottom,
         },
-        (true, true) if m.iso || rise.abs() < 0.5 => Shape::Floor { z: bottom },
+        (Kind::Joined | Kind::Terrain, true)
+            if match m.iso {
+                true => (0.0..=half).contains(&rise),
+                false => rise.abs() < 0.5,
+            } =>
+        {
+            Shape::Floor { z: bottom }
+        }
         _ => Shape::Board,
     }
 }
@@ -119,19 +137,28 @@ pub struct Instance {
     pub uv: [f32; 2],
     pub uv_a: [f32; 2],
     pub uv_b: [f32; 2],
-    /// Low byte: 0 for a plane, 1 for a board; next byte: the visibility filter. Then the haze of a level seen
+    /// Low byte: bit 0 for a board, bit 1 for a board at the near edge of its square; next byte: the visibility filter. Then the haze of a level seen
     /// through, 0 to 255.
     pub flags: [u32; 2],
 }
 
+/// Flag bits of an instance's first word: a board, and a board pushed to the near edge of its square.
 pub const BOARD: u32 = 1;
+pub const EDGE: u32 = 2;
+
+/// How far an upright sprite of an isometric tileset stands toward the eye from the middle of its square: to the
+/// square's near edge, whatever the camera's yaw. `toward` is the horizontal unit vector from target to eye; the
+/// shader computes the same.
+pub fn edge_push(toward: [f32; 2]) -> f32 {
+    0.5 / toward[0].abs().max(toward[1].abs()).max(f32::EPSILON)
+}
 
 /// A sprite in a square.
 pub struct Placement<'a> {
     pub square: (i32, i32),
     /// The height of the square's ground.
     pub floor: f32,
-    pub terrain: bool,
+    pub kind: Kind,
     pub turn: Turn,
     pub sprite: &'a SpriteSource,
     /// The visibility filter: 0 plain, 1 low light, 2 remembered.
@@ -139,7 +166,13 @@ pub struct Placement<'a> {
     pub haze: u8,
     /// The sprite's place in its square, bottom first.
     pub order: u32,
+    /// For a box: which of its south, east, north and west faces touch another box that is as tall, and are not seen.
+    pub covered: [bool; 4],
 }
+
+/// How much of a quad's sprite span is cut off at each edge, so that a pixel centre on an edge samples the
+/// sprite's own last texel and never a neighbour's in the sheet.
+const INSET: f32 = 0.0002;
 
 fn instance(
     origin: [f32; 3],
@@ -147,13 +180,14 @@ fn instance(
     uv: [Vec2; 3],
     flags: [u32; 2],
 ) -> Instance {
+    let inner = uv[0] + (uv[1] + uv[2]) * INSET;
     Instance {
         origin,
         a: edges.0,
         b: edges.1,
-        uv: uv[0].to_array(),
-        uv_a: uv[1].to_array(),
-        uv_b: uv[2].to_array(),
+        uv: inner.to_array(),
+        uv_a: (uv[1] * (1.0 - 2.0 * INSET)).to_array(),
+        uv_b: (uv[2] * (1.0 - 2.0 * INSET)).to_array(),
         flags,
     }
 }
@@ -193,7 +227,7 @@ pub fn place(m: &Metrics, p: &Placement) -> Vec<Instance> {
         (false, turn) => turn,
     };
     let ground = ([1.0, 0.0, 0.0], [0.0, 1.0, 0.0]);
-    match shape(m, s, p.terrain) {
+    match shape(m, s, p.kind) {
         Shape::Floor { z } => {
             // The diamond of the tile lies in the lowest rows of an isometric sprite; a square sprite is all ground.
             let uv = match m.iso {
@@ -224,28 +258,30 @@ pub fn place(m: &Metrics, p: &Placement) -> Vec<Instance> {
                 span(w / 2.0, t / 2.0),
                 span(-w / 2.0, t / 2.0),
             ];
-            vec![
-                instance([x, y, top], ground, lid, flags),
-                instance([x, y + 1.0, top], ([1.0, 0.0, 0.0], down), south, flags),
-                instance(
-                    [x + 1.0, y + 1.0, top],
-                    ([0.0, -1.0, 0.0], down),
-                    east,
-                    flags,
-                ),
-                instance([x + 1.0, y, top], ([-1.0, 0.0, 0.0], down), south, flags),
-                instance([x, y, top], ([0.0, 1.0, 0.0], down), east, flags),
-            ]
+            let faces = [
+                ([x, y + 1.0, top], ([1.0, 0.0, 0.0], down), south),
+                ([x + 1.0, y + 1.0, top], ([0.0, -1.0, 0.0], down), east),
+                ([x + 1.0, y, top], ([-1.0, 0.0, 0.0], down), south),
+                ([x, y, top], ([0.0, 1.0, 0.0], down), east),
+            ];
+            let seen = faces
+                .into_iter()
+                .zip(p.covered)
+                .filter(|(_, covered)| !covered)
+                .map(|((origin, edges, uv), _)| instance(origin, edges, uv, flags));
+            std::iter::once(instance([x, y, top], ground, lid, flags))
+                .chain(seen)
+                .collect()
         }
         Shape::Board => {
             let [tl, _, br, bl] = corners(turn, s);
             // The sprite's bottom edge rests on the ground where its tile's bottom edge would.
             let left = (s.offset.x - m.tile.x / 2.0) * m.across;
             let rest = (m.tile.y - (s.offset.y + size.y)) * m.up;
-            let front = if m.iso { FRONT } else { 0.0 } + LAYER_BIAS * p.order as f32;
-            let edges = ([size.x * m.across, left, front], [size.y * m.up, rest, 0.0]);
+            let bias = LAYER_BIAS * p.order as f32;
+            let edges = ([size.x * m.across, left, bias], [size.y * m.up, rest, 0.0]);
             // From the bottom left corner: along the width to the right, and up.
-            let flags = [flags[0] | BOARD, flags[1]];
+            let flags = [flags[0] | BOARD | if m.iso { EDGE } else { 0 }, flags[1]];
             vec![instance(
                 [x + 0.5, y + 0.5, p.floor],
                 edges,
@@ -279,17 +315,23 @@ mod tests {
         }
     }
 
-    fn square(s: &SpriteSource, terrain: bool) -> Placement<'_> {
+    fn square(s: &SpriteSource, kind: Kind) -> Placement<'_> {
         Placement {
             square: (3, 5),
             floor: 0.0,
-            terrain,
+            kind,
             turn: Turn::None,
             sprite: s,
             filter: 0,
             haze: 0,
             order: 0,
+            covered: [false; 4],
         }
+    }
+
+    /// Two page points are the same up to the sliver the quads cut off their edges.
+    fn near(a: Vec2, b: Vec2) -> bool {
+        (a - b).length() < 0.15
     }
 
     #[test]
@@ -311,10 +353,14 @@ mod tests {
     fn terrain_is_ground_or_a_box_by_how_far_its_sprite_rises_over_its_diamond() {
         let m = ultica();
         let ground = sprite((48.0, 36.0), (0.0, -12.0));
-        assert!(matches!(shape(&m, &ground, true), Shape::Floor { z } if z.abs() < 1e-6));
+        assert!(matches!(shape(&m, &ground, Kind::Terrain), Shape::Floor { z } if z.abs() < 1e-6));
+        assert!(matches!(
+            shape(&m, &ground, Kind::Joined),
+            Shape::Floor { .. }
+        ));
         let wall = sprite((48.0, 120.0), (0.0, -96.0));
         assert_eq!(
-            shape(&m, &wall, true),
+            shape(&m, &wall, Kind::Joined),
             Shape::Box {
                 top: 96.0 * m.up,
                 bottom: 0.0
@@ -323,33 +369,40 @@ mod tests {
         // A wall whose sprite reaches below its square's baseline goes down there.
         let deep = sprite((48.0, 132.0), (0.0, -96.0));
         assert_eq!(
-            shape(&m, &deep, true),
+            shape(&m, &deep, Kind::Joined),
             Shape::Box {
                 top: 96.0 * m.up,
                 bottom: -12.0 * m.up
             }
         );
+        // Tall terrain the engine did not join to its neighbours, a shrub or a mound, stands upright.
+        assert_eq!(shape(&m, &wall, Kind::Terrain), Shape::Board);
         // Not terrain, or not as wide as the tile: it stands upright.
-        assert_eq!(shape(&m, &wall, false), Shape::Board);
+        assert_eq!(shape(&m, &wall, Kind::Thing), Shape::Board);
         assert_eq!(
-            shape(&m, &sprite((200.0, 240.0), (-76.0, -216.0)), true),
+            shape(&m, &sprite((200.0, 240.0), (-76.0, -216.0)), Kind::Joined),
+            Shape::Board
+        );
+        // A sprite lower than its diamond has no ground to cut from it.
+        assert_eq!(
+            shape(&m, &sprite((48.0, 12.0), (0.0, 0.0)), Kind::Terrain),
             Shape::Board
         );
         // A square tileset has ground only: no data tells a wall from a floor.
         let flat = Metrics::new((16, 16), false, None);
         let square_sprite = sprite((16.0, 16.0), (0.0, 0.0));
         assert!(matches!(
-            shape(&flat, &square_sprite, true),
+            shape(&flat, &square_sprite, Kind::Terrain),
             Shape::Floor { .. }
         ));
-        assert_eq!(shape(&flat, &square_sprite, false), Shape::Board);
+        assert_eq!(shape(&flat, &square_sprite, Kind::Thing), Shape::Board);
     }
 
     #[test]
     fn ground_maps_the_diamond_of_the_sprite_onto_the_square() {
         let m = ultica();
         let s = sprite((48.0, 36.0), (0.0, -12.0));
-        let [floor] = place(&m, &square(&s, true))[..] else {
+        let [floor] = place(&m, &square(&s, Kind::Terrain))[..] else {
             panic!("one quad")
         };
         assert_eq!(floor.origin, [3.0, 5.0, 0.0]);
@@ -358,17 +411,17 @@ mod tests {
             Vec2::from(floor.uv) + Vec2::from(floor.uv_a) * u + Vec2::from(floor.uv_b) * v
         };
         let at = Vec2::new(96.0, 240.0);
-        assert_eq!(corner(0.0, 0.0), at + Vec2::new(24.0, 12.0));
-        assert_eq!(corner(1.0, 0.0), at + Vec2::new(48.0, 24.0));
-        assert_eq!(corner(1.0, 1.0), at + Vec2::new(24.0, 36.0));
-        assert_eq!(corner(0.0, 1.0), at + Vec2::new(0.0, 24.0));
+        assert!(near(corner(0.0, 0.0), at + Vec2::new(24.0, 12.0)));
+        assert!(near(corner(1.0, 0.0), at + Vec2::new(48.0, 24.0)));
+        assert!(near(corner(1.0, 1.0), at + Vec2::new(24.0, 36.0)));
+        assert!(near(corner(0.0, 1.0), at + Vec2::new(0.0, 24.0)));
     }
 
     #[test]
     fn a_box_takes_its_top_from_the_top_diamond_and_its_sides_from_the_left_and_right_faces() {
         let m = ultica();
         let s = sprite((48.0, 120.0), (0.0, -96.0));
-        let faces = place(&m, &square(&s, true));
+        let faces = place(&m, &square(&s, Kind::Joined));
         assert_eq!(faces.len(), 5);
         let at = Vec2::new(96.0, 240.0);
         let corner = |i: &Instance, u: f32, v: f32| {
@@ -377,19 +430,19 @@ mod tests {
         let top = 96.0 * m.up;
         // Lid: the top diamond, rows 0 to 24.
         assert_eq!(faces[0].origin, [3.0, 5.0, top]);
-        assert_eq!(corner(&faces[0], 0.0, 0.0), Vec2::new(24.0, 0.0));
-        assert_eq!(corner(&faces[0], 1.0, 1.0), Vec2::new(24.0, 24.0));
+        assert!(near(corner(&faces[0], 0.0, 0.0), Vec2::new(24.0, 0.0)));
+        assert!(near(corner(&faces[0], 1.0, 1.0), Vec2::new(24.0, 24.0)));
         // South face: the left half of the faces, from the west corner to the south corner.
         assert_eq!(faces[1].origin, [3.0, 6.0, top]);
-        assert_eq!(corner(&faces[1], 0.0, 0.0), Vec2::new(0.0, 12.0));
-        assert_eq!(corner(&faces[1], 1.0, 0.0), Vec2::new(24.0, 24.0));
-        assert_eq!(corner(&faces[1], 0.0, 1.0), Vec2::new(0.0, 108.0));
-        assert_eq!(corner(&faces[1], 1.0, 1.0), Vec2::new(24.0, 120.0));
+        assert!(near(corner(&faces[1], 0.0, 0.0), Vec2::new(0.0, 12.0)));
+        assert!(near(corner(&faces[1], 1.0, 0.0), Vec2::new(24.0, 24.0)));
+        assert!(near(corner(&faces[1], 0.0, 1.0), Vec2::new(0.0, 108.0)));
+        assert!(near(corner(&faces[1], 1.0, 1.0), Vec2::new(24.0, 120.0)));
         // East face: the right half, from the south corner to the east corner.
         assert_eq!(faces[2].origin, [4.0, 6.0, top]);
-        assert_eq!(corner(&faces[2], 0.0, 0.0), Vec2::new(24.0, 24.0));
-        assert_eq!(corner(&faces[2], 1.0, 0.0), Vec2::new(48.0, 12.0));
-        assert_eq!(corner(&faces[2], 1.0, 1.0), Vec2::new(48.0, 108.0));
+        assert!(near(corner(&faces[2], 0.0, 0.0), Vec2::new(24.0, 24.0)));
+        assert!(near(corner(&faces[2], 1.0, 0.0), Vec2::new(48.0, 12.0)));
+        assert!(near(corner(&faces[2], 1.0, 1.0), Vec2::new(48.0, 108.0)));
         // Each side face drops from the top to the bottom of the box.
         assert!(faces[1..].iter().all(|f| (f.b[2] + top).abs() < 1e-5));
     }
@@ -400,11 +453,11 @@ mod tests {
         let m = ultica();
         let mut s = sprite((24.0, 18.0), (0.0, -12.0));
         s.scale = 2.0;
-        let [floor] = place(&m, &square(&s, true))[..] else {
+        let [floor] = place(&m, &square(&s, Kind::Terrain))[..] else {
             panic!("one quad")
         };
-        assert_eq!(Vec2::from(floor.uv), s.at + Vec2::new(12.0, 6.0));
-        assert_eq!(Vec2::from(floor.uv_a), Vec2::new(12.0, 6.0));
+        assert!(near(Vec2::from(floor.uv), s.at + Vec2::new(12.0, 6.0)));
+        assert!(near(Vec2::from(floor.uv_a), Vec2::new(12.0, 6.0)));
     }
 
     /// Where the corner `(u, v)` of an instance lies on a screen that draws the world as the tileset does
@@ -420,12 +473,18 @@ mod tests {
             scale: m.tile.x / std::f32::consts::SQRT_2,
             size: Vec2::new(1000.0, 1000.0),
         };
-        let world = if i.flags[0] & 0xff == BOARD {
+        let world = if i.flags[0] & BOARD != 0 {
             let (a, b) = (i.a, i.b);
+            let toward = view.toward();
+            let edge = if i.flags[0] & EDGE != 0 {
+                edge_push([toward.x, toward.y])
+            } else {
+                0.0
+            };
             Vec3::from(i.origin)
                 + view.right() * (a[1] + u * a[0])
                 + Vec3::Z * (b[1] + v * b[0])
-                + view.toward() * a[2]
+                + toward * (a[2] + edge)
         } else {
             Vec3::from(i.origin) + Vec3::from(i.a) * u + Vec3::from(i.b) * v
         };
@@ -440,7 +499,7 @@ mod tests {
             screen(i, m, u, v) - page
         });
         for shift in shifts {
-            assert!((shift - shifts[0]).length() < 0.05, "{shifts:?}");
+            assert!((shift - shifts[0]).length() < 0.15, "{shifts:?}");
         }
     }
 
@@ -452,13 +511,13 @@ mod tests {
         let furniture = sprite((48.0, 72.0), (0.0, -48.0));
         let item = sprite((32.0, 32.0), (8.0, -15.0));
         let quads = [
-            (&ground, true),
-            (&wall, true),
-            (&furniture, false),
-            (&item, false),
+            (&ground, Kind::Terrain),
+            (&wall, Kind::Joined),
+            (&furniture, Kind::Thing),
+            (&item, Kind::Thing),
         ]
         .iter()
-        .flat_map(|(s, terrain)| place(&m, &square(s, *terrain)))
+        .flat_map(|(s, kind)| place(&m, &square(s, *kind)))
         .collect::<Vec<_>>();
         assert_eq!(quads.len(), 1 + 5 + 1 + 1);
         // The faces behind the box are seen from inside.
@@ -472,16 +531,16 @@ mod tests {
     }
 
     #[test]
-    fn a_board_stands_at_the_front_of_its_square_and_later_sprites_come_nearer_the_eye() {
+    fn a_board_stands_at_the_near_edge_of_its_square_and_later_sprites_come_nearer_the_eye() {
         let m = ultica();
         let s = sprite((48.0, 72.0), (0.0, -48.0));
-        let mut first = square(&s, false);
+        let mut first = square(&s, Kind::Thing);
         let a = place(&m, &first)[0];
         first.order = 3;
         let b = place(&m, &first)[0];
         assert_eq!(a.origin, [3.5, 5.5, 0.0]);
-        assert_eq!(a.flags[0] & 0xff, BOARD);
-        assert!((a.a[2] - FRONT).abs() < 1e-6);
+        assert_eq!(a.flags[0] & 0xff, BOARD | EDGE);
+        assert_eq!(a.a[2], 0.0);
         assert!((b.a[2] - a.a[2] - 3.0 * LAYER_BIAS).abs() < 1e-6);
         // 48 pixels wide is one diagonal of a square; 72 pixels tall at the tileset's tilt.
         assert!((a.a[0] - std::f32::consts::SQRT_2).abs() < 1e-5);
@@ -501,19 +560,67 @@ mod tests {
             scale: 1.0,
         };
         let board = |turn| {
-            let mut p = square(&s, false);
+            let mut p = square(&s, Kind::Thing);
             p.turn = turn;
             place(&flat, &p)[0]
         };
         let bottom_left = |i: Instance| Vec2::from(i.uv);
-        assert_eq!(bottom_left(board(Turn::None)), Vec2::new(32.0, 32.0));
-        assert_eq!(bottom_left(board(Turn::Mirror)), Vec2::new(48.0, 32.0));
+        assert!(near(bottom_left(board(Turn::None)), Vec2::new(32.0, 32.0)));
+        assert!(near(
+            bottom_left(board(Turn::Mirror)),
+            Vec2::new(48.0, 32.0)
+        ));
         // An isometric tile is never turned, only mirrored.
         let iso = ultica();
-        let mut p = square(&s, false);
+        let mut p = square(&s, Kind::Thing);
         p.turn = Turn::Left;
-        assert_eq!(Vec2::from(place(&iso, &p)[0].uv), Vec2::new(32.0, 32.0));
+        assert!(near(
+            Vec2::from(place(&iso, &p)[0].uv),
+            Vec2::new(32.0, 32.0)
+        ));
         p.turn = Turn::Mirror;
-        assert_eq!(Vec2::from(place(&iso, &p)[0].uv), Vec2::new(48.0, 32.0));
+        assert!(near(
+            Vec2::from(place(&iso, &p)[0].uv),
+            Vec2::new(48.0, 32.0)
+        ));
+    }
+
+    #[test]
+    fn a_board_never_leaves_its_square_at_any_yaw() {
+        for degrees in 0..360 {
+            let yaw = (degrees as f32).to_radians();
+            let toward = [yaw.cos(), yaw.sin()];
+            let push = edge_push(toward);
+            // The point it stands at is on the square's border, not past it.
+            let (x, y) = (push * toward[0], push * toward[1]);
+            assert!(
+                x.abs() <= 0.5 + 1e-4 && y.abs() <= 0.5 + 1e-4,
+                "{degrees}: {x} {y}"
+            );
+            assert!(
+                x.abs().max(y.abs()) >= 0.5 - 1e-4,
+                "{degrees}: it reaches the border"
+            );
+        }
+        assert!(
+            (edge_push([std::f32::consts::FRAC_1_SQRT_2; 2]) - std::f32::consts::FRAC_1_SQRT_2)
+                .abs()
+                < 1e-6
+        );
+    }
+
+    #[test]
+    fn faces_that_touch_another_box_are_left_out() {
+        let m = ultica();
+        let s = sprite((48.0, 120.0), (0.0, -96.0));
+        let mut p = square(&s, Kind::Joined);
+        p.covered = [true, false, true, false];
+        let faces = place(&m, &p);
+        // The lid and the east and west faces: [x + 1.0, y + 1.0] and [x, y] edges.
+        assert_eq!(faces.len(), 3);
+        assert_eq!(faces[1].origin[0], 4.0);
+        assert_eq!(faces[2].origin[0], 3.0);
+        p.covered = [true; 4];
+        assert_eq!(place(&m, &p).len(), 1, "only the lid");
     }
 }

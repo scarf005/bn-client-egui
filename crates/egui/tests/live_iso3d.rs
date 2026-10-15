@@ -23,7 +23,7 @@ fn run_until(h: &mut H, what: &str, secs: u64, mut done: impl FnMut(&H) -> bool)
             !watchdog.expired(h.state().model.received()),
             "timed out: {what}; {:?}; {:?}",
             h.state().model.command(),
-            h.state().model.menu().map(|m| m.title)
+            h.state().model.menu()
         );
         h.run_steps(1);
         std::thread::sleep(Duration::from_millis(30));
@@ -75,9 +75,16 @@ fn save(h: &mut H, name: &str) {
     }
 }
 
-fn press(h: &mut H, key: &str, times: usize) {
+/// Turns the camera 15 degrees `times` times with Alt+Left.
+fn turn(h: &mut H, times: usize) {
     for _ in 0..times {
-        h.event(egui::Event::Text(key.into()));
+        h.event(egui::Event::Key {
+            key: egui::Key::ArrowLeft,
+            physical_key: Some(egui::Key::ArrowLeft),
+            pressed: true,
+            repeat: false,
+            modifiers: egui::Modifiers::ALT,
+        });
         h.run_steps(2);
     }
 }
@@ -205,13 +212,13 @@ fn the_town_in_3d_from_every_side_and_what_a_frame_costs() {
     save(&mut h, "town-flat.png");
     h.get_by_label("3D").click();
     h.run_steps(4);
-    press(&mut h, "q", 6);
+    turn(&mut h, 6);
     save(&mut h, "town-yaw135.png");
-    press(&mut h, "q", 6);
+    turn(&mut h, 6);
     save(&mut h, "town-yaw225.png");
-    press(&mut h, "q", 6);
+    turn(&mut h, 6);
     save(&mut h, "town-yaw315.png");
-    press(&mut h, "q", 6);
+    turn(&mut h, 6);
     drag(&mut h, egui::vec2(0.0, -400.0));
     save(&mut h, "town-pitch-high.png");
     drag(&mut h, egui::vec2(0.0, 900.0));
@@ -221,7 +228,13 @@ fn the_town_in_3d_from_every_side_and_what_a_frame_costs() {
     drag(&mut h, egui::vec2(0.0, -150.0));
     let (mut ui, mut whole) = (vec![], vec![]);
     for _ in 0..120 {
-        h.event(egui::Event::Text("q".into()));
+        h.event(egui::Event::Key {
+            key: egui::Key::ArrowLeft,
+            physical_key: Some(egui::Key::ArrowLeft),
+            pressed: true,
+            repeat: false,
+            modifiers: egui::Modifiers::ALT,
+        });
         let start = Instant::now();
         h.step();
         ui.push(start.elapsed().as_secs_f64() * 1e3);
