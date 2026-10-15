@@ -177,7 +177,9 @@ pub fn build(
                             .painted(&sprite, mask.as_ref(), paint)
                             .unwrap_or(sprite);
                     }
-                    if let Some(pages) = pages {
+                    // Only an isometric sprite has rows over its diamond that say nothing; a sprite drawn from
+                    // above is the square whole.
+                    if let (Some(pages), true) = (pages, m.iso) {
                         sprite = pages.trimmed(sprite);
                     }
                     if let Shape::Box { top, bottom } = shape(&m, &sprite, kind) {
