@@ -24,6 +24,7 @@ pub const TURN: f32 = 15.0 * std::f32::consts::PI / 180.0;
 const DRAG: (f32, f32) = (0.01, 0.005);
 
 /// The 3D view's state between frames.
+#[derive(Default)]
 pub struct View3d {
     pub camera: Camera,
     /// The pass format of the window, known once the renderer is; none without one, and then there is no 3D view.
@@ -39,19 +40,6 @@ pub struct View3d {
 struct Key {
     map: Option<u64>,
     tileset: u32,
-}
-
-impl Default for View3d {
-    fn default() -> Self {
-        Self {
-            camera: Camera::default(),
-            target: None,
-            stats: Arc::default(),
-            pages: None,
-            scene: None,
-            built: 0,
-        }
-    }
 }
 
 impl View3d {

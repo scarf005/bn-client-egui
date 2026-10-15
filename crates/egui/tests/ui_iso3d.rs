@@ -281,7 +281,7 @@ fn hovering_a_3d_square_asks_the_engine_to_describe_that_square() {
         .sent()
         .into_iter()
         .filter(|m| m["method"] == "bn.world.describe")
-        .last()
+        .next_back()
         .expect("asked");
     assert_eq!(
         described["params"]["pos"],
