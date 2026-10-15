@@ -144,7 +144,7 @@ fn the_mutation_list_draws_both_columns_and_a_click_picks_the_row_by_identity() 
     first(&h, active["label"].as_str().unwrap()).click();
     h.run_steps(3);
     let last = operations(&script).pop().expect("a command");
-    assert_eq!(last["affordance_id"], "mutations:pick:active");
+    assert_eq!(last["affordance_id"], "bn:activate:mutations:pick:active");
     assert_eq!(last["args"]["row"], active["id"]);
 }
 
@@ -255,7 +255,7 @@ fn a_skill_category_is_a_heading_that_sends_nothing_and_a_skill_is_a_row() {
     first(&h, skill["label"].as_str().unwrap()).click();
     h.run_steps(3);
     let last = last_invoke(&script);
-    assert_eq!(last["affordance_id"], "character:focus:skills");
+    assert_eq!(last["affordance_id"], "bn:activate:character:focus:skills");
     assert_eq!(last["args"]["row"], skill["id"]);
 }
 
@@ -270,7 +270,7 @@ fn a_click_on_a_stat_row_moves_the_engines_cursor_to_it_by_the_rows_id() {
     first(&h, rows[1]["label"].as_str().unwrap()).click();
     h.run_steps(3);
     let last = last_invoke(&script);
-    assert_eq!(last["affordance_id"], "character:focus:stats");
+    assert_eq!(last["affordance_id"], "bn:activate:character:focus:stats");
     assert_eq!(last["args"]["row"], rows[1]["id"]);
 }
 

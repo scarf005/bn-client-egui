@@ -733,7 +733,7 @@ fn the_armor_layers_screen_draws_its_lists_and_details_and_down_runs_its_registe
 }
 
 #[test]
-fn the_auto_notes_manager_draws_its_extras_and_enter_runs_its_registered_action() {
+fn the_auto_notes_manager_draws_its_extras_and_enter_runs_the_lists_activate() {
     let (mut app, h) = open(example(
         "autonote.json",
         "auto notes manager with three discovered map extras",
@@ -755,7 +755,9 @@ fn the_auto_notes_manager_draws_its_extras_and_enter_runs_its_registered_action(
     large(&mut app);
     assert_eq!(
         operations(&h),
-        [json!({"kind": "invoke", "affordance_id": "CONFIRM", "args": {}})]
+        [
+            json!({"kind": "invoke", "affordance_id": "autonote:toggle", "args": {"row": "extra:mx_helicopter"}})
+        ]
     );
 }
 

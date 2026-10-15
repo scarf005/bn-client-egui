@@ -138,7 +138,7 @@ fn the_profession_list_draws_its_rows_and_a_click_picks_one_by_identity() {
     first(&h, row["label"].as_str().unwrap()).click();
     h.run_steps(3);
     let last = last_invoke(&script);
-    assert_eq!(last["affordance_id"], "newchar:profession:pick");
+    assert_eq!(last["affordance_id"], "bn:activate:newchar:profession:pick");
     assert_eq!(last["args"]["row"], row["id"]);
 }
 

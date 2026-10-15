@@ -1037,7 +1037,7 @@ fn a_worn_item_runs_the_armor_screens_pick_with_its_identity() {
     h.run_steps(3);
     assert_eq!(
         submits(&script),
-        [boundary_invoke("armor:pick", json!({"row": jeans}))]
+        [boundary_invoke("bn:activate:armor:pick", json!({"row": jeans}))]
     );
 }
 
