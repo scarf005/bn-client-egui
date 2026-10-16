@@ -208,3 +208,17 @@ fn releasing_the_later_of_two_pressed_steps_ends_the_walk() {
         "the earlier key is still down"
     );
 }
+
+#[test]
+fn key_up_under_a_screen_that_opened_during_the_walk_releases_it() {
+    let (mut h, script) = walking(8);
+    h.run_steps(3);
+    key(&mut h, egui::Key::ArrowRight, true, false);
+    key(&mut h, egui::Key::ArrowRight, true, true);
+    assert_eq!(sent(&script, "bn.hold").len(), 1);
+    script.push(common::overmap_event(100));
+    h.run_steps(2);
+    assert!(sent(&script, "bn.release").is_empty(), "still down");
+    key(&mut h, egui::Key::ArrowRight, false, false);
+    assert_eq!(sent(&script, "bn.release").len(), 1);
+}
