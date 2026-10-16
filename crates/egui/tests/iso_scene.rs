@@ -392,6 +392,7 @@ fn decoded(tileset: &Tileset) -> std::sync::Arc<Pages> {
         }
         std::thread::sleep(std::time::Duration::from_millis(10));
     }
+    assert!(!pages.loading(), "the sheets are decoded");
     pages
 }
 
@@ -460,4 +461,148 @@ fn a_flower_drawn_from_above_lies_over_the_ground_where_a_person_drawn_alike_sta
     // The avatar at (3, 4) is a person drawn with the same sprite: a creature stands.
     let me = at(&scene, &m, (3, 4));
     assert!(me.iter().any(|i| i.flags[0] & BOARD != 0), "{me:?}");
+}
+
+/// A square of terrain `id` the engine calls a wall.
+fn wall(x: i32, y: i32, id: &str) -> Value {
+    let mut walled = cell(x, y, 0, id);
+    walled["terrain"]["wall"] = true.into();
+    walled
+}
+
+/// The upright side faces among `quads`: those that drop straight down.
+fn sides(quads: &[Instance]) -> Vec<Instance> {
+    quads
+        .iter()
+        .filter(|i| i.flags[0] & BOARD == 0 && i.b[2] < 0.0)
+        .copied()
+        .collect()
+}
+
+#[test]
+fn an_opaque_wall_drawn_from_above_is_a_solid_of_its_top_its_bottom_and_four_sides_a_level_tall() {
+    let m = model(vec![wall(4, 4, "t_wall")]);
+    let scene = flat_scene_of(&m, "flat-solid");
+    let quads = planes(&scene);
+    assert_eq!(quads.len(), 6, "{quads:?}");
+    let (x, y) = square(&m, (4, 4));
+    let (x, y) = (x as f32, y as f32);
+    // The top and the bottom are the whole sprite over the whole square, a level apart.
+    let mut lids = quads
+        .iter()
+        .filter(|i| i.b[2] == 0.0)
+        .map(|i| (i.origin, i.a, i.b))
+        .collect::<Vec<_>>();
+    lids.sort_by(|a, b| a.0[2].total_cmp(&b.0[2]));
+    let ground = ([1.0, 0.0, 0.0], [0.0, 1.0, 0.0]);
+    assert_eq!(
+        lids,
+        [
+            ([x, y, 0.0], ground.0, ground.1),
+            ([x, y, 3.0], ground.0, ground.1)
+        ]
+    );
+    // Each side spans a whole edge of the square from the top down to the ground.
+    let sides = sides(&quads);
+    assert_eq!(sides.len(), 4, "{sides:?}");
+    assert!(
+        sides.iter().all(|i| (i.origin[2] - 3.0).abs() < 1e-4
+            && (i.b[2] + 3.0).abs() < 1e-4
+            && (i.a[0].abs() + i.a[1].abs() - 1.0).abs() < 1e-4),
+        "{sides:?}"
+    );
+    assert_eq!(
+        scene.column(x as i32, y as i32).unwrap().solid,
+        Some((0.0, 3.0))
+    );
+}
+
+#[test]
+fn a_side_face_stretches_the_sprites_edge_pixels_down_its_height() {
+    let m = model(vec![wall(4, 4, "t_wall")]);
+    let scene = flat_scene_of(&m, "flat-side-uv");
+    let (x, y) = square(&m, (4, 4));
+    let (x, y) = (x as f32, y as f32);
+    let sides = sides(&planes(&scene));
+    // The wall is sprite 2 of its sheet: 64 pixels from the left of its page.
+    let at = |i: &Instance, u: f32| {
+        let world = glam::Vec2::new(i.origin[0] + i.a[0] * u, i.origin[1] + i.a[1] * u);
+        let page = glam::Vec2::from(i.uv) + glam::Vec2::from(i.uv_a) * u;
+        (world, page)
+    };
+    let south = sides
+        .iter()
+        .find(|i| (i.origin[1] - (y + 1.0)).abs() < 1e-4 && i.a[1] == 0.0)
+        .expect("a south face");
+    for u in [0.0, 1.0] {
+        let (world, page) = at(south, u);
+        // The bottom row of the sprite, from where the face starts to where it ends.
+        let expected = glam::Vec2::new(64.0 + (world.x - x) * 32.0, 31.5);
+        assert!((page - expected).length() < 0.15, "{page} {expected}");
+    }
+    let east = sides
+        .iter()
+        .find(|i| (i.origin[0] - (x + 1.0)).abs() < 1e-4 && i.a[0] == 0.0)
+        .expect("an east face");
+    for u in [0.0, 1.0] {
+        let (world, page) = at(east, u);
+        let expected = glam::Vec2::new(64.0 + 31.5, (world.y - y) * 32.0);
+        assert!((page - expected).length() < 0.15, "{page} {expected}");
+    }
+    // Down the face the sprite stays on that row.
+    assert!(
+        sides
+            .iter()
+            .all(|i| glam::Vec2::from(i.uv_b).length() < 1e-4),
+        "{sides:?}"
+    );
+}
+
+#[test]
+fn a_wall_with_a_hole_has_sides_round_the_hole_too() {
+    let m = model(vec![wall(4, 4, "t_wall_holed")]);
+    let scene = flat_scene_of(&m, "flat-hole");
+    let quads = planes(&scene);
+    assert_eq!(quads.len(), 2 + 4 + 4, "{quads:?}");
+    let (x, y) = square(&m, (4, 4));
+    let inner = |v: f32, base: i32| (14.0 / 32.0..=18.0 / 32.0).contains(&(v - base as f32));
+    let around = sides(&quads)
+        .into_iter()
+        .filter(|i| inner(i.origin[0], x) && inner(i.origin[1], y))
+        .count();
+    assert_eq!(around, 4, "{quads:?}");
+}
+
+#[test]
+fn walls_side_by_side_leave_out_the_faces_they_share() {
+    let row = model(vec![
+        wall(4, 4, "t_wall"),
+        wall(5, 4, "t_wall"),
+        wall(6, 4, "t_wall"),
+    ]);
+    let scene = flat_scene_of(&row, "flat-row");
+    assert_eq!(planes(&scene).len(), 5 + 4 + 5);
+    let (x, _) = square(&row, (5, 4));
+    let shared = sides(&planes(&scene))
+        .into_iter()
+        .filter(|i| i.a[0] == 0.0 && [x, x + 1].contains(&(i.origin[0] as i32)))
+        .count();
+    assert_eq!(shared, 0, "no face between two walls");
+    // A wall over half its square shows the face of the whole wall beside it, which hides its own.
+    let half = model(vec![wall(4, 4, "t_wall"), wall(5, 4, "t_wall_half")]);
+    let scene = flat_scene_of(&half, "flat-half");
+    assert_eq!(planes(&scene).len(), 6 + 5);
+}
+
+#[test]
+fn a_vehicle_part_drawn_from_above_is_a_solid_half_a_square_tall_on_its_ground() {
+    let mut car = cell(5, 4, 0, "t_grass");
+    car["vehicle"] = look("vehicle_part", "vp_frame");
+    let m = model(vec![car, cell(6, 4, 0, "t_wall")]);
+    let scene = flat_scene_of(&m, "flat-car");
+    // The grass, the part's own grass background lying under it, the part's six faces and the flat terrain beside it.
+    let quads = planes(&scene);
+    assert_eq!(quads.len(), 1 + 1 + 6 + 1, "{quads:?}");
+    let top = quads.iter().map(|i| i.origin[2]).fold(f32::MIN, f32::max);
+    assert!((top - 0.5).abs() < 0.01, "{quads:?}");
 }

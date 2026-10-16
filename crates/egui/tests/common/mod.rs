@@ -247,8 +247,10 @@ pub fn iso_root(tag: &str) -> std::path::PathBuf {
 }
 
 /// A game root holding a 32 x 32 tileset `flat` drawn from above, in `gfx/flat`: grass, a shrub whose top rows
-/// are clear, a wall and a vehicle frame as wide and tall as the tile, a flower inside it that a person (`mon_a`)
-/// is drawn as too, and, twice as tall, a tree whose ground is a sprite of its own with grass in its bottom half.
+/// are clear, a wall and a vehicle frame on grass as wide and tall as the tile, a flower inside it that a person (`mon_a`)
+/// is drawn as too, a wall with a hole of 4 x 4 pixels in its middle (`t_wall_holed`), a wall over the top half of
+/// the square only (`t_wall_half`), and, twice as tall, a tree whose ground is a sprite of its own with grass in its
+/// bottom half.
 pub fn flat_root(tag: &str) -> std::path::PathBuf {
     let root = std::env::temp_dir().join(format!("bn-client-flat-{}-{tag}", std::process::id()));
     let dir = root.join("gfx/flat");
@@ -259,7 +261,7 @@ pub fn flat_root(tag: &str) -> std::path::PathBuf {
     )
     .unwrap();
     let grass = image::Rgba([90, 170, 60, 255]);
-    let mut top = image::RgbaImage::new(160, 32);
+    let mut top = image::RgbaImage::new(224, 32);
     for (x, y, px) in top.enumerate_pixels_mut() {
         let (sprite, x) = (x / 32, x % 32);
         let shrub = (6..26).contains(&x) && (8..28).contains(&y);
@@ -270,6 +272,10 @@ pub fn flat_root(tag: &str) -> std::path::PathBuf {
             2 => image::Rgba([150, 150, 150, 255]),
             3 => image::Rgba([60, 90, 210, 255]),
             4 if flower => image::Rgba([200, 60, 220, 255]),
+            5 if !(14..18).contains(&x) || !(14..18).contains(&y) => {
+                image::Rgba([120, 120, 120, 255])
+            }
+            6 if y < 16 => image::Rgba([170, 170, 170, 255]),
             _ => image::Rgba([0, 0, 0, 0]),
         };
     }
@@ -292,11 +298,13 @@ pub fn flat_root(tag: &str) -> std::path::PathBuf {
                 {"id": "t_dirt", "fg": 0, "multitile": true, "additional_tiles": [{"id": "center", "fg": 0}]},
                 {"id": "t_shrub", "fg": 1, "bg": 0},
                 {"id": "t_wall", "fg": 2, "multitile": true, "additional_tiles": [{"id": "center", "fg": 2}]},
-                {"id": "vp_frame", "fg": 3},
-                {"id": ["f_flower", "mon_a"], "fg": 4}
+                {"id": "vp_frame", "fg": 3, "bg": 0},
+                {"id": ["f_flower", "mon_a"], "fg": 4},
+                {"id": "t_wall_holed", "fg": 5},
+                {"id": "t_wall_half", "fg": 6}
             ]},
             {"file": "tall.png", "sprite_width": 32, "sprite_height": 64, "sprite_offset_y": -32, "tiles": [
-                {"id": "t_tree", "fg": 5, "bg": 6}
+                {"id": "t_tree", "fg": 7, "bg": 8}
             ]}
         ]
     });
