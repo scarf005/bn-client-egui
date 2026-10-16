@@ -51,6 +51,22 @@ fn start<'a>() -> H<'a> {
     h
 }
 
+/// Clicks the widget whose label contains `label` once it stopped moving: a press lands where the widget was
+/// last drawn, which a screen still laying itself out may have given to another widget.
+fn click_settled(h: &mut H, label: &str) {
+    let mut seen = None;
+    for _ in 0..100 {
+        let rect = h.get_by_label_contains(label).rect();
+        if seen == Some(rect) {
+            h.get_by_label_contains(label).click();
+            return;
+        }
+        seen = Some(rect);
+        h.run_steps(2);
+    }
+    panic!("{label} kept moving");
+}
+
 fn settle(h: &mut H, what: &str) {
     run_until(h, what, 30, |h| !h.state().model.busy());
     h.run_steps(5);
@@ -81,7 +97,7 @@ fn live_debug_menu_filters_to_tele_and_a_query_popup_declines() {
         h.query_by_label_contains("Filter").is_some()
     });
     h.get_by_label_contains("Spawning");
-    h.get_by_label_contains("Filter").click();
+    click_settled(&mut h, "Filter");
     run_until(&mut h, "the filter prompt", 30, |h| {
         h.query_by_label_contains("Filter").is_none()
     });
