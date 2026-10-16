@@ -121,7 +121,11 @@ fn the_town_in_3d_from_every_side_and_what_a_frame_costs() {
     let tileset = std::env::var("BN_ISO_TILESET").unwrap_or("Ultica_iso".into());
     std::fs::write(
         &settings,
-        format!(r#"{{"tiles":true,"tileset":"{tileset}"}}"#),
+        // BN_ISO_3D draws a flat tileset in 3D as the "3D" view setting does.
+        match std::env::var_os("BN_ISO_3D") {
+            Some(_) => format!(r#"{{"tiles":true,"tileset":"{tileset}","three_d":true}}"#),
+            None => format!(r#"{{"tiles":true,"tileset":"{tileset}"}}"#),
+        },
     )
     .unwrap();
     let transport = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
