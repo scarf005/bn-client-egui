@@ -38,6 +38,8 @@ pub struct TuiApp<M: GameModel> {
     actions_open: Option<usize>,
     /// Message log lines scrolled back from the newest.
     log_back: usize,
+    /// The log's lines when last drawn.
+    log_len: usize,
     /// The map square the mouse last hovered, in absolute coordinates.
     hovered: Option<Pos>,
     /// A settings value being typed.
@@ -163,6 +165,7 @@ impl<M: GameModel> TuiApp<M> {
             map_first: Pos { x: 0, y: 0 },
             actions_open: None,
             log_back: 0,
+            log_len: 0,
             edit: None,
             hovered: None,
             menu_hits: Default::default(),
@@ -276,7 +279,11 @@ impl<M: GameModel> TuiApp<M> {
             KeyCode::Tab if !token.is_some_and(|t| self.model.key_bound(&t)) => {
                 self.actions_open = Some(0)
             }
-            KeyCode::PageUp => self.log_back += LOG_LINES,
+            // Paging stops at the oldest line, so the way back down is as long as the way up.
+            KeyCode::PageUp => {
+                self.log_back =
+                    (self.log_back + LOG_LINES).min(self.log_len.saturating_sub(LOG_LINES))
+            }
             KeyCode::PageDown => self.log_back = self.log_back.saturating_sub(LOG_LINES),
             _ => {}
         }
@@ -604,6 +611,7 @@ impl<M: GameModel> TuiApp<M> {
             Line::styled(s.text, Style::new().fg(Color::Rgb(shade, shade, shade)))
         });
         let all = native.chain(commands).chain(sounds).collect::<Vec<_>>();
+        self.log_len = all.len();
         let end = all.len().saturating_sub(self.log_back.min(all.len()));
         let lines = all[end.saturating_sub(LOG_LINES)..end].to_vec();
         if log_shown {
