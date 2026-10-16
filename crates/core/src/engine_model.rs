@@ -1,5 +1,6 @@
 //! `GameModel` backed by a live engine connection.
 
+mod responses;
 mod session;
 
 pub use session::ConnectOptions;
@@ -16,7 +17,7 @@ use crate::model::{
 };
 use crate::protocol::{
     self, Cell as WorldCell, Entity, InvokeArgs, Known, Look, ModTileset, Operation, Row, Screen,
-    Snapshot, Traits, WorldPos,
+    Traits, WorldPos,
 };
 use crate::replica::Replica;
 use crate::transport::Transport;
@@ -65,13 +66,9 @@ struct Paged {
 /// Starts the engine again on the same profile.
 pub type Respawn = Box<dyn FnMut() -> std::io::Result<Box<dyn Transport>>>;
 
-/// Without a message for this long while a request is outstanding, the engine counts as stalled.
 /// The frame rate a client asks the engine to publish at while an activity runs, unless it knows better.
 pub const DEFAULT_MAX_HZ: u16 = 60;
-/// JSON-RPC code of a request whose params the engine does not accept.
-const INVALID_PARAMS: i64 = -32602;
-/// JSON-RPC code of a method the engine does not know.
-const METHOD_NOT_FOUND: i64 = -32601;
+/// Without a message for this long while a request is outstanding, the engine counts as stalled.
 const STALL: Duration = Duration::from_secs(120);
 
 pub struct EngineModel {
@@ -312,228 +309,6 @@ impl EngineModel {
         })
     }
 
-    /// A command's stage, from a notification or from `bn.command.result`.
-    fn command_notice(&mut self, n: protocol::CommandNotice) {
-        self.mark(match n.stage.as_str() {
-            "validated" => "validated",
-            "executing" => "executing",
-            "completed" => "completed",
-            _ => "stage",
-        });
-        if self.command_id.as_deref() == Some(&n.command_id) {
-            let reason = n.error.as_ref().map(error_kind);
-            let swap = reason.as_deref() == Some("stale_epoch");
-            let stage = match n.stage.as_str() {
-                "validated" => "accepted".into(),
-                "completed" => "done".into(),
-                _ if swap => "done".into(),
-                "rejected" | "interrupted" => match &n.error_text {
-                    Some(why) => format!("{}: {why}", n.stage),
-                    None => n.stage.clone(),
-                },
-                other => other.into(),
-            };
-            if let Some(s) = &mut self.status {
-                s.set_stage(stage, n.is_terminal());
-            }
-        }
-        let latest = self.command_id.as_deref() == Some(&n.command_id);
-        let outstanding = n.is_terminal() && self.running.remove(&n.command_id);
-        if outstanding {
-            self.busy = self.unanswered > 0 || !self.running.is_empty();
-        }
-        if n.is_terminal() && (latest || outstanding) {
-            if latest {
-                self.command_id = None;
-            }
-            // The world swap after choosing the Tutorial ends its command with stale_epoch.
-            let swap =
-                n.stage == "interrupted" && n.error.as_ref().is_some_and(|e| e == "stale_epoch");
-            if n.stage != "completed" && !swap {
-                let reason = n.error.as_ref().map(error_kind);
-                // A kept resend is the latest command; an earlier queued one is only reported.
-                if !(latest && self.stale_resend(reason.as_deref())) {
-                    self.report_failure(n.error_text.as_deref().unwrap_or(&n.stage));
-                }
-            }
-        }
-    }
-
-    fn response(&mut self, id: u64, result: Result<Value, protocol::RpcError>) {
-        let Some(kind) = self.pending.remove(&id) else {
-            return;
-        };
-        if matches!(kind, Pending::Subscribe) {
-            self.mark("subscribed");
-            self.subscribing = false;
-        }
-        if matches!(kind, Pending::Submit)
-            && let Err(e) = &result
-        {
-            self.unanswered = self.unanswered.saturating_sub(1);
-            self.busy = self.unanswered > 0 || !self.running.is_empty();
-            let kind = e.data.as_ref().map_or(e.message.clone(), error_kind);
-            self.stale_resend(Some(&kind));
-            if let Some(s) = &mut self.status {
-                s.set_stage(format!("rejected: {}", reason_of(&e)), true);
-            }
-        }
-        if matches!(kind, Pending::Describe) {
-            // A square outside the engine's window has no description; the cell's own name stands.
-            let described = result
-                .ok()
-                .and_then(|v| serde_json::from_value::<protocol::DescribeResult>(v).ok());
-            let lines = described
-                .iter()
-                .flat_map(|d| d.parts.iter())
-                .flat_map(|p| std::iter::once(&p.text).chain(p.detail.as_ref()))
-                .map(|text| markup::plain(text))
-                .collect();
-            if let Some(h) = self.hovered.as_mut() {
-                h.lines = Some(lines);
-                h.actions = described.map(|d| d.actions).unwrap_or_default();
-            }
-            return;
-        }
-        if matches!(kind, Pending::Rows) {
-            let asked = self.row_requests.remove(&id);
-            let reply = result
-                .ok()
-                .and_then(|v| serde_json::from_value::<protocol::ChoicesReply>(v).ok());
-            match (reply, asked) {
-                (Some(protocol::ChoicesReply::Rows(page)), _) => self.pages.accept(page),
-                (_, Some(component_id)) => self.pages.failed(&component_id),
-                _ => {}
-            }
-            return;
-        }
-        if matches!(kind, Pending::Retile) {
-            if let Ok(v) = &result {
-                self.set_credits(v);
-            }
-            // The engine refused (a command was running): ask again a moment later.
-            if result.is_err() {
-                self.tiles_told = !self.tiles;
-                self.tiles_retry = self.clock.now() + RESIZE_DEBOUNCE;
-            }
-            return;
-        }
-        if matches!(kind, Pending::Hold) {
-            // Held at the wrong moment (an activity, a popup): the key must go up and down again.
-            if result.is_err() {
-                self.holding = None;
-            }
-            return;
-        }
-        if matches!(kind, Pending::Interrupt) {
-            // The engine had no activity running; say so once, not per key press.
-            if let Err(e) = &result {
-                self.report_failure(&reason_of(e));
-                // An engine with nothing to interrupt may have finished the command without our hearing of it.
-                if let (Some(at), Some(command_id)) = (self.replica.at(), self.command_id.clone()) {
-                    let params = protocol::ResultParams {
-                        epoch: at.epoch.clone(),
-                        command_id,
-                    };
-                    self.call("bn.command.result", json!(params), Pending::Outcome);
-                }
-            }
-            return;
-        }
-        if matches!(kind, Pending::Outcome) {
-            if let Some(n) = result.ok().and_then(|v| serde_json::from_value(v).ok()) {
-                self.command_notice(n);
-            }
-            return;
-        }
-        if matches!(kind, Pending::Hello)
-            && let Err(e) = &result
-            && incompatible(e)
-        {
-            self.failure = Some(Failure {
-                kind: FailureKind::Incompatible,
-                message: reason_of(e),
-                stderr: self.transport.stderr_tail(),
-                engine: self.engine.clone(),
-            });
-            return;
-        }
-        let value = match result {
-            Ok(v) => v,
-            Err(e) => {
-                self.report_failure(&reason_of(&e));
-                return;
-            }
-        };
-        match kind {
-            Pending::Hello => {
-                self.display = value["engine"]["display"].as_object().and_then(|d| {
-                    Some((
-                        d.get("tiles")?.as_bool()?,
-                        d.get("tileset")?.as_str()?.to_string(),
-                    ))
-                });
-                self.soundpack = value["engine"]["sound"]["soundpack"]
-                    .as_str()
-                    .map(std::path::PathBuf::from);
-                self.mark("hello");
-                self.catalogue = self.data_root.as_deref().and_then(|root| {
-                    Catalogue::load(root, value["locale"].as_str()?).map(Arc::new)
-                });
-                localise::install(self.catalogue.clone());
-                self.screen_queue = serde_json::from_value::<protocol::Hello>(value.clone())
-                    .map_or(1, |hello| hello.screen_queue());
-                self.set_credits(&value);
-                self.subscribe();
-            }
-            Pending::Subscribe => match serde_json::from_value::<Snapshot>(value) {
-                Ok(s) => self.replica.begin(s),
-                Err(e) => self.messages.push(format!("Bad snapshot: {e}")),
-            },
-            Pending::Viewport
-            | Pending::Hold
-            | Pending::Interrupt
-            | Pending::Outcome
-            | Pending::Retile
-            | Pending::Rows
-            | Pending::Describe => {}
-            Pending::Choices => {
-                self.paged.waiting = false;
-                if let Ok(page) = serde_json::from_value::<protocol::ChoicesResult>(value)
-                    && self.paged.key.0 == page.boundary_id
-                {
-                    self.paged.more.extend(page.choices);
-                }
-            }
-            Pending::Submit => {
-                self.mark("received");
-                self.unanswered = self.unanswered.saturating_sub(1);
-                self.command_id = value["command_id"].as_str().map(String::from);
-                self.running.extend(self.command_id.clone());
-                self.busy = self.unanswered > 0 || !self.running.is_empty();
-                if let Some(s) = self.status.as_mut().filter(|s| s.stage == "sent") {
-                    s.set_stage("accepted".into(), false);
-                }
-            }
-        }
-    }
-
-    /// Keeps a command rejected as `stale_boundary` for the next boundary: a timed screen redraws on its
-    /// own, so a key sent as a tick lands is rejected though the player did nothing wrong.
-    fn stale_resend(&mut self, reason: Option<&str>) -> bool {
-        let timed = self
-            .replica
-            .boundary()
-            .and_then(|b| b.interaction.as_ref())
-            .is_some_and(|i| i.refresh_ms.is_some());
-        let sent = self.sent.take();
-        let keep = reason == Some("stale_boundary") && timed && sent.is_some();
-        if keep {
-            self.resend = sent;
-        }
-        keep
-    }
-
     /// Sends the kept command once the engine has published a newer boundary of a timed screen; a screen
     /// that no longer redraws on its own drops it.
     fn send_resend(&mut self) {
@@ -550,13 +325,6 @@ impl EngineModel {
         if let Some((operation, _)) = self.resend.take().filter(|_| timed) {
             self.submit(operation);
             self.sent = None;
-        }
-    }
-
-    /// Logs a failed command's reason; a repeat of the last line (a click held on an unreachable square) adds none.
-    fn report_failure(&mut self, text: &str) {
-        if self.messages.last().map(String::as_str) != Some(text) {
-            self.messages.push(text.to_string());
         }
     }
 
@@ -934,27 +702,6 @@ fn unzip3<A, B, C>(rows: Vec<(A, B, C)>) -> (Vec<A>, Vec<B>, Vec<C>) {
         c.push(z);
     }
     (a, b, c)
-}
-
-/// The engine's localized reason for a failed call: its `message` in the error data, else the RPC message.
-fn reason_of(e: &protocol::RpcError) -> String {
-    e.data
-        .as_ref()
-        .and_then(|d| d["message"].as_str())
-        .map_or_else(|| e.message.clone(), String::from)
-}
-
-/// A hello the engine cannot accept from this client at all: another protocol version, or none.
-fn incompatible(e: &protocol::RpcError) -> bool {
-    e.code == METHOD_NOT_FOUND
-        || e.code == INVALID_PARAMS
-        || e.data.as_ref().map(error_kind).as_deref() == Some("negotiation_failed")
-}
-
-fn error_kind(e: &Value) -> String {
-    e.as_str()
-        .or_else(|| e["kind"].as_str())
-        .map_or_else(|| e.to_string(), String::from)
 }
 
 impl EngineModel {
