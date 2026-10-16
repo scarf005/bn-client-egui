@@ -582,6 +582,32 @@ mod tests {
         ops.iter().filter_map(at).collect()
     }
 
+    fn shot(len: i32) -> Effect {
+        Effect {
+            shape: Shape::Projectile {
+                path: (0..len).map(|x| Pos { x, y: 0 }).collect(),
+                glyph: '*',
+                sprite: None,
+                color: Rgb(255, 0, 0),
+            },
+            duration_ms: 20,
+        }
+    }
+
+    #[test]
+    fn many_shots_in_one_turn_play_out_within_the_queue_bound() {
+        let mut e = Effects::default();
+        let shots = (0..100).map(|_| shot(20)).collect::<Vec<_>>();
+        let longest = shots.iter().map(life).fold(0.0, f64::max);
+        e.add(0.0, shots, false);
+        let end = MAX_QUEUE + longest + 0.001;
+        e.add(end, vec![], false);
+        assert!(
+            !e.active(),
+            "every shot ended by the queue bound plus one shot"
+        );
+    }
+
     #[test]
     fn floating_text_moves_one_square_per_step_in_its_direction_and_is_gone_after_eight() {
         let mut e = Effects::default();
