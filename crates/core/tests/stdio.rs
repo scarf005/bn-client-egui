@@ -190,3 +190,21 @@ fn stdio_transport_pays_credits_as_it_reads_without_the_ui_polling() {
     drop(t);
     std::fs::remove_dir_all(dir).unwrap();
 }
+
+#[test]
+fn closed_carries_the_exit_status_without_blocking_poll() {
+    let dir = std::env::temp_dir().join(format!("bn-stdio-exit-{}", std::process::id()));
+    // Closes its output, then takes a while to exit.
+    let script = "#!/bin/sh\nexec >&- 2>&-\nsleep 0.3\nexit 3\n";
+    let mut t = spawn_script(&dir, script, StdioTransport::spawn_fresh);
+    assert_eq!(recv(&mut t), Incoming::Closed);
+    let asked = Instant::now();
+    assert_eq!(t.exit_reason().as_deref(), Some("exit code 3"));
+    assert!(
+        asked.elapsed() < Duration::from_millis(50),
+        "{:?}",
+        asked.elapsed()
+    );
+    drop(t);
+    std::fs::remove_dir_all(dir).unwrap();
+}
