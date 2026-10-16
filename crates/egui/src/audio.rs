@@ -1,6 +1,7 @@
 //! The engine's sound cues on the default audio device, from the sound pack its hello names.
 
 use bn_client_core::audio::{Cue, Output, Play, Player, SoundPack, Track};
+use rodio::decoder::LoopedDecoder;
 use rodio::mixer::Mixer;
 use rodio::source::ChannelVolume;
 use rodio::{Decoder, Source};
@@ -51,6 +52,18 @@ fn decode(file: &Path) -> Option<Decoder<std::io::BufReader<std::fs::File>>> {
     Decoder::try_from(std::fs::File::open(file).ok()?).ok()
 }
 
+/// `file` decoded over again from its start each time it ends. Each play decodes the file anew rather than
+/// replaying `Source::buffered`, which ends at once on the empty first span the Vorbis decoder reports.
+fn looped(file: &Path) -> Option<LoopedDecoder<std::io::BufReader<std::fs::File>>> {
+    let file = std::fs::File::open(file).ok()?;
+    let length = file.metadata().ok()?.len();
+    Decoder::builder()
+        .with_data(std::io::BufReader::new(file))
+        .with_byte_len(length)
+        .build_looped()
+        .ok()
+}
+
 impl Speakers {
     pub fn new(mixer: Mixer) -> Self {
         let log = std::env::var_os("BN_SOUND_LOG")
@@ -99,7 +112,6 @@ impl Output for Speakers {
             return None;
         };
         let length = source.total_duration();
-        let source = source.buffered();
         let voice = rodio::Player::connect_new(&self.mixer);
         voice.set_volume(play.gain);
         let pan = Arc::new(AtomicU32::new(play.pan.unwrap_or(f32::NAN).to_bits()));
@@ -129,11 +141,16 @@ impl Output for Speakers {
         match play.loops {
             // Only the first time fades in, as the native player's fade does.
             Some(more) => {
-                for time in 0..=more {
-                    voice.append(shaped(Box::new(source.clone()), time == 0));
+                voice.append(shaped(Box::new(source), true));
+                for again in (0..more).filter_map(|_| decode(&play.file)) {
+                    voice.append(shaped(Box::new(again), false));
                 }
             }
-            None => voice.append(shaped(Box::new(source.repeat_infinite()), true)),
+            None => {
+                if let Some(source) = looped(&play.file) {
+                    voice.append(shaped(Box::new(source), true));
+                }
+            }
         }
         self.note(format_args!(
             "play {:?} {} gain={:.3} pan={:?} loops={:?}",
