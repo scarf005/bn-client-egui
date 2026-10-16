@@ -978,6 +978,34 @@ fn enter_chooses_the_cursor_row_when_the_menu_binds_no_confirm_key() {
 }
 
 #[test]
+fn a_fetched_page_keeps_the_client_highlight() {
+    let (t, h) = session();
+    let t = t.on(
+        "bn.interaction.choices",
+        vec![json!({"jsonrpc":"2.0","result":{"boundary_id":"b:13","total":3,"choices":[
+            {"id":"c:3","label":"glass jar","enabled":true,"description":"","denial":"","selectable":true,
+             "selected":false,"columns":[]}]}})],
+    );
+    let mut app = TuiApp::new(connected(t));
+    for name in ["events_41_walk", "events_42_message"] {
+        h.push(fixture(name));
+    }
+    let mut menu = menu_event(fixture("events_43_menu"), "c:1");
+    let ev = &mut menu["params"]["events"][0]["changes"]["interaction"];
+    ev["actions"] = json!([]);
+    ev["interaction"]["choice_total"] = json!(3);
+    ev["interaction"]["choices"][1]["enabled"] = json!(true);
+    ev["interaction"]["choices"][1]["selectable"] = json!(true);
+    h.push(menu);
+    app.model.poll();
+    app.handle_key(key(KeyCode::Down));
+    assert_eq!(app.selected_label().as_deref(), Some("tin can"));
+    app.model.poll();
+    assert_eq!(app.model.menu().unwrap().choices.len(), 3, "the page came");
+    assert_eq!(app.selected_label().as_deref(), Some("tin can"));
+}
+
+#[test]
 fn item_lists_beside_the_map_show_colour_tags_as_colour_not_text() {
     struct Tagged(FakeModel, Vec<String>);
     impl GameModel for Tagged {
