@@ -228,3 +228,73 @@ fn a_menu_window_is_narrowed_by_dragging_its_left_edge() {
         "{before:?} -> {after:?}"
     );
 }
+
+/// A client whose settings are kept in `settings`, in a game with the inventory's drop screen over the map.
+fn inventory_window<'a>(settings: &std::path::Path) -> (H<'a>, ScriptHandle) {
+    let path = format!(
+        "{}/../core/tests/fixtures/0.2.examples/inventory.json",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    let all = serde_json::from_str::<Value>(&std::fs::read_to_string(path).unwrap()).unwrap();
+    let screen = all["valid"][0]["value"].clone();
+    let (t, script) = session();
+    let app = App::new(EngineModel::new(Box::new(t))).with_settings(settings.into());
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(1100.0, 800.0))
+        .build_ui_state(|ui, app: &mut App<EngineModel>| app.show(ui), app);
+    h.run_steps(3);
+    script.push(fixture("events_41_walk"));
+    h.run_steps(4);
+    let map = json!({"screen_id": "screen:map", "role": "map", "root": null, "affordances": []});
+    script.push(json!({"jsonrpc": "2.0", "method": "bn.events", "params": {"epoch": "e7f3", "events": [{
+        "sequence": "42", "revision": "33", "type": "interaction.changed", "changes": {"interaction": {
+        "boundary_id": "b:60",
+        "readiness": {"phase": "playing", "game_ready": true, "accepts_interaction_commands": true,
+            "accepts_registered_actions": true},
+        "actions": [], "interaction": null, "stack": [map, screen]}}}]}}));
+    h.run_steps(6);
+    common::settle_windows(&mut h);
+    (h, script)
+}
+
+/// The inventory window, and a point on its title bar left of the close button.
+fn inventory_frame(h: &H) -> (egui::Rect, egui::Pos2) {
+    let window = h.get_by_label("Multidrop").rect();
+    let close = h.get_by_label("Close window").rect();
+    (window, egui::pos2(window.center().x, close.center().y))
+}
+
+#[test]
+fn a_screen_window_closed_by_its_close_button_runs_the_screens_cancel() {
+    let (mut h, script) = inventory_window(&settings("windows-screen-close"));
+    let close = h.get_by_label("Close window").rect().center();
+    click(&mut h, close);
+    let invoked = script
+        .sent()
+        .into_iter()
+        .filter(|m| m["method"] == "bn.command.submit")
+        .map(|m| m["params"]["operation"]["affordance_id"].clone())
+        .collect::<Vec<_>>();
+    assert_eq!(invoked, [json!("QUIT")]);
+}
+
+#[test]
+fn a_screen_window_is_moved_by_its_title_bar_and_found_there_after_a_restart() {
+    let file = settings("windows-screen-move");
+    let (mut h, _) = inventory_window(&file);
+    let (before, title) = inventory_frame(&h);
+    let by = egui::vec2(60.0, 70.0);
+    drag(&mut h, title, title + by);
+    let (moved, _) = inventory_frame(&h);
+    assert!(
+        (moved.min - before.min - by).length() < 2.0,
+        "{before:?} -> {moved:?}"
+    );
+    drop(h);
+    let (h, _) = inventory_window(&file);
+    let (again, _) = inventory_frame(&h);
+    assert!(
+        (again.min - moved.min).length() < 2.0,
+        "{again:?} vs {moved:?}"
+    );
+}
