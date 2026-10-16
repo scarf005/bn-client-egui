@@ -629,22 +629,24 @@ impl<M: GameModel> App<M> {
         if menu.as_ref().is_some_and(|m| m.acknowledges()) {
             keys.truncate(1);
         }
-        // A step of the map is held, not repeated: the engine walks from key down to key up. Any other key
-        // is a screen-scoped affordance, which the engine queues behind the command in flight.
-        let fresh = ctx.input(|i| {
+        // A key press is one step, as in the native game. Once the OS repeats the key, the step is held, not
+        // repeated: the engine walks until key up. Any other key is a screen-scoped affordance, which the engine
+        // queues behind the command in flight.
+        let down = ctx.input(|i| {
             i.events.iter().rev().find_map(|e| match e {
                 egui::Event::Key {
                     key,
                     pressed: true,
-                    repeat: false,
+                    repeat,
                     ..
-                } => Some(*key),
+                } => Some((*key, *repeat)),
                 _ => None,
             })
         });
+        let repeated = down.filter(|(_, repeat)| *repeat).map(|(key, _)| key);
         for key in keys {
-            if self.model.hold(&key) {
-                self.walk_key = fresh.or(self.walk_key);
+            if repeated.is_some() && self.model.hold(&key) {
+                self.walk_key = repeated;
                 self.keys_consumed = true;
             } else {
                 self.keys_consumed |= self.model.press(&key) || self.model.key_bound(&key);
