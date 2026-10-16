@@ -179,6 +179,30 @@ fn the_zone_manager_lists_its_zones_options_and_actions_under_headings() {
     );
 }
 
+#[test]
+fn the_footer_describes_the_cursor_row_under_headings() {
+    let (mut app, h) = engine();
+    text(&mut app);
+    let mut manager = screen(
+        "choices",
+        "ZONES_MANAGER",
+        "Zones",
+        "",
+        vec![
+            row("zone:0", "zones", "stockpile", "Holds the loot.", ""),
+            row("zone:1", "zones", "farm", "Grows the crops.", ""),
+            row("action:ADD_ZONE", "actions", "Add zone", "Adds a zone.", "a"),
+        ],
+    );
+    manager["compat"]["focus"]["choice_id"] = json!("zone:1");
+    let panes = json!([{"id":"zones","label":"Zones","role":"current"},
+        {"id":"actions","label":"Actions","role":"controls"}]);
+    show(&mut app, &h, with_panes(manager, panes), json!([]));
+    let shown = text(&mut app);
+    assert!(shown.contains("Grows the crops."), "{shown}");
+    assert!(!shown.contains("Adds a zone."), "{shown}");
+}
+
 /// The ids of the actions invoked so far.
 fn invoked(h: &ScriptHandle) -> Vec<String> {
     h.sent()
