@@ -115,9 +115,8 @@ fn doors_and_lockers(h: &H) -> Vec<Pos> {
     found
 }
 
-#[test]
-#[ignore = "requires BN_ENGINE pointing at an engine binary"]
-fn the_toolbar_the_square_menu_and_the_inventory_by_mouse() {
+/// A new game of the main menu's `entry` drawn with tiles, its pop-ups closed.
+fn start<'a>(entry: &str) -> H<'a> {
     let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
     let root =
         game_root(engine.as_ref(), std::env::var_os("BN_ROOT").map(Into::into)).expect("game root");
@@ -141,7 +140,7 @@ fn the_toolbar_the_square_menu_and_the_inventory_by_mouse() {
         h.state().model.menu().is_some()
     });
     choose(&mut h, "menu:tab", "new_game");
-    choose(&mut h, "menu:entry", "new_game:play_now");
+    choose(&mut h, "menu:entry", entry);
     run_until(&mut h, "the map", 900, |h| h.state().model.size().x > 0);
     run_until(&mut h, "the settled game", 300, |h| {
         h.state().model.menu().is_none() && !h.state().model.busy()
@@ -149,6 +148,13 @@ fn the_toolbar_the_square_menu_and_the_inventory_by_mouse() {
     dismiss_popups(&mut h);
     run_until(&mut h, "quiet", 180, |h| !h.state().model.busy());
     settle(&mut h);
+    h
+}
+
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn the_toolbar_the_square_menu_and_the_inventory_by_mouse() {
+    let mut h = start("new_game:play_now");
 
     // The bar is the engine's: one button per published shortcut, named as the engine names it.
     let shortcuts = h.state().model.shortcuts();
@@ -223,4 +229,129 @@ fn the_toolbar_the_square_menu_and_the_inventory_by_mouse() {
             .map(|s| s.screen_id.clone())
     );
     save(&mut h, "03-inventory.png");
+}
+
+/// Chooses the entry of the menu on top whose label contains `label`, once the menu lists it.
+fn pick(h: &mut H, label: &str) {
+    let listed = |h: &H| {
+        h.state()
+            .model
+            .menu()
+            .and_then(|m| m.choices.into_iter().find(|c| c.label.contains(label)))
+    };
+    run_until(h, label, 120, |h| {
+        !h.state().model.busy() && listed(h).is_some()
+    });
+    let id = listed(h).expect("listed").id;
+    h.state_mut().model.choose(&id);
+    run_until(h, label, 120, |h| !h.state().model.busy());
+    h.run_steps(3);
+}
+
+/// What the engine offers on view square `at`, once it answered; the pointer rests there, as the client asks
+/// about the square under it.
+fn actions_on(h: &mut H, at: Pos) -> Vec<String> {
+    let pos = on_screen(h, at);
+    h.hover_at(pos);
+    for _ in 0..2000 {
+        if let Some(actions) = h.state_mut().model.tile_actions(at) {
+            return actions.into_iter().map(|a| a.id).collect();
+        }
+        h.run_steps(1);
+        std::thread::sleep(Duration::from_millis(30));
+    }
+    panic!("no description of {at:?}");
+}
+
+/// Right-clicks view square `at` and saves the menu it opens as `name`.
+fn shoot_menu(h: &mut H, at: Pos, name: &str) {
+    let pos = on_screen(h, at);
+    right_click(h, pos);
+    run_until(h, "the square's actions", 60, |h| {
+        h.query_all_by_label_contains("[").next().is_some() && h.query_by_label("…").is_none()
+    });
+    settle(h);
+    println!("LIVE {name} {at:?}: {:?}", actions_on(h, at));
+    save(h, name);
+    h.key_press(egui::Key::Escape);
+    settle(h);
+}
+
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn the_square_menu_on_a_person_and_on_vehicle_controls_beside_the_avatar() {
+    let mut h = start("new_game:play_now_default");
+
+    // A person from the debug menu, then the menu of the square it stands on.
+    assert!(h.state_mut().model.invoke_action("debug"));
+    pick(&mut h, "Spawning");
+    pick(&mut h, "Spawn NPC");
+    dismiss_popups(&mut h);
+    settle(&mut h);
+    let me = h.state().model.player();
+    let person = (-6..=6)
+        .flat_map(|y| {
+            (-6..=6).map(move |x| Pos {
+                x: me.x + x,
+                y: me.y + y,
+            })
+        })
+        .filter(|&at| at != me)
+        .find(|&at| actions_on(&mut h, at).iter().any(|a| a == "talk"))
+        .expect("a person to talk to");
+    shoot_menu(&mut h, person, "npc-menu.png");
+
+    // A bicycle under the avatar, then a step off it: its saddle holds the controls beside the avatar.
+    assert!(h.state_mut().model.invoke_action("debug"));
+    pick(&mut h, "Spawning");
+    pick(&mut h, "Spawn a vehicle");
+    pick(&mut h, "(bicycle)");
+    pick(&mut h, "Undamaged");
+    let field = h
+        .state()
+        .model
+        .menu()
+        .and_then(|m| m.field)
+        .expect("the direction prompt");
+    h.state_mut().model.fill(&field.id, "-90", true);
+    run_until(&mut h, "the bicycle", 120, |h| {
+        h.state().model.menu().is_none() && !h.state().model.busy()
+    });
+    dismiss_popups(&mut h);
+    let part = |h: &H, at: Pos, name: &str| {
+        h.state()
+            .model
+            .cell(at)
+            .layers
+            .iter()
+            .any(|l| l.id.starts_with("vp_") && l.id.contains(name))
+    };
+    let around = |me: Pos| {
+        (-1..=1).flat_map(move |y| {
+            (-1..=1).map(move |x| Pos {
+                x: me.x + x,
+                y: me.y + y,
+            })
+        })
+    };
+    for step in ["RIGHT", "LEFT", "UP", "DOWN"] {
+        if !part(&h, h.state().model.player(), "") {
+            break;
+        }
+        assert!(h.state_mut().model.invoke_action(step));
+        run_until(&mut h, step, 120, |h| !h.state().model.busy());
+        dismiss_popups(&mut h);
+        settle(&mut h);
+    }
+    let me = h.state().model.player();
+    assert!(!part(&h, me, ""), "the avatar stepped off the bicycle");
+    let saddle = around(me)
+        .find(|&at| part(&h, at, "saddle"))
+        .expect("the saddle beside the avatar");
+    shoot_menu(&mut h, saddle, "controls-menu.png");
+    let actions = actions_on(&mut h, saddle);
+    assert!(
+        actions.iter().any(|a| a == "control_vehicle"),
+        "the controls beside the avatar are used from their square: {actions:?}"
+    );
 }
