@@ -1,5 +1,5 @@
 //! Mouse play against a real engine: the shortcut bar, the right-click menu of a door or locker, and the inventory
-//! opened from the bar, each saved as a picture.
+//! opened from the bar, dragged by its title bar and closed by its close button, each saved as a picture.
 //!
 //! `BN_ENGINE=<engine> SHOT_DIR=<dir> cargo test --release -p bn-client-egui --test live_mouse -- --ignored
 //! --nocapture`; `BN_ROOT` names the game root when it is not beside the engine.
@@ -11,7 +11,7 @@ use bn_client_egui::watchdog::Watchdog;
 use bn_client_egui::{App, EngineModel, GameModel, Pos};
 use eframe::egui;
 use egui_kittest::Harness;
-use egui_kittest::kittest::Queryable;
+use egui_kittest::kittest::{NodeT, Queryable};
 use std::time::Duration;
 
 type H<'a> = Harness<'a, App<EngineModel>>;
@@ -249,6 +249,63 @@ fn the_toolbar_the_square_menu_and_the_inventory_by_mouse() {
             .map(|s| s.screen_id.clone())
     );
     save(&mut h, "03-inventory.png");
+
+    // The inventory window is dragged by its title bar, then closed by its close button.
+    let title = bn_client_egui::markup::plain(
+        &h.state()
+            .model
+            .screens()
+            .last()
+            .and_then(|s| s.title.as_ref())
+            .map(|t| t.shown())
+            .unwrap_or_default(),
+    );
+    let before = window_rect(&h, &title);
+    let close = h.get_by_label("Close window").rect().center();
+    let grab = egui::pos2(before.center().x, close.y);
+    let by = egui::vec2(120.0, -10.0);
+    press(&mut h, grab, grab, true);
+    press(&mut h, grab, grab + by / 2.0, true);
+    press(&mut h, grab + by / 2.0, grab + by, false);
+    settle(&mut h);
+    let moved = window_rect(&h, &title);
+    println!("LIVE inventory window {before:?} -> {moved:?}");
+    assert!(
+        (moved.min.x - before.min.x - by.x).abs() < 2.0,
+        "{before:?} -> {moved:?}"
+    );
+    save(&mut h, "04-inventory-moved.png");
+    let close = h.get_by_label("Close window").rect().center();
+    press(&mut h, close, close, true);
+    press(&mut h, close, close, false);
+    run_until(&mut h, "the inventory closed", 60, |h| {
+        h.state().model.screens().len() == 1 && !h.state().model.busy()
+    });
+    settle(&mut h);
+    save(&mut h, "05-inventory-closed.png");
+}
+
+/// The window titled `title`; the bar's button of the same name is not it.
+fn window_rect(h: &H, title: &str) -> egui::Rect {
+    h.get_all_by_label(title)
+        .find(|n| n.accesskit_node().role() == egui::accesskit::Role::Window)
+        .expect("the window")
+        .rect()
+}
+
+/// The pointer moved from `from` to `to`, then the primary button held as `down` says.
+fn press(h: &mut H, from: egui::Pos2, to: egui::Pos2, down: bool) {
+    h.hover_at(from);
+    h.run_steps(1);
+    h.hover_at(to);
+    h.run_steps(1);
+    h.event(egui::Event::PointerButton {
+        pos: to,
+        button: egui::PointerButton::Primary,
+        pressed: down,
+        modifiers: egui::Modifiers::NONE,
+    });
+    h.run_steps(2);
 }
 
 /// Chooses the entry of the menu on top whose label contains `label`, once the menu lists it.
