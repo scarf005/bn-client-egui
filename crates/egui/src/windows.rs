@@ -128,18 +128,25 @@ fn widened(window: egui::Window<'_>, width: Option<f32>) -> egui::Window<'_> {
     }
 }
 
+/// The most a window `place` puts may take.
+fn room(place: Place) -> egui::Vec2 {
+    match place {
+        Place::Fill(rect) | Place::Center(rect) => rect.size(),
+        Place::Side { max, .. } => max,
+    }
+}
+
 /// `window` where `place` first puts it, moved and resized by the player after that.
 fn first_placed(window: egui::Window<'_>, place: Place, width: Option<f32>) -> egui::Window<'_> {
-    let (pivot, pos, max) = match place {
+    let (pivot, pos) = match place {
         Place::Fill(rect) => {
             return window
                 .pivot(egui::Align2::LEFT_TOP)
                 .default_pos(rect.min)
-                .default_size(rect.size())
-                .max_size(rect.size());
+                .default_size(rect.size());
         }
-        Place::Center(rect) => (egui::Align2::CENTER_CENTER, rect.center(), rect.size()),
-        Place::Side { pivot, pos, max } => (pivot, pos, max),
+        Place::Center(rect) => (egui::Align2::CENTER_CENTER, rect.center()),
+        Place::Side { pivot, pos, .. } => (pivot, pos),
     };
     // egui holds the pivot only while it first sizes the window, so with its width known the window starts
     // from its left edge, as a window the player never moved does.
@@ -150,7 +157,6 @@ fn first_placed(window: egui::Window<'_>, place: Place, width: Option<f32>) -> e
             .default_pos(egui::pos2(pos.x - pivot.x().to_factor() * width, pos.y)),
         None => window.pivot(pivot).default_pos(pos),
     }
-    .max_size(max)
 }
 
 /// Shows the window `spec` describes around `add`.
@@ -220,6 +226,10 @@ pub fn show<R>(
             }
         }
     };
+    // Where the player left a window it still fits the room its layout gives, whatever a last run kept.
+    if let Some(place) = spec.place.filter(|_| spec.movable) {
+        window = window.max_size(room(place));
+    }
     if let Some(w) = spec.max_width {
         window = window.max_width(w);
     }
