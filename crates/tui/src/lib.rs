@@ -1047,10 +1047,12 @@ impl<M: GameModel> TuiApp<M> {
             .max()
             .unwrap_or(0);
         let width = (widest as u16 + 2).clamp(30, 100).min(area.width);
+        // The text inside the border; none in a terminal too narrow for the border alone.
+        let inside = usize::from(width.saturating_sub(2));
         let header = popup
             .header
             .iter()
-            .flat_map(|l| wrap(l, usize::from(width) - 2))
+            .flat_map(|l| wrap(l, inside))
             .collect::<Vec<_>>();
         let head = (header.len() as u16).min(area.height.saturating_sub(2) / 2);
         let bar = u16::from(!popup.tabs.is_empty());
@@ -1059,8 +1061,8 @@ impl<M: GameModel> TuiApp<M> {
             .footer
             .iter()
             .flat_map(|l| match l.as_str() {
-                "--" => vec!["─".repeat(usize::from(width) - 2)],
-                _ => wrap(l, usize::from(width) - 2),
+                "--" => vec!["─".repeat(inside)],
+                _ => wrap(l, inside),
             })
             .collect::<Vec<_>>();
         // The description gets the room it needs, down to a few rows of the list; the rest scrolls.
