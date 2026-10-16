@@ -134,7 +134,7 @@ impl EngineModel {
         self.subscribing = false;
         match result.map(serde_json::from_value::<Snapshot>) {
             Ok(Ok(s)) => self.replica.begin(s),
-            Ok(Err(e)) => self.messages.push(format!("Bad snapshot: {e}")),
+            Ok(Err(e)) => self.tell(format!("Bad snapshot: {e}")),
             Err(e) => self.report_failure(&reason_of(&e)),
         }
     }
@@ -249,10 +249,20 @@ impl EngineModel {
         keep
     }
 
-    /// Logs a failed command's reason; a repeat of the last line (a click held on an unreachable square) adds none.
+    /// Logs a failed command's reason.
     fn report_failure(&mut self, text: &str) {
-        if self.messages.last().map(String::as_str) != Some(text) {
-            self.messages.push(text.to_string());
+        self.tell(text.to_string());
+    }
+
+    /// Adds a client line; a repeat of the last one (a click held on an unreachable square) only keeps it longer.
+    pub(super) fn tell(&mut self, text: String) {
+        let now = self.clock.now();
+        match (self.messages.last() == Some(&text), self.told.last_mut()) {
+            (true, Some(at)) => *at = now,
+            _ => {
+                self.messages.push(text);
+                self.told.push(now);
+            }
         }
     }
 }

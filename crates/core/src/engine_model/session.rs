@@ -100,6 +100,7 @@ impl EngineModel {
             resized: None,
             clock: Clock::default(),
             messages: vec![],
+            told: vec![],
             sounds: vec![],
             native: vec![],
             ground: vec![],
@@ -262,13 +263,13 @@ impl EngineModel {
                 };
             }
             Incoming::Progress | Incoming::Unknown(_) => {}
-            Incoming::Malformed(e) => self.messages.push(format!("Bad engine message: {e}")),
+            Incoming::Malformed(e) => self.tell(format!("Bad engine message: {e}")),
             Incoming::Closed => {
                 self.connected = false;
                 self.unanswered = 0;
                 self.running.clear();
                 self.busy = false;
-                self.messages.push("Engine connection closed.".into());
+                self.tell("Engine connection closed.".into());
                 let message = match self.transport.exit_reason() {
                     Some(reason) => format!("The engine stopped ({reason})."),
                     None => "The engine stopped.".into(),

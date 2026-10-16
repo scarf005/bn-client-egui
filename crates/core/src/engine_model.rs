@@ -132,7 +132,9 @@ pub struct EngineModel {
     declared: Pos,
     resized: Option<Duration>,
     clock: Clock,
+    /// The client's own lines (command results, errors), newest last, and when each was told.
     messages: Vec<String>,
+    told: Vec<Duration>,
     sounds: Vec<Heard>,
     native: Vec<LogLine>,
     ground: Vec<String>,
@@ -174,6 +176,9 @@ struct Hover {
 
 /// The engine's id of an item row and how many items it stands for.
 type ItemRow = (String, u64);
+
+/// How long a client line stays in the log.
+const MESSAGE_LIFE: Duration = Duration::from_secs(20);
 
 /// The row the engine names `item_id`; none for an empty id or a row that is gone.
 fn row_of(rows: &[ItemRow], item_id: &str) -> Option<ItemRow> {
@@ -827,6 +832,14 @@ impl GameModel for EngineModel {
         profiling::scope!("model.poll");
         localise::install(self.catalogue.clone());
         let now = self.clock.now();
+        // The client's lines stand beside the game's log for a while; they are not part of its history.
+        let expired = self
+            .told
+            .iter()
+            .take_while(|at| now.saturating_sub(**at) >= MESSAGE_LIFE)
+            .count();
+        self.messages.drain(..expired);
+        self.told.drain(..expired);
         while let Some(msg) = self.transport.recv() {
             self.received += 1;
             self.heard = now;
@@ -895,6 +908,7 @@ impl GameModel for EngineModel {
         let at_main_menu = interaction::titled(self.replica.stack());
         if at_main_menu && !std::mem::replace(&mut self.at_main_menu, true) {
             self.messages.clear();
+            self.told.clear();
             self.sounds.clear();
             self.native.clear();
         }
@@ -1114,9 +1128,7 @@ impl GameModel for EngineModel {
     }
 
     fn say(&mut self, text: String) {
-        if self.messages.last() != Some(&text) {
-            self.messages.push(text);
-        }
+        self.tell(text);
     }
 
     fn take_effects(&mut self) -> Vec<Effect> {
