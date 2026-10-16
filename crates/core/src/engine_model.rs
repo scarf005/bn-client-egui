@@ -1467,10 +1467,11 @@ impl GameModel for EngineModel {
             return true;
         }
         match (here == at, self.abs(at)) {
-            // The cursor is already there: a click confirms it, as Enter does; a hover leaves it.
+            // The cursor is already there: a click is the screen's Enter (throwing throws, looking confirms);
+            // a hover leaves it.
             (true, _) => {
                 if click {
-                    self.invoke(&["CONFIRM".into()]);
+                    self.press("RETURN");
                 }
             }
             (false, Some(pos)) => match self.cursor_move() {
