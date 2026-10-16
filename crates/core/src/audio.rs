@@ -274,7 +274,12 @@ struct Music {
     volume: u32,
     order: Vec<usize>,
     at: usize,
+    /// When the song playing ends, where its length is known.
+    ends: Option<Instant>,
 }
+
+/// How soon a song of unknown length is looked at again for its end.
+const SONG_POLL: Duration = Duration::from_secs(1);
 
 /// Turns cues into `Output` calls the way the native player turns calls into mixer tracks.
 pub struct Player {
@@ -334,7 +339,7 @@ impl Player {
         match cue {
             Cue::Effect(cue) => self.effect(cue, out, now),
             Cue::Channel(cue) => self.channel(cue, out),
-            Cue::Music(cue) => self.change_music(cue, out),
+            Cue::Music(cue) => self.change_music(cue, out, now),
         }
     }
 
@@ -421,7 +426,7 @@ impl Player {
         );
     }
 
-    fn change_music(&mut self, cue: MusicCue, out: &mut impl Output) {
+    fn change_music(&mut self, cue: MusicCue, out: &mut impl Output, now: Instant) {
         let Some(playlist) = cue.playlist else {
             if self.music.take().is_some() {
                 out.stop(&Track::Music, Duration::ZERO);
@@ -458,11 +463,12 @@ impl Player {
             volume: cue.volume,
             order,
             at: 0,
+            ends: None,
         });
-        self.play_music(out);
+        self.play_music(out, now);
     }
 
-    fn play_music(&mut self, out: &mut impl Output) {
+    fn play_music(&mut self, out: &mut impl Output, now: Instant) {
         let Some(music) = &self.music else {
             return;
         };
@@ -473,7 +479,7 @@ impl Player {
         else {
             return;
         };
-        out.play(Play {
+        let length = out.play(Play {
             track: Track::Music,
             file: entry.file,
             gain: gain(entry.volume, music.volume),
@@ -481,6 +487,9 @@ impl Player {
             loops: Some(0),
             fade_in: Duration::ZERO,
         });
+        if let Some(music) = &mut self.music {
+            music.ends = length.map(|l| now + l);
+        }
         // A song that does not play stops the music, as natively, instead of skipping through the list.
         if !out.playing(&Track::Music) {
             self.music = None;
@@ -488,7 +497,7 @@ impl Player {
     }
 
     /// Goes on to the next song when one ends, wrapping around as the native playlist does.
-    pub fn tick(&mut self, out: &mut impl Output) {
+    pub fn tick(&mut self, out: &mut impl Output, now: Instant) {
         let Some(music) = &mut self.music else {
             return;
         };
@@ -496,12 +505,18 @@ impl Player {
             return;
         }
         music.at = (music.at + 1) % music.order.len();
-        self.play_music(out);
+        self.play_music(out, now);
     }
 
-    /// Whether anything may still change without a new cue: music to advance.
-    pub fn active(&self) -> bool {
-        self.music.is_some()
+    /// How soon the music may need its next song without a new cue: when the song ends, or a poll for a song of
+    /// unknown length; none without music.
+    pub fn next_check(&self, now: Instant) -> Option<Duration> {
+        let music = self.music.as_ref()?;
+        Some(
+            music
+                .ends
+                .map_or(SONG_POLL, |end| end.saturating_duration_since(now)),
+        )
     }
 }
 
@@ -766,9 +781,33 @@ mod tests {
             &mut out,
             Instant::now(),
         );
-        player.tick(&mut out);
+        player.tick(&mut out, Instant::now());
         assert_eq!(out.plays.len(), 1);
-        assert!(!player.active());
+        assert_eq!(player.next_check(Instant::now()), None);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn music_is_looked_at_again_when_its_song_ends_not_every_frame() {
+        let dir = pack_dir("idle");
+        let mut player = Player::new(SoundPack::load(&dir).unwrap());
+        let now = Instant::now();
+        let title = Cue::Music(MusicCue {
+            playlist: Some("title".into()),
+            volume: 128,
+        });
+        let mut known = Recorder {
+            length: Some(Duration::from_secs(90)),
+            ..Default::default()
+        };
+        player.apply(title.clone(), &mut known, now);
+        assert_eq!(
+            player.next_check(now + Duration::from_secs(30)),
+            Some(Duration::from_secs(60))
+        );
+        let mut player = Player::new(SoundPack::load(&dir).unwrap());
+        player.apply(title, &mut Recorder::default(), now);
+        assert_eq!(player.next_check(now), Some(SONG_POLL));
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
@@ -803,11 +842,11 @@ mod tests {
         };
         player.apply(title(128), &mut out, Instant::now());
         player.apply(title(64), &mut out, Instant::now());
-        player.tick(&mut out);
+        player.tick(&mut out, Instant::now());
         out.live.remove(&Track::Music);
-        player.tick(&mut out);
+        player.tick(&mut out, Instant::now());
         out.live.remove(&Track::Music);
-        player.tick(&mut out);
+        player.tick(&mut out, Instant::now());
         let files = out
             .plays
             .iter()
@@ -824,7 +863,7 @@ mod tests {
             &mut out,
             Instant::now(),
         );
-        assert!(!player.active());
+        assert_eq!(player.next_check(Instant::now()), None);
         assert_eq!(out.calls.last().unwrap(), "stop Music 0");
         std::fs::remove_dir_all(&dir).unwrap();
     }

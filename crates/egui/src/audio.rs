@@ -234,7 +234,7 @@ struct Open {
 }
 
 impl Audio {
-    /// Plays the cues; true while a fade or the music needs another look soon.
+    /// Plays the cues; how soon a fade or the music needs another look.
     pub fn update(&mut self, soundpack: Option<PathBuf>, cues: Vec<Cue>) -> Option<Duration> {
         if soundpack != self.tried {
             self.tried = soundpack.clone();
@@ -254,9 +254,11 @@ impl Audio {
         for cue in cues {
             open.player.apply(cue, &mut open.speakers, now);
         }
-        open.player.tick(&mut open.speakers);
-        let fading = open.speakers.tick(now);
-        (fading || open.player.active()).then_some(STEP)
+        open.player.tick(&mut open.speakers, now);
+        match open.speakers.tick(now) {
+            true => Some(STEP),
+            false => open.player.next_check(now),
+        }
     }
 }
 
