@@ -1089,3 +1089,18 @@ fn item_lists_beside_the_map_show_colour_tags_as_colour_not_text() {
     let x = s.lines().nth(at.1).unwrap()[..at.0].chars().count() as u16;
     assert_ne!(b[(x, at.1 as u16)].fg, Color::Reset, "tinted");
 }
+
+#[test]
+fn the_tui_lets_go_of_the_animations_and_sounds_it_does_not_play() {
+    let (mut app, h) = engine();
+    h.push(json!({"jsonrpc": "2.0", "method": "bn.events", "params": {"epoch": "e7f3", "events": [
+        {"sequence": "41", "revision": "32", "type": "projectile.moved", "display": {"duration_ms": 30},
+         "data": {"projectile": "projectile:1", "path": [], "look": {"kind": "projectile", "glyph": "*", "color": "red"}}}
+    ]}}));
+    app.model.poll();
+    app.tick();
+    assert!(
+        app.model.take_effects().is_empty(),
+        "the tick dropped the animation facts"
+    );
+}
