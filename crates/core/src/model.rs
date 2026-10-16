@@ -88,7 +88,7 @@ pub struct Cell {
     pub square: u32,
 }
 
-/// One short animation the native game would play on the map, in view coordinates.
+/// One short animation the native game would play on the map, on world squares (view cell = square - origin).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Effect {
     pub shape: Shape,

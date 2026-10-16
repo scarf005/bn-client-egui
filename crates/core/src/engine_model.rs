@@ -244,12 +244,12 @@ impl EngineModel {
     }
 
     /// A published square in view coordinates; none on another level than the avatar's.
-    fn view_of(&self, square: &Value) -> Option<Pos> {
-        let (ox, oy) = self.origin?;
+    /// The world square of a fact on the avatar's level; the view places it when it draws it.
+    fn level_square(&self, square: &Value) -> Option<Pos> {
         let at = |k: &str| square[k].as_i64().map(|v| v as i32);
         (at("z")? == self.avatar_pos()?.z).then(|| Pos {
-            x: at("x").unwrap_or_default() - ox,
-            y: at("y").unwrap_or_default() - oy,
+            x: at("x").unwrap_or_default(),
+            y: at("y").unwrap_or_default(),
         })
     }
 
@@ -260,7 +260,7 @@ impl EngineModel {
                 .as_array()
                 .into_iter()
                 .flatten()
-                .filter_map(|s| self.view_of(s))
+                .filter_map(|s| self.level_square(s))
                 .collect()
         };
         let color = |name: &Value| self.colors.resolve(name.as_str().unwrap_or("white")).0;
@@ -272,7 +272,7 @@ impl EngineModel {
                 color: color(&d["look"]["color"]),
             },
             "explosion.started" => Shape::Burst {
-                at: self.view_of(&d["at"])?,
+                at: self.level_square(&d["at"])?,
                 radius: d["radius"].as_u64().unwrap_or(0) as u32,
                 color: color(&d["color"]),
                 tile: d["tile"].as_str().unwrap_or("explosion").to_string(),
@@ -287,7 +287,7 @@ impl EngineModel {
                     .unwrap_or_else(|| "explosion".into()),
             },
             "combat_text.shown" => Shape::Text {
-                at: self.view_of(&d["at"])?,
+                at: self.level_square(&d["at"])?,
                 segments: d["segments"]
                     .as_array()?
                     .iter()

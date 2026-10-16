@@ -604,11 +604,18 @@ impl<M: GameModel> App<M> {
                 egui::Stroke::new(1.0, egui::Color32::WHITE),
             );
         }
+        // Effects stand on world squares: placed by the origin of this frame, not of when they arrived.
+        let origin = self.model.origin();
         self.effects.paint(
             painter,
             now,
             canvas.cell_px,
-            |p| canvas.rect(p),
+            |p| {
+                canvas.rect(Pos {
+                    x: p.x - origin.x,
+                    y: p.y - origin.y,
+                })
+            },
             &mut self.display,
             !tiles,
         );
