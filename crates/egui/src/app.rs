@@ -5,10 +5,11 @@ use crate::iso::{self, View3d};
 use crate::text;
 use crate::windows::{self, Origin, Shown, WindowSpec};
 use bn_client_core::protocol::SidebarSide;
-use bn_client_core::{Failure, GameModel, Loading, Pos, interaction, keys};
+use bn_client_core::{Failure, GameModel, Loading, Pos, interaction};
 use eframe::egui::{self, accesskit};
 
 mod component;
+mod input;
 mod menu;
 mod palette;
 mod sidebar;
@@ -403,52 +404,7 @@ impl<M: GameModel> App<M> {
             // The game is over: the next one starts with the cursor on its player and and no travel marker.
             self.marker = None;
         }
-        // Esc interrupts a running activity, and then does nothing else; with none running it goes on like any key
-        // (leaves look mode, acknowledges a popup, closes a screen, else opens the main menu).
-        if ui.ctx().input(|i| i.key_pressed(egui::Key::Escape)) && self.model.interrupt() {
-            ui.ctx().input_mut(|i| {
-                i.events.retain(|e| {
-                    !matches!(
-                        e,
-                        egui::Event::Key {
-                            key: egui::Key::Escape,
-                            ..
-                        }
-                    )
-                })
-            });
-        }
-        self.palette_keys(ui.ctx());
-        // The palette and an open menu of the client (the map's right-click menu) have the keyboard; Escape closes
-        // them.
-        let client = self.palette.is_some() || egui::Popup::is_any_open(ui.ctx());
-        match component::sliced(self.model.screens()) {
-            _ if client => {}
-            Some(_) => self.component_keys(ui.ctx()),
-            None => self.game_keys(ui.ctx()),
-        }
-        // Whichever screen took the keys, the walk ends with its key.
-        self.release_hold_when_up(ui.ctx());
-        let open = self.model.menu();
-        if menu_forwards_keys(open.as_ref()) {
-            // Arrow keys belong to the game, whichever widget was clicked last; Tab still moves focus,
-            // except on a tabbed screen where it is the engine's tab key.
-            let tab = open.as_ref().is_some_and(tab_is_engines);
-            let ctx = ui.ctx();
-            if let Some(id) = ctx.memory(|m| m.focused()) {
-                ctx.memory_mut(|m| {
-                    m.set_focus_lock_filter(
-                        id,
-                        egui::EventFilter {
-                            tab,
-                            horizontal_arrows: true,
-                            vertical_arrows: true,
-                            ..Default::default()
-                        },
-                    )
-                });
-            }
-        }
+        self.keys(ui.ctx());
         egui::Panel::top("bar").show(ui, |ui| self.bar(ui));
         // Without a map the room is what the top bar leaves; with one, what the sidebar leaves.
         self.region = Some(ui.available_rect_before_wrap());
@@ -524,166 +480,6 @@ impl<M: GameModel> App<M> {
         self.client_settings = !windows::show(ctx, spec, |ui| self.display.controls(ui)).closed;
     }
 
-    /// Typed characters and special keys are game keys; the first one that runs an action wins.
-    /// Named like the engine's key names (`SPACE`, `ESC`, `RETURN`, `UP`, `PPAGE`).
-    fn game_keys(&mut self, ctx: &egui::Context) {
-        use egui::Key;
-        let typed = ctx.input(|i| {
-            i.events
-                .iter()
-                .filter_map(|e| match e {
-                    egui::Event::Text(t) => Some(if t == " " { "SPACE".into() } else { t.clone() }),
-                    _ => None,
-                })
-                .collect::<Vec<_>>()
-        });
-        let menu = self.model.menu();
-        // Zoom is the client's own view; the keys the engine binds to its zoom actions never reach it.
-        let typed = if menu.is_none() {
-            let actions = self.model.actions();
-            let zoom = |token: &str| {
-                let bound = actions.iter().find(|a| a.keys.iter().any(|k| k == token));
-                bound.and_then(|a| match a.id.as_str() {
-                    "zoom_in" => Some(1),
-                    "zoom_out" => Some(-1),
-                    _ => None,
-                })
-            };
-            let (zooms, rest): (Vec<_>, Vec<_>) =
-                typed.into_iter().partition(|t| zoom(t).is_some());
-            self.display
-                .zoom_by(zooms.iter().filter_map(|t| zoom(t)).sum());
-            rest
-        } else {
-            typed
-        };
-        // In the 3D map Alt+Left and Alt+Right turn the camera, unless the engine binds those keys; no other key
-        // of the game is taken.
-        let turning = menu.is_none() && self.iso.active(&self.display);
-        let turn_key = |key: egui::Key, mods: egui::Modifiers| {
-            let name = match key {
-                egui::Key::ArrowLeft => "LEFT",
-                egui::Key::ArrowRight => "RIGHT",
-                _ => return None,
-            };
-            let chord = format!("ALT+{name}");
-            (turning && mods.alt && !self.model.key_bound(&chord)).then(|| {
-                if key == egui::Key::ArrowLeft {
-                    1.0
-                } else {
-                    -1.0
-                }
-            })
-        };
-        let turns = ctx.input(|i| {
-            i.events
-                .iter()
-                .filter_map(|e| match e {
-                    egui::Event::Key {
-                        key,
-                        pressed: true,
-                        modifiers,
-                        ..
-                    } => turn_key(*key, *modifiers),
-                    _ => None,
-                })
-                .sum::<f32>()
-        });
-        self.iso.camera.orbit(turns * iso::TURN, 0.0);
-        // A menu is an engine input context: its navigation, paging, confirm and cancel keys are the
-        // player's bindings, and the engine moves its own cursor. The exceptions are the toolkit's
-        // accessibility keys: Tab and Shift+Tab move focus, and Space and Enter act on a focused widget.
-        // Menus with a text field keep the keyboard for typing.
-        // Only a focused control of the menu itself takes Space and Enter; with the focus left on the
-        // map, they are the engine's (they close a popup).
-        let focused = ctx
-            .memory(|m| m.focused())
-            .is_some_and(|id| self.menu_ids.contains(&id));
-        let toolkit = |token: &str| match &menu {
-            // A composed screen has no widgets: every key, Tab included, is the engine's.
-            None => false,
-            Some(m) if m.screen => false,
-            Some(m) => {
-                // Tab switches a tabbed screen's tab, unless a text box has the keyboard.
-                (matches!(token, "TAB" | "BACKTAB") && !tab_is_engines(m))
-                    || (focused && matches!(token, "SPACE" | "RETURN"))
-            }
-        };
-        let forwards = menu_forwards_keys(menu.as_ref());
-        let typed = if forwards { typed } else { vec![] };
-        // Esc closes a menu through its cancel button, which also covers menus the engine binds no key to.
-        let esc_cancels = menu
-            .as_ref()
-            .is_some_and(|m| m.can_cancel && !m.acknowledges());
-        let named = if forwards {
-            ctx.input(|i| {
-                i.events
-                    .iter()
-                    .filter_map(|e| match e {
-                        egui::Event::Key {
-                            key,
-                            pressed: true,
-                            modifiers,
-                            ..
-                        } if !(*key == Key::Escape && esc_cancels)
-                            // Alt with an arrow moves the focus among the action rows, not the engine's cursor.
-                            && !(modifiers.alt && matches!(key, Key::ArrowUp | Key::ArrowDown))
-                            && turn_key(*key, *modifiers).is_none() =>
-                        {
-                            key_name(*key, *modifiers)
-                        }
-                        _ => None,
-                    })
-                    .collect::<Vec<_>>()
-            })
-        } else {
-            vec![]
-        };
-        let (typed, named): (Vec<_>, Vec<_>) = (
-            typed.into_iter().filter(|t| !toolkit(t)).collect(),
-            named.into_iter().filter(|t| !toolkit(t)).collect(),
-        );
-        self.keys_consumed = false;
-        self.focus_action_row(ctx);
-        let mut keys = typed.into_iter().chain(named).collect::<Vec<_>>();
-        // A popup takes one key per frame; the rest of a burst would land on the game it covers.
-        if menu.as_ref().is_some_and(|m| m.acknowledges()) {
-            keys.truncate(1);
-        }
-        // A key press is one step, as in the native game. Once the OS repeats the key, the step is held, not
-        // repeated: the engine walks until key up. Any other key is a screen-scoped affordance, which the engine
-        // queues behind the command in flight.
-        let down = ctx.input(|i| {
-            i.events.iter().rev().find_map(|e| match e {
-                egui::Event::Key {
-                    key,
-                    pressed: true,
-                    repeat,
-                    ..
-                } => Some((*key, *repeat)),
-                _ => None,
-            })
-        });
-        let repeated = down.filter(|(_, repeat)| *repeat).map(|(key, _)| key);
-        for key in keys {
-            if repeated.is_some() && self.model.hold(&key) {
-                self.walk_key = repeated;
-                self.keys_consumed = true;
-            } else {
-                self.keys_consumed |= self.model.press(&key) || self.model.key_bound(&key);
-            }
-        }
-    }
-
-    /// The walk ends when the key that started it is up, or the window lost the keyboard (a key-up would never come).
-    fn release_hold_when_up(&mut self, ctx: &egui::Context) {
-        let walk_key = self.walk_key;
-        if ctx.input(|i| !i.focused || walk_key.is_none_or(|k| !i.keys_down.contains(&k))) {
-            self.walk_key = None;
-            self.model.release_hold();
-        }
-    }
-
     /// The pressed control's name and stage, announced politely; stays until the next command.
     fn bar(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
@@ -749,41 +545,6 @@ impl<M: GameModel> App<M> {
     fn settled(&self) -> bool {
         self.pending_since
             .is_some_and(|t| self.clock.now().saturating_sub(t) >= SETTLE)
-    }
-
-    /// Alt+Down and Alt+Up put the keyboard focus on the next and previous action row of the open menu,
-    /// where Enter sends that action; the engine's own keys never reach those rows.
-    fn focus_action_row(&mut self, ctx: &egui::Context) {
-        let step = ctx.input(|i| {
-            i.events.iter().fold(0_isize, |step, e| match e {
-                egui::Event::Key {
-                    key: egui::Key::ArrowDown,
-                    pressed: true,
-                    modifiers,
-                    ..
-                } if modifiers.alt => step + 1,
-                egui::Event::Key {
-                    key: egui::Key::ArrowUp,
-                    pressed: true,
-                    modifiers,
-                    ..
-                } if modifiers.alt => step - 1,
-                _ => step,
-            })
-        });
-        if step == 0 || self.action_ids.is_empty() {
-            return;
-        }
-        let at = ctx
-            .memory(|m| m.focused())
-            .and_then(|id| self.action_ids.iter().position(|a| *a == id));
-        let last = self.action_ids.len() as isize - 1;
-        let to = match at {
-            Some(i) => (i as isize + step).clamp(0, last),
-            None if step > 0 => 0,
-            None => last,
-        };
-        ctx.memory_mut(|m| m.request_focus(self.action_ids[to as usize]));
     }
 
     /// A button for a choice or action. Once a command has lasted a while, the pressed one is
@@ -1096,8 +857,7 @@ impl<M: GameModel> App<M> {
                 // The 3D scene has no square grid to place the menu on; it opens at the map's centre.
                 Some(_) => response.rect.center(),
                 None => {
-                    response.rect.min
-                        + egui::vec2(menu_at.x as f32, menu_at.y as f32) * cell_px
+                    response.rect.min + egui::vec2(menu_at.x as f32, menu_at.y as f32) * cell_px
                 }
             },
             egui::Vec2::splat(cell_px),
@@ -1263,53 +1023,6 @@ fn ground_point(
 ) -> egui::Pos2 {
     let on = v.project(glam::Vec3::new(p.x as f32 + at.0, p.y as f32 + at.1, z));
     rect.min + egui::vec2(on.x, on.y)
-}
-
-/// The engine's name for a pressed key, with Ctrl and Shift folded in (`CTRL+S`, `BACKTAB`). Named like the
-/// engine's key names (`SPACE`, `ESC`, `RETURN`, `UP`, `PPAGE`); typed characters arrive as text instead.
-fn key_name(key: egui::Key, mods: egui::Modifiers) -> Option<String> {
-    use egui::Key;
-    const NAMED: [(Key, &str); 13] = [
-        (Key::ArrowUp, "UP"),
-        (Key::ArrowDown, "DOWN"),
-        (Key::ArrowLeft, "LEFT"),
-        (Key::ArrowRight, "RIGHT"),
-        (Key::Escape, "ESC"),
-        (Key::Enter, "RETURN"),
-        (Key::Tab, "TAB"),
-        (Key::Backspace, "BACKSPACE"),
-        (Key::Delete, "DELETE"),
-        (Key::Home, "HOME"),
-        (Key::End, "END"),
-        (Key::PageUp, "PPAGE"),
-        (Key::PageDown, "NPAGE"),
-    ];
-    const FUNCTION: [Key; 12] = [
-        Key::F1,
-        Key::F2,
-        Key::F3,
-        Key::F4,
-        Key::F5,
-        Key::F6,
-        Key::F7,
-        Key::F8,
-        Key::F9,
-        Key::F10,
-        Key::F11,
-        Key::F12,
-    ];
-    let base = NAMED
-        .iter()
-        .find(|(k, _)| *k == key)
-        .map(|(_, n)| n.to_string())
-        .or_else(|| {
-            FUNCTION
-                .iter()
-                .position(|k| *k == key)
-                .map(|n| keys::function(n as u8 + 1))
-        })
-        .or_else(|| mods.ctrl.then(|| key.name().to_string()))?;
-    Some(keys::chord(&base, mods.ctrl, mods.shift))
 }
 
 /// Whether Tab and Shift+Tab are the engine's: its screen has tabs and no text box takes the keyboard.

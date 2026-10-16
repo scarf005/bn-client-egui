@@ -393,24 +393,10 @@ impl<M: GameModel> App<M> {
         self.keys_consumed = false;
         self.sync_screens();
         let page = self.page_rows(ctx);
-        let keys = ctx.input(|i| {
-            i.events
-                .iter()
-                .filter_map(|event| match event {
-                    egui::Event::Text(t) => Some(if t == " " { "SPACE".into() } else { t.clone() }),
-                    egui::Event::Key {
-                        key,
-                        pressed: true,
-                        modifiers,
-                        ..
-                    } => super::key_name(*key, *modifiers),
-                    _ => None,
-                })
-                .collect::<Vec<_>>()
-        });
+        let keys = super::input::frame_keys(ctx).into_iter().map(|k| k.token);
         // A text box has the typing; its keys are not the screen's, except Escape, which closes the screen.
         let typing = ctx.text_edit_focused();
-        let keys = keys.into_iter().filter(|key| !typing || key == "ESC");
+        let keys = keys.filter(|key| !typing || key == "ESC");
         for key in keys {
             let Some(top) = sliced(self.model.screens()) else {
                 return;
