@@ -271,8 +271,8 @@ pub struct Placement<'a> {
     pub haze: u8,
     /// The sprite's place in its square, bottom first.
     pub order: u32,
-    /// For a solid: which of the south, east, north and west edges of its square another solid as tall covers whole,
-    /// so that its faces there are not seen.
+    /// For a solid: which of the south, east, north and west edges of its square another solid at least as tall
+    /// and as low covers whole, so that its faces there are not seen.
     pub covered: [bool; 4],
     /// For a sprite pushed up from the ground: the outline of its opaque pixels, none for the whole sprite.
     pub outline: Option<&'a Outline>,
@@ -344,7 +344,8 @@ struct Side {
     edge: Edge,
 }
 
-/// The edges of the outline of a sprite drawn from above, where `place` lays the sprite in its square.
+/// The edges of the outline of a sprite drawn from above, where `place` lays the sprite in its square; only a
+/// tileset drawn from above pushes sprites up, and it turns them as `p.turn` says.
 fn sides(m: &Metrics, p: &Placement) -> Vec<Side> {
     let s = p.sprite;
     let (lo, hi) = turned(p.turn, s.offset, s.offset + s.size());
@@ -374,11 +375,12 @@ fn sides(m: &Metrics, p: &Placement) -> Vec<Side> {
         .collect()
 }
 
-/// Which edge of the square with its north-west corner at `square` a side lies along, by its place among the
-/// south, east, north and west ones.
-fn border(square: Vec2, side: &Side) -> Option<usize> {
+/// Which edge of the square with its north-west corner at `square` a side lies along, to within the half pixel a
+/// sprite inside its square may stand out of it, by its place among the south, east, north and west ones.
+fn border(m: &Metrics, square: Vec2, side: &Side) -> Option<usize> {
     let (from, to) = (side.from - square, side.to - square);
-    let on = |a: f32, b: f32, line: f32| (a - line).abs() < 1e-4 && (b - line).abs() < 1e-4;
+    let near = 0.5 * m.across.max(m.up);
+    let on = |a: f32, b: f32, line: f32| (a - line).abs() < near && (b - line).abs() < near;
     [
         on(from.y, to.y, 1.0),
         on(from.x, to.x, 1.0),
@@ -398,11 +400,11 @@ pub fn borders(m: &Metrics, p: &Placement) -> [bool; 4] {
             let square = Vec2::new(p.square.0 as f32, p.square.1 as f32);
             let mut length = [0.0; 4];
             for side in sides(m, p) {
-                if let Some(n) = border(square, &side) {
+                if let Some(n) = border(m, square, &side) {
                     length[n] += side.from.distance(side.to);
                 }
             }
-            length.map(|l| l > 1.0 - 1e-3)
+            length.map(|l| l > 1.0 - m.across.max(m.up))
         }
         Shape::Floor { .. } | Shape::Board => [false; 4],
     }
@@ -462,7 +464,7 @@ pub fn place(m: &Metrics, p: &Placement) -> Vec<Instance> {
             let square = Vec2::new(x, y);
             let seen = sides(m, p)
                 .into_iter()
-                .filter(|side| border(square, side).is_none_or(|n| !p.covered[n]))
+                .filter(|side| border(m, square, side).is_none_or(|n| !p.covered[n]))
                 .map(|side| {
                     let (e, run) = (side.edge, side.to - side.from);
                     // The pixels inside the edge, drawn all the way down.
@@ -798,6 +800,55 @@ mod tests {
                 .any(|i| i.b[2] < 0.0 && i.origin[1] == 6.0 && i.a[1] == 0.0)
         );
         assert_eq!(borders(&flat, &p), [true; 4]);
+    }
+
+    #[test]
+    fn every_side_shows_the_pixels_the_top_shows_at_its_edge_however_the_sprite_is_turned_or_scaled()
+     {
+        let flat = Metrics::new((32, 32), false, None);
+        let plain = sprite((20.0, 10.0), (4.0, 2.0));
+        let scaled = SpriteSource {
+            src: Vec2::new(10.0, 5.0),
+            scale: 2.0,
+            ..plain
+        };
+        for s in [plain, scaled] {
+            for turn in [
+                Turn::None,
+                Turn::Left,
+                Turn::Right,
+                Turn::Half,
+                Turn::Mirror,
+            ] {
+                let mut p = square(&s, Kind::Vehicle);
+                p.turn = turn;
+                let faces = place(&flat, &p);
+                assert_eq!(faces.len(), 6, "{turn:?}");
+                let top = faces[0];
+                // The page pixel the top draws at a point of the ground.
+                let drawn = |x: f32, y: f32| {
+                    let u = (x - top.origin[0]) / top.a[0];
+                    let v = (y - top.origin[1]) / top.b[1];
+                    Vec2::from(top.uv) + Vec2::from(top.uv_a) * u + Vec2::from(top.uv_b) * v
+                };
+                for side in faces.iter().filter(|i| i.b[2] < 0.0) {
+                    for u in [0.0, 1.0] {
+                        let (x, y) = (
+                            side.origin[0] + side.a[0] * u,
+                            side.origin[1] + side.a[1] * u,
+                        );
+                        let page = Vec2::from(side.uv) + Vec2::from(side.uv_a) * u;
+                        // Half a pixel in from the edge, at the middle of the pixel the top shows there.
+                        let off = (page - drawn(x, y)).length();
+                        assert!(
+                            (off - 0.5).abs() < 0.15,
+                            "{turn:?} {}: {page} {off}",
+                            s.scale
+                        );
+                    }
+                }
+            }
+        }
     }
 
     #[test]

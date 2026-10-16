@@ -72,6 +72,7 @@ struct Item {
     filter: u32,
     haze: u8,
     order: u32,
+    form: Shape,
     outline: Option<Arc<Outline>>,
 }
 
@@ -237,6 +238,7 @@ pub fn build(
                         filter,
                         haze,
                         order,
+                        form,
                         outline,
                     });
                     order += 1;
@@ -260,7 +262,7 @@ pub fn build(
     // Which edges of its square the solid of each square covers whole, as its column's solid is the last one.
     let mut edges = vec![[false; 4]; columns.len()];
     for item in &items {
-        if shape(&m, &item.sprite, item.kind).solid().is_some()
+        if item.form.solid().is_some()
             && let Some(n) = index(item.square.0, item.square.1)
         {
             edges[n] = borders(&m, &item.placement([false; 4]));
@@ -270,7 +272,7 @@ pub fn build(
     for item in &items {
         // A face is not seen where the next square holds a solid at least as tall, down to at least as low, that
         // covers the whole edge between them.
-        let covered = match shape(&m, &item.sprite, item.kind).solid() {
+        let covered = match item.form.solid() {
             Some((bottom, top)) => std::array::from_fn(|face| {
                 let (dx, dy) = FACES[face];
                 index(item.square.0 + dx, item.square.1 + dy).is_some_and(|n| {
