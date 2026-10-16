@@ -1222,11 +1222,7 @@ impl<M: GameModel> App<M> {
                 );
             }
         }
-        if let Some(m) = self.marker.filter(|_| self.model.busy()) {
-            let at = Pos {
-                x: m.x - origin.x,
-                y: m.y - origin.y,
-            };
+        if let Some(at) = self.marker() {
             outline(
                 at,
                 egui::Stroke::new(2.0, egui::Color32::from_rgb(0, 200, 255)),
