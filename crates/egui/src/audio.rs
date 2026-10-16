@@ -7,6 +7,8 @@ use rodio::{Decoder, Source};
 use std::collections::HashMap;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::{Duration, Instant};
 
 /// How often a fade or the music is looked at while one runs.
@@ -20,10 +22,26 @@ struct Fading {
     fade: Duration,
 }
 
+/// A channel's or the music's voice, with the direction its samples read as they play (`f32` bits, NaN for none).
+struct Voice {
+    player: rodio::Player,
+    pan: Arc<AtomicU32>,
+}
+
+/// Left and right gains: equal power from the left at -1 to the right at 1, both full for no direction.
+fn sides(pan: f32) -> (f32, f32) {
+    if pan.is_nan() {
+        return (1.0, 1.0);
+    }
+    let side = (pan.clamp(-1.0, 1.0) + 1.0) * std::f32::consts::FRAC_PI_4;
+    (side.cos(), side.sin())
+}
+
 /// Plays files into a mixer: one voice per channel and for the music, and one per effect that lives until it ends.
 pub struct Speakers {
     mixer: Mixer,
-    tracks: HashMap<Track, rodio::Player>,
+    tracks: HashMap<Track, Voice>,
+    effects: Vec<rodio::Player>,
     fading: Vec<Fading>,
     /// `BN_SOUND_LOG`: every file started or track stopped, with the milliseconds since the speakers opened.
     log: Option<(std::fs::File, Instant)>,
@@ -41,6 +59,7 @@ impl Speakers {
         Self {
             mixer,
             tracks: HashMap::new(),
+            effects: vec![],
             fading: vec![],
             log,
         }
@@ -70,7 +89,9 @@ impl Speakers {
 
 impl Output for Speakers {
     fn play(&mut self, play: Play) -> Option<Duration> {
-        self.stop(&play.track, Duration::ZERO);
+        if play.track != Track::Effect {
+            self.stop(&play.track, Duration::ZERO);
+        }
         let Some(source) = decode(&play.file) else {
             self.note(format_args!("missing {}", play.file.display()));
             return None;
@@ -79,28 +100,38 @@ impl Output for Speakers {
         let source = source.buffered();
         let voice = rodio::Player::connect_new(&self.mixer);
         voice.set_volume(play.gain);
-        let shaped = |s: Box<dyn Source + Send>| -> Box<dyn Source + Send> {
-            let s: Box<dyn Source + Send> = match play.pan {
-                // Equal power from the left at -1 to the right at 1.
-                Some(pan) => {
-                    let side = (pan.clamp(-1.0, 1.0) + 1.0) * std::f32::consts::FRAC_PI_4;
-                    Box::new(ChannelVolume::new(s, vec![side.cos(), side.sin()]))
-                }
-                None => s,
+        let pan = Arc::new(AtomicU32::new(play.pan.unwrap_or(f32::NAN).to_bits()));
+        // A channel can turn later; an effect keeps its direction and the music has none.
+        let steered = matches!(play.track, Track::Channel(_)) || play.pan.is_some();
+        let shaped = |s: Box<dyn Source + Send>, fade: bool| -> Box<dyn Source + Send> {
+            let s: Box<dyn Source + Send> = if steered {
+                let pan = pan.clone();
+                let (left, right) = sides(f32::from_bits(pan.load(Ordering::Relaxed)));
+                Box::new(ChannelVolume::new(s, vec![left, right]).periodic_access(
+                    Duration::from_millis(20),
+                    move |s| {
+                        let (left, right) = sides(f32::from_bits(pan.load(Ordering::Relaxed)));
+                        s.set_volume(0, left);
+                        s.set_volume(1, right);
+                    },
+                ))
+            } else {
+                s
             };
-            if play.fade_in.is_zero() {
+            if !fade || play.fade_in.is_zero() {
                 s
             } else {
                 Box::new(s.fade_in(play.fade_in))
             }
         };
         match play.loops {
+            // Only the first time fades in, as the native player's fade does.
             Some(more) => {
-                for _ in 0..=more {
-                    voice.append(shaped(Box::new(source.clone())));
+                for time in 0..=more {
+                    voice.append(shaped(Box::new(source.clone()), time == 0));
                 }
             }
-            None => voice.append(shaped(Box::new(source.repeat_infinite()))),
+            None => voice.append(shaped(Box::new(source.repeat_infinite()), true)),
         }
         self.note(format_args!(
             "play {:?} {} gain={:.3} pan={:?} loops={:?}",
@@ -111,39 +142,61 @@ impl Output for Speakers {
             play.loops
         ));
         match play.track {
-            Track::Effect => voice.detach(),
+            Track::Effect => {
+                self.effects.retain(|e| !e.empty());
+                self.effects.push(voice);
+            }
             track => {
-                self.tracks.insert(track, voice);
+                self.tracks.insert(track, Voice { player: voice, pan });
             }
         }
         length
     }
 
     fn stop(&mut self, track: &Track, fade: Duration) {
-        let Some(voice) = self.tracks.remove(track) else {
-            return;
+        let voices = match track {
+            Track::Effect => std::mem::take(&mut self.effects),
+            track => self
+                .tracks
+                .remove(track)
+                .map(|v| v.player)
+                .into_iter()
+                .collect(),
         };
+        if voices.is_empty() {
+            return;
+        }
         self.note(format_args!("stop {track:?} fade={}", fade.as_millis()));
-        if fade.is_zero() {
-            voice.stop();
-        } else {
-            self.fading.push(Fading {
-                from: voice.volume(),
-                voice,
-                since: Instant::now(),
-                fade,
-            });
+        for voice in voices {
+            if fade.is_zero() {
+                voice.stop();
+            } else {
+                self.fading.push(Fading {
+                    from: voice.volume(),
+                    voice,
+                    since: Instant::now(),
+                    fade,
+                });
+            }
         }
     }
 
     fn set_gain(&mut self, track: &Track, gain: f32) {
         if let Some(voice) = self.tracks.get(track) {
-            voice.set_volume(gain);
+            voice.player.set_volume(gain);
+        }
+    }
+
+    fn set_pan(&mut self, track: &Track, pan: Option<f32>) {
+        if let Some(voice) = self.tracks.get(track) {
+            voice
+                .pan
+                .store(pan.unwrap_or(f32::NAN).to_bits(), Ordering::Relaxed);
         }
     }
 
     fn playing(&self, track: &Track) -> bool {
-        self.tracks.get(track).is_some_and(|v| !v.empty())
+        self.tracks.get(track).is_some_and(|v| !v.player.empty())
     }
 }
 
@@ -294,10 +347,33 @@ mod tests {
         // It repeats past its one second.
         assert!(loudest(&mut out.by_ref().skip(16000), 2000) > 0.3);
         assert!(speakers.playing(&track));
+        // It turns to the left while it plays.
+        speakers.set_pan(&track, Some(-1.0));
+        let frames = out.by_ref().skip(2000).take(4000).collect::<Vec<_>>();
+        let right = frames
+            .iter()
+            .skip(1)
+            .step_by(2)
+            .fold(0.0f32, |m, s| m.max(s.abs()));
+        assert!(right < 1e-3, "{right}");
         speakers.stop(&track, Duration::from_millis(100));
         assert!(!speakers.playing(&track));
         assert!(speakers.tick(Instant::now()));
         assert!(!speakers.tick(Instant::now() + Duration::from_secs(1)));
+        // Stopping the effects fades out every one that plays.
+        for _ in 0..2 {
+            speakers.play(Play {
+                track: Track::Effect,
+                file: dir.join("tone.wav"),
+                gain: 1.0,
+                pan: None,
+                loops: Some(3),
+                fade_in: Duration::ZERO,
+            });
+        }
+        speakers.stop(&Track::Effect, Duration::from_millis(100));
+        assert_eq!(speakers.fading.len(), 2);
+        assert!(speakers.effects.is_empty());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

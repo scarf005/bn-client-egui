@@ -183,6 +183,9 @@ pub struct ChannelCue {
     pub variant: Option<String>,
     #[serde(default)]
     pub volume: u32,
+    /// The gain a volume change set, in mixer units, in place of `volume` and the pack's volume.
+    #[serde(default)]
+    pub gain: Option<u32>,
     #[serde(default)]
     pub angle: Option<i32>,
     #[serde(default = "forever")]
@@ -216,6 +219,9 @@ impl Cue {
     }
 }
 
+/// The channel that stops every channel and effect.
+const ANY: &str = "any";
+
 /// Where a sound plays: a one-shot effect, a reserved channel, or the music.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Track {
@@ -242,10 +248,12 @@ pub struct Play {
 pub trait Output {
     /// Starts a file, replacing what a channel or the music played; gives its length when it is known.
     fn play(&mut self, play: Play) -> Option<Duration>;
-    /// Fades out what a channel or the music plays.
+    /// Fades out what a channel or the music plays, or every effect for `Track::Effect`.
     fn stop(&mut self, track: &Track, fade: Duration);
     /// The new gain of what a channel or the music plays.
     fn set_gain(&mut self, track: &Track, gain: f32);
+    /// The new direction of what a channel plays; none for no direction.
+    fn set_pan(&mut self, track: &Track, pan: Option<f32>);
     /// Whether a channel or the music still plays.
     fn playing(&self, track: &Track) -> bool;
 }
@@ -255,8 +263,8 @@ pub trait Output {
 struct Channel {
     id: String,
     variant: String,
-    sample_volume: u32,
-    volume: u32,
+    gain: f32,
+    angle: Option<i32>,
     repeats: bool,
 }
 
@@ -281,6 +289,14 @@ pub struct Player {
 
 fn gain(sample_volume: u32, volume: u32) -> f32 {
     (sample_volume.min(100) as f32 / 100.0 * volume as f32 / FULL).clamp(0.0, 1.0)
+}
+
+/// A channel's gain: a volume change's own, else its start's as an effect's.
+fn channel_gain(cue: &ChannelCue, sample_volume: u32) -> f32 {
+    cue.gain.map_or_else(
+        || gain(sample_volume, cue.volume),
+        |g| (g as f32 / FULL).clamp(0.0, 1.0),
+    )
 }
 
 /// The native mixer places a sound at (sin, cos) of its angle, so its side is the sine.
@@ -355,27 +371,40 @@ impl Player {
         {
             self.channels.remove(&cue.channel);
         }
-        let (Some(id), Some(variant)) = (cue.id, cue.variant) else {
-            if self.channels.remove(&cue.channel).is_some() {
+        let (Some(id), Some(variant)) = (cue.id.clone(), cue.variant.clone()) else {
+            if cue.channel == ANY {
+                for (name, _) in self.channels.drain() {
+                    out.stop(&Track::Channel(name), fade);
+                }
+                out.stop(&Track::Effect, fade);
+            } else if self.channels.remove(&cue.channel).is_some() {
                 out.stop(&track, fade);
             }
             return;
         };
         if let Some(current) = self.channels.get_mut(&cue.channel) {
-            // The same sound plays on at its new level; anything else waits until the channel is free.
-            if current.id == id && current.variant == variant && current.volume != cue.volume {
-                current.volume = cue.volume;
-                out.set_gain(&track, gain(current.sample_volume, cue.volume));
+            // The same sound plays on at its new level and direction; anything else waits until the channel is free.
+            if current.id == id && current.variant == variant {
+                let level = cue.gain.map_or(current.gain, |_| channel_gain(&cue, 0));
+                if level != current.gain {
+                    current.gain = level;
+                    out.set_gain(&track, level);
+                }
+                if cue.angle != current.angle {
+                    current.angle = cue.angle;
+                    out.set_pan(&track, pan(cue.angle));
+                }
             }
             return;
         }
         let Some(sample) = self.sample(&id, &variant) else {
             return;
         };
+        let level = channel_gain(&cue, sample.volume);
         out.play(Play {
             track,
             file: sample.file,
-            gain: gain(sample.volume, cue.volume),
+            gain: level,
             pan: pan(cue.angle),
             loops: u32::try_from(cue.loops).ok(),
             fade_in: fade,
@@ -385,8 +414,8 @@ impl Player {
             Channel {
                 id,
                 variant,
-                sample_volume: sample.volume,
-                volume: cue.volume,
+                gain: level,
+                angle: cue.angle,
                 repeats: cue.loops < 0,
             },
         );
@@ -503,6 +532,9 @@ mod tests {
         fn set_gain(&mut self, track: &Track, gain: f32) {
             self.calls.push(format!("gain {track:?} {gain}"));
         }
+        fn set_pan(&mut self, track: &Track, pan: Option<f32>) {
+            self.calls.push(format!("pan {track:?} {pan:?}"));
+        }
         fn playing(&self, track: &Track) -> bool {
             self.live.contains(track)
         }
@@ -548,10 +580,21 @@ mod tests {
             id: id.map(|_| "environment".into()),
             variant: id.map(str::to_string),
             volume,
+            gain: None,
             angle: None,
             loops,
             fade_ms,
         })
+    }
+
+    /// A volume or direction change of the daytime ambience.
+    fn changed(gain: Option<u32>, angle: Option<i32>) -> Cue {
+        let Cue::Channel(mut cue) = channel(Some("daytime"), 128, -1, 0) else {
+            unreachable!()
+        };
+        cue.gain = gain;
+        cue.angle = angle;
+        Cue::Channel(cue)
     }
 
     #[test]
@@ -656,8 +699,10 @@ mod tests {
         let mut out = Recorder::default();
         let now = Instant::now();
         player.apply(channel(Some("daytime"), 128, -1, 1000), &mut out, now);
-        player.apply(channel(Some("daytime"), 64, -1, 0), &mut out, now);
-        player.apply(channel(Some("daytime"), 64, -1, 0), &mut out, now);
+        // A volume change sets the gain itself, past the pack's volume, as the native one does.
+        player.apply(changed(Some(64), None), &mut out, now);
+        player.apply(changed(Some(64), None), &mut out, now);
+        player.apply(changed(Some(64), Some(90)), &mut out, now);
         player.apply(channel(None, 0, -1, 500), &mut out, now);
         player.apply(channel(None, 0, -1, 500), &mut out, now);
         let track = Track::Channel("daytime_outdoors_env".into());
@@ -665,13 +710,37 @@ mod tests {
             out.calls,
             [
                 format!("play {track:?} {}", dir.join("day.ogg").display()),
-                format!("gain {track:?} 0.4"),
+                format!("gain {track:?} 0.5"),
+                format!("pan {track:?} Some(1.0)"),
                 format!("stop {track:?} 500"),
             ]
         );
         assert_eq!(out.plays[0].loops, None);
         assert_eq!(out.plays[0].fade_in, Duration::from_secs(1));
         assert_eq!(out.plays[0].gain, 0.8);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn stopping_any_channel_stops_every_channel_and_effect() {
+        let dir = pack_dir("any");
+        let mut player = Player::new(SoundPack::load(&dir).unwrap());
+        let mut out = Recorder::default();
+        let now = Instant::now();
+        player.apply(channel(Some("daytime"), 128, -1, 0), &mut out, now);
+        let Cue::Channel(mut any) = channel(None, 0, -1, 300) else {
+            unreachable!()
+        };
+        any.channel = "any".into();
+        player.apply(Cue::Channel(any), &mut out, now);
+        let track = Track::Channel("daytime_outdoors_env".into());
+        assert_eq!(
+            out.calls[1..],
+            [format!("stop {track:?} 300"), "stop Effect 300".to_string()]
+        );
+        // The channel is free for its next start.
+        player.apply(channel(Some("daytime"), 128, -1, 0), &mut out, now);
+        assert_eq!(out.plays.len(), 2);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
@@ -753,6 +822,7 @@ mod tests {
                 id: None,
                 variant: None,
                 volume: 0,
+                gain: None,
                 angle: None,
                 loops: -1,
                 fade_ms: 300,
