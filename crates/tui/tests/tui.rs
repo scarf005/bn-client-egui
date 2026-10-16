@@ -1006,6 +1006,14 @@ fn a_fetched_page_keeps_the_client_highlight() {
 }
 
 #[test]
+fn a_menu_in_a_one_column_terminal_does_not_panic() {
+    let (mut app, h) = engine();
+    open_menu(&mut app, &h);
+    let mut t = Terminal::new(TestBackend::new(1, 30)).unwrap();
+    t.draw(|f| app.draw(f)).unwrap();
+}
+
+#[test]
 fn item_lists_beside_the_map_show_colour_tags_as_colour_not_text() {
     struct Tagged(FakeModel, Vec<String>);
     impl GameModel for Tagged {
