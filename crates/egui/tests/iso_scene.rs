@@ -606,3 +606,23 @@ fn a_vehicle_part_drawn_from_above_is_a_solid_half_a_square_tall_on_its_ground()
     let top = quads.iter().map(|i| i.origin[2]).fold(f32::MIN, f32::max);
     assert!((top - 0.5).abs() < 0.01, "{quads:?}");
 }
+
+#[test]
+fn a_vehicle_part_beside_a_wall_hides_its_side_there_and_the_taller_wall_keeps_its_own() {
+    let mut car = cell(5, 4, 0, "t_grass");
+    car["vehicle"] = look("vehicle_part", "vp_frame");
+    let m = model(vec![wall(4, 4, "t_wall"), car]);
+    let scene = flat_scene_of(&m, "flat-car-wall");
+    // The wall's six faces, the grass and the part's grass background, and the part's faces but its west one.
+    assert_eq!(planes(&scene).len(), 6 + 1 + 1 + 5);
+    let (x, _) = square(&m, (5, 4));
+    let between = sides(&planes(&scene))
+        .into_iter()
+        .filter(|i| i.a[0] == 0.0 && i.origin[0] == x as f32)
+        .collect::<Vec<_>>();
+    assert_eq!(between.len(), 1, "{between:?}");
+    assert!(
+        (between[0].b[2] + 3.0).abs() < 1e-4,
+        "the wall's: {between:?}"
+    );
+}
