@@ -1,7 +1,9 @@
 //! Against a real engine: a long click-travel keeps the avatar on one screen square (the view follows it every
-//! frame), and a step reaches the screen without a fixed wait, with or without a shift of the map under it.
+//! frame), a step reaches the screen without a fixed wait, with or without a shift of the map under it, and so
+//! does the first step of a double-clicked walk.
 //!
 //! `BN_ENGINE=<engine> cargo test --release -p bn-client-egui --test live_travel -- --ignored --nocapture`
+use bn_client_egui::app::CELL;
 use bn_client_egui::interaction::InvokeError;
 use bn_client_egui::protocol::InvokeArgs;
 use bn_client_egui::transport::{StdioTransport, game_root};
@@ -9,6 +11,7 @@ use bn_client_egui::watchdog::Watchdog;
 use bn_client_egui::{App, EngineModel, GameModel, Pos};
 use eframe::egui;
 use egui_kittest::Harness;
+use egui_kittest::kittest::Queryable;
 use std::time::{Duration, Instant};
 
 type H<'a> = Harness<'a, App<EngineModel>>;
@@ -316,6 +319,116 @@ fn report(what: &str, rows: &[[f64; 4]]) {
     assert!(
         column(0, 50) < 20.0 && column(2, 50) < 100.0,
         "the client waits in a {what} step"
+    );
+}
+
+/// The middle of view square `at` on the screen.
+fn on_screen(h: &H, at: Pos) -> egui::Pos2 {
+    let display = h.state().display();
+    let cell = display.cell(CELL) * display.zoom();
+    h.get_by_label("Map").rect().min + egui::vec2(at.x as f32 + 0.5, at.y as f32 + 0.5) * cell
+}
+
+fn click(h: &mut H, pos: egui::Pos2) {
+    for pressed in [true, false] {
+        h.input_mut().events.push(egui::Event::PointerButton {
+            pos,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        });
+        h.step();
+    }
+}
+
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn double_click_travel_starts_without_a_fixed_wait() {
+    let mut rows = vec![];
+    for _ in 0..6 {
+        let mut h = start();
+        let mut misses = 0;
+        while rows.len() < 10 && misses < 40 {
+            settle(&mut h, 0);
+            let (size, seat) = (h.state().model.size(), h.state().model.player());
+            let far = (0..size.y)
+                .flat_map(|y| (0..size.x).map(move |x| Pos { x, y }))
+                .filter(|&p| (8..=12).contains(&(p.x - seat.x).abs().max((p.y - seat.y).abs())))
+                .collect::<Vec<_>>();
+            let target = far[(misses * 37 + rows.len() * 11) % far.len()];
+            // A square without a route never walks: a single click probes it, a click on the avatar forgets the
+            // planned route again.
+            h.state_mut().model.travel(target);
+            until(&mut h, 60, "the probe", |h| !h.state().model.busy());
+            if h.state().model.route().last() != Some(&target) {
+                misses += 1;
+                continue;
+            }
+            h.state_mut().model.travel(seat);
+            until(&mut h, 60, "the reset", |h| !h.state().model.busy());
+            let pos = on_screen(&h, target);
+            h.hover_at(pos);
+            settle(&mut h, 0);
+            let _ = h.state_mut().model.take_trace();
+            let before = square(&h);
+            let origin = h.state().model.origin();
+            let goal = (target.x + origin.x, target.y + origin.y);
+            let first = Instant::now();
+            click(&mut h, pos);
+            // A double click: the second press a typical 120 ms after the first.
+            while first.elapsed() < Duration::from_millis(120) {
+                h.step();
+                std::thread::sleep(Duration::from_millis(2));
+            }
+            click(&mut h, pos);
+            let mut watchdog = Watchdog::new(Duration::from_secs(30), Duration::from_secs(600));
+            let moved = loop {
+                h.step();
+                if square(&h) != before {
+                    break Some(Instant::now());
+                }
+                if first.elapsed() > Duration::from_secs(10) && !h.state().model.busy() {
+                    break None;
+                }
+                assert!(
+                    !watchdog.expired(h.state().model.received()),
+                    "timed out: travel"
+                );
+                std::thread::sleep(Duration::from_micros(500));
+            };
+            let trace = h.state_mut().model.take_trace();
+            let marks = trace
+                .iter()
+                .map(|(t, w)| format!("{w}@{:.0}", ms(first, *t)))
+                .collect::<Vec<_>>();
+            println!(
+                "CLICK {target:?} from {seat:?} moved {:?} {}",
+                moved.map(|t| ms(first, t)),
+                marks.join(" ")
+            );
+            // Waits out the walk.
+            until(&mut h, 120, "the walk", |h| !h.state().model.busy());
+            settle(&mut h, 1);
+            // Only a walk that ends on the clicked square counts.
+            match moved {
+                Some(moved) if square(&h) == goal => rows.push(ms(first, moved)),
+                _ => misses += 1,
+            }
+        }
+        if rows.len() >= 10 {
+            break;
+        }
+    }
+    rows.sort_by(f64::total_cmp);
+    assert!(rows.len() >= 10, "only {} double clicks walked", rows.len());
+    let median = rows[rows.len() / 2];
+    println!(
+        "LATENCY double click -> first step ms median of {}: {median:.1} rows {rows:?}",
+        rows.len()
+    );
+    assert!(
+        median < 500.0,
+        "a double click starts travel only after {median:.0} ms"
     );
 }
 
