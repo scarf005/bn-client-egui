@@ -141,11 +141,12 @@ fn start<'a>() -> H<'a> {
     h
 }
 
-/// The first row of a list on the top screen whose label contains `label`, with the affordance that chooses it.
+/// The first row of the carried items' list on the top screen whose label contains `label`, with the
+/// affordance that chooses it.
 fn row_labelled(h: &H, label: &str) -> Option<(String, String)> {
     fn find(c: &Component, label: &str) -> Option<(String, String)> {
         if let Component::List(l) = c
-            && let Some(activate) = &l.activate
+            && let Some(activate) = l.activate.as_ref().filter(|a| a.contains("inventory"))
             && let Some(row) = l
                 .rows
                 .iter()
@@ -187,7 +188,13 @@ fn cursor_at(h: &H, at: Pos) -> String {
 /// one it left, ends where a fast pointer comes to rest, and a click there acts on it.
 fn the_target_follows_the_pointer(h: &mut H, mode: &str) {
     run_until(h, "the target cursor", 60, |h| {
-        h.state().model.focus().is_some() && !h.state().model.busy()
+        let m = &h.state().model;
+        assert!(
+            m.focus().is_some() || m.busy() || m.command().is_none_or(|c| !c.finished),
+            "{mode}: no target cursor; {:?}",
+            m.messages().iter().rev().take(3).collect::<Vec<_>>()
+        );
+        m.focus().is_some() && !m.busy()
     });
     settle(h);
     save(h, &format!("{mode}-0-open.png"));
