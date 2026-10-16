@@ -1,4 +1,5 @@
-//! A held step of the map is input state: key down starts the walk, key up stops it, and repeats send nothing.
+//! A step of the map is one command per key press, as in the native game; once the OS repeats the key it is held
+//! input state: the walk starts, key up stops it, and further repeats send nothing.
 //! Every other key at the map is a screen-scoped affordance, which the engine queues behind the running one.
 mod common;
 use bn_client_egui::transport::{ScriptHandle, ScriptedTransport};
@@ -68,10 +69,25 @@ fn key(h: &mut H, key: egui::Key, pressed: bool, repeat: bool) {
 }
 
 #[test]
-fn key_down_holds_the_step_and_key_up_releases_it() {
+fn key_down_takes_one_step_and_no_hold() {
     let (mut h, script) = walking(8);
     h.run_steps(3);
     key(&mut h, egui::Key::ArrowRight, true, false);
+    let steps = sent(&script, "bn.command.submit");
+    assert_eq!(steps.len(), 1);
+    assert_eq!(steps[0]["operation"]["affordance_id"], "RIGHT");
+    assert!(sent(&script, "bn.hold").is_empty(), "a press is not a hold");
+    key(&mut h, egui::Key::ArrowRight, false, false);
+    assert!(sent(&script, "bn.release").is_empty());
+    assert_eq!(sent(&script, "bn.command.submit").len(), 1);
+}
+
+#[test]
+fn a_repeated_key_holds_the_step_and_key_up_releases_it() {
+    let (mut h, script) = walking(8);
+    h.run_steps(3);
+    key(&mut h, egui::Key::ArrowRight, true, false);
+    key(&mut h, egui::Key::ArrowRight, true, true);
     let holds = sent(&script, "bn.hold");
     assert_eq!(holds.len(), 1);
     assert_eq!(holds[0]["screen_id"], "screen:map:e1");
@@ -80,9 +96,10 @@ fn key_down_holds_the_step_and_key_up_releases_it() {
     assert!(sent(&script, "bn.release").is_empty(), "still down");
     key(&mut h, egui::Key::ArrowRight, false, false);
     assert_eq!(sent(&script, "bn.release").len(), 1);
-    assert!(
-        sent(&script, "bn.command.submit").is_empty(),
-        "a hold is not a command"
+    assert_eq!(
+        sent(&script, "bn.command.submit").len(),
+        1,
+        "only the press was a command"
     );
 }
 
@@ -95,23 +112,30 @@ fn key_repeats_send_nothing() {
         key(&mut h, egui::Key::ArrowRight, true, true);
     }
     assert_eq!(sent(&script, "bn.hold").len(), 1);
-    assert!(sent(&script, "bn.command.submit").is_empty());
+    assert_eq!(sent(&script, "bn.command.submit").len(), 1);
     assert!(sent(&script, "bn.release").is_empty());
 }
 
 #[test]
-fn a_tap_inside_one_frame_holds_and_releases_in_order() {
+fn a_tap_inside_one_frame_takes_one_step() {
     let (mut h, script) = walking(8);
     h.run_steps(3);
     h.key_press(egui::Key::ArrowRight);
     h.run_steps(2);
-    let order = script
-        .sent()
-        .into_iter()
-        .map(|m| m["method"].as_str().unwrap_or_default().to_string())
-        .filter(|m| m == "bn.hold" || m == "bn.release")
-        .collect::<Vec<_>>();
-    assert_eq!(order, ["bn.hold", "bn.release"]);
+    assert_eq!(sent(&script, "bn.command.submit").len(), 1);
+    assert!(sent(&script, "bn.hold").is_empty());
+}
+
+#[test]
+fn a_typed_step_key_takes_one_step() {
+    let (mut h, script) = walking(8);
+    h.run_steps(3);
+    key(&mut h, egui::Key::L, true, false);
+    h.event(egui::Event::Text("l".into()));
+    h.run_steps(1);
+    key(&mut h, egui::Key::L, false, false);
+    assert_eq!(sent(&script, "bn.command.submit").len(), 1);
+    assert!(sent(&script, "bn.hold").is_empty());
 }
 
 #[test]
@@ -119,6 +143,7 @@ fn losing_the_keyboard_releases_the_hold() {
     let (mut h, script) = walking(8);
     h.run_steps(3);
     key(&mut h, egui::Key::ArrowRight, true, false);
+    key(&mut h, egui::Key::ArrowRight, true, true);
     h.event(egui::Event::WindowFocused(false));
     h.run_steps(2);
     assert_eq!(sent(&script, "bn.release").len(), 1);
@@ -156,6 +181,7 @@ fn releasing_the_walk_key_ends_the_walk_while_another_key_stays_down() {
     let (mut h, script) = walking(8);
     h.run_steps(3);
     key(&mut h, egui::Key::ArrowRight, true, false);
+    key(&mut h, egui::Key::ArrowRight, true, true);
     key(&mut h, egui::Key::Q, true, false);
     assert!(sent(&script, "bn.release").is_empty(), "still down");
     key(&mut h, egui::Key::ArrowRight, false, false);
@@ -167,7 +193,9 @@ fn releasing_the_later_of_two_pressed_steps_ends_the_walk() {
     let (mut h, script) = walking(8);
     h.run_steps(3);
     key(&mut h, egui::Key::ArrowUp, true, false);
+    key(&mut h, egui::Key::ArrowUp, true, true);
     key(&mut h, egui::Key::ArrowRight, true, false);
+    key(&mut h, egui::Key::ArrowRight, true, true);
     assert_eq!(
         sent(&script, "bn.hold").len(),
         2,
