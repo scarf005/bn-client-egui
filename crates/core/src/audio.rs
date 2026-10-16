@@ -481,6 +481,10 @@ impl Player {
             loops: Some(0),
             fade_in: Duration::ZERO,
         });
+        // A song that does not play stops the music, as natively, instead of skipping through the list.
+        if !out.playing(&Track::Music) {
+            self.music = None;
+        }
     }
 
     /// Goes on to the next song when one ends, wrapping around as the native playlist does.
@@ -512,13 +516,15 @@ mod tests {
         plays: Vec<Play>,
         live: std::collections::HashSet<Track>,
         length: Option<Duration>,
+        /// Every file fails to play.
+        silent: bool,
     }
 
     impl Output for Recorder {
         fn play(&mut self, play: Play) -> Option<Duration> {
             self.calls
                 .push(format!("play {:?} {}", play.track, play.file.display()));
-            if play.track != Track::Effect {
+            if play.track != Track::Effect && !self.silent {
                 self.live.insert(play.track.clone());
             }
             self.plays.push(play);
@@ -741,6 +747,28 @@ mod tests {
         // The channel is free for its next start.
         player.apply(channel(Some("daytime"), 128, -1, 0), &mut out, now);
         assert_eq!(out.plays.len(), 2);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_song_that_does_not_play_stops_the_music() {
+        let dir = pack_dir("song");
+        let mut player = Player::new(SoundPack::load(&dir).unwrap());
+        let mut out = Recorder {
+            silent: true,
+            ..Default::default()
+        };
+        player.apply(
+            Cue::Music(MusicCue {
+                playlist: Some("title".into()),
+                volume: 128,
+            }),
+            &mut out,
+            Instant::now(),
+        );
+        player.tick(&mut out);
+        assert_eq!(out.plays.len(), 1);
+        assert!(!player.active());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
