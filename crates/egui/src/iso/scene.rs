@@ -156,6 +156,7 @@ pub fn build(
                 let drawn = items.len();
                 let chosen = tileset.choose(&query(&layer, season));
                 let kind = match (layer.terrain, chosen.as_ref().is_some_and(|c| c.joined)) {
+                    (false, _) if layer.creature => Kind::Creature,
                     (false, _) => Kind::Thing,
                     (true, false) => Kind::Terrain,
                     (true, true) => Kind::Joined,
@@ -177,10 +178,16 @@ pub fn build(
                             .painted(&sprite, mask.as_ref(), paint)
                             .unwrap_or(sprite);
                     }
-                    // Only an isometric sprite has rows over its diamond that say nothing; a sprite drawn from
-                    // above is the square whole.
-                    if let (Some(pages), true) = (pages, m.iso) {
-                        sprite = pages.trimmed(sprite);
+                    // An isometric sprite loses the rows over its diamond that say nothing. A sprite drawn from
+                    // above is cut to what it draws, which says whether it stays in its square and lies there;
+                    // what stands keeps its whole sprite, turned about its middle as the flat map turns it.
+                    if let Some(pages) = pages {
+                        sprite = match m.iso {
+                            true => pages.trimmed(sprite),
+                            false => Some(pages.cropped(sprite))
+                                .filter(|cut| shape(&m, cut, kind) != Shape::Board)
+                                .unwrap_or(sprite),
+                        };
                     }
                     if let Shape::Box { top, bottom } = shape(&m, &sprite, kind) {
                         column.solid = Some((floor + bottom, floor + top));

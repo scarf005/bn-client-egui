@@ -413,7 +413,7 @@ fn terrain_of_a_tileset_drawn_from_above_lies_on_the_ground_even_with_clear_rows
         "the grass under it and the shrub: {shrub:?}"
     );
     assert!(shrub.iter().all(|i| i.flags[0] & BOARD == 0), "{shrub:?}");
-    assert!(shrub.iter().all(|i| i.origin[2] == 0.0), "{shrub:?}");
+    assert!(shrub.iter().all(|i| i.origin[2].abs() < 0.01), "{shrub:?}");
 }
 
 /// The view square of absolute square `abs`, as the corner of the ground quad that covers it.

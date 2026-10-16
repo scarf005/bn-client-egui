@@ -15,11 +15,16 @@ const PAINTED_SHEET: u16 = u16::MAX;
 /// A sprite, the sprite masking its paint, and the paint: pixels of the pages and a color.
 type Painted = (PageId, [u32; 2], Option<(PageId, [u32; 2])>, Paint);
 
+/// A sprite by its page, its corner there and its size.
+type Cut = (PageId, [u32; 2], [u32; 2]);
+
 /// The decoded pages, filling as the sheets finish.
 pub struct Pages {
     images: Mutex<HashMap<PageId, Arc<image::RgbaImage>>>,
     /// The pages of sprites painted with a color, by what they were painted from.
     painted: Mutex<HashMap<Painted, PageId>>,
+    /// The first and the last column and row of each sprite's opaque pixels, none for a clear sprite.
+    opaque: Mutex<HashMap<Cut, Option<[u32; 4]>>>,
     /// Sheets not decoded yet.
     waiting: AtomicUsize,
 }
@@ -30,6 +35,7 @@ impl Pages {
         let pages = Arc::new(Self {
             images: Mutex::default(),
             painted: Mutex::default(),
+            opaque: Mutex::default(),
             waiting: AtomicUsize::new(sheets.len()),
         });
         let filling = pages.clone();
@@ -140,6 +146,49 @@ impl Pages {
                 ..sprite
             },
             false => sprite,
+        }
+    }
+
+    /// `sprite` cut to the rectangle of its opaque pixels, in its place on the screen; as it is while its page is
+    /// being decoded, or when it is clear.
+    pub fn cropped(&self, sprite: SpriteSource) -> SpriteSource {
+        let at = [sprite.at.x as u32, sprite.at.y as u32];
+        let size = [sprite.src.x as u32, sprite.src.y as u32];
+        let key = (sprite.page, at, size);
+        let known = self.opaque.lock().ok().and_then(|o| o.get(&key).copied());
+        let bounds = match known {
+            Some(bounds) => bounds,
+            None => {
+                let Some(image) = self.get(sprite.page) else {
+                    return sprite;
+                };
+                // The fragment shader discards what is less opaque than half.
+                let bounds = (0..size[1])
+                    .flat_map(|y| (0..size[0]).map(move |x| (x, y)))
+                    .filter(|(x, y)| {
+                        let pixel = image.get_pixel_checked(at[0] + x, at[1] + y);
+                        pixel.is_some_and(|px| px.0[3] >= 128)
+                    })
+                    .fold(None, |b: Option<[u32; 4]>, (x, y)| {
+                        Some(b.map_or([x, y, x, y], |[x0, y0, x1, y1]| {
+                            [x0.min(x), y0.min(y), x1.max(x), y1.max(y)]
+                        }))
+                    });
+                if let Ok(mut opaque) = self.opaque.lock() {
+                    opaque.insert(key, bounds);
+                }
+                bounds
+            }
+        };
+        let Some([x0, y0, x1, y1]) = bounds else {
+            return sprite;
+        };
+        let corner = glam::Vec2::new(x0 as f32, y0 as f32);
+        SpriteSource {
+            at: sprite.at + corner,
+            src: glam::Vec2::new((x1 + 1 - x0) as f32, (y1 + 1 - y0) as f32),
+            offset: sprite.offset + corner * sprite.scale,
+            ..sprite
         }
     }
 

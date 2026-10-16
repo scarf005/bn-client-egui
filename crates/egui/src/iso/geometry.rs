@@ -93,8 +93,10 @@ pub enum Shape {
 /// What a sprite is the picture of.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Kind {
-    /// Anything that is not a square's terrain.
+    /// Anything that is not a square's terrain or a creature.
     Thing,
+    /// A monster, a person or the avatar.
+    Creature,
     /// The terrain of a square.
     Terrain,
     /// Terrain the engine joined to its neighbours, as walls are: the tileset picked the variant for how they meet.
@@ -103,24 +105,28 @@ pub enum Kind {
 
 /// What `sprite` is drawn as. Terrain whose sprite is as wide as the tile is the ground when it hardly rises over
 /// its diamond; joined terrain that rises is a box, as a wall; anything else, a shrub or a mound as well, stands
-/// upright.
+/// upright. A tileset drawn from above draws what stays inside its square from above too, so that lies on the
+/// ground, but for a creature; what reaches out of its square, a tree, was drawn standing.
 pub fn shape(m: &Metrics, sprite: &SpriteSource, kind: Kind) -> Shape {
     let size = sprite.size();
+    if !m.iso {
+        let inside = sprite.offset.cmpgt(Vec2::splat(-0.5)).all()
+            && (sprite.offset + size).cmplt(m.tile + 0.5).all();
+        return match (kind, inside) {
+            (Kind::Creature, _) | (_, false) => Shape::Board,
+            _ => Shape::Floor { z: 0.0 },
+        };
+    }
     let rise = size.y - m.diamond;
     // The sprite's bottom edge, over the baseline of its tile.
     let bottom = (m.tile.y - sprite.offset.y - size.y) * m.up;
     let half = m.diamond / 2.0;
     match (kind, (size.x - m.tile.x).abs() < 0.5) {
-        (Kind::Joined, true) if m.iso && rise > half => Shape::Box {
+        (Kind::Joined, true) if rise > half => Shape::Box {
             top: (m.tile.y - m.diamond - sprite.offset.y) * m.up,
             bottom,
         },
-        (Kind::Joined | Kind::Terrain, true)
-            if match m.iso {
-                true => (0.0..=half).contains(&rise),
-                false => rise.abs() < 0.5,
-            } =>
-        {
+        (Kind::Joined | Kind::Terrain, true) if (0.0..=half).contains(&rise) => {
             Shape::Floor { z: bottom }
         }
         _ => Shape::Board,
@@ -215,6 +221,25 @@ fn corners(turn: Turn, s: &SpriteSource) -> [Vec2; 4] {
     }
 }
 
+/// Where a sprite drawn from above from `lo` to `hi` in its tile, in tile pixels from the tile's top left corner,
+/// lies once turned about the tile's middle as `turn` turns its picture.
+fn turned(turn: Turn, tile: Vec2, lo: Vec2, hi: Vec2) -> (Vec2, Vec2) {
+    let middle = tile / 2.0;
+    let take = |p: Vec2| {
+        let d = p - middle;
+        middle
+            + match turn {
+                Turn::None => d,
+                Turn::Left => Vec2::new(d.y, -d.x),
+                Turn::Right => Vec2::new(-d.y, d.x),
+                Turn::Half => -d,
+                Turn::Mirror => Vec2::new(-d.x, d.y),
+            }
+    };
+    let (a, b) = (take(lo), take(hi));
+    (a.min(b), a.max(b))
+}
+
 /// The instances that draw a sprite: one, or the five faces of a box.
 pub fn place(m: &Metrics, p: &Placement) -> Vec<Instance> {
     let s = p.sprite;
@@ -234,23 +259,33 @@ pub fn place(m: &Metrics, p: &Placement) -> Vec<Instance> {
     let ground = ([1.0, 0.0, 0.0], [0.0, 1.0, 0.0]);
     match shape(m, s, p.kind) {
         Shape::Floor { z } => {
-            // The diamond of the tile lies in the lowest rows of an isometric sprite, drawn as the game draws it:
-            // the square's north-west corner at its left corner, so its north-east corner is at the top.
-            let uv = match m.iso {
+            // Later sprites of a square lie over the earlier ones.
+            let z = p.floor + z + LAYER_BIAS * p.order as f32;
+            match m.iso {
+                // The diamond of the tile lies in the lowest rows of an isometric sprite, drawn as the game draws
+                // it: the square's north-west corner at its left corner, so its north-east corner is at the top.
                 true => {
                     let (w, h, t) = (size.x, size.y, m.diamond);
-                    [
+                    let uv = [
                         at(0.0, h - t / 2.0),
                         span(w / 2.0, -t / 2.0),
                         span(w / 2.0, t / 2.0),
-                    ]
+                    ];
+                    vec![instance([x, y, z], ground, uv, flags)]
                 }
+                // Where the flat map draws it in the square.
                 false => {
+                    let (lo, hi) = turned(turn, m.tile, s.offset, s.offset + size);
                     let [tl, tr, _, bl] = corners(turn, s);
-                    [tl, tr - tl, bl - tl]
+                    let (w, h) = ((hi.x - lo.x) * m.across, (hi.y - lo.y) * m.up);
+                    vec![instance(
+                        [x + lo.x * m.across, y + lo.y * m.up, z],
+                        ([w, 0.0, 0.0], [0.0, h, 0.0]),
+                        [tl, tr - tl, bl - tl],
+                        flags,
+                    )]
                 }
-            };
-            vec![instance([x, y, p.floor + z], ground, uv, flags)]
+            }
         }
         Shape::Box { top, bottom } => {
             let (w, h, t) = (size.x, size.y, m.diamond);
@@ -458,14 +493,50 @@ mod tests {
             shape(&m, &sprite((48.0, 12.0), (0.0, 0.0)), Kind::Terrain),
             Shape::Board
         );
-        // A square tileset has ground only: no data tells a wall from a floor.
-        let flat = Metrics::new((16, 16), false, None);
-        let square_sprite = sprite((16.0, 16.0), (0.0, 0.0));
-        assert!(matches!(
-            shape(&flat, &square_sprite, Kind::Terrain),
-            Shape::Floor { .. }
-        ));
-        assert_eq!(shape(&flat, &square_sprite, Kind::Thing), Shape::Board);
+    }
+
+    #[test]
+    fn a_sprite_drawn_from_above_lies_flat_inside_its_square_and_stands_when_it_reaches_out() {
+        let flat = Metrics::new((32, 32), false, None);
+        let whole = sprite((32.0, 32.0), (0.0, 0.0));
+        let small = sprite((20.0, 20.0), (6.0, 0.0));
+        let tall = sprite((32.0, 64.0), (0.0, -32.0));
+        // One pixel out of the square.
+        let wide = sprite((33.0, 32.0), (0.0, 0.0));
+        for kind in [Kind::Terrain, Kind::Joined, Kind::Thing] {
+            assert_eq!(shape(&flat, &whole, kind), Shape::Floor { z: 0.0 });
+            assert_eq!(shape(&flat, &small, kind), Shape::Floor { z: 0.0 });
+            assert_eq!(shape(&flat, &tall, kind), Shape::Board);
+            assert_eq!(shape(&flat, &wide, kind), Shape::Board);
+        }
+        // A creature stands however small it is.
+        assert_eq!(shape(&flat, &small, Kind::Creature), Shape::Board);
+    }
+
+    #[test]
+    fn a_sprite_drawn_from_above_lies_where_the_flat_map_draws_it_and_turns_about_its_squares_middle()
+     {
+        let flat = Metrics::new((32, 32), false, None);
+        // 20 x 10 pixels, 4 from the left and 2 from the top of its tile.
+        let s = sprite((20.0, 10.0), (4.0, 2.0));
+        let lies = |turn| {
+            let mut p = square(&s, Kind::Thing);
+            p.turn = turn;
+            place(&flat, &p)[0]
+        };
+        let plain = lies(Turn::None);
+        assert_eq!(plain.origin, [3.0 + 4.0 / 32.0, 5.0 + 2.0 / 32.0, 0.0]);
+        assert_eq!(
+            (plain.a, plain.b),
+            ([20.0 / 32.0, 0.0, 0.0], [0.0, 10.0 / 32.0, 0.0])
+        );
+        // Turned counter-clockwise, its top edge, 2 pixels from the tile's top, is its left edge, 2 from the left,
+        // and its right edge, 8 from the tile's right, is its top, 8 from the top.
+        let left = lies(Turn::Left);
+        assert_eq!(left.origin, [3.0 + 2.0 / 32.0, 5.0 + 8.0 / 32.0, 0.0]);
+        assert_eq!((left.a[0], left.b[1]), (10.0 / 32.0, 20.0 / 32.0));
+        // The sprite's top right corner is drawn at the top left.
+        assert!(near(Vec2::from(left.uv), s.at + Vec2::new(20.0, 0.0)));
     }
 
     #[test]
@@ -660,7 +731,7 @@ mod tests {
             scale: 1.0,
         };
         let board = |turn| {
-            let mut p = square(&s, Kind::Thing);
+            let mut p = square(&s, Kind::Creature);
             p.turn = turn;
             place(&flat, &p)[0]
         };
