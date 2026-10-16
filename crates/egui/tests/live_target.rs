@@ -141,22 +141,43 @@ fn start<'a>() -> H<'a> {
     h
 }
 
-/// The first row of the carried items' list on the top screen whose label contains `label`, with the
-/// affordance that chooses it.
-fn row_labelled(h: &H, label: &str) -> Option<(String, String)> {
-    fn find(c: &Component, label: &str) -> Option<(String, String)> {
+/// The rows of the carried items' lists on the top screen whose label contains `label`, each with the affordance
+/// that chooses it.
+fn rows_labelled(h: &H, label: &str) -> Vec<(String, String)> {
+    fn find(c: &Component, label: &str, found: &mut Vec<(String, String)>) {
         if let Component::List(l) = c
             && let Some(activate) = l.activate.as_ref().filter(|a| a.contains("inventory"))
-            && let Some(row) = l
-                .rows
-                .iter()
-                .find(|r| r.selectable && r.header != Some(true) && r.label.shown().contains(label))
         {
-            return Some((activate.clone(), row.id.clone()));
+            let rows = l.rows.iter().filter(|r| {
+                r.selectable && r.header != Some(true) && r.label.shown().contains(label)
+            });
+            found.extend(rows.map(|r| (activate.clone(), r.id.clone())));
         }
-        c.children().into_iter().find_map(|c| find(c, label))
+        c.children().into_iter().for_each(|c| find(c, label, found));
     }
-    find(h.state().model.screens().last()?.root.as_ref()?, label)
+    let mut found = Vec::new();
+    let root = h
+        .state()
+        .model
+        .screens()
+        .last()
+        .and_then(|s| s.root.as_ref());
+    root.into_iter().for_each(|r| find(r, label, &mut found));
+    found
+}
+
+/// The range the engine's target cursor may go to.
+fn target_range(h: &H) -> u64 {
+    let screen = h.state().model.screens().last().expect("a screen");
+    let map = screen
+        .root
+        .as_ref()
+        .and_then(|r| r.cursor_map())
+        .expect("a target map");
+    map.target
+        .as_ref()
+        .and_then(|t| t["range"].as_u64())
+        .expect("a range")
 }
 
 /// Types the game key `key` as the keyboard does.
@@ -281,12 +302,28 @@ fn the_target_follows_the_pointer(h: &mut H, mode: &str) {
 fn live_throwing_follows_the_pointer_and_a_click_throws() {
     let mut h = start();
     let carried = h.state().model.inventory().len();
-    type_key(&mut h, "t");
-    run_until(&mut h, "the item list", 60, |h| {
-        row_labelled(h, "").is_some()
-    });
-    let (activate, row) = row_labelled(&h, "").unwrap();
-    choose(&mut h, &activate, &row);
+    // The first carried item that flies far enough for the squares the pointer goes to; a heavy one is put back.
+    for at in 0.. {
+        type_key(&mut h, "t");
+        run_until(&mut h, "the item list", 60, |h| {
+            !rows_labelled(h, "").is_empty()
+        });
+        let (activate, row) = rows_labelled(&h, "")
+            .into_iter()
+            .nth(at)
+            .expect("an item to throw far");
+        choose(&mut h, &activate, &row);
+        run_until(&mut h, "the target cursor", 60, |h| {
+            h.state().model.focus().is_some() && !h.state().model.busy()
+        });
+        if target_range(&h) >= 6 {
+            break;
+        }
+        h.key_press(egui::Key::Escape);
+        run_until(&mut h, "the throw put back", 60, |h| {
+            h.state().model.focus().is_none() && !h.state().model.busy()
+        });
+    }
     the_target_follows_the_pointer(&mut h, "throw");
     assert!(
         h.state().model.inventory().len() < carried,
@@ -310,9 +347,9 @@ fn live_firing_follows_the_pointer_and_a_click_fires() {
     dismiss_popups(&mut h);
     type_key(&mut h, "w");
     run_until(&mut h, "the wield list", 60, |h| {
-        row_labelled(h, "pistol").is_some()
+        !rows_labelled(h, "pistol").is_empty()
     });
-    let (activate, row) = row_labelled(&h, "pistol").unwrap();
+    let (activate, row) = rows_labelled(&h, "pistol").remove(0);
     choose(&mut h, &activate, &row);
     run_until(&mut h, "wielded", 60, |h| !h.state().model.busy());
     dismiss_popups(&mut h);
