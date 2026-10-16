@@ -105,13 +105,14 @@ fn start<'a>() -> H<'a> {
 }
 
 /// What one frame shows of the side panels: where the sidebar is and the text of every label in it, top to
-/// bottom, and per button of the shortcut bar its name and whether it is drawn disabled while the engine has it
-/// enabled.
+/// bottom, and the shortcut bar's buttons drawn otherwise than the engine has them enabled.
 #[derive(Clone, Debug, PartialEq)]
 struct Shown {
+    /// Engine messages received before the frame.
+    received: u64,
     rect: Option<egui::Rect>,
     labels: Vec<String>,
-    greyed: Vec<String>,
+    mismatched: Vec<String>,
 }
 
 fn panel_rect(h: &H, name: &str) -> Option<egui::Rect> {
@@ -144,26 +145,25 @@ fn shown(h: &H) -> Shown {
         .model
         .shortcuts()
         .into_iter()
-        .filter(|s| s.enabled)
-        .map(|s| s.label.shown())
+        .map(|s| (bn_client_egui::markup::plain(&s.label.shown()), s.enabled))
         .collect::<Vec<_>>();
-    let greyed = h
+    let mismatched = h
         .query_all(
             by().role(egui::accesskit::Role::Button)
                 .predicate(|n| within(bar, n)),
         )
-        .filter(|n| n.accesskit_node().is_disabled())
-        .filter_map(|n| n.accesskit_node().label())
-        .filter(|l| {
-            enabled
-                .iter()
-                .any(|e| bn_client_egui::markup::plain(e) == *l)
+        .filter_map(|n| {
+            let node = n.accesskit_node();
+            let label = node.label()?;
+            let on = enabled.iter().find(|(l, _)| *l == label)?.1;
+            (node.is_disabled() == on).then_some(label)
         })
         .collect();
     Shown {
+        received: h.state().model.received(),
         rect,
         labels,
-        greyed,
+        mismatched,
     }
 }
 
@@ -233,7 +233,8 @@ fn a_held_walk_keeps_every_frame_of_the_side_panels_as_the_engine_sent_them() {
     }
     println!("LIVE steps {steps}, frames {}", frames.len());
     assert!(steps >= 10, "no open way for ten steps: {steps}");
-    // A label gone for a frame or more while the frames around it keep it is a flicker.
+    // A label gone for a frame while the frames around it keep it, with no engine message on one side of
+    // that frame, is the client's flicker, not the engine's news.
     let mut blinks = vec![];
     for (i, w) in frames.windows(2).enumerate() {
         if w[0].rect != w[1].rect {
@@ -244,19 +245,6 @@ fn a_held_walk_keeps_every_frame_of_the_side_panels_as_the_engine_sent_them() {
                 w[1].rect
             );
         }
-        let gone = w[0]
-            .labels
-            .iter()
-            .filter(|l| !w[1].labels.contains(l))
-            .collect::<Vec<_>>();
-        let new = w[1]
-            .labels
-            .iter()
-            .filter(|l| !w[0].labels.contains(l))
-            .collect::<Vec<_>>();
-        if !gone.is_empty() || !new.is_empty() {
-            println!("LIVE frame {}: -{gone:?} +{new:?}", i + 1);
-        }
     }
     for (i, w) in frames.windows(3).enumerate() {
         let lost = w[0]
@@ -265,28 +253,71 @@ fn a_held_walk_keeps_every_frame_of_the_side_panels_as_the_engine_sent_them() {
             .filter(|l| !w[1].labels.contains(l) && w[2].labels.contains(l))
             .cloned()
             .collect::<Vec<_>>();
-        if !lost.is_empty() || (w[0].rect == w[2].rect && w[1].rect != w[0].rect) {
+        let quiet = w[0].received == w[1].received || w[1].received == w[2].received;
+        let moved = w[0].rect == w[2].rect && w[1].rect != w[0].rect;
+        if (!lost.is_empty() && quiet) || moved {
             blinks.push((i + 1, lost, w[1].rect));
         }
     }
     for b in &blinks {
         println!("LIVE blink at frame {}: {:?}", b.0, b);
     }
-    let greyed = frames
-        .iter()
-        .enumerate()
-        .filter(|(_, f)| !f.greyed.is_empty())
-        .map(|(i, f)| (i, f.greyed.len()))
-        .collect::<Vec<_>>();
-    println!(
-        "LIVE frames with enabled shortcuts greyed: {} of {}: {greyed:?}",
-        greyed.len(),
-        frames.len()
-    );
+    let mismatched = mismatched(&frames);
     assert!(blinks.is_empty(), "{} frames flickered", blinks.len());
     assert!(
-        greyed.is_empty(),
-        "{} frames greyed out shortcuts the engine has enabled",
-        greyed.len()
+        mismatched.is_empty(),
+        "{} frames drew shortcuts otherwise than the engine has them",
+        mismatched.len()
     );
+}
+
+/// The frames that drew a shortcut otherwise than the engine has it, with how many.
+fn mismatched(frames: &[Shown]) -> Vec<(usize, usize)> {
+    let mismatched = frames
+        .iter()
+        .enumerate()
+        .filter(|(_, f)| !f.mismatched.is_empty())
+        .map(|(i, f)| (i, f.mismatched.len()))
+        .collect::<Vec<_>>();
+    println!(
+        "LIVE frames with shortcuts drawn otherwise than the engine has them: {} of {}: {mismatched:?}",
+        mismatched.len(),
+        frames.len()
+    );
+    mismatched
+}
+
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn the_shortcut_bar_follows_the_engine_into_look_aim_throw_and_its_own_screens_and_back() {
+    let mut h = start();
+    let mut frames = vec![shown(&h)];
+    let label = |h: &H, id: &str| {
+        let shortcuts = h.state().model.shortcuts();
+        let shortcut = shortcuts.iter().find(|s| s.affordance_id == id);
+        bn_client_egui::markup::plain(&shortcut.expect(id).label.shown())
+    };
+    // The keys of look, aim and throw, then the bar's own buttons to the inventory screen and the wait menu.
+    for key in ["x", "f", "t", "inventory", "wait"] {
+        let before = h.state().model.screens().len();
+        match key.len() {
+            1 => h.input_mut().events.push(egui::Event::Text(key.into())),
+            _ => h.get_by_label(&label(&h, key)).click(),
+        }
+        let end = Instant::now() + Duration::from_secs(3);
+        while Instant::now() < end {
+            h.step();
+            frames.push(shown(&h));
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        println!(
+            "LIVE {key}: screens {before} -> {}, menu {:?}",
+            h.state().model.screens().len(),
+            h.state().model.menu().map(|m| m.context)
+        );
+        h.key_press(egui::Key::Escape);
+        settle(&mut h, 2);
+        frames.push(shown(&h));
+    }
+    assert!(mismatched(&frames).is_empty());
 }
