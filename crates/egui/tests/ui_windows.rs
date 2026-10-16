@@ -317,3 +317,20 @@ fn a_screen_window_kept_from_a_last_run_keeps_its_size_while_the_pointer_moves_o
         "{before:?} -> {after:?}"
     );
 }
+
+#[test]
+fn a_screen_window_kept_wider_than_the_screen_opens_no_wider_than_its_room() {
+    let file = settings("windows-screen-too-wide");
+    let (h, _) = inventory_window(&file);
+    let (fresh, _) = inventory_frame(&h);
+    drop(h);
+    let kept = json!({"windows": {"screen:Multidrop": {
+        "pos": [16.0, 39.0], "size": [3000.0, 745.0], "collapsed": false}}});
+    std::fs::write(&file, kept.to_string()).unwrap();
+    let (h, _) = inventory_window(&file);
+    let (opened, _) = inventory_frame(&h);
+    assert!(
+        opened.width() <= fresh.width() + 1.0,
+        "{fresh:?} vs {opened:?}"
+    );
+}
