@@ -5,7 +5,7 @@
 //! --nocapture`; `BN_ROOT` names the game root when it is not beside the engine.
 use bn_client_egui::app::CELL;
 use bn_client_egui::interaction::InvokeError;
-use bn_client_egui::protocol::InvokeArgs;
+use bn_client_egui::protocol::{Component, InvokeArgs};
 use bn_client_egui::transport::{StdioTransport, game_root};
 use bn_client_egui::watchdog::Watchdog;
 use bn_client_egui::{App, EngineModel, GameModel, Pos};
@@ -52,14 +52,34 @@ fn choose(h: &mut H, affordance: &str, row: &str) {
 }
 
 fn dismiss_popups(h: &mut H) {
-    while let Some(menu) = h.state().model.menu() {
+    for _ in 0..20 {
+        let Some(menu) = h.state().model.menu() else {
+            return;
+        };
         match menu.choices.first().map(|c| c.id.clone()) {
+            _ if menu.context == "DIALOGUE_CHOOSE_RESPONSE" => leave_talk(h),
             Some(id) if !menu.can_cancel => h.state_mut().model.choose(&id),
             _ => h.state_mut().model.cancel_menu(),
         }
         run_until(h, "popup", 180, |h| !h.state().model.busy());
         h.run_steps(3);
     }
+    panic!("a pop-up stays open: {:?}", h.state().model.menu());
+}
+
+/// Leaves a conversation, which has no cancel, by its last response, as a person who walks up to talk may start one.
+fn leave_talk(h: &mut H) {
+    let last = h.state().model.screens().last().and_then(|s| {
+        match s.root.as_ref()?.find("talk:responses")? {
+            Component::List(l) => l.rows.last().map(|r| r.id.clone()),
+            _ => None,
+        }
+    });
+    let args = InvokeArgs {
+        row: last,
+        ..Default::default()
+    };
+    let _ = h.state_mut().model.invoke_affordance("talk:respond", args);
 }
 
 fn settle(h: &mut H) {
