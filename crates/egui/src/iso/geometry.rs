@@ -392,6 +392,13 @@ mod tests {
     }
 
     #[test]
+    fn a_level_height_of_zero_as_in_ultimatecataclysm_is_no_height_given() {
+        let given = Metrics::new((32, 32), false, Some(0.0));
+        assert_eq!(given.level, Metrics::new((32, 32), false, None).level);
+        assert_eq!(given.level, LEVEL);
+    }
+
+    #[test]
     fn the_diamond_of_an_isometric_tile_is_half_as_tall_as_wide_however_tall_the_tile_is() {
         // HitButton_iso: 16 x 20 tiles whose diamond is 16 x 8, as the game draws it.
         let m = Metrics::new((16, 20), true, None);
