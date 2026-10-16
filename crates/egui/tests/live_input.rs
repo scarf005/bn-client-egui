@@ -124,24 +124,23 @@ fn live_up_then_enter_on_the_quit_popup_takes_the_option_the_arrow_moved_to() {
 fn live_a_word_typed_fast_into_a_filter_arrives_in_order() {
     let mut h = start();
     world_screen(&mut h);
+    // The keybindings screen, whose list filter is an affordance that takes the typed text.
     h.event(egui::Event::Text("?".into()));
-    settle(&mut h);
-    h.event(egui::Event::Text("/".into()));
-    settle(&mut h);
-    println!("LIVE prompt open: {}", snapshot(&h));
+    run_until(&mut h, "the keybindings", 30, |h| {
+        h.query_by_label("Filter").is_some()
+    });
+    click_settled(&mut h, "Filter");
+    run_until(&mut h, "the filter prompt", 30, |h| {
+        h.query_by_role(egui::accesskit::Role::TextInput).is_some()
+    });
     h.get_by_role(egui::accesskit::Role::TextInput).click();
     h.run_steps(3);
     for c in ["m", "o", "d", "e"] {
         h.event(egui::Event::Text(c.into()));
         h.run_steps(1);
     }
-    settle(&mut h);
-    println!("LIVE after typing: {}", snapshot(&h));
-    let field = h
-        .state()
-        .model
-        .menu()
-        .and_then(|m| m.field)
-        .map(|f| f.value);
-    assert_eq!(field.as_deref(), Some("mode"));
+    h.key_press(egui::Key::Enter);
+    run_until(&mut h, "the filtered list", 30, |h| {
+        h.query_by_label("/mode").is_some()
+    });
 }
