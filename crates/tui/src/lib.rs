@@ -1015,20 +1015,7 @@ impl<M: GameModel> TuiApp<M> {
     fn draw_popup(f: &mut Frame, popup: &Popup) -> PopupLayout {
         let area = f.area();
         let tab_bar = bar(&popup.tabs);
-        let widest = popup
-            .header
-            .iter()
-            .map(|l| l.width())
-            .chain(
-                popup
-                    .rows
-                    .iter()
-                    .map(|(k, l, _)| k.width() + Line::from(l.clone()).width() + 2),
-            )
-            .chain(std::iter::once(tab_bar.width()))
-            .max()
-            .unwrap_or(0);
-        let width = (widest as u16 + 2).clamp(30, 100).min(area.width);
+        let width = popup_width(popup, &tab_bar).clamp(30, 100).min(area.width);
         // The text inside the border; none in a terminal too narrow for the border alone.
         let inside = usize::from(width.saturating_sub(2));
         let header = popup
@@ -1038,15 +1025,7 @@ impl<M: GameModel> TuiApp<M> {
             .collect::<Vec<_>>();
         let head = (header.len() as u16).min(area.height.saturating_sub(2) / 2);
         let bar = u16::from(!popup.tabs.is_empty());
-        // The native text window draws a line of two dashes as a rule across the window.
-        let footer = popup
-            .footer
-            .iter()
-            .flat_map(|l| match l.as_str() {
-                "--" => vec!["─".repeat(inside)],
-                _ => wrap(l, inside),
-            })
-            .collect::<Vec<_>>();
+        let footer = footer_lines(&popup.footer, inside);
         // The description gets the room it needs, down to a few rows of the list; the rest scrolls.
         let room = area.height.saturating_sub(2 + head + bar);
         let keep = (popup.rows.len() as u16).min(3);
@@ -1070,10 +1049,9 @@ impl<M: GameModel> TuiApp<M> {
             Constraint::Length(foot),
         ])
         .areas(inner);
-        let header_lines = header;
         let text = |s: &String| Line::raw(s.clone());
         f.render_widget(
-            Paragraph::new(header_lines.iter().map(text).collect::<Vec<_>>()),
+            Paragraph::new(header.iter().map(text).collect::<Vec<_>>()),
             header_area,
         );
         f.render_widget(Paragraph::new(tab_bar), bar_area);
@@ -1081,34 +1059,7 @@ impl<M: GameModel> TuiApp<M> {
             .footer_scroll
             .min(footer.len().saturating_sub(usize::from(foot)));
         let offset = (popup.selected + 1).saturating_sub(usize::from(list.height));
-        let lines = popup
-            .rows
-            .iter()
-            .enumerate()
-            .skip(offset)
-            .map(|(i, (key, label, style))| {
-                // The native key column in light green; the cursor row is reversed whole.
-                let on = i == popup.selected;
-                let green = match on {
-                    true => Style::new(),
-                    false => Style::new().fg(Color::LightGreen),
-                };
-                let line = Line::from(
-                    [
-                        Span::raw(if on { "> " } else { "  " }),
-                        Span::styled(key.clone(), green),
-                    ]
-                    .into_iter()
-                    .chain(label.clone())
-                    .collect::<Vec<_>>(),
-                );
-                match on {
-                    true => line.style(style.add_modifier(Modifier::REVERSED)),
-                    false => line.style(*style),
-                }
-            })
-            .collect::<Vec<_>>();
-        f.render_widget(Paragraph::new(lines), list);
+        f.render_widget(Paragraph::new(row_lines(popup, offset)), list);
         f.render_widget(
             Paragraph::new(
                 footer
@@ -1128,6 +1079,65 @@ impl<M: GameModel> TuiApp<M> {
             footer_scroll,
         }
     }
+}
+
+/// The columns a popup's widest line takes, with its border.
+fn popup_width(popup: &Popup, tab_bar: &Line) -> u16 {
+    let rows = popup
+        .rows
+        .iter()
+        .map(|(k, l, _)| k.width() + Line::from(l.clone()).width() + 2);
+    let widest = popup
+        .header
+        .iter()
+        .map(|l| l.width())
+        .chain(rows)
+        .chain(std::iter::once(tab_bar.width()))
+        .max()
+        .unwrap_or(0);
+    widest as u16 + 2
+}
+
+/// The description lines wrapped to `width`; a line of two dashes is a rule across, as the native text
+/// window draws it.
+fn footer_lines(footer: &[String], width: usize) -> Vec<String> {
+    footer
+        .iter()
+        .flat_map(|l| match l.as_str() {
+            "--" => vec!["─".repeat(width)],
+            _ => wrap(l, width),
+        })
+        .collect()
+}
+
+/// The rows from `offset` on: the native key column in light green, the cursor row reversed whole.
+fn row_lines(popup: &Popup, offset: usize) -> Vec<Line<'static>> {
+    popup
+        .rows
+        .iter()
+        .enumerate()
+        .skip(offset)
+        .map(|(i, (key, label, style))| {
+            let on = i == popup.selected;
+            let green = match on {
+                true => Style::new(),
+                false => Style::new().fg(Color::LightGreen),
+            };
+            let line = Line::from(
+                [
+                    Span::raw(if on { "> " } else { "  " }),
+                    Span::styled(key.clone(), green),
+                ]
+                .into_iter()
+                .chain(label.clone())
+                .collect::<Vec<_>>(),
+            );
+            match on {
+                true => line.style(style.add_modifier(Modifier::REVERSED)),
+                false => line.style(*style),
+            }
+        })
+        .collect()
 }
 
 /// A popup row: its native key (empty or padded), label and style.
