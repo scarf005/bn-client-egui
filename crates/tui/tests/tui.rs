@@ -614,6 +614,26 @@ fn page_up_scrolls_the_message_log_back_and_page_down_returns() {
 }
 
 #[test]
+fn page_down_after_paging_past_the_oldest_line_moves_at_once() {
+    let mut app = TuiApp::new(FakeModel::default());
+    for i in 0..20 {
+        app.model.say(format!("line {i}"));
+    }
+    render(&mut app);
+    for _ in 0..10 {
+        app.handle_key(key(KeyCode::PageUp));
+    }
+    let oldest = text(&render(&mut app));
+    assert!(oldest.contains("line 0"), "{oldest}");
+    app.handle_key(key(KeyCode::PageDown));
+    let s = text(&render(&mut app));
+    assert!(
+        !s.contains("line 0 ") && s.contains("line 6 ") && s.contains("line 10 "),
+        "{s}"
+    );
+}
+
+#[test]
 fn wide_map_glyphs_do_not_shift_the_rest_of_the_row() {
     struct Wide(FakeModel);
     impl GameModel for Wide {
