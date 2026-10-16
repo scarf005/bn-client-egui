@@ -668,7 +668,7 @@ impl<M: GameModel> App<M> {
                 self.affordance_button(ui, a, None, out);
             }
             if !more.is_empty() {
-                let menu = ui.menu_button("⋯", |ui| {
+                ui.menu_button("⋯", |ui| {
                     for a in more {
                         let enabled = interaction::row_availability(a, None).enabled;
                         let label = format!("{}{}", markup::plain(&a.label.shown()), key_hint(a));
@@ -678,7 +678,6 @@ impl<M: GameModel> App<M> {
                         }
                     }
                 });
-                a11y::menu_button(ui.ctx(), menu.response.id, "More");
             }
             if let Some(a) = help {
                 let label = markup::plain(&a.label.shown());
