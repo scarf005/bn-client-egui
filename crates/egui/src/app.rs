@@ -368,10 +368,14 @@ impl<M: GameModel> App<M> {
             self.wired = true;
         }
         self.model.poll();
-        if let Some(soon) = self
-            .audio
-            .update(self.model.soundpack(), self.model.take_cues())
-        {
+        // A failed engine plays nothing more: its loops and music stop with the device.
+        let soundpack = self
+            .model
+            .failure()
+            .is_none()
+            .then(|| self.model.soundpack())
+            .flatten();
+        if let Some(soon) = self.audio.update(soundpack, self.model.take_cues()) {
             ui.ctx().request_repaint_after(soon);
         }
         self.display.follow_engine(self.model.display_default());
