@@ -108,3 +108,60 @@ fn operations_serialize_with_the_kind_tag() {
     );
     assert_eq!(to_value(&Cancel), json!({"kind":"cancel"}));
 }
+
+fn overmap(
+    cols: usize,
+    rows: usize,
+    target: Option<(i32, i32)>,
+) -> bn_client_core::protocol::OvermapWire {
+    serde_json::from_value(serde_json::json!({
+        "origin": {"dim": "", "x": 0, "y": 0, "z": 0},
+        "player": {"dim": "", "x": 0, "y": 0, "z": 0},
+        "cols": cols, "rows": rows,
+        "cells": vec![vec![(".", 7, 0); cols]; rows],
+        "legend": [], "notes": [],
+        "mission_target": target.map(|(x, y)| serde_json::json!({"dim": "", "x": x, "y": y, "z": 0})),
+    }))
+    .unwrap()
+}
+
+#[test]
+fn an_overmap_window_shows_nothing_where_no_square_fits() {
+    let at = bn_client_core::protocol::WorldPos::default();
+    assert_eq!(overmap(0, 0, Some((5, 5))).window(&at, (10, 10)), None);
+    assert_eq!(overmap(20, 20, Some((5, 5))).window(&at, (0, 10)), None);
+}
+
+#[test]
+fn an_overmap_window_keeps_the_cursor_inside_and_marks_a_target_beyond_its_edge() {
+    use bn_client_core::protocol::{OvermapWindow, WorldPos};
+    let om = overmap(40, 30, Some((39, 2)));
+    let cursor = WorldPos {
+        x: 10,
+        y: 15,
+        ..Default::default()
+    };
+    let window = om.window(&cursor, (8, 6)).unwrap();
+    assert_eq!(
+        window,
+        OvermapWindow {
+            left: 6,
+            top: 12,
+            cols: 8,
+            rows: 6
+        }
+    );
+    let mark = om.target_mark(&window, &cursor).unwrap();
+    assert_eq!((mark.col, mark.row, mark.arrow), (13, 12, "/"));
+    let near = WorldPos {
+        x: 36,
+        y: 3,
+        ..Default::default()
+    };
+    let window = om.window(&near, (8, 6)).unwrap();
+    assert_eq!(
+        om.target_mark(&window, &near),
+        None,
+        "a target inside the window is drawn, not marked"
+    );
+}

@@ -1300,21 +1300,13 @@ impl<M: GameModel> App<M> {
         let font = egui::FontId::monospace(cell_px - 2.0);
         // The squares that fit, kept around the cursor.
         let room = ui.available_size();
-        let fit = |cells: usize, space: f32| ((space / cell_px) as usize).clamp(1, cells.max(1));
-        let (cols, rows) = (
-            fit(om.cols, room.x * 0.7),
-            fit(om.rows, ui.available_height()),
-        );
-        let (cursor_col, cursor_row) = om.cell_of(&cursor).unwrap_or((om.cols / 2, om.rows / 2));
-        let first = |at: usize, shown: usize, all: usize| {
-            at.saturating_sub(shown / 2).min(all.saturating_sub(shown))
+        let fit = |space: f32| ((space / cell_px) as usize).max(1);
+        let Some(window) = om.window(&cursor, (fit(room.x * 0.7), fit(ui.available_height())))
+        else {
+            return;
         };
-        let (left, top) = (
-            first(cursor_col, cols, om.cols),
-            first(cursor_row, rows, om.rows),
-        );
-        let cols = cols.min(om.cols.saturating_sub(left));
-        let rows = rows.min(om.rows.saturating_sub(top));
+        let (cursor_col, cursor_row) = om.cell_of(&cursor).unwrap_or((om.cols / 2, om.rows / 2));
+        let (left, top, cols, rows) = (window.left, window.top, window.cols, window.rows);
         let colors = self.model.colors();
         let square_status = |at: &WorldPos| {
             if *at == cursor {
@@ -1416,34 +1408,14 @@ impl<M: GameModel> App<M> {
                 });
             }
             // The mission's target, marked at the edge of the squares shown when it lies beyond them.
-            if let Some(target) = &om.mission_target {
-                let (dx, dy) = (target.x - om.origin.x, target.y - om.origin.y);
-                let inside = (left as i32..(left + cols) as i32).contains(&dx)
-                    && (top as i32..(top + rows) as i32).contains(&dy);
-                if !inside {
-                    let col = dx.clamp(left as i32, (left + cols) as i32 - 1) as usize;
-                    let row = dy.clamp(top as i32, (top + rows) as i32 - 1) as usize;
-                    let (toward_x, toward_y) = (
-                        (target.x - cursor.x).signum(),
-                        (target.y - cursor.y).signum(),
-                    );
-                    let marker = match (toward_x, toward_y) {
-                        (0, -1) => "^",
-                        (1, -1) | (-1, 1) => "/",
-                        (1, 0) => ">",
-                        (1, 1) | (-1, -1) => "\\",
-                        (0, 1) => "v",
-                        (-1, 0) => "<",
-                        _ => " ",
-                    };
-                    paints.push(OvermapPaint::Text {
-                        painter: painter.clone(),
-                        rect: rect_of(col, row),
-                        text: marker.into(),
-                        color: colors.index(1),
-                        font: font.clone(),
-                    });
-                }
+            if let Some(mark) = om.target_mark(&window, &cursor) {
+                paints.push(OvermapPaint::Text {
+                    painter: painter.clone(),
+                    rect: rect_of(mark.col, mark.row),
+                    text: mark.arrow.into(),
+                    color: colors.index(1),
+                    font: font.clone(),
+                });
             }
             paints.push(OvermapPaint::Outline {
                 painter: painter.clone(),

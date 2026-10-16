@@ -965,19 +965,16 @@ impl<M: GameModel> Painter<'_, M> {
             .into_iter()
             .filter(|n| !n.is_empty())
             .collect::<Vec<_>>();
-        let rows = om
-            .rows
-            .min(usize::from(inner.height).saturating_sub(notes.len()).max(1));
-        let cols = om.cols.min(usize::from(inner.width));
-        let (cursor_col, cursor_row) = om.cell_of(&cursor).unwrap_or((om.cols / 2, om.rows / 2));
-        // The squares that fit, kept around the cursor.
-        let first = |at: usize, shown: usize, all: usize| {
-            at.saturating_sub(shown / 2).min(all.saturating_sub(shown))
-        };
-        let (left, top) = (
-            first(cursor_col, cols, om.cols),
-            first(cursor_row, rows, om.rows),
+        let room = (
+            usize::from(inner.width),
+            usize::from(inner.height).saturating_sub(notes.len()).max(1),
         );
+        // The squares that fit, kept around the cursor; a part too narrow for one shows none.
+        let Some(window) = om.window(&cursor, room) else {
+            return;
+        };
+        let (left, top, cols, rows) = (window.left, window.top, window.cols, window.rows);
+        let (cursor_col, cursor_row) = om.cell_of(&cursor).unwrap_or((om.cols / 2, om.rows / 2));
         let [grid, foot] =
             Layout::vertical([Constraint::Length(rows as u16), Constraint::Min(0)]).areas(inner);
         let mut cells = (top..top + rows)
@@ -1020,29 +1017,12 @@ impl<M: GameModel> Painter<'_, M> {
             }
         }
         // The mission's target, marked at the edge of the squares shown when it lies beyond them.
-        if let Some(target) = &om.mission_target {
-            let (dx, dy) = (target.x - om.origin.x, target.y - om.origin.y);
-            let inside = (left as i32..(left + cols) as i32).contains(&dx)
-                && (top as i32..(top + rows) as i32).contains(&dy);
-            if !inside {
-                let col = dx.clamp(left as i32, (left + cols) as i32 - 1) as usize - left;
-                let row = dy.clamp(top as i32, (top + rows) as i32 - 1) as usize - top;
-                let marker = match (
-                    (target.x - cursor.x).signum(),
-                    (target.y - cursor.y).signum(),
-                ) {
-                    (0, -1) => "^",
-                    (1, -1) | (-1, 1) => "/",
-                    (1, 0) => ">",
-                    (1, 1) | (-1, -1) => "\\",
-                    (0, 1) => "v",
-                    (-1, 0) => "<",
-                    _ => " ",
-                };
-                if let Some(cell) = cells.get_mut(row).and_then(|line| line.get_mut(col)) {
-                    *cell = Span::styled(marker, Style::new().fg(Color::Red));
-                }
-            }
+        if let Some(mark) = om.target_mark(&window, &cursor)
+            && let Some(cell) = cells
+                .get_mut(mark.row - top)
+                .and_then(|line| line.get_mut(mark.col - left))
+        {
+            *cell = Span::styled(mark.arrow, Style::new().fg(Color::Red));
         }
         let lines = cells.into_iter().map(Line::from).collect::<Vec<_>>();
         f.render_widget(Paragraph::new(lines), grid);

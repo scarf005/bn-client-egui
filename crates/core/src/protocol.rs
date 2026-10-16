@@ -609,7 +609,73 @@ pub struct OvermapTile<'a> {
     pub fallbacks: &'a [String],
 }
 
+/// The cells of an overmap a view shows: `cols` by `rows` from cell (`left`, `top`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct OvermapWindow {
+    pub left: usize,
+    pub top: usize,
+    pub cols: usize,
+    pub rows: usize,
+}
+
+/// The mission target marked at the edge of a window it lies beyond: the edge cell and the arrow toward it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TargetMark {
+    pub col: usize,
+    pub row: usize,
+    pub arrow: &'static str,
+}
+
 impl OvermapWire {
+    /// The cells that fit in `room` (columns, rows), kept around `cursor` and within the overmap; none when no
+    /// cell fits.
+    pub fn window(&self, cursor: &WorldPos, room: (usize, usize)) -> Option<OvermapWindow> {
+        let (cols, rows) = (self.cols.min(room.0), self.rows.min(room.1));
+        if cols == 0 || rows == 0 {
+            return None;
+        }
+        let (col, row) = self
+            .cell_of(cursor)
+            .unwrap_or((self.cols / 2, self.rows / 2));
+        let first =
+            |at: usize, shown: usize, all: usize| at.saturating_sub(shown / 2).min(all - shown);
+        Some(OvermapWindow {
+            left: first(col, cols, self.cols),
+            top: first(row, rows, self.rows),
+            cols,
+            rows,
+        })
+    }
+
+    /// Where the mission target is marked when it lies beyond `window`, as the native overmap marks it; none
+    /// without a target or with the target inside.
+    pub fn target_mark(&self, window: &OvermapWindow, cursor: &WorldPos) -> Option<TargetMark> {
+        let target = self.mission_target.as_ref()?;
+        let (dx, dy) = (target.x - self.origin.x, target.y - self.origin.y);
+        let (left, top) = (window.left as i32, window.top as i32);
+        let (right, bottom) = (left + window.cols as i32 - 1, top + window.rows as i32 - 1);
+        if (left..=right).contains(&dx) && (top..=bottom).contains(&dy) {
+            return None;
+        }
+        let arrow = match (
+            (target.x - cursor.x).signum(),
+            (target.y - cursor.y).signum(),
+        ) {
+            (0, -1) => "^",
+            (1, -1) | (-1, 1) => "/",
+            (1, 0) => ">",
+            (1, 1) | (-1, -1) => "\\",
+            (0, 1) => "v",
+            (-1, 0) => "<",
+            _ => " ",
+        };
+        Some(TargetMark {
+            col: dx.clamp(left, right) as usize,
+            row: dy.clamp(top, bottom) as usize,
+            arrow,
+        })
+    }
+
     /// The absolute overmap square drawn in cell `(col, row)`.
     pub fn square(&self, col: usize, row: usize) -> WorldPos {
         WorldPos {
