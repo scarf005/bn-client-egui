@@ -355,6 +355,12 @@ fn the_town_in_3d_from_every_side_and_what_a_frame_costs() {
         percentile(&mut whole.clone(), 0.95),
         percentile(&mut whole, 1.0),
     );
+    let stats = h.state().iso_stats();
+    println!(
+        "LIVE frame drawn: {} draws, {} instances",
+        stats.draws.load(std::sync::atomic::Ordering::Relaxed),
+        stats.instances.load(std::sync::atomic::Ordering::Relaxed)
+    );
     let load = std::fs::read_to_string("/proc/loadavg").unwrap_or_default();
     println!("LIVE load {}", load.trim());
 }
