@@ -411,6 +411,8 @@ impl<M: GameModel> App<M> {
             Some(_) => self.component_keys(ui.ctx()),
             None => self.game_keys(ui.ctx(), interrupted),
         }
+        // Whichever screen took the keys, the walk ends with its key.
+        self.release_hold_when_up(ui.ctx());
         let open = self.model.menu();
         if menu_forwards_keys(open.as_ref()) {
             // Arrow keys belong to the game, whichever widget was clicked last; Tab still moves focus,
@@ -624,7 +626,6 @@ impl<M: GameModel> App<M> {
         self.focus_action_row(ctx);
         // The palette and an open menu of the client (the map's right-click menu) have the keyboard; Escape closes them.
         if self.palette.is_some() || egui::Popup::is_any_open(ctx) {
-            self.release_hold_when_up(ctx);
             return;
         }
         let mut keys = typed.into_iter().chain(named).collect::<Vec<_>>();
@@ -655,7 +656,6 @@ impl<M: GameModel> App<M> {
                 self.keys_consumed |= self.model.press(&key) || self.model.key_bound(&key);
             }
         }
-        self.release_hold_when_up(ctx);
     }
 
     /// The walk ends when the key that started it is up, or the window lost the keyboard (a key-up would never come).
