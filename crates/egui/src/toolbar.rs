@@ -24,7 +24,6 @@ pub fn show(ui: &mut egui::Ui, model: &mut impl GameModel) {
     if shortcuts.is_empty() {
         return;
     }
-    let busy = model.busy();
     let mut run = None;
     egui::Panel::left("shortcut-bar")
         .resizable(false)
@@ -34,8 +33,9 @@ pub fn show(ui: &mut egui::Ui, model: &mut impl GameModel) {
         .show(ui, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
                 ui.spacing_mut().item_spacing = egui::vec2(0.0, 2.0);
+                // A command on its way does not grey the bar: the model refuses what the engine cannot take yet.
                 for shortcut in &shortcuts {
-                    if button(ui, shortcut, shortcut.enabled && !busy).clicked() {
+                    if button(ui, shortcut, shortcut.enabled).clicked() {
                         run = Some(shortcut.affordance_id.clone());
                     }
                 }
