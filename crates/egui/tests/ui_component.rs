@@ -422,7 +422,7 @@ fn the_action_palette_and_client_settings_open_on_the_title_screen() {
     assert!(submits(&script).is_empty(), "{:?}", submits(&script));
     h.get_by_label("Client settings").click();
     h.run_steps(3);
-    assert!(dialog(&h, "Client settings"));
+    assert!(h.query_by_label("Reduced motion").is_some());
 }
 
 #[test]

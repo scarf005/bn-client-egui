@@ -407,7 +407,11 @@ impl<M: GameModel> App<M> {
         let interrupted =
             ui.ctx().input(|i| i.key_pressed(egui::Key::Escape)) && self.model.interrupt();
         self.palette_keys(ui.ctx());
+        // The palette and an open menu of the client (the map's right-click menu) have the keyboard; Escape closes
+        // them.
+        let client = self.palette.is_some() || egui::Popup::is_any_open(ui.ctx());
         match component::sliced(self.model.screens()) {
+            _ if client => {}
             Some(_) => self.component_keys(ui.ctx()),
             None => self.game_keys(ui.ctx(), interrupted),
         }
@@ -438,8 +442,7 @@ impl<M: GameModel> App<M> {
         self.region = Some(ui.available_rect_before_wrap());
         if interaction::titled(self.model.screens()) {
             // The title screen is only its menu: no map, sidebar or log of a game that is not running.
-            self.menu_or_screen(ui.ctx());
-            return;
+            return self.windows(ui.ctx());
         }
         let room = ui.available_width();
         let layout = self.model.sidebar_layout();
@@ -485,9 +488,15 @@ impl<M: GameModel> App<M> {
                 profiling::scope!("map");
                 self.map(ui)
             });
-        self.palette(ui.ctx());
-        self.client_settings(ui.ctx());
-        self.menu_or_screen(ui.ctx());
+        self.windows(ui.ctx());
+    }
+
+    /// The windows over the game, and over the title screen: the action palette, the client settings and the
+    /// engine's menu or screen.
+    fn windows(&mut self, ctx: &egui::Context) {
+        self.palette(ctx);
+        self.client_settings(ctx);
+        self.menu_or_screen(ctx);
     }
 
     /// The client's own choices (view mode, tileset, motion), which are no part of the game.
@@ -624,10 +633,6 @@ impl<M: GameModel> App<M> {
         );
         self.keys_consumed = false;
         self.focus_action_row(ctx);
-        // The palette and an open menu of the client (the map's right-click menu) have the keyboard; Escape closes them.
-        if self.palette.is_some() || egui::Popup::is_any_open(ctx) {
-            return;
-        }
         let mut keys = typed.into_iter().chain(named).collect::<Vec<_>>();
         // A popup takes one key per frame; the rest of a burst would land on the game it covers.
         if menu.as_ref().is_some_and(|m| m.acknowledges()) {
