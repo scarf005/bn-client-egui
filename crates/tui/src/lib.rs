@@ -6,7 +6,7 @@ mod settings;
 use bn_client_core::markup::plain;
 use bn_client_core::protocol::SidebarSide;
 use bn_client_core::sidebar::{self as native, Body};
-use bn_client_core::{ActionEntry, Failure, GameModel, Loading, Menu, Pos, Rgb, keys};
+use bn_client_core::{ActionEntry, Failure, GameModel, Loading, Menu, MenuChoice, Pos, Rgb, keys};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Position, Rect};
@@ -77,6 +77,23 @@ impl Footer {
     fn scroll_by(&mut self, lines: isize) {
         let last = self.total.saturating_sub(self.shown);
         self.scroll = self.scroll.saturating_add_signed(lines).min(last);
+    }
+
+    /// Shows `text`, from its top when it is not the text already shown.
+    fn show(&mut self, text: &str) {
+        if self.text != text {
+            *self = Self {
+                text: text.to_string(),
+                ..Self::default()
+            };
+        }
+    }
+
+    /// Takes the room and scroll `draw_popup` gave the text.
+    fn fit(&mut self, layout: &PopupLayout) {
+        self.total = layout.footer_total;
+        self.shown = usize::from(layout.footer.height);
+        self.scroll = layout.footer_scroll;
     }
 }
 
@@ -857,7 +874,6 @@ impl<M: GameModel> TuiApp<M> {
 
     fn draw_menu(&mut self, f: &mut Frame, menu: &Menu) {
         let entries = menu.entries();
-        let actions = self.model.actions();
         // The focused action row, when the keyboard is on one, is the highlighted row.
         let selected = self
             .action_focus
@@ -870,8 +886,47 @@ impl<M: GameModel> TuiApp<M> {
                     .map(|(row, _)| row)
             })
             .unwrap_or(self.selected);
+        let rows = self.menu_rows(menu, &entries, selected);
+        let sections = Sections::of(menu, &entries, rows);
+        // What the engine says about the row its cursor is on.
+        let described = entries
+            .get(selected)
+            .map(|c| plain(&c.description))
+            .unwrap_or_default();
+        self.footer.show(&described);
+        let popup = Popup {
+            title: &menu.title,
+            header: plain(&menu.message)
+                .lines()
+                .map(str::to_string)
+                .chain(self.settings_hint(menu))
+                .collect(),
+            tabs: menu
+                .tabs()
+                .iter()
+                .map(|t| (plain(&t.label), t.selected))
+                .collect(),
+            selected: sections.at.get(selected).copied().unwrap_or(selected),
+            rows: sections.rows,
+            footer: described.lines().map(str::to_string).collect(),
+            footer_scroll: self.footer.scroll,
+        };
+        let layout = Self::draw_popup(f, &popup);
+        self.footer.fit(&layout);
+        self.menu_hits = MenuHits {
+            list: layout.list,
+            rows: sections.ids.into_iter().skip(layout.offset).collect(),
+            bar: layout.bar,
+            footer: layout.footer,
+            tabs: tab_hits(menu, &popup.tabs),
+        };
+    }
+
+    /// Each entry's key column, text and style; the cursor row `selected` is plain text.
+    fn menu_rows(&self, menu: &Menu, entries: &[&MenuChoice], selected: usize) -> Vec<PopupRow> {
+        let actions = self.model.actions();
         let any_hotkey = entries.iter().any(|c| !c.hotkey.is_empty());
-        let rows = entries
+        entries
             .iter()
             .enumerate()
             .map(|(i, c)| {
@@ -928,79 +983,7 @@ impl<M: GameModel> TuiApp<M> {
                 };
                 (key, spans, style)
             })
-            .collect::<Vec<_>>();
-        // A list of named panes starts each under its heading; `ids` keeps a click on a row mapped to it.
-        let (mut sections, mut ids, mut cursor) = (vec![], vec![], selected);
-        for (i, (row, entry)) in rows.into_iter().zip(&entries).enumerate() {
-            if let Some(heading) = menu.heading(i.checked_sub(1).map(|p| entries[p]), entry) {
-                let bold = Style::new().add_modifier(Modifier::BOLD);
-                sections.push((
-                    String::new(),
-                    vec![Span::styled(heading.to_string(), bold)],
-                    bold,
-                ));
-                ids.push(String::new());
-            }
-            if i == selected {
-                cursor = sections.len();
-            }
-            sections.push(row);
-            ids.push(entry.id.clone());
-        }
-        let tabs = menu
-            .tabs()
-            .iter()
-            .map(|t| (plain(&t.label), t.selected))
-            .collect::<Vec<_>>();
-        // What the engine says about the row its cursor is on.
-        let described = entries
-            .get(selected)
-            .map(|c| plain(&c.description))
-            .unwrap_or_default();
-        if self.footer.text != described {
-            self.footer = Footer {
-                text: described.clone(),
-                ..Footer::default()
-            };
-        }
-        let popup = Popup {
-            title: &menu.title,
-            header: plain(&menu.message)
-                .lines()
-                .map(str::to_string)
-                .chain(self.settings_hint(menu))
-                .collect(),
-            tabs,
-            rows: sections,
-            selected: cursor,
-            footer: described.lines().map(str::to_string).collect(),
-            footer_scroll: self.footer.scroll,
-        };
-        let layout = Self::draw_popup(f, &popup);
-        self.footer.total = layout.footer_total;
-        self.footer.shown = usize::from(layout.footer.height);
-        self.footer.scroll = layout.footer_scroll;
-        let tab_ids = menu
-            .tabs()
-            .into_iter()
-            .map(|t| t.id.clone())
-            .collect::<Vec<_>>();
-        let widths = popup.tabs.iter().map(|(label, _)| label.width() as u16 + 3);
-        let mut from = 0;
-        self.menu_hits = MenuHits {
-            list: layout.list,
-            rows: ids.into_iter().skip(layout.offset).collect(),
-            bar: layout.bar,
-            footer: layout.footer,
-            tabs: tab_ids
-                .into_iter()
-                .zip(widths)
-                .map(|(id, w)| {
-                    from += w;
-                    (id, from - w, from - 1)
-                })
-                .collect(),
-        };
+            .collect()
     }
 
     fn draw_action_list(&mut self, f: &mut Frame, row: usize) {
@@ -1147,6 +1130,56 @@ impl<M: GameModel> TuiApp<M> {
     }
 }
 
+/// A popup row: its native key (empty or padded), label and style.
+type PopupRow = (String, Vec<Span<'static>>, Style);
+
+/// A menu's rows with a heading over each named pane it lists in one list: `ids` keeps a click on a drawn
+/// row mapped to its entry, and `at` is the drawn row of each entry.
+struct Sections {
+    rows: Vec<PopupRow>,
+    ids: Vec<String>,
+    at: Vec<usize>,
+}
+
+impl Sections {
+    fn of(menu: &Menu, entries: &[&MenuChoice], rows: Vec<PopupRow>) -> Self {
+        let mut s = Self {
+            rows: vec![],
+            ids: vec![],
+            at: vec![],
+        };
+        for (i, (row, entry)) in rows.into_iter().zip(entries).enumerate() {
+            if let Some(heading) = menu.heading(i.checked_sub(1).map(|p| entries[p]), entry) {
+                let bold = Style::new().add_modifier(Modifier::BOLD);
+                s.rows.push((
+                    String::new(),
+                    vec![Span::styled(heading.to_string(), bold)],
+                    bold,
+                ));
+                s.ids.push(String::new());
+            }
+            s.at.push(s.rows.len());
+            s.rows.push(row);
+            s.ids.push(entry.id.clone());
+        }
+        s
+    }
+}
+
+/// Where each tab of a menu's bar is drawn: its id and the columns it spans from the bar's left edge.
+fn tab_hits(menu: &Menu, labels: &[(String, bool)]) -> Vec<(String, u16, u16)> {
+    let widths = labels.iter().map(|(label, _)| label.width() as u16 + 3);
+    let mut from = 0;
+    menu.tabs()
+        .into_iter()
+        .zip(widths)
+        .map(|(t, w)| {
+            from += w;
+            (t.id.clone(), from - w, from - 1)
+        })
+        .collect()
+}
+
 /// Where `draw_popup` put the rows and the tab bar.
 struct PopupLayout {
     list: Rect,
@@ -1205,7 +1238,7 @@ struct Popup<'a> {
     /// Tab labels and whether each is the current one.
     tabs: Vec<(String, bool)>,
     /// Each row's native key (empty or padded), label and style.
-    rows: Vec<(String, Vec<Span<'static>>, Style)>,
+    rows: Vec<PopupRow>,
     selected: usize,
     /// Detail text under the rows, such as the highlighted row's description.
     footer: Vec<String>,
