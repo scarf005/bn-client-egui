@@ -241,6 +241,27 @@ fn the_menu_acts_on_the_square_the_press_landed_on_not_where_the_pointer_was_las
 }
 
 #[test]
+fn the_menu_acts_on_the_square_it_opened_on_after_the_view_scrolled() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    let at = square(&mut h, (22.5, 12.5));
+    click(&mut h, at, egui::PointerButton::Secondary);
+    h.run_steps(3);
+    h.get_by_label("Open [o]");
+    let origin = h.state().model.origin();
+    // The avatar walks while the menu is open: the view follows it.
+    script.push(fixture("events_41_walk"));
+    h.run_steps(4);
+    assert_ne!(h.state().model.origin(), origin, "the view scrolled");
+    h.get_by_label("Open [o]").click();
+    h.run_steps(3);
+    assert_eq!(
+        operations(&script),
+        [json!({"kind":"tile_action","action_id":"open","pos":{"dim":"","x":5,"y":4,"z":0}})]
+    );
+}
+
+#[test]
 fn the_wheel_in_a_menu_the_engine_can_scroll_scrolls_the_clients_list_and_sends_no_scroll_action() {
     let (mut h, script) = harness();
     let actions =
