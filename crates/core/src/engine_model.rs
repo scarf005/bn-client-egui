@@ -925,7 +925,17 @@ impl EngineModel {
             }
             Operation::Travel { .. } => (Some("Travel".into()), None),
             Operation::Context { .. } => (Some("Right click".into()), None),
-            Operation::TileAction { action_id, .. } => (None, Some(action_id.clone())),
+            Operation::TileAction { action_id, pos } => {
+                let found = self
+                    .hovered
+                    .as_ref()
+                    .filter(|h| &h.pos == pos)
+                    .and_then(|h| h.actions.iter().find(|a| &a.id == action_id));
+                (
+                    found.map(|a| markup::plain(&a.label.shown())),
+                    Some(action_id.clone()),
+                )
+            }
             Operation::Cancel => (Some("Cancel".into()), None),
             _ => (None, None),
         };
