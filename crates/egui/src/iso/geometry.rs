@@ -50,7 +50,7 @@ pub struct Metrics {
     pub level: f32,
 }
 
-/// Without a tileset's own height, a z-level is this many squares tall.
+/// Without a tileset's own height above zero, a z-level is this many squares tall.
 const LEVEL: f32 = 3.0;
 /// Sprites of one square are drawn this far apart toward the eye, so the later one wins at equal depth.
 const LAYER_BIAS: f32 = 0.002;
@@ -74,7 +74,8 @@ impl Metrics {
             diamond,
             across,
             up,
-            level: zlevel_height.map_or(LEVEL, |h| h * up),
+            // UltimateCataclysm gives 0: no height.
+            level: zlevel_height.filter(|h| *h > 0.0).map_or(LEVEL, |h| h * up),
         }
     }
 }
