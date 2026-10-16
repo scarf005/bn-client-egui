@@ -405,7 +405,7 @@ fn while_looking_the_mouse_moves_the_engines_cursor_and_a_second_click_confirms_
         &mut h,
         &script,
         json!([]),
-        json!([{"id":"CONFIRM","name":"Confirm"}]),
+        json!([{"id":"CONFIRM","name":"Confirm","keys":["RETURN"]}]),
         Some(target),
     );
     // Hovering another square sends the engine's own set_target, as MOUSE_MOVE does natively. The avatar
@@ -417,7 +417,7 @@ fn while_looking_the_mouse_moves_the_engines_cursor_and_a_second_click_confirms_
         operations(&script),
         [json!({"kind":"set_target","pos":{"dim":"","x":6,"y":4,"z":0}})]
     );
-    // On the cursor's own square a click confirms (SELECT) instead of travelling.
+    // On the cursor's own square a click is the screen's Enter instead of travelling.
     script.push(
         json!({"jsonrpc":"2.0","method":"bn.command","params":{"epoch":"e7f3",
         "command_id":"c:5","stage":"completed"}}),
