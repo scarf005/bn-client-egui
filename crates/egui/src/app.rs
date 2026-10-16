@@ -46,6 +46,7 @@ impl<M: GameModel> App<M> {
             saved: self.display.window(kind),
             origin: Origin::top_center(ctx),
             place: None,
+            movable: false,
             width: None,
             height: None,
             max_width: None,

@@ -38,8 +38,8 @@ impl Origin {
     }
 }
 
-/// Where a window sits by the screen's layout rather than where the player left it: such a window cannot be
-/// moved, is not remembered and never leaves the screen.
+/// Where a window sits by the screen's layout rather than where the player left it. Unless the spec lets the
+/// player move it, such a window cannot be moved, is not remembered and never leaves the screen.
 #[derive(Clone, Copy, Debug)]
 pub enum Place {
     /// The whole of `rect`.
@@ -62,6 +62,9 @@ pub struct WindowSpec {
     pub saved: Option<WindowState>,
     pub origin: Origin,
     pub place: Option<Place>,
+    /// A placed window is only first placed by its layout: the player moves and resizes it, and where they
+    /// leave it is kept as for any other window.
+    pub movable: bool,
     pub width: Option<f32>,
     pub height: Option<f32>,
     pub max_width: Option<f32>,
@@ -125,6 +128,31 @@ fn widened(window: egui::Window<'_>, width: Option<f32>) -> egui::Window<'_> {
     }
 }
 
+/// `window` where `place` first puts it, moved and resized by the player after that.
+fn first_placed(window: egui::Window<'_>, place: Place, width: Option<f32>) -> egui::Window<'_> {
+    let (pivot, pos, max) = match place {
+        Place::Fill(rect) => {
+            return window
+                .pivot(egui::Align2::LEFT_TOP)
+                .default_pos(rect.min)
+                .default_size(rect.size())
+                .max_size(rect.size());
+        }
+        Place::Center(rect) => (egui::Align2::CENTER_CENTER, rect.center(), rect.size()),
+        Place::Side { pivot, pos, max } => (pivot, pos, max),
+    };
+    // egui holds the pivot only while it first sizes the window, so with its width known the window starts
+    // from its left edge, as a window the player never moved does.
+    match width {
+        Some(width) => window
+            .default_width(width)
+            .pivot(egui::Align2([egui::Align::LEFT, pivot.y()]))
+            .default_pos(egui::pos2(pos.x - pivot.x().to_factor() * width, pos.y)),
+        None => window.pivot(pivot).default_pos(pos),
+    }
+    .max_size(max)
+}
+
 /// Shows the window `spec` describes around `add`.
 pub fn show<R>(
     ctx: &egui::Context,
@@ -144,7 +172,12 @@ pub fn show<R>(
             .unwrap_or(Placed { kept: spec.saved })
     });
     ctx.data_mut(|d| d.insert_temp(key, placed));
-    window = match (spec.place, placed.kept) {
+    window = match (
+        spec.place
+            .filter(|_| !spec.movable || placed.kept.is_none()),
+        placed.kept,
+    ) {
+        (Some(place), _) if spec.movable => first_placed(window, place, spec.width),
         (Some(Place::Fill(rect)), _) => window
             .collapsible(false)
             .fixed_pos(rect.min)
@@ -205,7 +238,7 @@ pub fn show<R>(
     // A collapsed window is only its title bar, so it keeps the size it had expanded.
     let state = shown
         .as_ref()
-        .filter(|_| spec.place.is_none())
+        .filter(|_| spec.place.is_none() || spec.movable)
         .and_then(|s| {
             let pos = s.response.rect.min;
             let size = match collapsed {

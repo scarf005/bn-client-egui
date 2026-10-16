@@ -244,17 +244,25 @@ fn placement(
             None => side(true),
         },
         (Some(ScreenDock::Cursor), _) => away(),
-        // A screen that puts a cursor on the map (look, aim) must not hide what the cursor is on.
-        _ if screen
-            .root
-            .as_ref()
-            .is_some_and(|r| r.cursor_map().is_some()) =>
-        {
-            away()
-        }
+        _ if keeps_off_cursor(screen) => away(),
         (None, ScreenRole::Dialog) => Place::Center(inner),
         (None, _) => Place::Fill(inner),
     }
+}
+
+/// The kind of window a screen is kept as: one per title, as the window itself is.
+fn screen_kind(title: &str) -> String {
+    format!("screen:{title}")
+}
+
+/// A screen that puts a cursor on the map (look, aim), or asks to sit away from it, must not hide what the
+/// cursor is on: it moves as the cursor does rather than where the player drags it.
+fn keeps_off_cursor(screen: &Screen) -> bool {
+    screen.dock == Some(ScreenDock::Cursor)
+        || screen
+            .root
+            .as_ref()
+            .is_some_and(|r| r.cursor_map().is_some())
 }
 
 /// The ids of the affordances some component names.
@@ -354,9 +362,15 @@ impl<M: GameModel> App<M> {
             return self.menu(ctx);
         };
         let mut out = vec![];
+        let cancel = interaction::with_role(top, AffordanceRole::Cancel).map(|a| a.id.clone());
+        let kind = screen_kind(&markup::plain(
+            &top.title.as_ref().map(Text::shown).unwrap_or_default(),
+        ));
         let shown = self.screen_window(ctx, top, &mut out);
-        if self.keep_window(ctx, "screen", &shown) {
-            out.push(Intent::Cancel);
+        if self.keep_window(ctx, &kind, &shown)
+            && let Some(cancel) = cancel
+        {
+            out.push(Intent::Run(cancel));
         }
         self.screens.reveal = None;
         let season = self.model.season();
@@ -523,7 +537,7 @@ impl<M: GameModel> App<M> {
                 Some(content + frame.total_margin().sum().x + ui.spacing().window_margin.sum().x)
             }
         };
-        let base = self.window_spec(ctx, "screen", &title);
+        let base = self.window_spec(ctx, &screen_kind(&title), &title);
         // The help sits in the title bar, or last in the footer of a window that has none.
         let titled = interaction::with_role(screen, AffordanceRole::Help)
             .filter(|a| a.enabled && base.title_bar);
@@ -532,6 +546,7 @@ impl<M: GameModel> App<M> {
             closable: interaction::with_role(screen, AffordanceRole::Cancel).is_some(),
             frame: Some(frame),
             place: Some(place),
+            movable: !keeps_off_cursor(screen),
             width,
             help: titled.map(|a| windows::TitleHelp {
                 label: markup::plain(&a.label.shown()),

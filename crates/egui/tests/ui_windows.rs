@@ -283,7 +283,8 @@ fn a_screen_window_is_moved_by_its_title_bar_and_found_there_after_a_restart() {
     let file = settings("windows-screen-move");
     let (mut h, _) = inventory_window(&file);
     let (before, title) = inventory_frame(&h);
-    let by = egui::vec2(60.0, 70.0);
+    // The window is as tall as the room, so it moves along it; it never leaves the screen.
+    let by = egui::vec2(60.0, -10.0);
     drag(&mut h, title, title + by);
     let (moved, _) = inventory_frame(&h);
     assert!(
