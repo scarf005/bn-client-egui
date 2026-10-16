@@ -1,6 +1,6 @@
 //! Against a real engine: a long click-travel keeps the avatar on one screen square (the view follows it every
 //! frame), a step reaches the screen without a fixed wait, with or without a shift of the map under it, and so
-//! does the first step of a double-clicked walk.
+//! does the first step of a double-clicked walk; a key tapped as a person taps it takes one step and a held one walks on.
 //!
 //! `BN_ENGINE=<engine> cargo test --release -p bn-client-egui --test live_travel -- --ignored --nocapture`
 use bn_client_egui::app::CELL;
@@ -465,4 +465,84 @@ fn shifting_step_reaches_the_screen_without_a_fixed_wait() {
         KEYS[heading]
     });
     report("shifting", &rows);
+}
+
+/// The key `key` (typed as `text`) pressed down, or let up.
+fn key_event(h: &mut H, key: egui::Key, pressed: bool) {
+    h.input_mut().events.push(egui::Event::Key {
+        key,
+        physical_key: Some(key),
+        pressed,
+        repeat: false,
+        modifiers: egui::Modifiers::NONE,
+    });
+}
+
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn a_tapped_step_key_moves_one_square_and_a_held_one_walks_on() {
+    let mut h = start();
+    let mut moved = vec![];
+    for (text, key) in [
+        ("l", egui::Key::L),
+        ("h", egui::Key::H),
+        ("j", egui::Key::J),
+        ("k", egui::Key::K),
+    ] {
+        let before = square(&h);
+        // A person's tap holds the key about 100 ms, short of the OS repeat delay.
+        key_event(&mut h, key, true);
+        h.input_mut().events.push(egui::Event::Text(text.into()));
+        let up = Instant::now() + Duration::from_millis(100);
+        while Instant::now() < up {
+            h.step();
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        key_event(&mut h, key, false);
+        settle(&mut h, 1);
+        let after = square(&h);
+        let squares = (after.0 - before.0).abs().max((after.1 - before.1).abs());
+        println!("LIVE tap {text}: {before:?} -> {after:?}");
+        moved.push(squares);
+    }
+    assert!(moved.iter().any(|n| *n > 0), "no way was open: {moved:?}");
+    assert!(
+        moved.iter().all(|n| *n <= 1),
+        "a tap took more than one step: {moved:?}"
+    );
+    // Held past the OS repeat delay, the key walks on until it is up.
+    let open = [
+        ("l", egui::Key::L),
+        ("h", egui::Key::H),
+        ("j", egui::Key::J),
+        ("k", egui::Key::K),
+    ][moved.iter().position(|n| *n > 0).unwrap()];
+    let before = square(&h);
+    key_event(&mut h, open.1, true);
+    h.input_mut().events.push(egui::Event::Text(open.0.into()));
+    let up = Instant::now() + Duration::from_millis(1000);
+    let mut next = Instant::now() + Duration::from_millis(500);
+    while Instant::now() < up {
+        if Instant::now() >= next {
+            h.input_mut().events.push(egui::Event::Key {
+                key: open.1,
+                physical_key: Some(open.1),
+                pressed: true,
+                repeat: true,
+                modifiers: egui::Modifiers::NONE,
+            });
+            h.input_mut().events.push(egui::Event::Text(open.0.into()));
+            next += Duration::from_millis(33);
+        }
+        h.step();
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    key_event(&mut h, open.1, false);
+    settle(&mut h, 1);
+    let after = square(&h);
+    println!("LIVE held {}: {before:?} -> {after:?}", open.0);
+    assert!(
+        (after.0 - before.0).abs().max((after.1 - before.1).abs()) > 1,
+        "a held key walks on"
+    );
 }
