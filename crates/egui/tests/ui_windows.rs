@@ -299,3 +299,21 @@ fn a_screen_window_is_moved_by_its_title_bar_and_found_there_after_a_restart() {
         "{again:?} vs {moved:?}"
     );
 }
+
+#[test]
+fn a_screen_window_kept_from_a_last_run_keeps_its_size_while_the_pointer_moves_over_it() {
+    let file = settings("windows-screen-hover");
+    drop(inventory_window(&file));
+    let (mut h, _) = inventory_window(&file);
+    let (before, _) = inventory_frame(&h);
+    for i in 0..40 {
+        let x = before.left() + before.width() * (i % 10) as f32 / 10.0;
+        h.hover_at(egui::pos2(x, before.center().y));
+        h.run_steps(1);
+    }
+    let (after, _) = inventory_frame(&h);
+    assert!(
+        (after.size() - before.size()).length() < 1.0,
+        "{before:?} -> {after:?}"
+    );
+}

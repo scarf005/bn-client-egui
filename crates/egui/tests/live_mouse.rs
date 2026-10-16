@@ -275,6 +275,18 @@ fn the_toolbar_the_square_menu_and_the_inventory_by_mouse() {
         "{before:?} -> {moved:?}"
     );
     save(&mut h, "04-inventory-moved.png");
+    // The pointer swept left and right over the window leaves its size as it was.
+    for i in 0..40 {
+        let x = moved.left() + moved.width() * (i % 10) as f32 / 10.0;
+        h.hover_at(egui::pos2(x, moved.center().y));
+        h.run_steps(1);
+    }
+    let swept = window_rect(&h, &title);
+    println!("LIVE inventory window swept {moved:?} -> {swept:?}");
+    assert!(
+        (swept.size() - moved.size()).length() < 1.0,
+        "{moved:?} -> {swept:?}"
+    );
     let close = h.get_by_label("Close window").rect().center();
     press(&mut h, close, close, true);
     press(&mut h, close, close, false);
