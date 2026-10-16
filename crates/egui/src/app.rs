@@ -99,6 +99,8 @@ pub struct App<M: GameModel> {
     pending_since: Option<std::time::Duration>,
     clock: bn_client_core::Clock,
     last_hover: Option<egui::Pos2>,
+    /// Wheel travel over the map short of a whole zoom step, in lines.
+    wheel: f32,
     wired: bool,
     images: bool,
     /// Game root, for files the engine names relative to it (loading images).
@@ -175,6 +177,7 @@ impl<M: GameModel> App<M> {
             pending_since: None,
             clock: bn_client_core::Clock::default(),
             last_hover: None,
+            wheel: 0.0,
             wired: false,
             images: false,
             root: None,
@@ -929,22 +932,29 @@ impl<M: GameModel> App<M> {
             ui.ctx().request_repaint();
         }
         response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Other, true, "Map"));
-        // One zoom step per wheel event over the map, not per smoothed frame.
+        // One zoom step per wheel line over the map, not per smoothed frame; a touchpad's points add up to lines.
         if response.hovered() {
-            let steps = ui.input(|i| {
+            let line = ui.ctx().options(|o| o.input_options.line_scroll_speed);
+            self.wheel += ui.input(|i| {
                 i.raw
                     .events
                     .iter()
                     .map(|e| match e {
-                        egui::Event::MouseWheel { delta, .. } => {
-                            delta.y.signum() as i8 * (delta.y != 0.0) as i8
-                        }
-                        _ => 0,
+                        egui::Event::MouseWheel {
+                            unit: egui::MouseWheelUnit::Point,
+                            delta,
+                            ..
+                        } => delta.y / line,
+                        // A page is one step too: the zoom has no page.
+                        egui::Event::MouseWheel { delta, .. } => delta.y,
+                        _ => 0.0,
                     })
-                    .sum::<i8>()
+                    .sum::<f32>()
             });
-            if steps != 0 {
-                self.display.zoom_by(steps);
+            let steps = self.wheel.trunc();
+            self.wheel -= steps;
+            if steps != 0.0 {
+                self.display.zoom_by(steps as i8);
                 ui.ctx().request_repaint();
             }
         }
