@@ -1958,6 +1958,7 @@ impl GameModel for EngineModel {
         let params =
             json!({"epoch": at.epoch, "screen_id": screen.screen_id, "affordance_id": step});
         self.holding = Some(step);
+        self.mark("hold");
         self.call("bn.hold", params, Pending::Hold);
         true
     }
