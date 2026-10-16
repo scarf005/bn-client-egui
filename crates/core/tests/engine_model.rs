@@ -1537,7 +1537,11 @@ fn a_refused_choices_page_stops_waiting() {
     m.more_choices();
     m.poll();
     m.more_choices();
-    assert_eq!(asks(&h), 1, "a refused page is not asked again for that boundary");
+    assert_eq!(
+        asks(&h),
+        1,
+        "a refused page is not asked again for that boundary"
+    );
     assert!(m.messages().is_empty(), "a refused read is no failure line");
     h.push(long(42));
     m.poll();

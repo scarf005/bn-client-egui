@@ -191,7 +191,7 @@ fn the_footer_describes_the_cursor_row_under_headings() {
         vec![
             row("zone:0", "zones", "stockpile", "Holds the loot.", ""),
             row("zone:1", "zones", "farm", "Grows the crops.", ""),
-            row("action:ADD_ZONE", "actions", "Add zone", "Adds a zone.", "a"),
+            row("action:ADD_ZONE", "actions", "Add zone", "Adds one.", "a"),
         ],
     );
     manager["compat"]["focus"]["choice_id"] = json!("zone:1");
@@ -200,7 +200,7 @@ fn the_footer_describes_the_cursor_row_under_headings() {
     show(&mut app, &h, with_panes(manager, panes), json!([]));
     let shown = text(&mut app);
     assert!(shown.contains("Grows the crops."), "{shown}");
-    assert!(!shown.contains("Adds a zone."), "{shown}");
+    assert!(!shown.contains("Adds one."), "{shown}");
 }
 
 /// The ids of the actions invoked so far.
