@@ -24,6 +24,10 @@ saves, options and keybindings are used (Load tab, Save and Quit work as in Tile
 `--configdir PATH` override them; `--fresh-profile` (or `BN_FRESH_PROFILE=1`) uses a private throwaway profile.
 Live tests always use one.
 
+Sound: the egui client plays the sound effects, ambience and music the engine asks for from the sound pack its
+`Choose soundpack` option picks (off with `Sound Enabled`; volumes from the engine's volume options).
+`BN_SOUND_LOG=PATH` writes every file started and track stopped, with milliseconds since the audio device opened.
+
 Terminal client over the same model (`Ctrl-C` quits; the terminal size is declared to the engine as the map viewport).
 
 Keys: the client binds none. The engine sends, with every action, the keys of the active input context

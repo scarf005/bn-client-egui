@@ -157,6 +157,8 @@ pub struct App<M: GameModel> {
     menu_cursor: Option<String>,
     /// The text prompt that already took the keyboard focus when it opened.
     prompt_focused: Option<String>,
+    /// The engine's sound cues on the audio device.
+    audio: crate::audio::Audio,
     /// The loading step the list was last scrolled to; scrolling again every frame would repaint forever.
     scrolled_to: Option<usize>,
 }
@@ -204,6 +206,7 @@ impl<M: GameModel> App<M> {
             map_view: None,
             menu_cursor: None,
             prompt_focused: None,
+            audio: Default::default(),
             scrolled_to: None,
         }
     }
@@ -355,6 +358,12 @@ impl<M: GameModel> App<M> {
             self.wired = true;
         }
         self.model.poll();
+        if let Some(soon) = self
+            .audio
+            .update(self.model.soundpack(), self.model.take_cues())
+        {
+            ui.ctx().request_repaint_after(soon);
+        }
         self.display.follow_engine(self.model.display_default());
         self.display.follow_mods(self.model.mod_tilesets());
         self.model.set_tiles(self.display.tiles());
