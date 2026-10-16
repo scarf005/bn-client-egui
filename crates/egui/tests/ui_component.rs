@@ -2,7 +2,7 @@
 //! (`crates/core/tests/fixtures/0.2.examples/`): one test per component kind, then the affordances and keys.
 mod common;
 use bn_client_egui::transport::{ScriptHandle, ScriptedTransport};
-use bn_client_egui::{App, Clock, ConnectOptions, EngineModel};
+use bn_client_egui::{App, Clock, ConnectOptions, EngineModel, GameModel};
 use common::fixture;
 use eframe::egui;
 use egui_kittest::Harness;
@@ -423,6 +423,25 @@ fn the_action_palette_and_client_settings_open_on_the_title_screen() {
     h.get_by_label("Client settings").click();
     h.run_steps(3);
     assert!(dialog(&h, "Client settings"));
+}
+
+#[test]
+fn escape_that_interrupts_a_running_command_does_not_also_cancel_the_screen() {
+    let close = json!({"id": "close", "label": "Close", "keys": ["ESC"], "enabled": true,
+        "expect": "screen", "role": "cancel"});
+    let (mut h, script) = harness(pick_list(vec![close]));
+    h.key_press(egui::Key::Enter);
+    h.run_steps(3);
+    assert_eq!(submits(&script).len(), 1, "the pick runs");
+    assert!(h.state().model.busy());
+    h.key_press(egui::Key::Escape);
+    h.run_steps(3);
+    let interrupts = script.sent_methods();
+    assert_eq!(
+        interrupts.iter().filter(|m| *m == "bn.interrupt").count(),
+        1
+    );
+    assert_eq!(submits(&script).len(), 1, "{:?}", submits(&script));
 }
 
 #[test]
