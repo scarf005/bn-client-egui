@@ -92,6 +92,7 @@ fn menu_item(ui: &mut egui::Ui, text: &str) -> bool {
 pub struct App<M: GameModel> {
     pub model: M,
     cursor: Pos,
+    /// Absolute square the map's right-click menu was opened on; its actions are about it while the view scrolls.
     menu_cell: Pos,
     /// Absolute square of the last map click, marked until its command finishes.
     marker: Option<Pos>,
@@ -863,6 +864,12 @@ impl<M: GameModel> App<M> {
             x: view.x + origin.x,
             y: view.y + origin.y,
         };
+        // The view square of an absolute one, which may lie outside the view.
+        let to_view = |abs: Pos| Pos {
+            x: abs.x - origin.x,
+            y: abs.y - origin.y,
+        };
+        let menu_at = to_view(self.menu_cell);
         let looking = self.model.focus();
         if let Some(focus) = looking {
             self.cursor = to_abs(focus);
@@ -1023,7 +1030,7 @@ impl<M: GameModel> App<M> {
             ui.ctx().request_repaint();
         }
         if response.secondary_clicked() {
-            self.menu_cell = clicked;
+            self.menu_cell = to_abs(clicked);
         }
         // With nothing focused, an arrow key would move egui's focus onto a toolbar widget and a later
         // Space would press it, so the map holds the focus.
@@ -1053,7 +1060,7 @@ impl<M: GameModel> App<M> {
             }
             // Shift+F10, the keyboard's context-menu key, is the right click on the cursor square.
             if ui.input(|i| i.modifiers.shift && i.key_pressed(egui::Key::F10)) {
-                self.menu_cell = cursor;
+                self.menu_cell = to_abs(cursor);
                 menu_key = true;
             }
         }
@@ -1090,7 +1097,7 @@ impl<M: GameModel> App<M> {
                 Some(_) => response.rect.center(),
                 None => {
                     response.rect.min
-                        + egui::vec2(self.menu_cell.x as f32, self.menu_cell.y as f32) * cell_px
+                        + egui::vec2(menu_at.x as f32, menu_at.y as f32) * cell_px
                 }
             },
             egui::Vec2::splat(cell_px),
@@ -1099,7 +1106,7 @@ impl<M: GameModel> App<M> {
             popup = popup.open_memory(egui::SetOpenCommand::Bool(true));
         }
         let menu = popup.show(|ui| {
-            let at = self.menu_cell;
+            let at = to_view(self.menu_cell);
             let Some(actions) = self.model.tile_actions(at) else {
                 // The engine has not answered for this square yet.
                 ui.add_enabled(false, egui::Label::new("…"));
