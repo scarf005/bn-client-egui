@@ -290,7 +290,8 @@ pub struct MenuPane {
 }
 
 /// The weight and volume line of a pane header: `weight`/`volume` against an optional maximum.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Deserialize)]
+#[serde(default)]
 pub struct PaneTotals {
     pub weight: String,
     /// Empty where the native header shows no weight capacity.

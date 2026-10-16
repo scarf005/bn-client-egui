@@ -1,6 +1,7 @@
 //! `GameModel` backed by a live engine connection.
 
 mod commands;
+mod menu;
 mod responses;
 mod session;
 
@@ -13,7 +14,7 @@ use crate::localise::{self, Catalogue};
 use crate::markup::{self, Run};
 use crate::model::{
     ActionEntry, Cell, CommandStatus, Effect, Failure, FailureKind, GameModel, Heard, Layer,
-    Loading, LogLine, Menu, MenuChoice, MenuField, MenuPane, Mutation, PaneTotals, Pos, Rgb, Shape,
+    Loading, LogLine, Menu, Mutation, Pos, Rgb, Shape,
 };
 use crate::protocol::{
     self, Cell as WorldCell, Entity, InvokeArgs, Known, Look, ModTileset, Operation, Row, Screen,
@@ -782,147 +783,6 @@ impl EngineModel {
         let attitude = e.attitude.as_ref()?;
         let aware = if e.aware { "_sees_player" } else { "" };
         Some(self.marker(&format!("overlay_{attitude}{aware}")))
-    }
-}
-
-impl EngineModel {
-    /// The generic menu an interaction shows.
-    fn menu_of(&self, i: &protocol::Interaction) -> Menu {
-        let text = |k: &str| {
-            let v = i.field.as_ref()?.get(k)?.as_str();
-            v.map(String::from)
-        };
-        let field = text("id").map(|id| MenuField {
-            id,
-            label: text("label").unwrap_or_default(),
-            value: text("value").unwrap_or_default(),
-            kind: text("type").unwrap_or_default(),
-        });
-        let pane_labels = i
-            .compat
-            .as_ref()
-            .and_then(|c| c["panes"].as_array())
-            .map_or(&[][..], Vec::as_slice);
-        let pane_of = |label: &str| {
-            pane_labels
-                .iter()
-                .find(|p| p["label"] == label)
-                .and_then(|p| p["id"].as_str())
-        };
-        // Without the engine's pane list, the rows that belong to no pane are the tabs of a paned menu.
-        let more = self.more_of(i);
-        let all = || i.choices.iter().chain(more);
-        let paned = all().any(|c| c.pane_id.is_some());
-        let tab = |c: &protocol::Choice| {
-            c.pane_id.is_none()
-                && (pane_of(&c.label).is_some() || (pane_labels.is_empty() && paned))
-        };
-        // The cursor travels as `compat.focus`; a popup row's description is its action id, for tools.
-        let focus = i
-            .compat
-            .as_ref()
-            .and_then(|c| c["focus"]["choice_id"].as_str());
-        let actions = self.replica.boundary().map_or(&[][..], |b| &b.actions);
-        let described = |text: &str| {
-            let machine = actions.iter().any(|a| a.id == text);
-            if machine {
-                String::new()
-            } else {
-                text.to_string()
-            }
-        };
-        Menu {
-            context: i.context.clone(),
-            field,
-            can_set_count: i.allow_set_count,
-            title: i.title.clone(),
-            message: i.message.clone(),
-            message_tone: i.message_tone.clone().unwrap_or_default(),
-            category_mode: i.category_mode,
-            total: i.choice_total as usize,
-            choices: all()
-                .map(|c| MenuChoice {
-                    id: c.id.clone(),
-                    label: c.label.clone(),
-                    enabled: c.enabled && c.selectable,
-                    denial: c.denial.clone(),
-                    hotkey: c.hotkey.clone().unwrap_or_default(),
-                    selected: c.selected,
-                    group: c.pane_id.clone(),
-                    tab: tab(c),
-                    highlighted: Some(c.id.as_str()) == focus,
-                    selected_count: c.selected_count,
-                    available_count: c.available_count,
-                    description: described(&c.description),
-                    columns: c.columns.clone(),
-                    favorite: c.favorite,
-                    color: c.color.clone().unwrap_or_default(),
-                    key_color: c.key_color.clone().unwrap_or_default(),
-                    markup: c.markup.clone().unwrap_or_default(),
-                    action: c.action_id.clone().unwrap_or_default(),
-                    nest_color: c.nest_color.clone().unwrap_or_default(),
-                    mark: c.mark.clone(),
-                    editor: c.editor.clone(),
-                })
-                .collect(),
-            panes: pane_labels
-                .iter()
-                .filter(|p| p["area_label"].as_str().is_some_and(|a| !a.is_empty()))
-                .map(|p| {
-                    let text = |k: &str| p[k].as_str().unwrap_or_default().to_string();
-                    MenuPane {
-                        id: text("id"),
-                        label: text("label"),
-                        role: text("role"),
-                        area: text("area_label"),
-                        storage: text("storage_kind"),
-                        description: text("area_description"),
-                        filter: text("filter"),
-                        sort: text("sort"),
-                        totals: p["totals"].is_object().then(|| {
-                            let t =
-                                |k: &str| p["totals"][k].as_str().unwrap_or_default().to_string();
-                            let b = |k: &str| p["totals"][k].as_bool().unwrap_or_default();
-                            PaneTotals {
-                                weight: t("weight"),
-                                weight_max: t("weight_max"),
-                                weight_unit: t("weight_unit"),
-                                volume: t("volume"),
-                                volume_max: t("volume_max"),
-                                volume_unit: t("volume_unit"),
-                                over_weight: b("over_weight"),
-                                over_volume: b("over_volume"),
-                            }
-                        }),
-                        page: p["page"]["number"]
-                            .as_u64()
-                            .zip(p["page"]["count"].as_u64()),
-                    }
-                })
-                .collect(),
-            can_cancel: i.allow_cancel,
-            pane_tabs: pane_labels
-                .iter()
-                .filter(|p| matches!(p["role"].as_str(), Some("current" | "inactive")))
-                .map(|p| {
-                    let text = |k: &str| p[k].as_str().unwrap_or_default().to_string();
-                    (text("id"), text("label"), p["role"] == "current")
-                })
-                .collect(),
-            pane: all()
-                .find(|c| tab(c) && c.selected)
-                .and_then(|c| pane_of(&c.label).map(String::from)),
-            screen: i.kind == "custom",
-            focus: i
-                .compat
-                .as_ref()
-                .and_then(|c| c["focus"]["choice_id"].as_str())
-                .map(String::from),
-            sections: pane_labels
-                .iter()
-                .filter_map(|p| Some((p["id"].as_str()?.into(), p["label"].as_str()?.into())))
-                .collect(),
-        }
     }
 }
 
