@@ -280,7 +280,7 @@ fn the_sheets_own_controls_are_the_engines_affordances_run_by_id() {
     let screen = example("character sheet");
     let (mut h, script) = open(screen);
     // The sheet has more actions than the footer shows; the rest are in its menu.
-    h.get_by_label("More").click();
+    h.get_by_label("⋯").click();
     h.run_steps(3);
     first(&h, "Change name").click();
     h.run_steps(3);

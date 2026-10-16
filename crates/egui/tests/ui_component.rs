@@ -1195,7 +1195,11 @@ fn the_footer_shows_at_most_six_buttons_and_puts_the_rest_in_a_menu() {
         .count();
     assert!(buttons <= 6, "{buttons} buttons");
     assert!(h.query_by_label("Act8").is_none(), "folded into the menu");
-    h.get_by_label("More").click();
+    assert!(
+        h.query_by_label("More").is_none(),
+        "the client names nothing"
+    );
+    h.get_by_label("⋯").click();
     h.run_steps(3);
     h.get_by_label_contains("Act8").click();
     h.run_steps(3);
