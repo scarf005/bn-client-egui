@@ -56,13 +56,15 @@ impl Speakers {
         let log = std::env::var_os("BN_SOUND_LOG")
             .and_then(|p| std::fs::File::create(p).ok())
             .map(|f| (f, Instant::now()));
-        Self {
+        let mut speakers = Self {
             mixer,
             tracks: HashMap::new(),
             effects: vec![],
             fading: vec![],
             log,
-        }
+        };
+        speakers.note(format_args!("open"));
+        speakers
     }
 
     fn note(&mut self, line: std::fmt::Arguments) {
