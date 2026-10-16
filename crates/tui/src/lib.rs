@@ -227,6 +227,9 @@ impl<M: GameModel> TuiApp<M> {
     /// Sends the filter a list is waiting to send; call between frames.
     pub fn tick(&mut self) {
         self.send_filter();
+        // A terminal plays no animations or sounds; taking them lets the model drop them.
+        self.model.take_effects();
+        self.model.take_cues();
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) {
