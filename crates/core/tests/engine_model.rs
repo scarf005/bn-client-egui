@@ -1627,6 +1627,29 @@ fn looking_says_the_facts_of_the_cursor_square_and_moving_it_invokes_the_screens
 }
 
 #[test]
+fn a_click_on_the_target_cursors_square_is_the_enter_key_of_the_screen() {
+    let (t, h) = session();
+    let mut m = connected(t.on("bn.command.submit", walk_reply()));
+    let mut event = target_stack(41, "Throwing rock", 3, None, json!([]));
+    // The throwing screen binds Enter to throwing; it offers no CONFIRM.
+    event["params"]["events"][0]["changes"]["interaction"]["actions"] = json!([
+        {"id":"SELECT","name":"Select","keys":[]},
+        {"id":"FIRE","name":"Fire Weapon","keys":["f","RETURN"]}]);
+    h.push(event);
+    m.poll();
+    let origin = m.origin();
+    let cursor = Pos {
+        x: 3 - origin.x,
+        y: 6 - origin.y,
+    };
+    assert!(m.aim(cursor, true));
+    assert_eq!(
+        operations(&h),
+        [json!({"kind":"action","action_id":"FIRE"})]
+    );
+}
+
+#[test]
 fn the_map_editors_square_and_keys_are_said_as_a_note() {
     let row = |id: &str, pane: &str, label: &str, description: &str, hotkey: &str| {
         json!({"id":id,"label":label,"description":description,"denial":"","hotkey":hotkey,
