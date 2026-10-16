@@ -406,6 +406,26 @@ fn the_title_screen_is_only_its_menu_and_a_tab_click_runs_the_tab_with_its_id() 
 }
 
 #[test]
+fn the_action_palette_and_client_settings_open_on_the_title_screen() {
+    let title = example("title.json", "title screen with its banner and tabs");
+    let (mut h, script) = harness(title);
+    let dialog = |h: &H, label: &str| {
+        h.query_all_by_label(label)
+            .any(|n| n.accesskit_node().role() == egui::accesskit::Role::Dialog)
+    };
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::P);
+    h.run_steps(3);
+    assert!(dialog(&h, "Actions"), "Ctrl+P opens the palette");
+    h.key_press(egui::Key::Escape);
+    h.run_steps(3);
+    assert!(!dialog(&h, "Actions"), "Escape closes it");
+    assert!(submits(&script).is_empty(), "{:?}", submits(&script));
+    h.get_by_label("Client settings").click();
+    h.run_steps(3);
+    assert!(dialog(&h, "Client settings"));
+}
+
+#[test]
 fn form_field_set_by_the_player_runs_the_forms_affordance_with_the_field_and_text() {
     let screen = example("menu.json", "options page with each editor type");
     let (mut h, script) = harness(screen);

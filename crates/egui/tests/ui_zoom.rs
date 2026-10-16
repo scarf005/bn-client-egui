@@ -87,6 +87,17 @@ fn a_key_the_engine_binds_to_no_zoom_action_does_not_zoom() {
 }
 
 #[test]
+fn a_zoom_key_typed_into_the_action_palette_does_not_zoom() {
+    let (mut h, script) = zooming(None);
+    let before = h.state().display().zoom();
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::P);
+    h.run_steps(3);
+    type_text(&mut h, "z");
+    assert_eq!(h.state().display().zoom(), before);
+    assert_eq!(sent_actions(&script), 0);
+}
+
+#[test]
 fn the_wheel_over_the_map_zooms_it_and_is_bounded() {
     let (mut h, _script) = zooming(None);
     let before = h.state().display().zoom();
