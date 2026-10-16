@@ -1,0 +1,323 @@
+//! Against a real engine: the engine's target cursor of throwing (`t`), firing (`f`) and looking (`x`) follows the
+//! pointer square by square with no frame back on the square it left, ends on the square the pointer rests on
+//! however fast it moved, and a click there acts on it; each mode saved as pictures.
+//!
+//! `BN_ENGINE=<engine> SHOT_DIR=<dir> cargo test --release -p bn-client-egui --test live_target -- --ignored
+//! --nocapture`; `BN_ROOT` names the game root when it is not beside the engine.
+use bn_client_egui::app::CELL;
+use bn_client_egui::interaction::InvokeError;
+use bn_client_egui::protocol::{Component, InvokeArgs};
+use bn_client_egui::transport::{StdioTransport, game_root};
+use bn_client_egui::watchdog::Watchdog;
+use bn_client_egui::{App, EngineModel, GameModel, Pos};
+use eframe::egui;
+use egui_kittest::Harness;
+use egui_kittest::kittest::{NodeT, Queryable};
+use std::time::Duration;
+
+type H<'a> = Harness<'a, App<EngineModel>>;
+
+fn run_until(h: &mut H, what: &str, secs: u64, mut done: impl FnMut(&H) -> bool) {
+    let mut watchdog = Watchdog::new(Duration::from_secs(secs), Duration::from_secs(900));
+    while !done(h) {
+        assert!(
+            !watchdog.expired(h.state().model.received()),
+            "timed out: {what}; {:?}; {:?}",
+            h.state().model.command(),
+            h.state().model.menu()
+        );
+        h.run_steps(1);
+        std::thread::sleep(Duration::from_millis(30));
+    }
+}
+
+fn choose(h: &mut H, affordance: &str, row: &str) {
+    let offered = |h: &H| {
+        h.state()
+            .model
+            .screens()
+            .last()
+            .is_some_and(|s| s.affordances.iter().any(|a| a.id == affordance))
+    };
+    loop {
+        run_until(h, row, 180, |h| offered(h) && !h.state().model.busy());
+        let args = InvokeArgs {
+            row: Some(row.into()),
+            ..Default::default()
+        };
+        match h.state_mut().model.invoke_affordance(affordance, args) {
+            Err(InvokeError::Busy) => h.run_steps(1),
+            sent => return sent.unwrap_or_else(|e| panic!("{affordance} on {row}: {e:?}")),
+        }
+    }
+}
+
+/// Chooses the entry of the menu on top whose label contains `label`, once the menu lists it.
+fn pick(h: &mut H, label: &str) {
+    let listed = |h: &H| {
+        h.state()
+            .model
+            .menu()
+            .and_then(|m| m.choices.into_iter().find(|c| c.label.contains(label)))
+    };
+    run_until(h, label, 120, |h| {
+        !h.state().model.busy() && listed(h).is_some()
+    });
+    let id = listed(h).expect("listed").id;
+    h.state_mut().model.choose(&id);
+    run_until(h, label, 120, |h| !h.state().model.busy());
+    h.run_steps(3);
+}
+
+fn dismiss_popups(h: &mut H) {
+    for _ in 0..20 {
+        let Some(menu) = h.state().model.menu() else {
+            return;
+        };
+        match menu.choices.first().map(|c| c.id.clone()) {
+            Some(id) if !menu.can_cancel => h.state_mut().model.choose(&id),
+            _ => h.state_mut().model.cancel_menu(),
+        }
+        run_until(h, "popup", 180, |h| !h.state().model.busy());
+        h.run_steps(3);
+    }
+    panic!("a pop-up stays open: {:?}", h.state().model.menu());
+}
+
+fn settle(h: &mut H) {
+    for _ in 0..30 {
+        h.run_steps(1);
+        std::thread::sleep(Duration::from_millis(30));
+    }
+}
+
+fn save(h: &mut H, name: &str) {
+    let image = h.render().expect("renders");
+    if let Some(dir) = std::env::var_os("SHOT_DIR") {
+        std::fs::create_dir_all(&dir).unwrap();
+        image.save(std::path::Path::new(&dir).join(name)).unwrap();
+    }
+}
+
+/// The middle of view square `at` on the screen.
+fn on_screen(h: &H, at: Pos) -> egui::Pos2 {
+    let display = h.state().display();
+    let cell = display.cell(CELL) * display.zoom();
+    h.get_by_label("Map").rect().min + egui::vec2(at.x as f32 + 0.5, at.y as f32 + 0.5) * cell
+}
+
+/// A new game of the default character drawn with tiles, its pop-ups closed.
+fn start<'a>() -> H<'a> {
+    let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
+    let root =
+        game_root(engine.as_ref(), std::env::var_os("BN_ROOT").map(Into::into)).expect("game root");
+    let dir = std::env::temp_dir().join(format!("bn-target-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let settings = dir.join("settings.json");
+    std::fs::write(&settings, r#"{"tiles":true,"tileset":"UltimateCataclysm"}"#).unwrap();
+    let transport = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
+    let app = App::new(EngineModel::new(Box::new(transport)))
+        .with_settings(settings)
+        .with_root(root.clone())
+        .with_target_format(eframe::wgpu::TextureFormat::Rgba8Unorm);
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(1280.0, 720.0))
+        .with_step_dt(1.0 / 60.0)
+        .wgpu()
+        .build_ui_state(|ui, app: &mut App<EngineModel>| app.show(ui), app);
+    bn_client_egui::fonts::install(&h.ctx, &root);
+
+    run_until(&mut h, "the main menu", 120, |h| {
+        h.state().model.menu().is_some()
+    });
+    choose(&mut h, "menu:tab", "new_game");
+    choose(&mut h, "menu:entry", "new_game:play_now_default");
+    run_until(&mut h, "the map", 900, |h| h.state().model.size().x > 0);
+    run_until(&mut h, "the settled game", 300, |h| {
+        h.state().model.menu().is_none() && !h.state().model.busy()
+    });
+    dismiss_popups(&mut h);
+    settle(&mut h);
+    h
+}
+
+/// The first row of a list on the top screen whose label contains `label`, with the affordance that chooses it.
+fn row_labelled(h: &H, label: &str) -> Option<(String, String)> {
+    fn find(c: &Component, label: &str) -> Option<(String, String)> {
+        if let Component::List(l) = c
+            && let Some(activate) = &l.activate
+            && let Some(row) = l
+                .rows
+                .iter()
+                .find(|r| r.selectable && r.header != Some(true) && r.label.shown().contains(label))
+        {
+            return Some((activate.clone(), row.id.clone()));
+        }
+        c.children().into_iter().find_map(|c| find(c, label))
+    }
+    find(h.state().model.screens().last()?.root.as_ref()?, label)
+}
+
+/// Types the game key `key` as the keyboard does.
+fn type_key(h: &mut H, key: &str) {
+    h.event(egui::Event::Text(key.into()));
+    h.run_steps(1);
+}
+
+/// The square the map says its cursor is on, as it says it.
+fn said_cursor(h: &H) -> String {
+    let description = h
+        .get_by_label("Map")
+        .accesskit_node()
+        .description()
+        .unwrap_or_default();
+    let at = description
+        .find("Cursor (")
+        .expect("the map names its cursor");
+    description[at..].split(')').next().unwrap().to_string() + ")"
+}
+
+/// How the map names view square `at` as its cursor.
+fn cursor_at(h: &H, at: Pos) -> String {
+    let origin = h.state().model.origin();
+    format!("Cursor ({}, {})", at.x + origin.x, at.y + origin.y)
+}
+
+/// With the engine's target cursor open: the cursor follows the pointer onto a square with no frame back on the
+/// one it left, ends where a fast pointer comes to rest, and a click there acts on it.
+fn the_target_follows_the_pointer(h: &mut H, mode: &str) {
+    run_until(h, "the target cursor", 60, |h| {
+        h.state().model.focus().is_some() && !h.state().model.busy()
+    });
+    settle(h);
+    save(h, &format!("{mode}-0-open.png"));
+    let me = h.state().model.player();
+    let from = h.state().model.focus().unwrap();
+
+    // One square: every frame until the engine has moved its cursor there shows it there.
+    let one = Pos {
+        x: me.x + 2,
+        y: me.y + 1,
+    };
+    assert_ne!(one, from);
+    h.hover_at(on_screen(h, one));
+    let mut said = Vec::new();
+    for _ in 0..200 {
+        h.step();
+        said.push(said_cursor(h));
+        if h.state().model.focus() == Some(one) && !h.state().model.busy() {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    assert_eq!(
+        h.state().model.focus(),
+        Some(one),
+        "{mode}: the engine took the square"
+    );
+    let off = said.iter().filter(|s| **s != cursor_at(h, one)).count();
+    assert_eq!(off, 0, "{mode}: frames off the pointer's square: {said:?}");
+    save(h, &format!("{mode}-1-one-square.png"));
+
+    // A fast sweep, one frame per few points, then rest: the engine's cursor ends under the pointer.
+    let rest = Pos {
+        x: me.x + 4,
+        y: me.y - 1,
+    };
+    let (a, b) = (
+        on_screen(
+            h,
+            Pos {
+                x: me.x - 3,
+                y: me.y + 2,
+            },
+        ),
+        on_screen(h, rest),
+    );
+    let frames = 60;
+    for f in 0..=frames {
+        h.hover_at(a + (b - a) * (f as f32 / frames as f32));
+        h.step();
+    }
+    for _ in 0..100 {
+        h.step();
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert_eq!(
+        h.state().model.focus(),
+        Some(rest),
+        "{mode}: the cursor ends where the pointer rests"
+    );
+    assert_eq!(said_cursor(h), cursor_at(h, rest));
+    save(h, &format!("{mode}-2-swept.png"));
+
+    // A click on the cursor's square acts on it: the target screen closes.
+    let p = on_screen(h, rest);
+    for pressed in [true, false] {
+        h.event(egui::Event::PointerButton {
+            pos: p,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        });
+    }
+    h.run_steps(2);
+    run_until(h, "the click's action", 60, |h| {
+        h.state().model.focus().is_none() && !h.state().model.busy()
+    });
+    settle(h);
+    save(h, &format!("{mode}-3-clicked.png"));
+}
+
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn live_throwing_follows_the_pointer_and_a_click_throws() {
+    let mut h = start();
+    let carried = h.state().model.inventory().len();
+    type_key(&mut h, "t");
+    run_until(&mut h, "the item list", 60, |h| {
+        row_labelled(h, "").is_some()
+    });
+    let (activate, row) = row_labelled(&h, "").unwrap();
+    choose(&mut h, &activate, &row);
+    the_target_follows_the_pointer(&mut h, "throw");
+    assert!(
+        h.state().model.inventory().len() < carried,
+        "the item left the inventory"
+    );
+}
+
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn live_firing_follows_the_pointer_and_a_click_fires() {
+    let mut h = start();
+    // A loaded pistol from the debug menu, wielded.
+    assert!(h.state_mut().model.invoke_action("debug"));
+    pick(&mut h, "Spawning");
+    pick(&mut h, "Spawn an item");
+    pick(&mut h, "12 gauge pistol");
+    if let Some(field) = h.state().model.menu().and_then(|m| m.field) {
+        h.state_mut().model.fill(&field.id, "1", true);
+        run_until(&mut h, "the pistol", 60, |h| !h.state().model.busy());
+    }
+    dismiss_popups(&mut h);
+    type_key(&mut h, "w");
+    run_until(&mut h, "the wield list", 60, |h| {
+        row_labelled(h, "pistol").is_some()
+    });
+    let (activate, row) = row_labelled(&h, "pistol").unwrap();
+    choose(&mut h, &activate, &row);
+    run_until(&mut h, "wielded", 60, |h| !h.state().model.busy());
+    dismiss_popups(&mut h);
+    settle(&mut h);
+    type_key(&mut h, "f");
+    the_target_follows_the_pointer(&mut h, "fire");
+}
+
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn live_looking_follows_the_pointer_and_a_click_looks() {
+    let mut h = start();
+    type_key(&mut h, "x");
+    the_target_follows_the_pointer(&mut h, "look");
+}
