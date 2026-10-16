@@ -642,11 +642,13 @@ fn files_under(dir: &str) -> Vec<String> {
     found
 }
 
-/// Files that are client chrome, not a screen: the palette lists the engine's actions, the sidebar lays out
-/// values the engine labels, the component renderers draw what the core decides, and the binary only parses
-/// arguments.
+/// Files that are client chrome, not a screen: input routes keys and the pointer, the map paints the view, the
+/// palette lists the engine's actions, the sidebar lays out values the engine labels, the component renderers
+/// draw what the core decides, and the binary only parses arguments.
 const CLIENT_OWNED: &[&str] = &[
     "crates/egui/src/app/component.rs",
+    "crates/egui/src/app/input.rs",
+    "crates/egui/src/app/map.rs",
     "crates/egui/src/app/palette.rs",
     "crates/egui/src/app/sidebar.rs",
     "crates/egui/src/app/sounds.rs",
