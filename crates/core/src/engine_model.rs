@@ -168,7 +168,7 @@ struct Hover {
     revision: String,
     /// None while the answer is outstanding.
     lines: Option<Vec<String>>,
-    /// What the avatar can do with the square; empty while the answer is outstanding.
+    /// What the avatar can do with the square; empty until the first answer for it.
     actions: Vec<protocol::TileAction>,
 }
 
@@ -440,17 +440,17 @@ impl EngineModel {
         })
         .expect("describe params serialize");
         // The square's earlier answer stands until the new one comes, so its text does not flip to the bare
-        // cell and back with every revision.
-        let lines = self
+        // cell and back, nor its open menu lose its actions, with every revision.
+        let (lines, actions) = self
             .hovered
             .take()
             .filter(|h| h.pos == pos)
-            .and_then(|h| h.lines);
+            .map_or((None, Vec::new()), |h| (h.lines, h.actions));
         self.hovered = Some(Hover {
             pos,
             revision: now.revision.clone(),
             lines,
-            actions: Vec::new(),
+            actions,
         });
         self.call("bn.world.describe", params, Pending::Describe);
     }
