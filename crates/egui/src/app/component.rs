@@ -843,14 +843,14 @@ impl<M: GameModel> App<M> {
                     };
                     let size = egui::vec2(*width, ui.available_height());
                     let down = egui::Layout::top_down(egui::Align::Min);
+                    // The active pane's stroke is inside its width too, or each frame it widens the
+                    // window that the next frame's room comes from.
+                    let frame = egui::Frame::NONE.stroke(stroke).inner_margin(PANE_MARGIN);
                     ui.allocate_ui_with_layout(size, down, |ui| {
-                        egui::Frame::NONE
-                            .stroke(stroke)
-                            .inner_margin(PANE_MARGIN)
-                            .show(ui, |ui| {
-                                ui.set_width(width - margin);
-                                self.component(ui, screen, child, out)
-                            });
+                        frame.show(ui, |ui| {
+                            ui.set_width(width - frame.total_margin().sum().x);
+                            self.component(ui, screen, child, out)
+                        });
                     });
                 }
             });
