@@ -173,9 +173,10 @@ impl<M: GameModel> App<M> {
         let engines = |k: &FrameKey| match k.key {
             None => true,
             Some((key, modifiers)) => {
-                !(key == Key::Escape && esc_cancels)
-                    // Alt with an arrow moves the focus among the action rows, not the engine's cursor.
-                    && !(modifiers.alt && matches!(key, Key::ArrowUp | Key::ArrowDown))
+                let cancels = key == Key::Escape && esc_cancels;
+                // Alt with an arrow moves the focus among the action rows, not the engine's cursor.
+                let moves_focus = modifiers.alt && matches!(key, Key::ArrowUp | Key::ArrowDown);
+                !(cancels || moves_focus)
             }
         };
         let (typed, named): (Vec<_>, Vec<_>) = keys
