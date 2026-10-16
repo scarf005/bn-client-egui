@@ -451,6 +451,8 @@ impl<M: GameModel> TuiApp<M> {
         let inside = (area.x..area.x + area.width).contains(&ev.column)
             && (area.y..area.y + area.height).contains(&ev.row);
         if !inside || self.model.menu().is_some() {
+            // Off the map, or with a menu over it, the pointer is on no square.
+            self.hovered = None;
             return;
         }
         let view = Pos {
