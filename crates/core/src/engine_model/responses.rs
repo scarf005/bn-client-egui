@@ -206,13 +206,13 @@ impl EngineModel {
         }
     }
 
-    /// A page of a long 0.1 menu, for the boundary it was asked in.
+    /// A page of a long 0.1 menu, for the boundary it was asked in; a refused one closes paging for it.
     fn choices_page(&mut self, result: Result<Value, RpcError>) {
-        let value = match result {
-            Ok(v) => v,
-            Err(e) => return self.report_failure(&reason_of(&e)),
-        };
         self.paged.waiting = false;
+        let Ok(value) = result else {
+            self.paged.closed = true;
+            return;
+        };
         if let Ok(page) = serde_json::from_value::<protocol::ChoicesResult>(value)
             && self.paged.key.0 == page.boundary_id
         {

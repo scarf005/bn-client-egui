@@ -61,6 +61,8 @@ struct Paged {
     more: Vec<protocol::Choice>,
     /// A page was asked for and has not arrived.
     waiting: bool,
+    /// The engine refused a page; no more are asked for in this boundary.
+    closed: bool,
 }
 
 /// Starts the engine again on the same profile.
@@ -1616,7 +1618,7 @@ impl GameModel for EngineModel {
             };
         }
         let loaded = i.choices.len() + self.paged.more.len();
-        if self.paged.waiting || loaded as u64 >= i.choice_total {
+        if self.paged.waiting || self.paged.closed || loaded as u64 >= i.choice_total {
             return;
         }
         let (epoch, boundary_id) = (
