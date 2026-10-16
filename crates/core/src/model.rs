@@ -34,6 +34,10 @@ pub struct Layer {
     pub creature: bool,
     /// Whether this is the terrain of its square, which a 3D view draws as ground or as a wall.
     pub terrain: bool,
+    /// Terrain the game data flags as a wall, which a 3D view raises.
+    pub wall: bool,
+    /// Whether the thing is a part of a vehicle.
+    pub vehicle: bool,
     /// Picks between the weighted variants of a sprite, like the game's per-tile seed.
     pub seed: u32,
     /// Paint the tileset blends into the background and the foreground sprite.

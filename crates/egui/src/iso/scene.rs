@@ -1,7 +1,7 @@
 //! The scene of the 3D map: what the model shows in each square, as quads grouped by the page they sample.
 
 use super::geometry::{
-    Instance, Kind, Metrics, PageId, Placement, Shape, SpriteSource, place, shape,
+    Instance, Kind, Metrics, Outline, PageId, Placement, Shape, SpriteSource, borders, place, shape,
 };
 use super::pages::Pages;
 use crate::display::{Fx, STRIP, query, resolve_layer};
@@ -9,6 +9,7 @@ use crate::tileset::{Tileset, Turn};
 use bn_client_core::{GameModel, Layer, Pos};
 use glam::Vec2;
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 /// The quads that sample one page.
 pub struct Batch {
@@ -61,7 +62,7 @@ impl Scene {
     }
 }
 
-/// A sprite of a square, found before any is placed: the boxes next to one another hide each other's faces.
+/// A sprite of a square, found before any is placed: the solids next to one another hide each other's faces.
 struct Item {
     square: (i32, i32),
     floor: f32,
@@ -71,9 +72,27 @@ struct Item {
     filter: u32,
     haze: u8,
     order: u32,
+    outline: Option<Arc<Outline>>,
 }
 
-/// The directions of a box's faces, in the order `place` lists them: south, east, north, west.
+impl Item {
+    fn placement(&self, covered: [bool; 4]) -> Placement<'_> {
+        Placement {
+            square: self.square,
+            floor: self.floor,
+            kind: self.kind,
+            turn: self.turn,
+            sprite: &self.sprite,
+            filter: self.filter,
+            haze: self.haze,
+            order: self.order,
+            covered,
+            outline: self.outline.as_deref(),
+        }
+    }
+}
+
+/// The directions of the faces of a solid, in the order `Placement::covered` lists them: south, east, north, west.
 const FACES: [(i32, i32); 4] = [(0, 1), (1, 0), (0, -1), (-1, 0)];
 
 /// Where sprite number `sprite` of the tileset is: its page and the place in it.
@@ -157,16 +176,24 @@ pub fn build(
                 let chosen = tileset.choose(&query(&layer, season));
                 let kind = match (layer.terrain, chosen.as_ref().is_some_and(|c| c.joined)) {
                     (false, _) if layer.creature => Kind::Creature,
+                    (false, _) if layer.vehicle => Kind::Vehicle,
                     (false, _) => Kind::Thing,
+                    (true, joined) if layer.wall => Kind::Wall { joined },
                     (true, false) => Kind::Terrain,
                     (true, true) => Kind::Joined,
                 };
-                for (placed, paint) in chosen
+                for (placed, paint, under) in chosen
                     .iter()
-                    .flat_map(|c| [(c.bg, paints.0), (c.fg, paints.1)])
+                    .flat_map(|c| [(c.bg, paints.0, c.fg.is_some()), (c.fg, paints.1, false)])
                 {
                     let Some(placed) = placed else {
                         continue;
+                    };
+                    // The background under a wall or a vehicle part is its ground.
+                    let kind = match (kind, under) {
+                        (Kind::Wall { .. }, true) => Kind::Terrain,
+                        (Kind::Vehicle, true) => Kind::Thing,
+                        (kind, _) => kind,
                     };
                     let Some(mut sprite) = source(tileset, placed.sprite) else {
                         continue;
@@ -179,19 +206,28 @@ pub fn build(
                             .unwrap_or(sprite);
                     }
                     // An isometric sprite loses the rows over its diamond that say nothing. A sprite drawn from
-                    // above is cut to what it draws, which says whether it stays in its square and lies there;
-                    // what stands keeps its whole sprite, turned about its middle as the flat map turns it.
+                    // above is cut to what it draws, which says whether it stays in its square and lies there,
+                    // and a clear one draws nothing; what stands, or is turned about the middle of its whole
+                    // sprite, keeps it whole.
                     if let Some(pages) = pages {
-                        sprite = match m.iso {
-                            true => pages.trimmed(sprite),
-                            false => Some(pages.cropped(sprite))
-                                .filter(|cut| shape(&m, cut, kind) != Shape::Board)
-                                .unwrap_or(sprite),
+                        sprite = match (m.iso, placed.turn) {
+                            (true, _) => pages.trimmed(sprite),
+                            (false, Turn::None) => match pages.cropped(sprite) {
+                                None => continue,
+                                Some(cut) if shape(&m, &cut, kind) != Shape::Board => cut,
+                                Some(_) => sprite,
+                            },
+                            (false, _) => sprite,
                         };
                     }
-                    if let Shape::Box { top, bottom } = shape(&m, &sprite, kind) {
-                        column.solid = Some((floor + bottom, floor + top));
+                    let form = shape(&m, &sprite, kind);
+                    if let Some((low, high)) = form.solid() {
+                        column.solid = Some((floor + low, floor + high));
                     }
+                    let outline = match form {
+                        Shape::Extrude { .. } => pages.and_then(|p| p.outline(&sprite)),
+                        _ => None,
+                    };
                     items.push(Item {
                         square: (x, y),
                         floor,
@@ -201,6 +237,7 @@ pub fn build(
                         filter,
                         haze,
                         order,
+                        outline,
                     });
                     order += 1;
                 }
@@ -216,38 +253,38 @@ pub fn build(
             columns[(y * width + x) as usize] = Some(column);
         }
     }
-    let solid_at = |x: i32, y: i32| {
+    let index = |x: i32, y: i32| {
         let inside = (0..width).contains(&x) && (0..height).contains(&y);
-        inside
-            .then(|| columns[(y * width + x) as usize]?.solid)
-            .flatten()
+        inside.then(|| (y * width + x) as usize)
     };
+    // Which edges of its square the solid of each square covers whole, as its column's solid is the last one.
+    let mut edges = vec![[false; 4]; columns.len()];
+    for item in &items {
+        if shape(&m, &item.sprite, item.kind).solid().is_some()
+            && let Some(n) = index(item.square.0, item.square.1)
+        {
+            edges[n] = borders(&m, &item.placement([false; 4]));
+        }
+    }
     let mut pages = BTreeMap::<PageId, Vec<Instance>>::new();
     for item in &items {
-        // A face is not seen where the next square holds a box at least as tall, down to at least as low.
-        let covered = match shape(&m, &item.sprite, item.kind) {
-            Shape::Box { top, bottom } => FACES.map(|(dx, dy)| {
-                solid_at(item.square.0 + dx, item.square.1 + dy).is_some_and(|(low, high)| {
-                    high >= item.floor + top - 1e-3 && low <= item.floor + bottom + 1e-3
+        // A face is not seen where the next square holds a solid at least as tall, down to at least as low, that
+        // covers the whole edge between them.
+        let covered = match shape(&m, &item.sprite, item.kind).solid() {
+            Some((bottom, top)) => std::array::from_fn(|face| {
+                let (dx, dy) = FACES[face];
+                index(item.square.0 + dx, item.square.1 + dy).is_some_and(|n| {
+                    columns[n].and_then(|c| c.solid).is_some_and(|(low, high)| {
+                        high >= item.floor + top - 1e-3 && low <= item.floor + bottom + 1e-3
+                    }) && edges[n][(face + 2) % 4]
                 })
             }),
-            _ => [false; 4],
-        };
-        let placement = Placement {
-            square: item.square,
-            floor: item.floor,
-            kind: item.kind,
-            turn: item.turn,
-            sprite: &item.sprite,
-            filter: item.filter,
-            haze: item.haze,
-            order: item.order,
-            covered,
+            None => [false; 4],
         };
         pages
             .entry(item.sprite.page)
             .or_default()
-            .extend(place(&m, &placement));
+            .extend(place(&m, &item.placement(covered)));
     }
     Scene {
         version,

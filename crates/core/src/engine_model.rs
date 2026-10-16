@@ -1235,6 +1235,8 @@ impl EngineModel {
             mirrored: look.facing.as_deref() == Some("left"),
             creature: matches!(look.kind.as_str(), "monster" | "npc" | "avatar"),
             terrain: look.kind == "terrain",
+            wall: look.wall,
+            vehicle: look.kind == "vehicle_part",
             seed,
             tint_bg: paint(look, |t| t.bg.as_deref()),
             tint_fg: paint(look, |t| t.fg.as_deref()),

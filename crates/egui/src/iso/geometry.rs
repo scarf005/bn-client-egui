@@ -1,10 +1,11 @@
-//! What a sprite becomes in the 3D scene: the ground under a square, a box for a wall, or an upright board.
+//! What a sprite becomes in the 3D scene: the ground under a square, a box for a wall, a solid of its outline, or an
+//! upright board.
 //! Every shape is a parallelogram `origin + u * a + v * b` with an affine map from `(u, v)` to sprite pixels, so
 //! one instance format draws all of them.
 
 use crate::tileset::Turn;
 use bytemuck::{Pod, Zeroable};
-use glam::Vec2;
+use glam::{Mat2, Vec2};
 
 /// A texture the scene draws from: one strip of rows of a tileset sheet.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -54,6 +55,8 @@ pub struct Metrics {
 const LEVEL: f32 = 3.0;
 /// Sprites of one square are drawn this far apart toward the eye, so the later one wins at equal depth.
 const LAYER_BIAS: f32 = 0.002;
+/// A vehicle part of a tileset drawn from above stands this many squares tall: a person in it shows from the chest.
+const VEHICLE: f32 = 0.5;
 
 impl Metrics {
     pub fn new(tile: (u32, u32), iso: bool, zlevel_height: Option<f32>) -> Self {
@@ -87,27 +90,110 @@ pub enum Shape {
     Floor { z: f32 },
     /// A box filling the square, between two heights.
     Box { top: f32, bottom: f32 },
+    /// The sprite of a tileset drawn from above pushed up from the ground to a height, as a block game makes an item
+    /// of its sprite: the sprite on top and at the bottom, and its edge pixels drawn down the sides of its outline.
+    Extrude { top: f32 },
     /// An upright board that faces the eye.
     Board,
+}
+
+impl Shape {
+    /// The bottom and the top of what a solid shape fills, over its square's ground.
+    pub fn solid(&self) -> Option<(f32, f32)> {
+        match *self {
+            Shape::Box { top, bottom } => Some((bottom, top)),
+            Shape::Extrude { top } => Some((0.0, top)),
+            Shape::Floor { .. } | Shape::Board => None,
+        }
+    }
+}
+
+/// The outline of a sprite's opaque pixels, those the fragment shader draws: the straight runs of the edges
+/// between an opaque pixel and a clear one or the outside of the sprite.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Outline {
+    pub edges: Vec<Edge>,
+}
+
+/// A straight run of an outline in the sprite's pixels from its top left corner, from `from` to `to`, with the
+/// opaque pixels on the side `inward` points to.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Edge {
+    pub from: Vec2,
+    pub to: Vec2,
+    pub inward: Vec2,
+}
+
+impl Outline {
+    /// The outline of a sprite `size` pixels big whose pixel `(x, y)` is opaque where `opaque` says so.
+    pub fn of(size: [u32; 2], opaque: impl Fn(u32, u32) -> bool) -> Self {
+        let [w, h] = size.map(|n| n as i32);
+        let at = |x: i32, y: i32| {
+            (0..w).contains(&x) && (0..h).contains(&y) && opaque(x as u32, y as u32)
+        };
+        // Along each line between two rows, and between two columns, the runs over which the pixels on its two
+        // sides differ the same way: true where the opaque one is after the line.
+        let rows = (0..=h).flat_map(|y| {
+            let side = move |x| (at(x, y - 1) != at(x, y)).then(|| at(x, y));
+            runs(w, side)
+                .into_iter()
+                .map(move |(from, to, after)| Edge {
+                    from: Vec2::new(from as f32, y as f32),
+                    to: Vec2::new(to as f32, y as f32),
+                    inward: Vec2::new(0.0, if after { 1.0 } else { -1.0 }),
+                })
+        });
+        let columns = (0..=w).flat_map(|x| {
+            let side = move |y| (at(x - 1, y) != at(x, y)).then(|| at(x, y));
+            runs(h, side)
+                .into_iter()
+                .map(move |(from, to, after)| Edge {
+                    from: Vec2::new(x as f32, from as f32),
+                    to: Vec2::new(x as f32, to as f32),
+                    inward: Vec2::new(if after { 1.0 } else { -1.0 }, 0.0),
+                })
+        });
+        Self {
+            edges: rows.chain(columns).collect(),
+        }
+    }
+}
+
+/// The runs `from..to` of `0..len` over which `side` is some and the same, with what it is.
+fn runs(len: i32, side: impl Fn(i32) -> Option<bool>) -> Vec<(i32, i32, bool)> {
+    let mut found = Vec::<(i32, i32, bool)>::new();
+    for n in 0..len {
+        match (side(n), found.last_mut()) {
+            (Some(s), Some(last)) if last.1 == n && last.2 == s => last.1 = n + 1,
+            (Some(s), _) => found.push((n, n + 1, s)),
+            (None, _) => {}
+        }
+    }
+    found
 }
 
 /// What a sprite is the picture of.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Kind {
-    /// Anything that is not a square's terrain or a creature.
+    /// Anything that is not a square's terrain, a creature or a vehicle part.
     Thing,
     /// A monster, a person or the avatar.
     Creature,
+    /// A part of a vehicle.
+    Vehicle,
     /// The terrain of a square.
     Terrain,
     /// Terrain the engine joined to its neighbours, as walls are: the tileset picked the variant for how they meet.
     Joined,
+    /// Terrain the engine says is a wall, and whether it joined it to its neighbours.
+    Wall { joined: bool },
 }
 
 /// What `sprite` is drawn as. Terrain whose sprite is as wide as the tile is the ground when it hardly rises over
 /// its diamond; joined terrain that rises is a box, as a wall; anything else, a shrub or a mound as well, stands
 /// upright. A tileset drawn from above draws what stays inside its square from above too, so that lies on the
-/// ground, but for a creature; what reaches out of its square, a tree, was drawn standing.
+/// ground, but for a creature, and a wall or a vehicle part is pushed up from it; what reaches out of its square, a
+/// tree, was drawn standing. An isometric tileset draws a wall's height itself: only the joins tell.
 pub fn shape(m: &Metrics, sprite: &SpriteSource, kind: Kind) -> Shape {
     let size = sprite.size();
     if !m.iso {
@@ -115,9 +201,16 @@ pub fn shape(m: &Metrics, sprite: &SpriteSource, kind: Kind) -> Shape {
             && (sprite.offset + size).cmplt(m.tile + 0.5).all();
         return match (kind, inside) {
             (Kind::Creature, _) | (_, false) => Shape::Board,
+            (Kind::Wall { .. }, true) => Shape::Extrude { top: m.level },
+            (Kind::Vehicle, true) => Shape::Extrude { top: VEHICLE },
             _ => Shape::Floor { z: 0.0 },
         };
     }
+    let kind = match kind {
+        Kind::Wall { joined: true } => Kind::Joined,
+        Kind::Wall { joined: false } => Kind::Terrain,
+        kind => kind,
+    };
     let rise = size.y - m.diamond;
     // The sprite's bottom edge, over the baseline of its tile.
     let bottom = (m.tile.y - sprite.offset.y - size.y) * m.up;
@@ -178,8 +271,11 @@ pub struct Placement<'a> {
     pub haze: u8,
     /// The sprite's place in its square, bottom first.
     pub order: u32,
-    /// For a box: which of its south, east, north and west faces touch another box that is as tall, and are not seen.
+    /// For a solid: which of the south, east, north and west edges of its square another solid as tall covers whole,
+    /// so that its faces there are not seen.
     pub covered: [bool; 4],
+    /// For a sprite pushed up from the ground: the outline of its opaque pixels, none for the whole sprite.
+    pub outline: Option<&'a Outline>,
 }
 
 /// How much of a quad's sprite span is cut off at each edge, so that a pixel centre on an edge samples the
@@ -223,9 +319,9 @@ fn corners(turn: Turn, s: &SpriteSource) -> [Vec2; 4] {
 }
 
 /// Where a sprite drawn from above from `lo` to `hi` in its tile, in tile pixels from the tile's top left corner,
-/// lies once turned about the tile's middle as `turn` turns its picture.
-fn turned(turn: Turn, tile: Vec2, lo: Vec2, hi: Vec2) -> (Vec2, Vec2) {
-    let middle = tile / 2.0;
+/// lies once turned about its own middle as `turn` turns its picture, as the game's tiles view turns it.
+fn turned(turn: Turn, lo: Vec2, hi: Vec2) -> (Vec2, Vec2) {
+    let middle = (lo + hi) / 2.0;
     let take = |p: Vec2| {
         let d = p - middle;
         middle
@@ -241,7 +337,78 @@ fn turned(turn: Turn, tile: Vec2, lo: Vec2, hi: Vec2) -> (Vec2, Vec2) {
     (a.min(b), a.max(b))
 }
 
-/// The instances that draw a sprite: one, or the five faces of a box.
+/// An edge of a sprite's outline where it lies in the world, from `from` to `to`.
+struct Side {
+    from: Vec2,
+    to: Vec2,
+    edge: Edge,
+}
+
+/// The edges of the outline of a sprite drawn from above, where `place` lays the sprite in its square.
+fn sides(m: &Metrics, p: &Placement) -> Vec<Side> {
+    let s = p.sprite;
+    let (lo, hi) = turned(p.turn, s.offset, s.offset + s.size());
+    let [tl, tr, _, bl] = corners(p.turn, s);
+    // How far across and down the laid sprite a page pixel is.
+    let across = Mat2::from_cols(tr - tl, bl - tl).inverse();
+    let square = Vec2::new(p.square.0 as f32, p.square.1 as f32);
+    let laid = |q: Vec2| {
+        square + (lo + (hi - lo) * (across * (s.at + q - tl))) * Vec2::new(m.across, m.up)
+    };
+    let whole;
+    let outline = match p.outline {
+        Some(outline) => outline,
+        None => {
+            whole = Outline::of([s.src.x as u32, s.src.y as u32], |_, _| true);
+            &whole
+        }
+    };
+    outline
+        .edges
+        .iter()
+        .map(|e| Side {
+            from: laid(e.from),
+            to: laid(e.to),
+            edge: *e,
+        })
+        .collect()
+}
+
+/// Which edge of the square with its north-west corner at `square` a side lies along, by its place among the
+/// south, east, north and west ones.
+fn border(square: Vec2, side: &Side) -> Option<usize> {
+    let (from, to) = (side.from - square, side.to - square);
+    let on = |a: f32, b: f32, line: f32| (a - line).abs() < 1e-4 && (b - line).abs() < 1e-4;
+    [
+        on(from.y, to.y, 1.0),
+        on(from.x, to.x, 1.0),
+        on(from.y, to.y, 0.0),
+        on(from.x, to.x, 0.0),
+    ]
+    .iter()
+    .position(|on| *on)
+}
+
+/// Which of the south, east, north and west edges of its square a solid covers whole: all of them for a box, and
+/// for a sprite pushed up from the ground those it is opaque all along.
+pub fn borders(m: &Metrics, p: &Placement) -> [bool; 4] {
+    match shape(m, p.sprite, p.kind) {
+        Shape::Box { .. } => [true; 4],
+        Shape::Extrude { .. } => {
+            let square = Vec2::new(p.square.0 as f32, p.square.1 as f32);
+            let mut length = [0.0; 4];
+            for side in sides(m, p) {
+                if let Some(n) = border(square, &side) {
+                    length[n] += side.from.distance(side.to);
+                }
+            }
+            length.map(|l| l > 1.0 - 1e-3)
+        }
+        Shape::Floor { .. } | Shape::Board => [false; 4],
+    }
+}
+
+/// The instances that draw a sprite: one, the five faces of a box, or the faces of a solid pushed up from it.
 pub fn place(m: &Metrics, p: &Placement) -> Vec<Instance> {
     let s = p.sprite;
     let size = s.size();
@@ -258,10 +425,21 @@ pub fn place(m: &Metrics, p: &Placement) -> Vec<Instance> {
         (false, turn) => turn,
     };
     let ground = ([1.0, 0.0, 0.0], [0.0, 1.0, 0.0]);
+    // A sprite drawn from above lying at a height, where the flat map draws it in its square.
+    let lying = |z: f32| {
+        let (lo, hi) = turned(turn, s.offset, s.offset + size);
+        let [tl, tr, _, bl] = corners(turn, s);
+        let (w, h) = ((hi.x - lo.x) * m.across, (hi.y - lo.y) * m.up);
+        instance(
+            [x + lo.x * m.across, y + lo.y * m.up, z],
+            ([w, 0.0, 0.0], [0.0, h, 0.0]),
+            [tl, tr - tl, bl - tl],
+            flags,
+        )
+    };
     match shape(m, s, p.kind) {
         Shape::Floor { z } => {
-            // Later sprites of a square lie over the earlier ones.
-            let z = p.floor + z + LAYER_BIAS * p.order as f32;
+            let z = p.floor + z;
             match m.iso {
                 // The diamond of the tile lies in the lowest rows of an isometric sprite, drawn as the game draws
                 // it: the square's north-west corner at its left corner, so its north-east corner is at the top.
@@ -274,19 +452,28 @@ pub fn place(m: &Metrics, p: &Placement) -> Vec<Instance> {
                     ];
                     vec![instance([x, y, z], ground, uv, flags)]
                 }
-                // Where the flat map draws it in the square.
-                false => {
-                    let (lo, hi) = turned(turn, m.tile, s.offset, s.offset + size);
-                    let [tl, tr, _, bl] = corners(turn, s);
-                    let (w, h) = ((hi.x - lo.x) * m.across, (hi.y - lo.y) * m.up);
-                    vec![instance(
-                        [x + lo.x * m.across, y + lo.y * m.up, z],
-                        ([w, 0.0, 0.0], [0.0, h, 0.0]),
-                        [tl, tr - tl, bl - tl],
-                        flags,
-                    )]
-                }
+                // Later sprites of a square lie over the earlier ones.
+                false => vec![lying(z + LAYER_BIAS * p.order as f32)],
             }
+        }
+        Shape::Extrude { top } => {
+            // The top first: where it covers what is under it, that colour is not written again.
+            let bottom = p.floor + LAYER_BIAS * p.order as f32;
+            let square = Vec2::new(x, y);
+            let seen = sides(m, p)
+                .into_iter()
+                .filter(|side| border(square, side).is_none_or(|n| !p.covered[n]))
+                .map(|side| {
+                    let (e, run) = (side.edge, side.to - side.from);
+                    // The pixels inside the edge, drawn all the way down.
+                    let uv = [s.at + e.from + e.inward / 2.0, e.to - e.from, Vec2::ZERO];
+                    let edges = ([run.x, run.y, 0.0], [0.0, 0.0, -top]);
+                    instance([side.from.x, side.from.y, bottom + top], edges, uv, flags)
+                });
+            std::iter::once(lying(bottom + top))
+                .chain(seen)
+                .chain(std::iter::once(lying(bottom)))
+                .collect()
         }
         Shape::Box { top, bottom } => {
             let (w, h, t) = (size.x, size.y, m.diamond);
@@ -369,6 +556,7 @@ mod tests {
             haze: 0,
             order: 0,
             covered: [false; 4],
+            outline: None,
         }
     }
 
@@ -522,8 +710,114 @@ mod tests {
     }
 
     #[test]
-    fn a_sprite_drawn_from_above_lies_where_the_flat_map_draws_it_and_turns_about_its_squares_middle()
+    fn a_wall_or_a_vehicle_part_drawn_from_above_is_pushed_up_from_its_sprite_where_an_isometric_wall_goes_by_its_joins()
      {
+        let flat = Metrics::new((32, 32), false, None);
+        let whole = sprite((32.0, 32.0), (0.0, 0.0));
+        let wall = Kind::Wall { joined: false };
+        assert_eq!(shape(&flat, &whole, wall), Shape::Extrude { top: 3.0 });
+        assert_eq!(
+            shape(&flat, &whole, Kind::Vehicle),
+            Shape::Extrude { top: VEHICLE }
+        );
+        // A wall sprite that reaches out of its square was drawn standing.
+        let tall = sprite((32.0, 64.0), (0.0, -32.0));
+        assert_eq!(shape(&flat, &tall, wall), Shape::Board);
+        // The top comes first and the bottom lies on the ground: four sides between them, however tall it is.
+        let p = Placement {
+            floor: 1.0,
+            ..square(&whole, wall)
+        };
+        let layers = place(&flat, &p);
+        assert_eq!(layers.len(), 6);
+        assert_eq!(layers[0].origin, [3.0, 5.0, 4.0]);
+        assert_eq!(layers[layers.len() - 1].origin, [3.0, 5.0, 1.0]);
+        // An isometric wall is a box only where the tileset joined it: a lone rock stands.
+        let m = ultica();
+        let iso = sprite((48.0, 120.0), (0.0, -96.0));
+        assert!(matches!(
+            shape(&m, &iso, Kind::Wall { joined: true }),
+            Shape::Box { .. }
+        ));
+        assert_eq!(shape(&m, &iso, wall), Shape::Board);
+        assert_eq!(shape(&m, &iso, Kind::Vehicle), Shape::Board);
+    }
+
+    #[test]
+    fn an_outline_is_one_run_per_straight_edge_and_rings_a_hole_too() {
+        let count = |opaque: fn(u32, u32) -> bool| Outline::of([32, 32], opaque).edges.len();
+        assert_eq!(count(|_, _| true), 4);
+        assert_eq!(count(|_, _| false), 0);
+        // An L of the top and left halves: six straight edges.
+        assert_eq!(count(|x, y| x < 16 || y < 16), 6);
+        // A hole of 4 x 4 pixels in the middle: four more.
+        let holed = |x: u32, y: u32| !(14..18).contains(&x) || !(14..18).contains(&y);
+        assert_eq!(count(holed), 8);
+        let hole = Outline::of([32, 32], holed);
+        // Round the hole the opaque pixels lie away from it.
+        let left = hole
+            .edges
+            .iter()
+            .find(|e| e.from.x == 14.0 && e.to.x == 14.0)
+            .unwrap();
+        assert_eq!(
+            (left.from.y, left.to.y, left.inward),
+            (14.0, 18.0, Vec2::new(-1.0, 0.0))
+        );
+    }
+
+    #[test]
+    fn a_side_of_a_turned_sprite_drawn_from_above_shows_the_edge_its_turn_brings_there() {
+        let flat = Metrics::new((32, 32), false, None);
+        let whole = sprite((32.0, 32.0), (0.0, 0.0));
+        let mut p = square(&whole, Kind::Wall { joined: false });
+        p.turn = Turn::Left;
+        let faces = place(&flat, &p);
+        assert_eq!(faces.len(), 6);
+        // Turned counter-clockwise, the sprite's left column lies along the south edge of the square, (3, 6) to
+        // (4, 6), its top at the west end.
+        let south = faces
+            .iter()
+            .find(|i| i.b[2] < 0.0 && i.origin[1] == 6.0 && i.a[1] == 0.0)
+            .unwrap();
+        for u in [0.0, 1.0] {
+            let x = south.origin[0] + south.a[0] * u - 3.0;
+            let page = Vec2::from(south.uv) + Vec2::from(south.uv_a) * u;
+            assert!(
+                near(page, Vec2::new(96.5, 240.0 + x * 32.0)),
+                "{page} at {x}"
+            );
+        }
+        // A side covered by a solid beside it is left out.
+        p.covered = [true, false, false, false];
+        let faces = place(&flat, &p);
+        assert_eq!(faces.len(), 5);
+        assert!(
+            !faces
+                .iter()
+                .any(|i| i.b[2] < 0.0 && i.origin[1] == 6.0 && i.a[1] == 0.0)
+        );
+        assert_eq!(borders(&flat, &p), [true; 4]);
+    }
+
+    #[test]
+    fn a_solid_drawn_from_above_covers_only_the_edges_of_its_square_it_is_opaque_all_along() {
+        let flat = Metrics::new((32, 32), false, None);
+        // The top half of the square, cut to its opaque pixels.
+        let half = sprite((32.0, 16.0), (0.0, 0.0));
+        let p = square(&half, Kind::Wall { joined: false });
+        assert_eq!(borders(&flat, &p), [false, false, true, false]);
+        let outline = Outline::of([32, 16], |x, _| x < 31);
+        let p = Placement {
+            outline: Some(&outline),
+            ..p
+        };
+        assert_eq!(borders(&flat, &p), [false; 4]);
+        assert_eq!(borders(&flat, &square(&half, Kind::Thing)), [false; 4]);
+    }
+
+    #[test]
+    fn a_sprite_drawn_from_above_lies_where_the_flat_map_draws_it_and_turns_about_its_own_middle() {
         let flat = Metrics::new((32, 32), false, None);
         // 20 x 10 pixels, 4 from the left and 2 from the top of its tile.
         let s = sprite((20.0, 10.0), (4.0, 2.0));
@@ -538,10 +832,9 @@ mod tests {
             (plain.a, plain.b),
             ([20.0 / 32.0, 0.0, 0.0], [0.0, 10.0 / 32.0, 0.0])
         );
-        // Turned counter-clockwise, its top edge, 2 pixels from the tile's top, is its left edge, 2 from the left,
-        // and its right edge, 8 from the tile's right, is its top, 8 from the top.
+        // Turned counter-clockwise about its own middle, (14, 7): 10 wide from 9 and 20 tall from -3.
         let left = lies(Turn::Left);
-        assert_eq!(left.origin, [3.0 + 2.0 / 32.0, 5.0 + 8.0 / 32.0, 0.0]);
+        assert_eq!(left.origin, [3.0 + 9.0 / 32.0, 5.0 - 3.0 / 32.0, 0.0]);
         assert_eq!((left.a[0], left.b[1]), (10.0 / 32.0, 20.0 / 32.0));
         // The sprite's top right corner is drawn at the top left.
         assert!(near(Vec2::from(left.uv), s.at + Vec2::new(20.0, 0.0)));

@@ -1,6 +1,6 @@
 //! The tileset's sheets as the 3D scene's textures: decoded in the background, a strip of rows per page.
 
-use super::geometry::{PageId, SpriteSource};
+use super::geometry::{Outline, PageId, SpriteSource};
 use crate::display::{STRIP, load};
 use crate::tileset::Sheet;
 use crate::tint::{Paint, tint_pixel};
@@ -25,6 +25,8 @@ pub struct Pages {
     painted: Mutex<HashMap<Painted, PageId>>,
     /// The first and the last column and row of each sprite's opaque pixels, none for a clear sprite.
     opaque: Mutex<HashMap<Cut, Option<[u32; 4]>>>,
+    /// The outline of the opaque pixels of each sprite pushed up from the ground.
+    outlines: Mutex<HashMap<Cut, Arc<Outline>>>,
     /// Sheets not decoded yet.
     waiting: AtomicUsize,
 }
@@ -36,6 +38,7 @@ impl Pages {
             images: Mutex::default(),
             painted: Mutex::default(),
             opaque: Mutex::default(),
+            outlines: Mutex::default(),
             waiting: AtomicUsize::new(sheets.len()),
         });
         let filling = pages.clone();
@@ -150,8 +153,8 @@ impl Pages {
     }
 
     /// `sprite` cut to the rectangle of its opaque pixels, in its place on the screen; as it is while its page is
-    /// being decoded, or when it is clear.
-    pub fn cropped(&self, sprite: SpriteSource) -> SpriteSource {
+    /// being decoded, and none when it is clear.
+    pub fn cropped(&self, sprite: SpriteSource) -> Option<SpriteSource> {
         let at = [sprite.at.x as u32, sprite.at.y as u32];
         let size = [sprite.src.x as u32, sprite.src.y as u32];
         let key = (sprite.page, at, size);
@@ -160,7 +163,7 @@ impl Pages {
             Some(bounds) => bounds,
             None => {
                 let Some(image) = self.get(sprite.page) else {
-                    return sprite;
+                    return Some(sprite);
                 };
                 // The fragment shader discards what is less opaque than half.
                 let bounds = (0..size[1])
@@ -180,16 +183,33 @@ impl Pages {
                 bounds
             }
         };
-        let Some([x0, y0, x1, y1]) = bounds else {
-            return sprite;
-        };
+        let [x0, y0, x1, y1] = bounds?;
         let corner = glam::Vec2::new(x0 as f32, y0 as f32);
-        SpriteSource {
+        Some(SpriteSource {
             at: sprite.at + corner,
             src: glam::Vec2::new((x1 + 1 - x0) as f32, (y1 + 1 - y0) as f32),
             offset: sprite.offset + corner * sprite.scale,
             ..sprite
+        })
+    }
+
+    /// The outline of the pixels of `sprite` the fragment shader draws, found once; none while its page is being
+    /// decoded.
+    pub fn outline(&self, sprite: &SpriteSource) -> Option<Arc<Outline>> {
+        let at = [sprite.at.x as u32, sprite.at.y as u32];
+        let size = [sprite.src.x as u32, sprite.src.y as u32];
+        let key = (sprite.page, at, size);
+        if let Some(known) = self.outlines.lock().ok()?.get(&key) {
+            return Some(known.clone());
         }
+        let image = self.get(sprite.page)?;
+        // The fragment shader discards what is less opaque than half.
+        let outline = Arc::new(Outline::of(size, |x, y| {
+            let pixel = image.get_pixel_checked(at[0] + x, at[1] + y);
+            pixel.is_some_and(|px| px.0[3] >= 128)
+        }));
+        self.outlines.lock().ok()?.insert(key, outline.clone());
+        Some(outline)
     }
 
     /// Some sheet is still being decoded.
