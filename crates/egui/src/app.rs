@@ -402,10 +402,21 @@ impl<M: GameModel> App<M> {
             // The game is over: the next one starts with the cursor on its player and and no travel marker.
             self.marker = None;
         }
-        // Esc interrupts a running activity; with none running it goes to the game like any key
-        // (leaves look mode, acknowledges a popup, else opens the main menu).
-        let interrupted =
-            ui.ctx().input(|i| i.key_pressed(egui::Key::Escape)) && self.model.interrupt();
+        // Esc interrupts a running activity, and then does nothing else; with none running it goes on like any key
+        // (leaves look mode, acknowledges a popup, closes a screen, else opens the main menu).
+        if ui.ctx().input(|i| i.key_pressed(egui::Key::Escape)) && self.model.interrupt() {
+            ui.ctx().input_mut(|i| {
+                i.events.retain(|e| {
+                    !matches!(
+                        e,
+                        egui::Event::Key {
+                            key: egui::Key::Escape,
+                            ..
+                        }
+                    )
+                })
+            });
+        }
         self.palette_keys(ui.ctx());
         // The palette and an open menu of the client (the map's right-click menu) have the keyboard; Escape closes
         // them.
@@ -413,7 +424,7 @@ impl<M: GameModel> App<M> {
         match component::sliced(self.model.screens()) {
             _ if client => {}
             Some(_) => self.component_keys(ui.ctx()),
-            None => self.game_keys(ui.ctx(), interrupted),
+            None => self.game_keys(ui.ctx()),
         }
         // Whichever screen took the keys, the walk ends with its key.
         self.release_hold_when_up(ui.ctx());
@@ -514,7 +525,7 @@ impl<M: GameModel> App<M> {
 
     /// Typed characters and special keys are game keys; the first one that runs an action wins.
     /// Named like the engine's key names (`SPACE`, `ESC`, `RETURN`, `UP`, `PPAGE`).
-    fn game_keys(&mut self, ctx: &egui::Context, interrupted: bool) {
+    fn game_keys(&mut self, ctx: &egui::Context) {
         use egui::Key;
         let typed = ctx.input(|i| {
             i.events
@@ -613,7 +624,7 @@ impl<M: GameModel> App<M> {
                             pressed: true,
                             modifiers,
                             ..
-                        } if !(*key == Key::Escape && (interrupted || esc_cancels))
+                        } if !(*key == Key::Escape && esc_cancels)
                             // Alt with an arrow moves the focus among the action rows, not the engine's cursor.
                             && !(modifiers.alt && matches!(key, Key::ArrowUp | Key::ArrowDown))
                             && turn_key(*key, *modifiers).is_none() =>
