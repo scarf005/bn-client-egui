@@ -1867,6 +1867,19 @@ mod failures {
     }
 
     #[test]
+    fn a_malformed_error_response_ends_its_request() {
+        let (t, _h) = session();
+        let odd = json!({"jsonrpc": "2.0", "error": "the engine broke"});
+        let (mut m, clock) = with_clock(t.on("bn.command.submit", vec![odd]));
+        assert!(m.invoke_action("RIGHT"));
+        m.poll();
+        assert!(!m.busy(), "the refused submit is over");
+        clock.advance(Duration::from_secs(3600));
+        m.poll();
+        assert!(m.failure().is_none(), "no request is left waiting");
+    }
+
+    #[test]
     fn restart_starts_a_fresh_session_through_the_respawn_hook() {
         let (t, h) = session();
         let (t2, h2) = session();
