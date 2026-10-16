@@ -2585,3 +2585,44 @@ fn the_map_version_changes_with_what_the_engine_publishes_and_with_nothing_else(
     m.poll();
     assert_ne!(m.map_version(), Some(first), "an event changed the map");
 }
+
+/// The value of the example `name` in the engine's world examples.
+fn world_example(name: &str) -> Value {
+    let all: Value = serde_json::from_str(
+        &std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/0.2.examples/world.json"
+        ))
+        .unwrap(),
+    )
+    .unwrap();
+    all["valid"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["name"] == name)
+        .unwrap_or_else(|| panic!("no example {name}"))["value"]
+        .clone()
+}
+
+#[test]
+fn a_square_action_is_named_in_the_status_by_the_label_the_engine_described_it_with() {
+    let (t, _h) = session();
+    let reply = json!({"jsonrpc":"2.0","id":0,"result": world_example("describe result")});
+    let mut m = connected(
+        t.on("bn.world.describe", vec![reply])
+            .on("bn.command.submit", walk_reply()),
+    );
+    let at = Pos { x: 22, y: 12 };
+    m.hover(at);
+    m.poll();
+    let actions = m.tile_actions(at).expect("the square was described");
+    let fire = actions
+        .iter()
+        .find(|a| a.id == "fire")
+        .expect("fire is offered");
+    assert!(m.tile_action(at, "fire"));
+    let status = m.command().unwrap();
+    assert_eq!(status.label, fire.label.shown());
+    assert_eq!(status.target.as_deref(), Some("fire"));
+}
