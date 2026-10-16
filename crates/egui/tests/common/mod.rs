@@ -247,7 +247,8 @@ pub fn iso_root(tag: &str) -> std::path::PathBuf {
 }
 
 /// A game root holding a 32 x 32 tileset `flat` drawn from above, in `gfx/flat`: grass, a shrub whose top rows
-/// are clear, a wall and a vehicle frame, each as wide and tall as the tile, and a tree twice as tall.
+/// are clear, a wall and a vehicle frame as wide and tall as the tile, a flower inside it that a person (`mon_a`)
+/// is drawn as too, and, twice as tall, a tree whose ground is a sprite of its own with grass in its bottom half.
 pub fn flat_root(tag: &str) -> std::path::PathBuf {
     let root = std::env::temp_dir().join(format!("bn-client-flat-{}-{tag}", std::process::id()));
     let dir = root.join("gfx/flat");
@@ -257,23 +258,29 @@ pub fn flat_root(tag: &str) -> std::path::PathBuf {
         "NAME: flat\nVIEW: Flat Set\nJSON: tile_config.json\nTILESET: top.png\n",
     )
     .unwrap();
-    let mut top = image::RgbaImage::new(128, 32);
+    let grass = image::Rgba([90, 170, 60, 255]);
+    let mut top = image::RgbaImage::new(160, 32);
     for (x, y, px) in top.enumerate_pixels_mut() {
         let (sprite, x) = (x / 32, x % 32);
         let shrub = (6..26).contains(&x) && (8..28).contains(&y);
+        let flower = (12..20).contains(&x) && (12..20).contains(&y);
         *px = match sprite {
-            0 => image::Rgba([90, 170, 60, 255]),
+            0 => grass,
             1 if shrub => image::Rgba([30, 90, 30, 255]),
             2 => image::Rgba([150, 150, 150, 255]),
             3 => image::Rgba([60, 90, 210, 255]),
+            4 if flower => image::Rgba([200, 60, 220, 255]),
             _ => image::Rgba([0, 0, 0, 0]),
         };
     }
     top.save(dir.join("top.png")).unwrap();
-    let mut tall = image::RgbaImage::new(32, 64);
+    let mut tall = image::RgbaImage::new(64, 64);
     for (x, y, px) in tall.enumerate_pixels_mut() {
-        if (12..20).contains(&x) && y >= 8 {
-            *px = image::Rgba([110, 70, 30, 255]);
+        let (sprite, x) = (x / 32, x % 32);
+        match sprite {
+            0 if (12..20).contains(&x) && y >= 8 => *px = image::Rgba([110, 70, 30, 255]),
+            1 if y >= 32 => *px = grass,
+            _ => {}
         }
     }
     tall.save(dir.join("tall.png")).unwrap();
@@ -285,11 +292,11 @@ pub fn flat_root(tag: &str) -> std::path::PathBuf {
                 {"id": "t_dirt", "fg": 0, "multitile": true, "additional_tiles": [{"id": "center", "fg": 0}]},
                 {"id": "t_shrub", "fg": 1, "bg": 0},
                 {"id": "t_wall", "fg": 2, "multitile": true, "additional_tiles": [{"id": "center", "fg": 2}]},
-                {"id": "vp_frame", "fg": 3}
+                {"id": "vp_frame", "fg": 3},
+                {"id": ["f_flower", "mon_a"], "fg": 4}
             ]},
             {"file": "tall.png", "sprite_width": 32, "sprite_height": 64, "sprite_offset_y": -32, "tiles": [
-                {"id": "t_tree", "fg": 4, "bg": 0},
-                {"id": "mon_a", "fg": 4}
+                {"id": "t_tree", "fg": 5, "bg": 6}
             ]}
         ]
     });

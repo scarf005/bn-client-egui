@@ -415,3 +415,49 @@ fn terrain_of_a_tileset_drawn_from_above_lies_on_the_ground_even_with_clear_rows
     assert!(shrub.iter().all(|i| i.flags[0] & BOARD == 0), "{shrub:?}");
     assert!(shrub.iter().all(|i| i.origin[2] == 0.0), "{shrub:?}");
 }
+
+/// The view square of absolute square `abs`, as the corner of the ground quad that covers it.
+fn corner(m: &EngineModel, abs: (i32, i32)) -> [f32; 2] {
+    let (x, y) = square(m, abs);
+    [x as f32, y as f32]
+}
+
+#[test]
+fn a_tree_drawn_from_above_stands_on_the_ground_its_own_sprites_draw_in_its_square() {
+    let m = model(vec![cell(4, 4, 0, "t_tree")]);
+    let scene = flat_scene_of(&m, "flat-tree");
+    let (boards, ground): (Vec<_>, Vec<_>) = at(&scene, &m, (4, 4))
+        .into_iter()
+        .partition(|i| i.flags[0] & BOARD != 0);
+    assert_eq!(boards.len(), 1, "the tree stands: {boards:?}");
+    // Its ground sprite is twice as tall as the tile with grass in the square only: it covers the square.
+    assert_eq!(ground.len(), 1, "{ground:?}");
+    assert_eq!(
+        ground[0].origin,
+        [corner(&m, (4, 4))[0], corner(&m, (4, 4))[1], 0.0]
+    );
+    assert_eq!(
+        (ground[0].a, ground[0].b),
+        ([1.0, 0.0, 0.0], [0.0, 1.0, 0.0])
+    );
+}
+
+#[test]
+fn a_flower_drawn_from_above_lies_over_the_ground_where_a_person_drawn_alike_stands() {
+    let mut flower = cell(4, 4, 0, "t_grass");
+    flower["furniture"] = look("furniture", "f_flower");
+    let m = model(vec![flower, cell(3, 4, 0, "t_grass")]);
+    let scene = flat_scene_of(&m, "flat-flower");
+    let quads = at(&scene, &m, (4, 4));
+    assert_eq!(quads.len(), 2, "{quads:?}");
+    assert!(quads.iter().all(|i| i.flags[0] & BOARD == 0), "{quads:?}");
+    let (grass, flower) = (quads[0], quads[1]);
+    // Only its eight pixels across lie where the flat map draws them, over the grass.
+    let [x, y] = corner(&m, (4, 4));
+    assert_eq!(flower.origin[..2], [x + 12.0 / 32.0, y + 12.0 / 32.0]);
+    assert_eq!(flower.a[0], 8.0 / 32.0);
+    assert!(flower.origin[2] > grass.origin[2], "{quads:?}");
+    // The avatar at (3, 4) is a person drawn with the same sprite: a creature stands.
+    let me = at(&scene, &m, (3, 4));
+    assert!(me.iter().any(|i| i.flags[0] & BOARD != 0), "{me:?}");
+}
