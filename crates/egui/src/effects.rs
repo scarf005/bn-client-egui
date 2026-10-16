@@ -256,7 +256,7 @@ impl Effects {
             self.texts.clear();
             return;
         }
-        self.tail = self.tail.max(now).min(now + MAX_QUEUE);
+        self.tail = self.tail.max(now);
         for effect in produced {
             let life = life(&effect);
             if let Shape::Text {
@@ -269,8 +269,8 @@ impl Effects {
                 self.add_text(now, at, segments, scroll, hp);
                 continue;
             }
-            // Shots and blasts follow one another.
-            let start = self.tail;
+            // Shots and blasts follow one another, none starting later than the queue bound.
+            let start = self.tail.min(now + MAX_QUEUE);
             self.tail = start + life;
             self.playing.push(Playing {
                 shape: effect.shape,
