@@ -948,7 +948,6 @@ impl<M: GameModel> TuiApp<M> {
             sections.push(row);
             ids.push(entry.id.clone());
         }
-        let (rows, selected) = (sections, cursor);
         let tabs = menu
             .tabs()
             .iter()
@@ -973,8 +972,8 @@ impl<M: GameModel> TuiApp<M> {
                 .chain(self.settings_hint(menu))
                 .collect(),
             tabs,
-            rows,
-            selected,
+            rows: sections,
+            selected: cursor,
             footer: described.lines().map(str::to_string).collect(),
             footer_scroll: self.footer.scroll,
         };
