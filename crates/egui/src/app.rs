@@ -102,6 +102,8 @@ pub struct App<M: GameModel> {
     pending_since: Option<std::time::Duration>,
     clock: bn_client_core::Clock,
     last_hover: Option<egui::Pos2>,
+    /// Where the pointer sent the engine's cursor, drawn until the engine has answered.
+    aim: Option<map::Aim>,
     /// Wheel travel over the map short of a whole zoom step, in lines.
     wheel: f32,
     wired: bool,
@@ -180,6 +182,7 @@ impl<M: GameModel> App<M> {
             pending_since: None,
             clock: bn_client_core::Clock::default(),
             last_hover: None,
+            aim: None,
             wheel: 0.0,
             wired: false,
             images: false,

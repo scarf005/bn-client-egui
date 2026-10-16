@@ -99,6 +99,14 @@ impl Canvas {
     }
 }
 
+/// The absolute square a moving pointer asked the engine's cursor (look, aim) to go to.
+#[derive(Clone, Copy)]
+pub(super) struct Aim {
+    pub(super) at: Pos,
+    /// The move went to the engine; once it is no longer busy, it has answered.
+    pub(super) sent: bool,
+}
+
 /// What the pointer and the keyboard did on the map this frame.
 struct MapInput {
     /// The cursor's view square, moved by a moving pointer.
@@ -128,8 +136,11 @@ impl<M: GameModel> App<M> {
             y: view.y + origin.y,
         };
         let looking = self.model.focus();
-        if let Some(focus) = looking {
-            self.cursor = to_abs(focus);
+        match looking {
+            // The square the pointer asked for stands until the engine has answered, so no frame shows the
+            // square the engine's cursor is leaving.
+            Some(focus) => self.cursor = self.aim.map_or(to_abs(focus), |aim| aim.at),
+            None => self.aim = None,
         }
         let player = self.model.player();
         // Native shows no cursor outside look mode and the mouse: without a pointer it is the player's square.
@@ -141,16 +152,12 @@ impl<M: GameModel> App<M> {
             y: (self.cursor.y - origin.y).clamp(0, size.y - 1),
         };
         let route = self.model.route();
-        let status = self.map_status(origin, cursor, &route);
         // The cursor's square is said politely and never drawn; the map's own description says it too.
         let said = ui.interact(
             egui::Rect::from_min_size(ui.max_rect().min, egui::Vec2::ZERO),
             ui.id().with("map_status"),
             egui::Sense::hover(),
         );
-        said.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, &status));
-        ui.ctx()
-            .accesskit_node_builder(said.id, |b| b.set_live(accesskit::Live::Polite));
         // The squares fill whole cells, so what is left over is shared by both sides, not left as a band.
         // The 3D map fills the room and turns with the right button; the flat one is its squares.
         let (extent, sense) = match three {
@@ -194,15 +201,19 @@ impl<M: GameModel> App<M> {
         }
         response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Other, true, "Map"));
         self.map_wheel(ui, &response);
-        ui.ctx().accesskit_node_builder(response.id, |b| {
-            b.set_role(accesskit::Role::Canvas);
-            b.set_description(status.as_str());
-        });
         self.map_view = Some((response.rect.min, cell_px));
         let scene = shown.as_ref().map(|(scene, _)| scene.as_ref());
         let input = self.map_pointer(ui, &response, &canvas, scene, cursor);
         let cursor = input.cursor;
         self.cursor = to_abs(cursor);
+        let status = self.map_status(origin, cursor, &route);
+        said.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, &status));
+        ui.ctx()
+            .accesskit_node_builder(said.id, |b| b.set_live(accesskit::Live::Polite));
+        ui.ctx().accesskit_node_builder(response.id, |b| {
+            b.set_role(accesskit::Role::Canvas);
+            b.set_description(status.as_str());
+        });
         self.map_tooltip(&response, &canvas, scene, cursor);
         self.map_menu(ui, &response, &canvas, input.menu_key);
         self.paint_map(&painter, &canvas, shown, season.as_deref());
@@ -329,11 +340,32 @@ impl<M: GameModel> App<M> {
             cursor = cell_at(p);
             // The engine's own cursor follows the mouse while it is looking or aiming; otherwise the
             // native mouse view describes the square.
-            if !self.model.aim(cursor, false) {
-                self.model.hover(cursor);
+            match self.model.focus() {
+                Some(_) => {
+                    self.aim = Some(Aim {
+                        at: to_abs(cursor),
+                        sent: false,
+                    })
+                }
+                None => self.model.hover(cursor),
             }
         }
         self.last_hover = hover;
+        // One move is in flight at a time: the pointer's latest square goes once the engine is free, and the
+        // square stands until the engine has answered it, wherever the engine then put its cursor.
+        if let Some(aim) = self.aim.as_mut().filter(|_| !self.model.busy()) {
+            match aim.sent {
+                true => self.aim = None,
+                false => {
+                    aim.sent = true;
+                    let at = Pos {
+                        x: aim.at.x - origin.x,
+                        y: aim.at.y - origin.y,
+                    };
+                    self.model.aim(at, false);
+                }
+            }
+        }
         let mut menu_key = false;
         // A click goes to the square it landed on, not to where the pointer was last seen hovering.
         let clicked = response.interact_pointer_pos().map_or(cursor, cell_at);
