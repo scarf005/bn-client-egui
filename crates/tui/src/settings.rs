@@ -6,7 +6,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 /// A value being typed for a row or field.
 pub(super) struct Edit {
-    id: String,
+    pub(super) id: String,
     text: String,
     numeric: bool,
     /// The field is the whole screen (a text prompt): Esc cancels the prompt, not just the edit.

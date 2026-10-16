@@ -26,8 +26,9 @@ pub struct TuiApp<M: GameModel> {
     /// engine binds neither; the engine's cursor moving takes the highlight back.
     engine_at: Option<usize>,
     moved: Option<usize>,
-    /// Identity of the menu `selected` refers to; a different menu resets the selection.
-    menu_sig: Option<(String, usize, Option<String>)>,
+    /// Identity of the menu `selected` refers to, its schema id and selected tab; a different menu resets the
+    /// selection.
+    menu_sig: Option<(String, Option<String>)>,
     quit: bool,
     /// Where the map cells were last drawn, for mouse clicks.
     map_cells: Rect,
@@ -169,13 +170,14 @@ impl<M: GameModel> TuiApp<M> {
         let menu = self.model.menu();
         let sig = menu.as_ref().map(|m| {
             let tab = m.tabs().iter().find(|t| t.selected).map(|t| t.id.clone());
-            (m.title.clone(), m.entries().len(), tab)
+            (m.schema_id.clone(), tab)
         });
+        // Typing a filter changes the rows but not the field it is typed into.
+        let field = menu.as_ref().and_then(|m| m.field.as_ref()).map(|f| &f.id);
+        if self.edit.as_ref().is_some_and(|e| Some(&e.id) != field) {
+            self.edit = None;
+        }
         if sig != self.menu_sig {
-            // Typing a filter changes the rows but not the screen.
-            if sig.as_ref().map(|s| &s.0) != self.menu_sig.as_ref().map(|s| &s.0) {
-                self.edit = None;
-            }
             self.selected = 0;
             self.moved = None;
             self.action_focus = None;

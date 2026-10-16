@@ -329,6 +329,8 @@ impl PaneTotals {
 pub struct Menu {
     /// The engine's name for the kind of menu, such as `MAIN_MENU`.
     pub context: String,
+    /// The engine's id of what the menu shows; it changes with the rows and stays while more pages come.
+    pub schema_id: String,
     pub title: String,
     pub message: String,
     /// `good` or `bad` where the native screen colors the message line; empty otherwise.

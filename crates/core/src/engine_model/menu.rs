@@ -124,6 +124,7 @@ impl EngineModel {
         };
         Menu {
             context: i.context.clone(),
+            schema_id: i.schema_id.clone(),
             field: field(i),
             can_set_count: i.allow_set_count,
             title: i.title.clone(),
