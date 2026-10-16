@@ -1479,7 +1479,14 @@ pub fn parse_message(msg: &Value) -> Result<Incoming, serde_json::Error> {
         return Ok(Incoming::Malformed("response without numeric id".into()));
     };
     let result = match msg.get("error") {
-        Some(e) => Err(serde_json::from_value(e.clone())?),
+        // An error in another shape still ends its request, with the engine's words as the message.
+        Some(e) => Err(
+            serde_json::from_value(e.clone()).unwrap_or_else(|_| RpcError {
+                code: 0,
+                message: e.as_str().map_or_else(|| e.to_string(), String::from),
+                data: None,
+            }),
+        ),
         None => Ok(msg.get("result").cloned().unwrap_or(Value::Null)),
     };
     Ok(Incoming::Response { id, result })
