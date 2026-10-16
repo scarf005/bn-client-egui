@@ -23,11 +23,12 @@ enum Column {
     Inventory,
 }
 
-/// Drag payload: which column the item comes from and its index there.
-#[derive(Clone, Copy)]
+/// Drag payload: which column the item comes from and which item it is.
+#[derive(Clone)]
 struct Dragged {
     from: Column,
-    index: usize,
+    /// The engine's id of the row, so a list that changes before the drop still moves this item.
+    item_id: String,
 }
 
 impl<M: GameModel> App<M> {
@@ -121,24 +122,27 @@ impl<M: GameModel> App<M> {
         let mut moved = None;
         let season = self.model.season();
         for column in [Column::Ground, Column::Inventory] {
-            let (title, verb, items, cells) = match column {
+            let (title, verb, items, cells, ids) = match column {
                 Column::Ground => (
                     "Ground",
                     "Pick up",
                     self.model.ground(),
                     self.model.ground_cells(),
+                    self.model.ground_ids(),
                 ),
                 Column::Inventory => (
                     "Inventory",
                     "Drop",
                     self.model.inventory(),
                     self.model.inventory_cells(),
+                    self.model.inventory_ids(),
                 ),
             };
             let rows = items
                 .iter()
+                .zip(ids)
                 .enumerate()
-                .map(|(i, name)| (name, self.rich(ui, name), cells.get(i)))
+                .map(|(i, (name, id))| (name, self.rich(ui, name), cells.get(i), id))
                 .collect::<Vec<_>>();
             // The heading is part of the drop zone, so dropping on it works too.
             // Only a drag in progress gives the zone a fill; idle zones are bare.
@@ -163,7 +167,7 @@ impl<M: GameModel> App<M> {
                             .max_height(room)
                             .auto_shrink([false, true])
                             .show(ui, |ui| {
-                                for (index, (name, label, cell)) in rows.into_iter().enumerate() {
+                                for (name, label, cell, item_id) in rows {
                                     ui.horizontal(|ui| {
                                         if let Some(cell) = cell {
                                             icon(ui, &mut self.display, cell, season.as_deref());
@@ -194,7 +198,7 @@ impl<M: GameModel> App<M> {
                                             .inner;
                                         grip.dnd_set_drag_payload(Dragged {
                                             from: column,
-                                            index,
+                                            item_id: item_id.clone(),
                                         });
                                         let button = ui.button(verb);
                                         ui.ctx().accesskit_node_builder(button.id, |b| {
@@ -203,7 +207,7 @@ impl<M: GameModel> App<M> {
                                         if button.clicked() {
                                             moved = Some(Dragged {
                                                 from: column,
-                                                index,
+                                                item_id,
                                             });
                                         }
                                         // Tabbing to a row below the fold brings it into view.
@@ -217,18 +221,18 @@ impl<M: GameModel> App<M> {
                 })
                 .inner;
             if let Some(d) = dropped.filter(|d| d.from != column) {
-                moved = Some(*d);
+                moved = Some((*d).clone());
             }
         }
         match moved {
             Some(Dragged {
                 from: Column::Ground,
-                index,
-            }) => self.model.pick_up(index),
+                item_id,
+            }) => self.model.pick_up(&item_id),
             Some(Dragged {
                 from: Column::Inventory,
-                index,
-            }) => self.model.drop_item(index),
+                item_id,
+            }) => self.model.drop_item(&item_id),
             None => {}
         }
     }

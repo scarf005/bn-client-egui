@@ -349,20 +349,27 @@ fn pick_up_and_drop_send_the_engines_row_id_and_count() {
     let mut carried = item("flashlight", 1, Some("carried"), "flashlight");
     carried["id"] = json!("item:i1");
     h.push(avatar_event(
-        json!([carried]),
-        json!([ground, item("no id", 1, None, "no id")]),
+        json!([carried.clone()]),
+        json!([ground.clone(), item("no id", 1, None, "no id")]),
     ));
     m.poll();
-    m.pick_up(1);
+    assert_eq!(m.ground_ids(), ["item:g1", ""]);
+    m.pick_up("");
     assert!(submits(&h).is_empty(), "a row without an id names nothing");
-    m.pick_up(0);
+    // The ground changed after the player chose: the chosen item is still the one taken.
+    h.push(avatar_event(
+        json!([carried]),
+        json!([item("rock", 1, None, "rock"), ground]),
+    ));
+    m.poll();
+    m.pick_up("item:g1");
     assert_eq!(
         submits(&h)[0]["params"]["operation"],
         json!({"kind":"pickup","item_id":"item:g1","count":2})
     );
     h.push(fixture("command_completed"));
     m.poll();
-    m.drop_item(0);
+    m.drop_item("item:i1");
     assert_eq!(
         submits(&h)[1]["params"]["operation"],
         json!({"kind":"drop","item_id":"item:i1","count":1})

@@ -636,8 +636,14 @@ fn wide_map_glyphs_do_not_shift_the_rest_of_the_row() {
         fn inventory(&self) -> &[String] {
             self.0.inventory()
         }
-        fn pick_up(&mut self, _: usize) {}
-        fn drop_item(&mut self, _: usize) {}
+        fn ground_ids(&self) -> Vec<String> {
+            vec![]
+        }
+        fn inventory_ids(&self) -> Vec<String> {
+            vec![]
+        }
+        fn pick_up(&mut self, _: &str) {}
+        fn drop_item(&mut self, _: &str) {}
         fn messages(&self) -> &[String] {
             self.0.messages()
         }
@@ -1032,8 +1038,14 @@ fn item_lists_beside_the_map_show_colour_tags_as_colour_not_text() {
         fn inventory(&self) -> &[String] {
             &self.1
         }
-        fn pick_up(&mut self, _: usize) {}
-        fn drop_item(&mut self, _: usize) {}
+        fn ground_ids(&self) -> Vec<String> {
+            vec![]
+        }
+        fn inventory_ids(&self) -> Vec<String> {
+            vec![]
+        }
+        fn pick_up(&mut self, _: &str) {}
+        fn drop_item(&mut self, _: &str) {}
         fn messages(&self) -> &[String] {
             self.0.messages()
         }

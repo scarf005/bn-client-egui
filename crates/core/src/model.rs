@@ -648,8 +648,13 @@ pub trait GameModel {
     fn inventory_cells(&self) -> &[Cell] {
         &[]
     }
-    fn pick_up(&mut self, index: usize);
-    fn drop_item(&mut self, index: usize);
+    /// The engine's id of each `ground` row, empty where it names none; pickup and drop name a row by it, so a
+    /// list that changed since the player chose still takes the chosen item.
+    fn ground_ids(&self) -> Vec<String>;
+    /// The same for the rows of `inventory`.
+    fn inventory_ids(&self) -> Vec<String>;
+    fn pick_up(&mut self, item_id: &str);
+    fn drop_item(&mut self, item_id: &str);
     /// Client-side lines: command results and errors.
     fn messages(&self) -> &[String];
     /// Sounds heard that the game's message log does not hold: grouped, oldest first, faded by age.
@@ -810,14 +815,23 @@ impl GameModel for FakeModel {
         &self.inventory
     }
 
-    fn pick_up(&mut self, index: usize) {
-        if index < self.ground.len() {
+    // The fake's items are their own ids.
+    fn ground_ids(&self) -> Vec<String> {
+        self.ground.clone()
+    }
+
+    fn inventory_ids(&self) -> Vec<String> {
+        self.inventory.clone()
+    }
+
+    fn pick_up(&mut self, item_id: &str) {
+        if let Some(index) = self.ground.iter().position(|i| i == item_id) {
             self.inventory.push(self.ground.remove(index));
         }
     }
 
-    fn drop_item(&mut self, index: usize) {
-        if index < self.inventory.len() {
+    fn drop_item(&mut self, item_id: &str) {
+        if let Some(index) = self.inventory.iter().position(|i| i == item_id) {
             self.ground.push(self.inventory.remove(index));
         }
     }

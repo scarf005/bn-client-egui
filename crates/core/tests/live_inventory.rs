@@ -68,7 +68,7 @@ fn live_pick_up_a_chosen_ground_item_wield_it_and_drop_it() {
     );
 
     // The tutorial avatar has no storage: the native pickup answers with its own wield offer.
-    model.pick_up(0);
+    model.pick_up(&model.ground_ids()[0].clone());
     settle(&mut model);
     let menu = model.menu().expect("the native capacity offer");
     assert!(menu.message.contains("Not enough capacity"), "{menu:?}");
@@ -83,7 +83,7 @@ fn live_pick_up_a_chosen_ground_item_wield_it_and_drop_it() {
     assert_eq!(model.inventory(), [format!("{item} (wielded)")]);
     assert!(model.ground().is_empty(), "{:?}", model.ground());
 
-    model.drop_item(0);
+    model.drop_item(&model.inventory_ids()[0].clone());
     settle(&mut model);
     println!("MENU {:?}", model.menu());
     dismiss_popups(&mut model);

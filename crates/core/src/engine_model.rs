@@ -175,6 +175,13 @@ struct Hover {
 /// The engine's id of an item row and how many items it stands for.
 type ItemRow = (String, u64);
 
+/// The row the engine names `item_id`; none for an empty id or a row that is gone.
+fn row_of(rows: &[ItemRow], item_id: &str) -> Option<ItemRow> {
+    rows.iter()
+        .find(|(id, _)| !id.is_empty() && id == item_id)
+        .cloned()
+}
+
 fn look_name(l: &Look) -> String {
     (l.name.clone().or_else(|| l.id.clone())).unwrap_or_else(|| l.glyph.clone())
 }
@@ -1055,18 +1062,25 @@ impl GameModel for EngineModel {
         &self.inventory_cells
     }
 
-    fn pick_up(&mut self, index: usize) {
-        if let (false, Some((item_id, count))) = (self.busy, self.ground_items.get(index).cloned())
-            && !item_id.is_empty()
-        {
+    fn ground_ids(&self) -> Vec<String> {
+        self.ground_items.iter().map(|(id, _)| id.clone()).collect()
+    }
+
+    fn inventory_ids(&self) -> Vec<String> {
+        self.inventory_items
+            .iter()
+            .map(|(id, _)| id.clone())
+            .collect()
+    }
+
+    fn pick_up(&mut self, item_id: &str) {
+        if let (false, Some((item_id, count))) = (self.busy, row_of(&self.ground_items, item_id)) {
             self.submit(Operation::Pickup { item_id, count });
         }
     }
 
-    fn drop_item(&mut self, index: usize) {
-        if let (false, Some((item_id, count))) =
-            (self.busy, self.inventory_items.get(index).cloned())
-            && !item_id.is_empty()
+    fn drop_item(&mut self, item_id: &str) {
+        if let (false, Some((item_id, count))) = (self.busy, row_of(&self.inventory_items, item_id))
         {
             self.submit(Operation::Drop { item_id, count });
         }
