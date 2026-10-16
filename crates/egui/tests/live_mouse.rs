@@ -174,7 +174,7 @@ fn start<'a>(entry: &str) -> H<'a> {
 #[test]
 #[ignore = "requires BN_ENGINE pointing at an engine binary"]
 fn the_toolbar_the_square_menu_and_the_inventory_by_mouse() {
-    let mut h = start("new_game:play_now");
+    let mut h = start("new_game:play_now_default");
 
     // The bar is the engine's: one button per published shortcut, named as the engine names it.
     let shortcuts = h.state().model.shortcuts();
