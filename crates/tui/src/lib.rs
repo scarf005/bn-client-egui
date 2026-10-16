@@ -242,12 +242,13 @@ impl<M: GameModel> TuiApp<M> {
             return;
         }
         if let Some(menu) = self.menu() {
-            return match menu.context.as_str() {
-                _ if self.footer_key(key) => {}
-                _ if !menu.screen && self.action_row_key(&menu, key) => {}
-                _ if !menu.screen && self.settings_key(&menu, key) => {}
-                _ => self.menu_key(&menu, key),
-            };
+            let taken = self.footer_key(key)
+                || (!menu.screen
+                    && (self.action_row_key(&menu, key) || self.settings_key(&menu, key)));
+            if !taken {
+                self.menu_key(&menu, key);
+            }
+            return;
         }
         let token = token(key);
         if token.as_ref().is_some_and(|t| self.model.press(t)) {
@@ -407,11 +408,6 @@ impl<M: GameModel> TuiApp<M> {
         }
     }
 
-    /// A mouse click on a map square: the engine plans the route, a repeat walks it.
-    fn go_to(&mut self, view: Pos) {
-        self.model.travel(view);
-    }
-
     /// The mouse as the game reads it: the wheel steps an engine menu, hovering a map cell asks for its
     /// native description (or moves the engine's own cursor), the left click travels there (the first
     /// click shows the route), the right click is the engine's context click.
@@ -468,7 +464,8 @@ impl<M: GameModel> TuiApp<M> {
             }
             MouseEventKind::Down(MouseButton::Left) => {
                 if !self.model.aim(view, true) {
-                    self.go_to(view);
+                    // The engine plans the route; a repeat click walks it.
+                    self.model.travel(view);
                 }
             }
             MouseEventKind::Down(MouseButton::Right) => {
@@ -599,9 +596,7 @@ impl<M: GameModel> TuiApp<M> {
             );
         }
         if let Some(menu) = self.menu() {
-            match menu.context.as_str() {
-                _ => self.draw_menu(f, &menu),
-            }
+            self.draw_menu(f, &menu);
         }
         if let Some(row) = self.actions_open {
             self.draw_action_list(f, row);
