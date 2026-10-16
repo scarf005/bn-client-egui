@@ -1948,11 +1948,10 @@ fn square(x: i32, y: i32, z: i32) -> Value {
 }
 
 #[test]
-fn animation_facts_become_effects_in_view_coordinates() {
+fn animation_facts_become_effects_on_their_world_squares() {
     use bn_client_core::{Pos, Shape};
     let (t, h) = session();
     let mut m = connected(t);
-    let me = m.player();
     h.push(fact_event(
         "projectile.moved",
         json!({"projectile": "projectile:1", "path": [square(4, 4, 0), square(5, 4, 0), square(5, 4, 1)],
@@ -1969,17 +1968,8 @@ fn animation_facts_become_effects_in_view_coordinates() {
     assert_eq!(*glyph, '*');
     assert_eq!(
         *path,
-        [
-            Pos {
-                x: me.x + 1,
-                y: me.y
-            },
-            Pos {
-                x: me.x + 2,
-                y: me.y
-            }
-        ],
-        "squares on another level are dropped"
+        [Pos { x: 4, y: 4 }, Pos { x: 5, y: 4 }],
+        "world squares, which a view that scrolls before they play still finds; squares on another level are dropped"
     );
     assert!(m.take_effects().is_empty(), "each fact is handed out once");
 }
