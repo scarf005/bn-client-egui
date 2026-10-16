@@ -1,3 +1,4 @@
+pub mod audio;
 pub mod clock;
 pub mod color_table;
 pub mod colors;

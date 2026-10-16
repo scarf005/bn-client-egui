@@ -674,6 +674,14 @@ pub trait GameModel {
     fn take_effects(&mut self) -> Vec<Effect> {
         vec![]
     }
+    /// The folder of the sound pack the engine plays from; none while its sound is off.
+    fn soundpack(&self) -> Option<std::path::PathBuf> {
+        None
+    }
+    /// What the engine's sound player was asked to play since the last call.
+    fn take_cues(&mut self) -> Vec<crate::audio::Cue> {
+        vec![]
+    }
 }
 
 pub struct FakeModel {

@@ -108,6 +108,8 @@ pub struct EngineModel {
     tints_told: Vec<String>,
     /// The engine's `USE_TILES` and `TILES` options from its hello.
     display: Option<(bool, String)>,
+    /// The sound pack folder from the hello.
+    soundpack: Option<std::path::PathBuf>,
     /// The earliest time to tell the engine again after it refused.
     tiles_retry: Duration,
     transport: Box<dyn Transport>,
@@ -360,6 +362,7 @@ impl EngineModel {
             locale,
             data_root: None,
             catalogue: None,
+            soundpack: None,
             tiles,
             tiles_told: tiles,
             tint_ids: vec![],
@@ -736,6 +739,9 @@ impl EngineModel {
                         d.get("tileset")?.as_str()?.to_string(),
                     ))
                 });
+                self.soundpack = value["engine"]["sound"]["soundpack"]
+                    .as_str()
+                    .map(std::path::PathBuf::from);
                 self.mark("hello");
                 self.catalogue = self.data_root.as_deref().and_then(|root| {
                     Catalogue::load(root, value["locale"].as_str()?).map(Arc::new)
@@ -1703,6 +1709,14 @@ impl GameModel for EngineModel {
 
     fn display_default(&self) -> Option<(bool, String)> {
         self.display.clone()
+    }
+
+    fn soundpack(&self) -> Option<std::path::PathBuf> {
+        self.soundpack.clone()
+    }
+
+    fn take_cues(&mut self) -> Vec<crate::audio::Cue> {
+        self.replica.take_cues()
     }
 
     fn set_tiles(&mut self, tiles: bool) {

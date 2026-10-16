@@ -63,6 +63,8 @@ pub struct Replica {
     /// `(parts expected, next part index)` while a snapshot is loading.
     loading: Option<(u32, u32)>,
     sounds: Vec<Sound>,
+    /// What the engine's sound player was asked to play, in order.
+    cues: Vec<crate::audio::Cue>,
     lines: Vec<LoggedLine>,
     facts: Vec<Fact>,
 }
@@ -167,6 +169,13 @@ impl Replica {
                         .as_ref()
                         .map_or(0, |d| d["duration_ms"].as_u64().unwrap_or(0)),
                 });
+            }
+            if let Some(cue) = e
+                .data
+                .as_ref()
+                .and_then(|data| crate::audio::Cue::of_event(&e.kind, data))
+            {
+                self.cues.push(cue);
             }
             if let Some(data) = &e.data {
                 let shown = |name: &str| {
@@ -334,6 +343,11 @@ impl Replica {
     /// Message-log lines since the last call, in log order.
     pub fn take_lines(&mut self) -> Vec<LoggedLine> {
         std::mem::take(&mut self.lines)
+    }
+
+    /// Sound cues since the last call, in the order the engine published them.
+    pub fn take_cues(&mut self) -> Vec<crate::audio::Cue> {
+        std::mem::take(&mut self.cues)
     }
 
     /// Sounds the message log does not hold, since the last call.
