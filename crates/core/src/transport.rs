@@ -131,7 +131,9 @@ impl Profile {
 
 /// Engine child process speaking JSON-RPC on stdin/stdout.
 pub struct StdioTransport {
-    child: Child,
+    child: Arc<Mutex<Child>>,
+    /// How the engine ended, set by the reader before it reports `Closed`.
+    exit: Arc<Mutex<Option<String>>>,
     out: Sender<String>,
     incoming: Receiver<Incoming>,
     waker: Arc<Mutex<Option<Waker>>>,
@@ -144,7 +146,7 @@ pub struct StdioTransport {
 impl StdioTransport {
     /// The engine's process id, for tests that kill it.
     pub fn pid(&self) -> u32 {
-        self.child.id()
+        self.child.lock().unwrap().id()
     }
 
     /// Runs the engine on its own default user and config directories (your real saves and options).
@@ -209,6 +211,9 @@ impl StdioTransport {
             }
         });
         let stdout = child.stdout.take().expect("piped stdout");
+        let child = Arc::new(Mutex::new(child));
+        let exit: Arc<Mutex<Option<String>>> = Arc::default();
+        let (reaped, ended) = (child.clone(), exit.clone());
         let trace = Trace::from_env();
         let (tx, incoming) = mpsc::channel();
         let waker: Arc<Mutex<Option<Waker>>> = Arc::default();
@@ -245,6 +250,8 @@ impl StdioTransport {
             }
             // The last stderr lines explain the exit, so they must be in before the UI hears of it.
             let _ = err_reader.join();
+            // Reaped here, off the UI thread, so the failure screen can name the status at once.
+            *ended.lock().unwrap() = reap(&reaped);
             notify(Incoming::Closed);
         });
         std::thread::spawn(move || {
@@ -261,6 +268,7 @@ impl StdioTransport {
         });
         Ok(Self {
             child,
+            exit,
             out,
             incoming,
             waker,
@@ -293,29 +301,35 @@ impl Transport for StdioTransport {
     }
 
     fn exit_reason(&mut self) -> Option<String> {
-        // Output closes just before the process is reaped.
-        for _ in 0..20 {
-            if let Some(status) = self.child.try_wait().ok().flatten() {
-                #[cfg(unix)]
-                let signal = std::os::unix::process::ExitStatusExt::signal(&status);
-                #[cfg(not(unix))]
-                let signal: Option<i32> = None;
-                return Some(match (status.code(), signal) {
-                    (Some(code), _) => format!("exit code {code}"),
-                    (None, Some(signal)) => format!("signal {signal}"),
-                    _ => "unknown status".into(),
-                });
-            }
-            std::thread::sleep(std::time::Duration::from_millis(50));
-        }
-        None
+        self.exit.lock().unwrap().clone()
     }
+}
+
+/// How the engine process ended, waiting up to 1 s after its output closes: `exit code 0` or `signal 9`.
+fn reap(child: &Mutex<Child>) -> Option<String> {
+    // Output closes just before the process is reaped.
+    for _ in 0..20 {
+        if let Some(status) = child.lock().unwrap().try_wait().ok().flatten() {
+            #[cfg(unix)]
+            let signal = std::os::unix::process::ExitStatusExt::signal(&status);
+            #[cfg(not(unix))]
+            let signal: Option<i32> = None;
+            return Some(match (status.code(), signal) {
+                (Some(code), _) => format!("exit code {code}"),
+                (None, Some(signal)) => format!("signal {signal}"),
+                _ => "unknown status".into(),
+            });
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    None
 }
 
 impl Drop for StdioTransport {
     fn drop(&mut self) {
-        let _ = self.child.kill();
-        let _ = self.child.wait();
+        let mut child = self.child.lock().unwrap();
+        let _ = child.kill();
+        let _ = child.wait();
         if let Some(dir) = &self.dir {
             let _ = std::fs::remove_dir_all(dir);
         }
