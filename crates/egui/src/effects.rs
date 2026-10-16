@@ -453,7 +453,7 @@ impl Effects {
         out
     }
 
-    /// Draws what is playing at `now`. `cell` is the screen square of a view square.
+    /// Draws what is playing at `now`. `cell` is the screen square of a world square.
     pub fn paint(
         &self,
         painter: &egui::Painter,
