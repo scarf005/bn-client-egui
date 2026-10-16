@@ -49,11 +49,15 @@ fn sent_actions(script: &ScriptHandle) -> usize {
 }
 
 fn wheel(h: &mut H, dy: f32) {
+    wheel_in(h, egui::MouseWheelUnit::Line, dy);
+}
+
+fn wheel_in(h: &mut H, unit: egui::MouseWheelUnit, dy: f32) {
     let at = h.get_by_label("Map").rect().center();
     h.hover_at(at);
     h.run_steps(2);
     h.event(egui::Event::MouseWheel {
-        unit: egui::MouseWheelUnit::Line,
+        unit,
         delta: egui::vec2(0.0, dy),
         phase: egui::TouchPhase::Move,
         modifiers: egui::Modifiers::NONE,
@@ -101,6 +105,24 @@ fn the_wheel_over_the_map_zooms_it_and_is_bounded() {
     assert!(least < before && least > 0.0);
     wheel(&mut h, -1.0);
     assert_eq!(h.state().display().zoom(), least, "zoom out stops");
+}
+
+#[test]
+fn touchpad_scroll_in_points_zooms_one_step_per_line_it_adds_up_to() {
+    let (mut h, _script) = zooming(None);
+    let before = h.state().display().zoom();
+    let line = egui::InputOptions::default().line_scroll_speed;
+    for _ in 0..10 {
+        wheel_in(&mut h, egui::MouseWheelUnit::Point, 0.1);
+    }
+    assert_eq!(h.state().display().zoom(), before, "a tenth of a point");
+    wheel_in(&mut h, egui::MouseWheelUnit::Point, line - 2.0);
+    assert_eq!(h.state().display().zoom(), before, "short of one line");
+    wheel_in(&mut h, egui::MouseWheelUnit::Point, 2.0);
+    let one = h.state().display().zoom();
+    assert!(one > before, "one line: {before} -> {one}");
+    wheel_in(&mut h, egui::MouseWheelUnit::Point, -1.5 * line);
+    assert_eq!(h.state().display().zoom(), before, "one step back");
 }
 
 #[test]
