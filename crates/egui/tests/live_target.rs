@@ -297,10 +297,25 @@ fn the_target_follows_the_pointer(h: &mut H, mode: &str) {
     save(h, &format!("{mode}-3-clicked.png"));
 }
 
+/// One `name` from the debug menu's item spawner, into the inventory.
+fn spawn(h: &mut H, name: &str) {
+    assert!(h.state_mut().model.invoke_action("debug"));
+    pick(h, "Spawning");
+    pick(h, "Spawn an item");
+    pick(h, name);
+    if let Some(field) = h.state().model.menu().and_then(|m| m.field) {
+        h.state_mut().model.fill(&field.id, "1", true);
+        run_until(h, name, 60, |h| !h.state().model.busy());
+    }
+    dismiss_popups(h);
+}
+
 #[test]
 #[ignore = "requires BN_ENGINE pointing at an engine binary"]
 fn live_throwing_follows_the_pointer_and_a_click_throws() {
     let mut h = start();
+    // A random start may carry nothing to throw; a pistol (on the spawn list's first page) flies far enough.
+    spawn(&mut h, "12 gauge pistol");
     let carried = h.state().model.inventory().len();
     // The first carried item that flies far enough for the squares the pointer goes to; a heavy one is put back.
     for at in 0.. {
@@ -335,16 +350,8 @@ fn live_throwing_follows_the_pointer_and_a_click_throws() {
 #[ignore = "requires BN_ENGINE pointing at an engine binary"]
 fn live_firing_follows_the_pointer_and_a_click_fires() {
     let mut h = start();
-    // A loaded pistol from the debug menu, wielded.
-    assert!(h.state_mut().model.invoke_action("debug"));
-    pick(&mut h, "Spawning");
-    pick(&mut h, "Spawn an item");
-    pick(&mut h, "12 gauge pistol");
-    if let Some(field) = h.state().model.menu().and_then(|m| m.field) {
-        h.state_mut().model.fill(&field.id, "1", true);
-        run_until(&mut h, "the pistol", 60, |h| !h.state().model.busy());
-    }
-    dismiss_popups(&mut h);
+    // A loaded pistol, wielded.
+    spawn(&mut h, "12 gauge pistol");
     type_key(&mut h, "w");
     run_until(&mut h, "the wield list", 60, |h| {
         !rows_labelled(h, "pistol").is_empty()
