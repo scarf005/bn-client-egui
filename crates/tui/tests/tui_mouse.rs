@@ -109,6 +109,20 @@ fn hovering_a_map_square_asks_for_its_native_description_and_the_status_line_sho
 }
 
 #[test]
+fn leaving_the_map_clears_the_hover_text() {
+    let (mut app, _h) = engine();
+    let t = render(&mut app);
+    let (x, y) = avatar(&t);
+    app.handle_mouse(mouse(MouseEventKind::Moved, x + 2, y));
+    app.model.poll();
+    assert!(text(&render(&mut app)).contains("A zombie is here."));
+    let right = t.backend().buffer().area.width - 1;
+    app.handle_mouse(mouse(MouseEventKind::Moved, right, 0));
+    let shown = text(&render(&mut app));
+    assert!(!shown.contains("A zombie is here."), "{shown}");
+}
+
+#[test]
 fn right_click_on_a_map_square_is_the_engines_context_click() {
     let (mut app, h) = engine();
     let t = render(&mut app);
