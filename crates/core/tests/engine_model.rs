@@ -2601,6 +2601,31 @@ fn a_hovered_squares_description_stays_while_its_new_answer_is_pending() {
 }
 
 #[test]
+fn a_hovered_squares_actions_stay_while_its_new_answer_is_pending() {
+    let (t, h) = session();
+    let reply = json!({"jsonrpc":"2.0","id":0,"result": world_example("describe result")});
+    // Only the first question is answered.
+    let mut m = connected(t.on("bn.world.describe", vec![reply]));
+    let at = Pos { x: 22, y: 12 };
+    m.hover(at);
+    m.poll();
+    let ids = |m: &mut EngineModel| {
+        m.tile_actions(at)
+            .map(|a| a.into_iter().map(|a| a.id).collect::<Vec<_>>())
+    };
+    let before = ids(&mut m).expect("the square was described");
+    assert!(!before.is_empty());
+    h.push(change(41, json!({"route": [pos(4, 4)]})));
+    m.poll();
+    assert_eq!(describes(&h), 2, "the new revision is asked about");
+    assert_eq!(
+        ids(&mut m),
+        Some(before),
+        "the earlier actions are offered until the new answer arrives"
+    );
+}
+
+#[test]
 fn no_command_leaves_for_the_old_world_while_the_new_one_is_being_fetched() {
     let (t, h) = session();
     // The engine has not answered the new subscription yet.
