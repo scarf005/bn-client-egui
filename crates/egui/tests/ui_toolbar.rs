@@ -2,7 +2,7 @@
 //! a click is an invoke of the map's registered action of that id.
 mod common;
 use bn_client_egui::transport::{ScriptHandle, ScriptedTransport};
-use bn_client_egui::{App, Clock, ConnectOptions, EngineModel};
+use bn_client_egui::{App, Clock, ConnectOptions, EngineModel, GameModel};
 use common::fixture;
 use eframe::egui::{self, accesskit::Role};
 use egui_kittest::Harness;
@@ -116,4 +116,16 @@ fn the_tooltip_of_a_shortcut_names_its_bound_key() {
     h.get_by_role_and_label(Role::Button, "Inventory").hover();
     h.run_steps(4);
     h.get_by_label("Inventory [i]");
+}
+
+#[test]
+fn a_step_on_its_way_leaves_every_shortcut_as_enabled_as_the_engine_has_it() {
+    let (mut h, _) = harness();
+    assert!(h.state_mut().model.invoke_action("inventory"));
+    h.run_steps(3);
+    assert!(h.state().model.busy(), "the command is still on its way");
+    for (_, label, _, _, enabled) in SHORTCUTS {
+        let node = h.get_by_role_and_label(Role::Button, label);
+        assert_eq!(node.accesskit_node().is_disabled(), !enabled, "{label}");
+    }
 }
