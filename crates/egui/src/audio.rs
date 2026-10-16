@@ -318,6 +318,37 @@ mod tests {
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
+    /// The sound packs are Ogg Vorbis, whose decoder starts with an empty span.
+    #[test]
+    fn an_ogg_file_plays_once_repeats_a_set_number_of_times_and_loops() {
+        let file = Path::new(env!("CARGO_MANIFEST_DIR")).join("../core/tests/fixtures/tone.ogg");
+        let (mixer, mut out) =
+            rodio::mixer::mixer(NonZero::new(2).unwrap(), NonZero::new(48000).unwrap());
+        let mut speakers = Speakers::new(mixer);
+        let play = |track: Track, loops: Option<u32>| Play {
+            track,
+            file: file.clone(),
+            gain: 1.0,
+            pan: None,
+            loops,
+            fade_in: Duration::ZERO,
+        };
+        // A second of stereo samples.
+        let second = 96000;
+        // The one-second tone (about 0.09 of full scale), twice: sounding in its first and second seconds, not after.
+        speakers.play(play(Track::Music, Some(1)));
+        assert!(loudest(&mut out, second) > 0.05);
+        assert!(speakers.playing(&Track::Music));
+        assert!(loudest(&mut out, second) > 0.05);
+        assert!(loudest(&mut out.by_ref().skip(second / 10), second) < 1e-3);
+        assert!(!speakers.playing(&Track::Music));
+        // A track repeated until stopped still sounds after many times its length.
+        let track = Track::Channel("ambience".into());
+        speakers.play(play(track.clone(), None));
+        assert!(loudest(&mut out.by_ref().skip(5 * second), second) > 0.05);
+        assert!(speakers.playing(&track));
+    }
+
     #[test]
     fn a_channel_pans_repeats_and_fades_out() {
         let dir = std::env::temp_dir().join(format!("bn-channel-{}", std::process::id()));
