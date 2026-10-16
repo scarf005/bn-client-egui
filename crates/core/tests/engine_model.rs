@@ -1505,6 +1505,49 @@ fn the_selected_tab_picks_the_pane_and_a_target_interaction_is_a_cursor_not_a_me
 }
 
 #[test]
+fn a_refused_choices_page_stops_waiting() {
+    let (t, h) = session();
+    let refusal = json!({"jsonrpc": "2.0", "error": {"code": 1000, "message": "x",
+        "data": {"kind": "stale_boundary", "message": "The screen changed."}}});
+    let page = json!({"jsonrpc": "2.0", "result": {"boundary_id": "b:42", "total": 2, "choices": [
+        {"id":"c:2","label":"jar","enabled":true,"description":"","denial":"","selectable":true,
+         "selected":false,"columns":[]}]}});
+    let mut m = connected(
+        t.on("bn.interaction.choices", vec![refusal])
+            .on("bn.interaction.choices", vec![page]),
+    );
+    let long = |sequence| {
+        show(
+            sequence,
+            json!([]),
+            json!({"schema_id":"s:long","kind":"choices","context":"PICKUP","title":"Pick up",
+                "message":"","allow_cancel":true,"choice_total":2,"allow_set_count":false,
+                "choices":[{"id":"c:1","label":"can","description":"","denial":"","enabled":true,
+                    "selectable":true,"selected":false,"columns":[]}]}),
+        )
+    };
+    let asks = |h: &bn_client_core::transport::ScriptHandle| {
+        h.sent_methods()
+            .iter()
+            .filter(|x| *x == "bn.interaction.choices")
+            .count()
+    };
+    h.push(long(41));
+    m.poll();
+    m.more_choices();
+    m.poll();
+    m.more_choices();
+    assert_eq!(asks(&h), 1, "a refused page is not asked again for that boundary");
+    assert!(m.messages().is_empty(), "a refused read is no failure line");
+    h.push(long(42));
+    m.poll();
+    m.more_choices();
+    m.poll();
+    assert_eq!(asks(&h), 2, "the next boundary asks again");
+    assert_eq!(m.menu().unwrap().choices.len(), 2);
+}
+
+#[test]
 fn aiming_says_the_screens_range_line_and_the_creature_under_the_cursor() {
     let (t, h) = session();
     let mut m = connected(t);
