@@ -1771,6 +1771,19 @@ mod failures {
     }
 
     #[test]
+    fn a_client_line_leaves_the_log_after_a_while_instead_of_staying_the_newest() {
+        let (t, _h) = session();
+        let (mut m, clock) = with_clock(t);
+        m.say("Nothing to interrupt.".into());
+        clock.advance(Duration::from_secs(5));
+        m.poll();
+        assert_eq!(m.messages(), ["Nothing to interrupt."]);
+        clock.advance(Duration::from_secs(30));
+        m.poll();
+        assert!(m.messages().is_empty(), "{:?}", m.messages());
+    }
+
+    #[test]
     fn an_exit_is_a_failure_with_the_last_stderr_lines() {
         let (t, h) = session();
         let mut m = connected(t);
