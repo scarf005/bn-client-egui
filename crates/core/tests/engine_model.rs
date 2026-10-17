@@ -245,6 +245,27 @@ fn resync_mid_command_rebuilds_the_mirror_and_keeps_the_command_outcome() {
 }
 
 #[test]
+fn the_log_keeps_the_newest_lines_the_engine_contract_keeps() {
+    let (t, h) = session();
+    let mut m = connected(t);
+    h.push(fixture("events_41_walk"));
+    let events = (1..=150)
+        .map(|n| {
+            json!({ "sequence": (41 + n).to_string(), "revision": "32", "type": "message.logged",
+                "data": { "id": n.to_string(), "text": format!("line {n}"), "kind": "info" } })
+        })
+        .collect::<Vec<_>>();
+    h.push(json!({ "jsonrpc": "2.0", "method": "bn.events", "params": { "epoch": "e7f3", "events": events } }));
+    m.poll();
+    let shown: Vec<_> = m.native_log().iter().map(|l| l.shown()).collect();
+    assert_eq!(shown.len(), 100, "the contract keeps the newest 100");
+    assert_eq!(
+        (shown[0].as_str(), shown[99].as_str()),
+        ("line 51", "line 150")
+    );
+}
+
+#[test]
 fn duplicate_events_do_not_resubscribe_or_duplicate_messages() {
     let (t, h) = session();
     let mut m = connected(t);
