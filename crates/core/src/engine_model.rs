@@ -663,11 +663,7 @@ impl EngineModel {
             layers.extend(self.overlays(look, &avatar.overlays, &avatar.traits, seed));
         }
         // A creature here, else the nearest one on the levels seen through.
-        let on = |at: &WorldPos| {
-            self.replica
-                .entities()
-                .find(|e| &e.at == at && e.look.is_some())
-        };
+        let on = |at: &WorldPos| self.replica.entity_at(at);
         let entity = on(&p).or_else(|| {
             over.iter()
                 .rev()

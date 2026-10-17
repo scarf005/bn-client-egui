@@ -59,6 +59,8 @@ pub struct Replica {
     environment: Option<Environment>,
     route: Vec<WorldPos>,
     entities: HashMap<String, Entity>,
+    /// The entity drawn on each square: one with a look, the lowest id when several share the square.
+    drawn: HashMap<WorldPos, String>,
     cells: HashMap<String, HashMap<(i32, i32, i32), Cell>>,
     /// `(parts expected, next part index)` while a snapshot is loading.
     loading: Option<(u32, u32)>,
@@ -107,6 +109,7 @@ impl Replica {
                 .collect(),
             ..Self::default()
         };
+        self.index_entities();
     }
 
     pub fn part(&mut self, p: SnapshotPart) -> Outcome {
@@ -218,11 +221,26 @@ impl Replica {
                 at.revision = e.revision;
             }
         }
+        self.index_entities();
         Outcome::Applied
     }
 
     pub fn resync(&mut self, _r: &Resync) -> Outcome {
         Outcome::Resubscribe("engine requested resync")
+    }
+
+    fn index_entities(&mut self) {
+        self.drawn.clear();
+        for e in self.entities.values().filter(|e| e.look.is_some()) {
+            self.drawn
+                .entry(e.at.clone())
+                .and_modify(|id| {
+                    if e.id < *id {
+                        id.clone_from(&e.id);
+                    }
+                })
+                .or_insert_with(|| e.id.clone());
+        }
     }
 
     fn insert_cells(&mut self, cells: Vec<Cell>) {
@@ -329,6 +347,11 @@ impl Replica {
 
     pub fn entities(&self) -> impl Iterator<Item = &Entity> {
         self.entities.values()
+    }
+
+    /// The entity drawn on `at`, when one with a look is there.
+    pub fn entity_at(&self, at: &WorldPos) -> Option<&Entity> {
+        self.entities.get(self.drawn.get(at)?)
     }
 
     pub fn cell(&self, dim: &str, x: i32, y: i32, z: i32) -> Option<&Cell> {
