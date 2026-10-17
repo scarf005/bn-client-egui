@@ -22,6 +22,6 @@ pub use engine_model::{ConnectOptions, EngineModel};
 pub use model::FakeModel;
 pub use model::{
     ActionEntry, Cell, CommandStatus, Effect, Failure, FailureKind, GameModel, Heard, Layer,
-    Loading, LogLine, Menu, MenuChoice, MenuPane, Mutation, PaneTotals, Pos, Rgb, Shape,
+    Loading, LogLine, Menu, MenuChoice, MenuModel, MenuPane, Mutation, PaneTotals, Pos, Rgb, Shape,
     action_hint,
 };

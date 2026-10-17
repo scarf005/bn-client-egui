@@ -2,7 +2,7 @@
 //! A one hour wait shows its turns as they pass instead of one jump when it ends.
 mod common;
 use bn_client_core::transport::StdioTransport;
-use bn_client_core::{EngineModel, GameModel};
+use bn_client_core::{EngineModel, GameModel, MenuModel};
 
 /// Asked of the engine, so the bound below bites on a wait that takes seconds.
 const MAX_HZ: u16 = 10;

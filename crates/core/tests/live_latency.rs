@@ -4,7 +4,7 @@ mod common;
 use bn_client_core::protocol::InvokeArgs;
 use bn_client_core::transport::StdioTransport;
 use bn_client_core::watchdog::Watchdog;
-use bn_client_core::{EngineModel, GameModel};
+use bn_client_core::{EngineModel, GameModel, MenuModel};
 /// Nanoseconds the engine's threads have run and have waited for a CPU, from the kernel's scheduler stats.
 fn sched(pid: u32) -> (f64, f64) {
     let (mut run, mut wait) = (0.0, 0.0);

@@ -4,7 +4,7 @@ mod common;
 use bn_client_core::protocol::{Component, InvokeArgs, RowPick};
 use bn_client_core::transport::StdioTransport;
 use bn_client_core::watchdog::Watchdog;
-use bn_client_core::{EngineModel, GameModel};
+use bn_client_core::{EngineModel, GameModel, MenuModel};
 use bn_client_tui::TuiApp;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use std::time::Duration;

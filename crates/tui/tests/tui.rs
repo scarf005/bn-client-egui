@@ -1,7 +1,7 @@
 #![recursion_limit = "512"]
 mod common;
 use bn_client_core::transport::ScriptHandle;
-use bn_client_core::{EngineModel, FakeModel, GameModel, Pos, Rgb};
+use bn_client_core::{EngineModel, FakeModel, GameModel, MenuModel, Pos, Rgb};
 use bn_client_tui::TuiApp;
 use common::{connected, fixture, session};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
@@ -636,6 +636,7 @@ fn page_down_after_paging_past_the_oldest_line_moves_at_once() {
 #[test]
 fn wide_map_glyphs_do_not_shift_the_rest_of_the_row() {
     struct Wide(FakeModel);
+    impl MenuModel for Wide {}
     impl GameModel for Wide {
         fn size(&self) -> Pos {
             self.0.size()
@@ -1042,6 +1043,7 @@ fn a_menu_in_a_one_column_terminal_does_not_panic() {
 #[test]
 fn item_lists_beside_the_map_show_colour_tags_as_colour_not_text() {
     struct Tagged(FakeModel, Vec<String>);
+    impl MenuModel for Tagged {}
     impl GameModel for Tagged {
         fn size(&self) -> Pos {
             self.0.size()

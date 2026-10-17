@@ -440,8 +440,35 @@ pub struct Failure {
     pub engine: Option<std::path::PathBuf>,
 }
 
+/// The menu of a 0.1 `interaction`: the engine's open menu and the answers to it. It goes with protocol 0.1;
+/// screens of the interaction stack are answered through `GameModel::invoke_affordance`.
+pub trait MenuModel {
+    /// The open menu; none while there is no 0.1 interaction, and for a cursor the map draws instead.
+    fn menu(&self) -> Option<Menu> {
+        None
+    }
+    /// Answers the menu with one of its choices.
+    fn choose(&mut self, _choice_id: &str) {}
+    /// Whether the open menu scrolls by the mouse wheel in the engine, as a native list does.
+    fn can_scroll_menu(&self) -> bool {
+        false
+    }
+    /// One wheel step in the open menu; `up` moves the engine's cursor three rows up.
+    fn scroll_menu(&mut self, _up: bool) -> bool {
+        false
+    }
+    /// Fetches the next page of a menu that has more choices than it lists.
+    fn more_choices(&mut self) {}
+    /// Closes the menu, as its cancel key does, when it can be cancelled.
+    fn cancel_menu(&mut self) {}
+    /// Fills the menu's text field; `submit` applies it (search) rather than only editing it.
+    fn fill(&mut self, _field_id: &str, _value: &str, _submit: bool) {}
+    /// Chooses a row with a count, such as a batch craft.
+    fn set_count(&mut self, _choice_id: &str, _count: u64) {}
+}
+
 /// What the UI needs from the game: `FakeModel` (feature `fake`) in tests, `EngineModel` against a real engine.
-pub trait GameModel {
+pub trait GameModel: MenuModel {
     /// Called once per frame: drain engine messages. No-op for synchronous models.
     fn poll(&mut self) {}
     /// Registers a callback the model runs (from any thread) when new engine data has arrived.
@@ -523,9 +550,6 @@ pub trait GameModel {
     fn loading(&self) -> Option<Loading> {
         None
     }
-    fn menu(&self) -> Option<Menu> {
-        None
-    }
     /// Where the engine's own cursor is (look mode), in view coordinates; none when it has no cursor.
     fn focus(&self) -> Option<Pos> {
         None
@@ -539,7 +563,6 @@ pub trait GameModel {
     fn styled(&self, text: &str) -> Vec<Run> {
         markup::runs(text, &ColorMap::default())
     }
-    fn choose(&mut self, _choice_id: &str) {}
     /// Asks for the native description of the hovered view square; it arrives with later polls.
     fn hover(&mut self, _at: Pos) {}
     /// The native description lines of view square `at`, once the engine has answered for it.
@@ -571,14 +594,6 @@ pub trait GameModel {
     fn aim(&mut self, _at: Pos, _click: bool) -> bool {
         false
     }
-    /// Whether the open menu scrolls by the mouse wheel in the engine, as a native list does.
-    fn can_scroll_menu(&self) -> bool {
-        false
-    }
-    /// One wheel step in the open menu; `up` moves the engine's cursor three rows up.
-    fn scroll_menu(&mut self, _up: bool) -> bool {
-        false
-    }
     /// The colour names the game data defines, loaded by the client; renderers resolve names with it.
     fn colors(&self) -> &ColorMap {
         static DEFAULT: std::sync::OnceLock<ColorMap> = std::sync::OnceLock::new();
@@ -598,9 +613,6 @@ pub trait GameModel {
     fn rows<'a>(&'a self, list: &'a List) -> Vec<&'a Row> {
         list.rows.iter().collect()
     }
-    /// Fetches the next page of a menu that has more choices than it lists.
-    fn more_choices(&mut self) {}
-    fn cancel_menu(&mut self) {}
     /// The files of game data that add sprites to the tileset the game draws, in the engine's load order.
     fn mod_tilesets(&self) -> &[ModTileset] {
         &[]
@@ -609,10 +621,6 @@ pub trait GameModel {
     fn season(&self) -> Option<String> {
         None
     }
-    /// Fills the menu's text field; `submit` applies it (search) rather than only editing it.
-    fn fill(&mut self, _field_id: &str, _value: &str, _submit: bool) {}
-    /// Chooses a row with a count, such as a batch craft.
-    fn set_count(&mut self, _choice_id: &str, _count: u64) {}
     fn size(&self) -> Pos;
     fn cell(&self, at: Pos) -> Cell;
     fn player(&self) -> Pos;
@@ -702,6 +710,9 @@ impl Default for FakeModel {
         }
     }
 }
+
+#[cfg(feature = "fake")]
+impl MenuModel for FakeModel {}
 
 #[cfg(feature = "fake")]
 impl GameModel for FakeModel {

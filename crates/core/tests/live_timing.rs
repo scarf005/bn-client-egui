@@ -3,7 +3,7 @@
 mod common;
 use bn_client_core::transport::StdioTransport;
 use bn_client_core::watchdog::Watchdog;
-use bn_client_core::{EngineModel, GameModel};
+use bn_client_core::{EngineModel, GameModel, MenuModel};
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 

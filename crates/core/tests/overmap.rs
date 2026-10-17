@@ -1,7 +1,7 @@
 #![recursion_limit = "512"]
 mod common;
 use bn_client_core::protocol::{Component, InvokeArgs, MapComponent, OvermapWire, WorldPos};
-use bn_client_core::{EngineModel, GameModel};
+use bn_client_core::{EngineModel, GameModel, MenuModel};
 use common::{connected, session};
 use serde_json::{Value, json};
 

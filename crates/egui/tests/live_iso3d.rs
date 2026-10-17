@@ -8,7 +8,7 @@ use bn_client_egui::interaction::InvokeError;
 use bn_client_egui::protocol::InvokeArgs;
 use bn_client_egui::transport::{StdioTransport, game_root};
 use bn_client_egui::watchdog::Watchdog;
-use bn_client_egui::{App, EngineModel, GameModel};
+use bn_client_egui::{App, EngineModel, GameModel, MenuModel};
 use eframe::egui;
 use egui_kittest::Harness;
 use egui_kittest::kittest::Queryable;

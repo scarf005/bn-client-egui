@@ -6,7 +6,7 @@ mod common;
 use bn_client_core::protocol::{AffordanceRole, Component, InvokeArgs, Row};
 use bn_client_core::transport::StdioTransport;
 use bn_client_core::watchdog::Watchdog;
-use bn_client_core::{EngineModel, GameModel, MenuChoice};
+use bn_client_core::{EngineModel, GameModel, MenuChoice, MenuModel};
 use std::time::Duration;
 
 fn wait_for(model: &mut EngineModel, what: &str, mut done: impl FnMut(&EngineModel) -> bool) {

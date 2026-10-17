@@ -4,7 +4,7 @@ use super::{EngineModel, Pending};
 use crate::interaction::{self, InvokeError};
 use crate::keys;
 use crate::markup;
-use crate::model::{CommandStatus, GameModel, MenuChoice};
+use crate::model::{CommandStatus, MenuChoice, MenuModel};
 use crate::protocol::Operation;
 
 impl EngineModel {

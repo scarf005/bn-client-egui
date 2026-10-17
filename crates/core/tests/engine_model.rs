@@ -2,7 +2,7 @@
 mod common;
 use bn_client_core::colors::ColorMap;
 use bn_client_core::transport::ScriptedTransport;
-use bn_client_core::{EngineModel, GameModel, Pos, Rgb};
+use bn_client_core::{EngineModel, GameModel, MenuModel, Pos, Rgb};
 use common::{connected, fixture, session, subscribe_reply};
 use serde_json::{Value, json};
 

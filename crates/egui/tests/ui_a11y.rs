@@ -2,7 +2,7 @@
 //! What a screen reader gets from the AccessKit tree: names, roles, selection and focus.
 mod common;
 use bn_client_egui::transport::ScriptHandle;
-use bn_client_egui::{App, EngineModel, GameModel};
+use bn_client_egui::{App, EngineModel, MenuModel};
 use common::{fixture, session};
 use eframe::egui::{self, accesskit};
 use egui_kittest::Harness;

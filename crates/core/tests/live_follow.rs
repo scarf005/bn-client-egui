@@ -3,7 +3,7 @@
 mod common;
 use bn_client_core::transport::StdioTransport;
 use bn_client_core::watchdog::Watchdog;
-use bn_client_core::{EngineModel, GameModel, Pos};
+use bn_client_core::{EngineModel, GameModel, MenuModel, Pos};
 use std::time::Duration;
 
 fn wait_for(model: &mut EngineModel, what: &str, mut done: impl FnMut(&EngineModel) -> bool) {

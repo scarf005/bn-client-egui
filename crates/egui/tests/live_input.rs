@@ -1,7 +1,7 @@
 //! Needs a real engine build: `BN_ENGINE=/path/to/cataclysm-bn-tiles cargo test -p bn-client-egui --test live_input -- --ignored --nocapture`
 use bn_client_egui::transport::StdioTransport;
 use bn_client_egui::watchdog::Watchdog;
-use bn_client_egui::{App, EngineModel, GameModel};
+use bn_client_egui::{App, EngineModel, GameModel, MenuModel};
 use eframe::egui;
 use egui_kittest::Harness;
 use egui_kittest::kittest::Queryable;

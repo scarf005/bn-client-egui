@@ -1,8 +1,8 @@
 //! The generic menu a 0.1 interaction shows.
 
-use super::EngineModel;
-use crate::model::{Menu, MenuChoice, MenuField, MenuPane, PaneTotals};
-use crate::protocol::{Choice, Interaction};
+use super::{EngineModel, Paged, Pending};
+use crate::model::{Menu, MenuChoice, MenuField, MenuModel, MenuPane, PaneTotals};
+use crate::protocol::{self, Choice, Interaction, Operation};
 use serde::Deserialize;
 
 /// A pane the engine names in `compat.panes`.
@@ -143,6 +143,112 @@ impl EngineModel {
                 .iter()
                 .map(|p| (p.id.clone(), p.label.clone()))
                 .collect(),
+        }
+    }
+}
+
+impl MenuModel for EngineModel {
+    fn menu(&self) -> Option<Menu> {
+        profiling::scope!("model.menu");
+        let i = self.replica.boundary()?.interaction.as_ref()?;
+        // A cursor the engine moves (look mode) is drawn on the map, not listed.
+        (i.kind != "target").then(|| self.menu_of(i))
+    }
+
+    fn choose(&mut self, choice_id: &str) {
+        let enabled = self
+            .menu()
+            .is_some_and(|m| m.choices.iter().any(|c| c.id == choice_id && c.enabled));
+        if enabled && !self.busy {
+            self.submit(Operation::Choose {
+                choice_id: choice_id.into(),
+            });
+        }
+    }
+
+    fn can_scroll_menu(&self) -> bool {
+        self.replica.boundary().is_some_and(|b| {
+            b.interaction.is_some() && b.actions.iter().any(|a| a.id == "SCROLL_UP")
+        })
+    }
+
+    fn scroll_menu(&mut self, up: bool) -> bool {
+        let id = if up { "SCROLL_UP" } else { "SCROLL_DOWN" };
+        self.can_scroll_menu() && !self.busy && self.invoke(&[id.into()])
+    }
+
+    fn more_choices(&mut self) {
+        let Some(b) = self.replica.boundary() else {
+            return;
+        };
+        let Some(i) = b.interaction.as_ref() else {
+            return;
+        };
+        let key = (b.boundary_id.clone(), i.schema_id.clone());
+        if self.paged.key != key {
+            self.paged = Paged {
+                key,
+                ..Paged::default()
+            };
+        }
+        let loaded = i.choices.len() + self.paged.more.len();
+        if self.paged.waiting || self.paged.closed || loaded as u64 >= i.choice_total {
+            return;
+        }
+        let (epoch, boundary_id) = (
+            self.replica.at().map(|a| a.epoch.clone()),
+            b.boundary_id.clone(),
+        );
+        let Some(epoch) = epoch else {
+            return;
+        };
+        self.paged.waiting = true;
+        let params = protocol::ChoicesParams {
+            epoch,
+            boundary_id,
+            component_id: None,
+            offset: loaded as u64,
+            limit: protocol::PAGE_ROWS,
+        };
+        self.call(
+            "bn.interaction.choices",
+            serde_json::to_value(params).expect("choices params serialize"),
+            Pending::Choices,
+        );
+    }
+
+    fn cancel_menu(&mut self) {
+        if self.menu().is_some_and(|m| m.can_cancel) && !self.busy {
+            self.submit(Operation::Cancel);
+        }
+    }
+
+    fn fill(&mut self, field_id: &str, value: &str, submit: bool) {
+        // An editable row is filled by its own id, like an option of the options menu.
+        let has_field = self.menu().is_some_and(|m| {
+            m.field.is_some_and(|f| f.id == field_id)
+                || m.choices
+                    .iter()
+                    .any(|c| c.id == field_id && c.enabled && c.editor.is_some())
+        });
+        if has_field && !self.busy {
+            self.submit(Operation::Fill {
+                field_id: field_id.into(),
+                value: value.into(),
+                submit,
+            });
+        }
+    }
+
+    fn set_count(&mut self, choice_id: &str, count: u64) {
+        let allowed = self.menu().is_some_and(|m| {
+            m.can_set_count && m.choices.iter().any(|c| c.id == choice_id && c.enabled)
+        });
+        if allowed && !self.busy {
+            self.submit(Operation::SetCount {
+                choice_id: choice_id.into(),
+                count,
+            });
         }
     }
 }

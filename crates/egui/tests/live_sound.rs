@@ -5,7 +5,7 @@
 use bn_client_core::audio::SoundPack;
 use bn_client_egui::transport::{Profile, StdioTransport};
 use bn_client_egui::watchdog::Watchdog;
-use bn_client_egui::{App, EngineModel, GameModel};
+use bn_client_egui::{App, EngineModel, GameModel, MenuModel};
 use eframe::egui;
 use egui_kittest::Harness;
 use egui_kittest::kittest::Queryable;

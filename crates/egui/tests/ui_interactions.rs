@@ -2,7 +2,7 @@
 mod common;
 use bn_client_egui::app::CELL;
 use bn_client_egui::transport::ScriptHandle;
-use bn_client_egui::{App, EngineModel, GameModel};
+use bn_client_egui::{App, EngineModel, GameModel, MenuModel};
 use common::{fixture, session};
 use eframe::egui;
 use egui_kittest::Harness;
