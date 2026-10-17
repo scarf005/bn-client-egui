@@ -1244,3 +1244,50 @@ fn the_footer_shows_at_most_six_buttons_and_puts_the_rest_in_a_menu() {
     h.run_steps(3);
     assert_eq!(submits(&script), [screen_invoke("A8")]);
 }
+
+/// A list of `n` rows `{prefix}0`, `{prefix}1`, ... with the id `id`.
+fn long_list(id: &str, prefix: &str, n: usize) -> Value {
+    let rows = (0..n).map(|i| {
+        json!({"id": format!("{prefix}{i}"), "label": format!("{prefix}{i}"), "description": "",
+            "denial": "", "enabled": true, "selectable": true, "selected": i == 0, "columns": []})
+    });
+    json!({"id": id, "kind": "list", "columns": [], "rows": rows.collect::<Vec<_>>(),
+        "total": n, "selection": "single", "activate": "pick"})
+}
+
+#[test]
+fn a_page_key_moves_the_focus_by_the_rows_its_own_list_shows() {
+    let stats = (0..12)
+        .map(|i| json!({"key": format!("s{i}"), "label": format!("Stat {i}"), "value": "1"}));
+    let panel = json!({"id": "side", "kind": "panel", "title": "", "stats": stats.collect::<Vec<_>>(),
+        "child": long_list("two", "b", 60)});
+    let split = json!({"id": "root", "kind": "split", "relation": "peers",
+        "children": [long_list("one", "a", 60), panel]});
+    let pick = affordance("pick", &["RETURN"], json!({"row": {"component_id": "one"}}));
+    let (mut h, script) = harness(dialog(split, vec![pick]));
+    let shown = |h: &H, prefix: &str| {
+        (0..60)
+            .filter(|i| h.query_by_label(&format!("{prefix}{i}")).is_some())
+            .count()
+    };
+    let (one, two) = (shown(&h, "a"), shown(&h, "b"));
+    assert!(
+        one > two + 2,
+        "the panel's stats leave its list fewer rows: {one} vs {two}"
+    );
+    h.key_press(egui::Key::PageDown);
+    h.run_steps(2);
+    h.key_press(egui::Key::Enter);
+    h.run_steps(3);
+    let sent = submits(&script);
+    let row = sent[0]["operation"]["args"]["row"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let moved = row[1..].parse::<usize>().unwrap();
+    // The rows drawn include the ones cut at the top and bottom edges, which a page does not count.
+    assert!(
+        (one - 2..=one).contains(&moved),
+        "moved {moved} rows; the list shows {one}, the other {two}"
+    );
+}
