@@ -806,6 +806,9 @@ pub struct Changes {
     /// Replaces the planned route; `[]` clears it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub route: Option<Vec<WorldPos>>,
+    /// The engine's localized line for a non-empty `route`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub route_text: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub interaction: Option<BoundaryChange>,
 }
@@ -867,6 +870,9 @@ pub struct Snapshot {
     /// Planned travel route, nearest square first; omitted when empty.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub route: Vec<WorldPos>,
+    /// The engine's localized line for `route`; omitted with it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub route_text: Option<String>,
     pub entities: Vec<Entity>,
     /// The newest message log lines, oldest first; omitted when the log is empty.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

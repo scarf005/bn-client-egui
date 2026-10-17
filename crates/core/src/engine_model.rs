@@ -952,6 +952,10 @@ impl GameModel for EngineModel {
             .collect()
     }
 
+    fn route_text(&self) -> Option<String> {
+        self.replica.route_text().map(str::to_owned)
+    }
+
     /// A registered action of the map is its screen-scoped affordance: the engine queues it behind the
     /// command in flight, and says `stale_screen` for one that outlived the map. Any other action waits
     /// for the engine to be free.

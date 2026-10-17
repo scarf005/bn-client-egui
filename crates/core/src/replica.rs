@@ -58,6 +58,7 @@ pub struct Replica {
     avatar: Option<Avatar>,
     environment: Option<Environment>,
     route: Vec<WorldPos>,
+    route_text: Option<String>,
     entities: HashMap<String, Entity>,
     /// The entity drawn on each square: one with a look, the lowest id when several share the square.
     drawn: HashMap<WorldPos, String>,
@@ -93,6 +94,7 @@ impl Replica {
             avatar: s.avatar,
             environment: s.environment,
             route: s.route,
+            route_text: s.route_text,
             entities: s.entities.into_iter().map(|e| (e.id.clone(), e)).collect(),
             loading: (s.parts > 0).then_some((s.parts, 0)),
             // The log the engine already holds, as if each line had just been published.
@@ -294,6 +296,7 @@ impl Replica {
         self.environment = c.environment.or(self.environment.take());
         if let Some(route) = c.route {
             self.route = route;
+            self.route_text = c.route_text;
         }
         if let Some(next) = c.interaction {
             let kept = self.boundary.take().map(|b| b.actions).unwrap_or_default();
@@ -343,6 +346,11 @@ impl Replica {
     /// The engine's planned route, nearest square first; empty when none.
     pub fn route(&self) -> &[WorldPos] {
         &self.route
+    }
+
+    /// The engine's line for the planned route; none when nothing is planned.
+    pub fn route_text(&self) -> Option<&str> {
+        self.route_text.as_deref()
     }
 
     pub fn entities(&self) -> impl Iterator<Item = &Entity> {

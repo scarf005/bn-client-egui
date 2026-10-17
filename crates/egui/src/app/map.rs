@@ -206,7 +206,7 @@ impl<M: GameModel> App<M> {
         let input = self.map_pointer(ui, &response, &canvas, scene, cursor);
         let cursor = input.cursor;
         self.cursor = to_abs(cursor);
-        let status = self.map_status(origin, cursor, &route);
+        let status = self.map_status(origin, cursor);
         said.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, &status));
         ui.ctx()
             .accesskit_node_builder(said.id, |b| b.set_live(accesskit::Live::Polite));
@@ -255,7 +255,7 @@ impl<M: GameModel> App<M> {
     }
 
     /// What a screen reader says of the map: the player's and the cursor's squares, the planned route and the aim.
-    fn map_status(&self, origin: Pos, cursor: Pos, route: &[Pos]) -> String {
+    fn map_status(&self, origin: Pos, cursor: Pos) -> String {
         let player = self.model.player();
         // The engine's mouse-view text when it has answered for this square; nothing for an unknown square.
         let said = self.model.hover_text(cursor).map_or_else(
@@ -276,13 +276,8 @@ impl<M: GameModel> App<M> {
             cursor.x + origin.x,
             cursor.y + origin.y,
         );
-        if let Some(end) = route.last() {
-            status += &format!(
-                " Route of {} squares to ({}, {}); click it again to go.",
-                route.len(),
-                end.x,
-                end.y
-            );
+        if let Some(route) = self.model.route_text() {
+            status += &format!(" {route}");
         }
         if let Some(aiming) = self.model.aiming() {
             status = format!("{aiming}. {status}");

@@ -530,6 +530,10 @@ pub trait GameModel: MenuModel {
     fn route(&self) -> Vec<Pos> {
         vec![]
     }
+    /// The engine's localized line for the planned route; none when nothing is planned.
+    fn route_text(&self) -> Option<String> {
+        None
+    }
     /// The engine's `USE_TILES` and `TILES` options, when it publishes them: the map mode a new profile starts in.
     fn display_default(&self) -> Option<(bool, String)> {
         None
