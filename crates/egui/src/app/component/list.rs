@@ -15,6 +15,27 @@ pub(super) struct RowIcon {
     pub(super) cell: Cell,
 }
 
+/// How the rows of a list are laid out this frame: the width of the label and of each column.
+struct RowLayout<'a> {
+    label: f32,
+    height: f32,
+    columns: &'a [f32],
+}
+
+/// The columns' captions over their values, past the label and the item's square (`lead` wide).
+fn list_header(ui: &mut egui::Ui, list: &List, lead: f32, layout: &RowLayout) {
+    ui.horizontal(|ui| {
+        ui.allocate_space(egui::vec2(layout.label + lead, layout.height));
+        for (column, w) in list.columns.iter().zip(layout.columns) {
+            let caption = markup::plain(&column.label.shown());
+            ui.add_sized(
+                [*w, layout.height],
+                egui::Label::new(egui::RichText::new(caption).weak()).truncate(),
+            );
+        }
+    });
+}
+
 impl<M: GameModel> App<M> {
     /// The room a list has here: what the window has left, less its description and the buttons under it.
     fn list_height(ui: &egui::Ui) -> f32 {
@@ -76,18 +97,13 @@ impl<M: GameModel> App<M> {
             .any(|r| r.look.is_some() && self.display.tiles());
         let icon = if squares { height + spacing } else { 0.0 };
         let columns_w = widths.columns.iter().map(|w| w + spacing).sum::<f32>();
-        let label_w = (width - columns_w - icon).max(0.0);
+        let layout = RowLayout {
+            label: (width - columns_w - icon).max(0.0),
+            height,
+            columns: &widths.columns,
+        };
         if !list.columns.is_empty() {
-            ui.horizontal(|ui| {
-                ui.allocate_space(egui::vec2(label_w + icon, height));
-                for (column, w) in list.columns.iter().zip(&widths.columns) {
-                    let caption = markup::plain(&column.label.shown());
-                    ui.add_sized(
-                        [*w, height],
-                        egui::Label::new(egui::RichText::new(caption).weak()).truncate(),
-                    );
-                }
-            });
+            list_header(ui, list, icon, &layout);
         }
         let list_height = Self::list_height(ui);
         self.screens
@@ -104,98 +120,7 @@ impl<M: GameModel> App<M> {
         }
         area.show_rows(ui, height, rows.len(), |ui, range| {
             for row in &rows[range.clone()] {
-                ui.horizontal(|ui| {
-                    if row.header == Some(true) {
-                        let heading = markup::plain(&row.label.shown());
-                        ui.label(egui::RichText::new(heading).strong());
-                        return;
-                    }
-                    let pick = interaction.picks(id).iter().find(|p| p.id == row.id);
-                    let on = row.enabled && row.selectable;
-                    let cell = row
-                        .look
-                        .as_ref()
-                        .filter(|_| self.display.tiles())
-                        .and_then(|look| self.model.look_cell(look));
-                    if let Some(cell) = &cell {
-                        let size = egui::Vec2::splat(height);
-                        let (rect, _) = ui.allocate_exact_size(size, egui::Sense::hover());
-                        self.screens.icons.borrow_mut().push(RowIcon {
-                            painter: ui.painter_at(rect),
-                            rect,
-                            cell: cell.clone(),
-                        });
-                    }
-                    let marked = Self::row_markup(list, row, pick.is_some(), cell.is_some());
-                    // A refused row is plain dim text: the game's colours would hide that it is.
-                    let text = if row.enabled {
-                        self.line(ui, &marked)
-                    } else {
-                        egui::RichText::new(markup::plain(&marked))
-                            .color(ui.visuals().weak_text_color())
-                            .into()
-                    };
-                    let highlighted =
-                        cursor == Some(row.id.as_str()) || (cursor.is_none() && row.selected);
-                    let layout = egui::Layout::top_down_justified(egui::Align::Min);
-                    let button = ui
-                        .allocate_ui_with_layout(egui::vec2(label_w, height), layout, |ui| {
-                            self.control(ui, text, &row.id, on, highlighted)
-                        })
-                        .inner;
-                    button.widget_info(|| {
-                        WidgetInfo::selected(
-                            WidgetType::SelectableLabel,
-                            button.enabled(),
-                            highlighted,
-                            markup::plain(&row.label.shown()),
-                        )
-                    });
-                    let denial = row.denial.shown();
-                    let button = match (on, denial.is_empty()) {
-                        (false, false) => button.on_disabled_hover_text(denial),
-                        _ => button,
-                    };
-                    if button.clicked() {
-                        out.push(Intent::Focus {
-                            component: id.clone(),
-                            row: row.id.clone(),
-                        });
-                        match (list.selection, &list.activate) {
-                            (Selection::Multi | Selection::Count, _) => out.push(Intent::Mark {
-                                component: id.clone(),
-                                row: row.id.clone(),
-                            }),
-                            (_, Some(activate)) => out.push(Intent::Run(activate.clone())),
-                            _ => {}
-                        }
-                    }
-                    if let (Selection::Count, Some(pick), Some(max)) =
-                        (list.selection, pick, row.max)
-                    {
-                        let mut count = pick.count.unwrap_or(max);
-                        let drag = ui.add(egui::DragValue::new(&mut count).range(0..=max));
-                        if drag.changed() {
-                            out.push(Intent::MarkCount {
-                                component: id.clone(),
-                                row: row.id.clone(),
-                                count,
-                            });
-                        }
-                    }
-                    for (column, column_w) in list.columns.iter().zip(&widths.columns) {
-                        let value = row
-                            .columns
-                            .iter()
-                            .find(|c| c.key.as_deref() == Some(column.key.as_str()))
-                            .map(|c| tagged(c.color.as_deref(), &c.value.shown()))
-                            .unwrap_or_default();
-                        ui.add_sized(
-                            [*column_w, height],
-                            egui::Label::new(self.line(ui, &value)).truncate(),
-                        );
-                    }
-                });
+                ui.horizontal(|ui| self.list_row(ui, list, row, cursor, &layout, out));
             }
             if range.end + PREFETCH >= rows.len() {
                 out.push(Intent::More(id.clone()));
@@ -203,16 +128,7 @@ impl<M: GameModel> App<M> {
         });
         let shown = cursor.and_then(|c| rows.iter().find(|r| r.id == c));
         if let Some(row) = shown {
-            let description = row.description.shown();
-            if !description.is_empty() {
-                egui::ScrollArea::vertical()
-                    .id_salt(("description", id))
-                    .max_height(DESCRIPTION_HEIGHT)
-                    .show(ui, |ui| ui.label(self.rich(ui, &description)));
-            }
-            if !row.enabled && !row.denial.shown().is_empty() {
-                ui.colored_label(BAD, markup::plain(&row.denial.shown()));
-            }
+            self.row_description(ui, id, row);
         }
         let own = list
             .head
@@ -221,6 +137,127 @@ impl<M: GameModel> App<M> {
             .filter_map(|a| find(screen, a))
             .collect::<Vec<_>>();
         self.affordance_buttons(ui, &own, shown.copied(), out);
+    }
+
+    /// One row: its item's square, its text as a button, its count editor and its column values. A click
+    /// focuses the row and marks it (a picking list) or runs the list's `activate`.
+    fn list_row(
+        &self,
+        ui: &mut egui::Ui,
+        list: &List,
+        row: &Row,
+        cursor: Option<&str>,
+        layout: &RowLayout,
+        out: &mut Vec<Intent>,
+    ) {
+        let id = &list.head.id;
+        if row.header == Some(true) {
+            let heading = markup::plain(&row.label.shown());
+            ui.label(egui::RichText::new(heading).strong());
+            return;
+        }
+        let pick = self
+            .screens
+            .interaction
+            .picks(id)
+            .iter()
+            .find(|p| p.id == row.id);
+        let on = row.enabled && row.selectable;
+        let cell = row
+            .look
+            .as_ref()
+            .filter(|_| self.display.tiles())
+            .and_then(|look| self.model.look_cell(look));
+        if let Some(cell) = &cell {
+            let size = egui::Vec2::splat(layout.height);
+            let (rect, _) = ui.allocate_exact_size(size, egui::Sense::hover());
+            self.screens.icons.borrow_mut().push(RowIcon {
+                painter: ui.painter_at(rect),
+                rect,
+                cell: cell.clone(),
+            });
+        }
+        let marked = Self::row_markup(list, row, pick.is_some(), cell.is_some());
+        // A refused row is plain dim text: the game's colours would hide that it is.
+        let text = if row.enabled {
+            self.line(ui, &marked)
+        } else {
+            egui::RichText::new(markup::plain(&marked))
+                .color(ui.visuals().weak_text_color())
+                .into()
+        };
+        let highlighted = cursor == Some(row.id.as_str()) || (cursor.is_none() && row.selected);
+        let justified = egui::Layout::top_down_justified(egui::Align::Min);
+        let size = egui::vec2(layout.label, layout.height);
+        let button = ui
+            .allocate_ui_with_layout(size, justified, |ui| {
+                self.control(ui, text, &row.id, on, highlighted)
+            })
+            .inner;
+        button.widget_info(|| {
+            WidgetInfo::selected(
+                WidgetType::SelectableLabel,
+                button.enabled(),
+                highlighted,
+                markup::plain(&row.label.shown()),
+            )
+        });
+        let denial = row.denial.shown();
+        let button = match (on, denial.is_empty()) {
+            (false, false) => button.on_disabled_hover_text(denial),
+            _ => button,
+        };
+        if button.clicked() {
+            out.push(Intent::Focus {
+                component: id.clone(),
+                row: row.id.clone(),
+            });
+            match (list.selection, &list.activate) {
+                (Selection::Multi | Selection::Count, _) => out.push(Intent::Mark {
+                    component: id.clone(),
+                    row: row.id.clone(),
+                }),
+                (_, Some(activate)) => out.push(Intent::Run(activate.clone())),
+                _ => {}
+            }
+        }
+        if let (Selection::Count, Some(pick), Some(max)) = (list.selection, pick, row.max) {
+            let mut count = pick.count.unwrap_or(max);
+            let drag = ui.add(egui::DragValue::new(&mut count).range(0..=max));
+            if drag.changed() {
+                out.push(Intent::MarkCount {
+                    component: id.clone(),
+                    row: row.id.clone(),
+                    count,
+                });
+            }
+        }
+        for (column, column_w) in list.columns.iter().zip(layout.columns) {
+            let value = row
+                .columns
+                .iter()
+                .find(|c| c.key.as_deref() == Some(column.key.as_str()))
+                .map(|c| tagged(c.color.as_deref(), &c.value.shown()))
+                .unwrap_or_default();
+            ui.add_sized(
+                [*column_w, layout.height],
+                egui::Label::new(self.line(ui, &value)).truncate(),
+            );
+        }
+    }
+
+    /// The focused row's description under the list, and why it is refused when it is.
+    fn row_description(&self, ui: &mut egui::Ui, list_id: &str, row: &Row) {
+        let description = row.description.shown();
+        if !description.is_empty() {
+            egui::ScrollArea::vertical()
+                .id_salt(("description", list_id))
+                .max_height(DESCRIPTION_HEIGHT)
+                .show(ui, |ui| ui.label(self.rich(ui, &description)));
+        }
+        if !row.enabled && !row.denial.shown().is_empty() {
+            ui.colored_label(BAD, markup::plain(&row.denial.shown()));
+        }
     }
 }
 
