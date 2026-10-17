@@ -595,7 +595,7 @@ impl<M: GameModel> TuiApp<M> {
         }
         self.draw_actions(f, actions);
         self.draw_items(f, items);
-        f.render_widget(Paragraph::new(self.status_line()), status);
+        f.render_widget(Paragraph::new(self.status_line(log_shown)), status);
         // The game's own lines in their colours with repeat counts, then the client's command results.
         let native = self.model.native_log().iter().map(|l| {
             let style = l.color.map_or(Style::new(), |c| Style::new().fg(color(c)));
@@ -634,8 +634,8 @@ impl<M: GameModel> TuiApp<M> {
     }
 
     /// The pressed command and its stage, then what the engine says of the hovered square and of the
-    /// square under its own cursor.
-    fn status_line(&mut self) -> String {
+    /// square under its own cursor; with the log panel off (`log_shown` false), the client's last line too.
+    fn status_line(&mut self, log_shown: bool) -> String {
         let command = self
             .model
             .command()
@@ -658,9 +658,9 @@ impl<M: GameModel> TuiApp<M> {
             .map(|note| format!(" | {note}"))
             .unwrap_or_default();
         // With the log panel off, the client's own results and errors are said here instead.
-        let said = match self.model.sidebar_layout().is_some_and(|l| !l.has_log()) {
-            true => self.model.messages().last().map(|m| format!(" | {m}")),
-            false => None,
+        let said = match log_shown {
+            false => self.model.messages().last().map(|m| format!(" | {m}")),
+            true => None,
         };
         format!("{command}{hover}{note}{}", said.unwrap_or_default())
     }
