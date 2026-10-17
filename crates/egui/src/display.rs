@@ -13,8 +13,8 @@ use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::{Receiver, channel};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::mpsc::{Receiver, Sender, channel};
+use std::sync::{Arc, OnceLock};
 
 /// The game's default `TILES` option value.
 const DEFAULT_TILESET: &str = "UNDEAD_PEOPLE_BASE";
@@ -181,8 +181,8 @@ struct Source {
 struct Atlas {
     tileset: Tileset,
     sheets: [Option<Sheets>; 4],
-    /// Sheets decoded for painting single sprites, shared by the threads that paint them.
-    decoded: Arc<Mutex<HashMap<usize, Arc<image::RgbaImage>>>>,
+    /// The sprites to paint, for the one thread that paints them.
+    jobs: Sender<Job>,
     painted: RefCell<HashMap<PaintKey, Painted>>,
     wake: Wake,
 }
@@ -205,10 +205,12 @@ impl Atlas {
     fn start(tileset: Tileset) -> Self {
         let wake = Wake::default();
         let plain = Sheets::start(tileset.sheets.clone(), Fx::Plain, wake.clone());
+        let (jobs, queue) = channel();
+        std::thread::spawn(move || painter(queue));
         Self {
             tileset,
             sheets: [Some(plain), None, None, None],
-            decoded: Arc::default(),
+            jobs,
             painted: RefCell::default(),
             wake,
         }
@@ -226,18 +228,17 @@ impl Atlas {
         let mut cache = self.painted.borrow_mut();
         let key = (sprite, placed.mask, paint, fx);
         let Some(entry) = cache.get_mut(&key) else {
-            let (sheet, decoded) = (self.tileset.sheets[n].clone(), self.decoded.clone());
             let mask = placed.mask.and_then(|m| {
                 let (n, local) = self.tileset.locate(m)?;
                 Some((n, self.tileset.sheets[n].clone(), local))
             });
-            let (send, receive) = channel();
-            std::thread::spawn(move || {
-                let job = Job {
-                    sheet: (n, &sheet, local),
-                    mask: mask.as_ref().map(|(n, s, l)| (*n, s, *l)),
-                };
-                let _ = send.send(paint_sprite(&decoded, job, fx, paint));
+            let (done, receive) = channel();
+            let _ = self.jobs.send(Job {
+                sheet: (n, self.tileset.sheets[n].clone(), local),
+                mask,
+                paint,
+                fx,
+                done,
             });
             cache.insert(key, Painted::Pending(receive));
             ctx.request_repaint_after(std::time::Duration::from_millis(30));
@@ -336,38 +337,51 @@ pub(crate) fn load(sheet: &tileset::Sheet) -> Option<image::RgbaImage> {
     Some(image)
 }
 
-/// The sheet of a sprite as `(sheet number, sheet, index in the sheet)`, and of the sprite masking its paint.
-struct Job<'a> {
-    sheet: (usize, &'a tileset::Sheet, u32),
-    mask: Option<(usize, &'a tileset::Sheet, u32)>,
+/// A sprite to paint: its sheet as `(sheet number, sheet, index in the sheet)` and that of the sprite masking its
+/// paint, the paint and the filter, and where the painted image goes.
+struct Job {
+    sheet: (usize, tileset::Sheet, u32),
+    mask: Option<(usize, tileset::Sheet, u32)>,
+    paint: Paint,
+    fx: Fx,
+    done: Sender<Option<egui::ColorImage>>,
+}
+
+/// Paints the sprites asked for, one after another, until the atlas that asks is gone.
+fn painter(jobs: Receiver<Job>) {
+    let mut decoded = HashMap::new();
+    for job in jobs {
+        let _ = job.done.send(paint_sprite(&mut decoded, &job));
+    }
 }
 
 /// The decoded pixels of sheet `n`, kept for the other sprites painted from it.
 fn decoded_sheet(
-    decoded: &Mutex<HashMap<usize, Arc<image::RgbaImage>>>,
+    decoded: &mut HashMap<usize, Arc<image::RgbaImage>>,
     n: usize,
     sheet: &tileset::Sheet,
 ) -> Option<Arc<image::RgbaImage>> {
-    let mut sheets = decoded.lock().ok()?;
-    match sheets.get(&n) {
+    match decoded.get(&n) {
         Some(image) => Some(image.clone()),
-        None => Some(sheets.entry(n).or_insert(Arc::new(load(sheet)?)).clone()),
+        None => Some(decoded.entry(n).or_insert(Arc::new(load(sheet)?)).clone()),
     }
 }
 
 /// One sprite of a sheet painted with `paint`, where its mask lets the paint through, and then filtered, like
 /// the game's tinted sprite lookup.
 fn paint_sprite(
-    decoded: &Mutex<HashMap<usize, Arc<image::RgbaImage>>>,
+    decoded: &mut HashMap<usize, Arc<image::RgbaImage>>,
     Job {
         sheet: (n, sheet, local),
         mask,
-    }: Job,
-    fx: Fx,
-    paint: Paint,
+        paint,
+        fx,
+        ..
+    }: &Job,
 ) -> Option<egui::ColorImage> {
+    let (n, local, fx, paint) = (*n, *local, *fx, *paint);
     let image = decoded_sheet(decoded, n, sheet)?;
-    let mask = mask.and_then(|(n, sheet, local)| {
+    let mask = mask.as_ref().and_then(|&(n, ref sheet, local)| {
         let image = decoded_sheet(decoded, n, sheet)?;
         let (w, h) = sheet.sprite;
         let (col, row) = (local % sheet.columns, local / sheet.columns);
@@ -1105,19 +1119,20 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("bn-client-mask-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let sheet = sheet(&dir);
-        let decoded = Mutex::default();
+        let mut decoded = HashMap::new();
         let paint = Paint::of([247, 251, 245]);
-        let painted = |mask: Option<(usize, &tileset::Sheet, u32)>| {
+        let mut painted = |mask: Option<(usize, tileset::Sheet, u32)>| {
             let job = Job {
-                sheet: (0, &sheet, 0),
+                sheet: (0, sheet.clone(), 0),
                 mask,
+                paint,
+                fx: Fx::Plain,
+                done: channel().0,
             };
-            paint_sprite(&decoded, job, Fx::Plain, paint)
-                .unwrap()
-                .pixels
+            paint_sprite(&mut decoded, &job).unwrap().pixels
         };
         let color = |p: [u8; 3]| Color32::from_rgb(p[0], p[1], p[2]);
-        let masked = painted(Some((0, &sheet, 1)));
+        let masked = painted(Some((0, sheet.clone(), 1)));
         assert_eq!(
             masked[0],
             color(tint_pixel([128; 3], paint, Some([255, 255, 127])))
