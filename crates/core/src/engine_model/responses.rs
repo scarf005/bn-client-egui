@@ -26,17 +26,19 @@ impl EngineModel {
             let reason = n.error.as_ref().map(error_kind);
             let swap = reason.as_deref() == Some("stale_epoch");
             let stage = match n.stage.as_str() {
-                "validated" => "accepted".into(),
-                "completed" => "done".into(),
-                _ if swap => "done".into(),
-                "rejected" | "interrupted" => match &n.error_text {
-                    Some(why) => format!("{}: {why}", n.stage),
-                    None => n.stage.clone(),
-                },
-                other => other.into(),
+                "validated" => "accepted",
+                "completed" => "done",
+                _ if swap => "done",
+                other => other,
+            };
+            // The world swap is no failure to tell.
+            let text = match (&n.error_text, swap) {
+                (_, true) => String::new(),
+                (Some(why), false) => format!("{} {why}", n.stage_text).trim().into(),
+                (None, false) => n.stage_text.clone(),
             };
             if let Some(s) = &mut self.status {
-                s.set_stage(stage, n.is_terminal());
+                s.set_stage(stage, text, n.is_terminal());
             }
         }
         let latest = self.command_id.as_deref() == Some(&n.command_id);
@@ -147,14 +149,15 @@ impl EngineModel {
                 self.command_id = value["command_id"].as_str().map(String::from);
                 self.running.extend(self.command_id.clone());
                 if let Some(s) = self.status.as_mut().filter(|s| s.stage == "sent") {
-                    s.set_stage("accepted".into(), false);
+                    let text = value["stage_text"].as_str().unwrap_or_default();
+                    s.set_stage("accepted", text.into(), false);
                 }
             }
             Err(e) => {
                 let kind = e.data.as_ref().map_or(e.message.clone(), error_kind);
                 self.stale_resend(Some(&kind));
                 if let Some(s) = &mut self.status {
-                    s.set_stage(format!("rejected: {}", reason_of(&e)), true);
+                    s.set_stage("rejected", reason_of(&e), true);
                 }
                 self.report_failure(&reason_of(&e));
             }

@@ -144,8 +144,9 @@ impl EngineModel {
             label: label.unwrap_or_else(|| "Command".into()),
             target,
             stage: "sent".into(),
+            text: String::new(),
             finished: false,
-            history: vec!["sent".into()],
+            history: vec![],
         }
     }
 

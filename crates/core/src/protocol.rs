@@ -900,6 +900,9 @@ pub struct CommandNotice {
     pub epoch: String,
     pub command_id: String,
     pub stage: String,
+    /// The engine's localized words for `stage`.
+    #[serde(default)]
+    pub stage_text: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<Value>,
     /// The engine's localized reason for `error`.

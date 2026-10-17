@@ -639,7 +639,7 @@ impl<M: GameModel> TuiApp<M> {
         let command = self
             .model
             .command()
-            .map_or_else(|| "Ready".into(), |s| format!("{}: {}", s.label, s.stage));
+            .map_or_else(|| "Ready".into(), |s| s.line());
         let command = match self.model.busy() {
             true => format!("{command} [Esc: interrupt]"),
             false => command,

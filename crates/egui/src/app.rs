@@ -5,7 +5,7 @@ use crate::iso::{self, View3d};
 use crate::text;
 use crate::windows::{self, Origin, Shown, WindowSpec};
 use bn_client_core::protocol::SidebarSide;
-use bn_client_core::{Failure, GameModel, Loading, Pos, interaction};
+use bn_client_core::{CommandStatus, Failure, GameModel, Loading, Pos, interaction};
 use eframe::egui::{self, accesskit};
 
 mod component;
@@ -219,7 +219,7 @@ impl<M: GameModel> App<M> {
             menu_focus: None,
             native_live: a11y::Announcer::new(" "),
             command_live: a11y::Announcer::new(" "),
-            status_live: a11y::Announcer::new(", "),
+            status_live: a11y::Announcer::new(" "),
             screens: Default::default(),
             sidebar: None,
             region: None,
@@ -518,7 +518,7 @@ impl<M: GameModel> App<M> {
         let text = command
             .as_ref()
             .filter(|s| !(s.finished && s.stage == "done"))
-            .map_or_else(|| "Ready".into(), |s| format!("{}: {}", s.label, s.stage));
+            .map_or_else(|| "Ready".into(), CommandStatus::line);
         // Every stage reached since the last frame is said, even one that is not shown afterwards.
         let news = command
             .as_ref()

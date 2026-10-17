@@ -393,19 +393,33 @@ pub struct CommandStatus {
     pub label: String,
     /// Id of the choice or action that was pressed, to mark it pending.
     pub target: Option<String>,
-    /// `sent`, `accepted`, `executing`, `done`, or the failure in words.
+    /// `sent`, `accepted`, `executing`, `done`, `rejected` or `interrupted`.
     pub stage: String,
+    /// The engine's words for the stage, with its reason for a failure; empty until the engine answers.
+    pub text: String,
     /// The command reached a terminal stage.
     pub finished: bool,
-    /// Every stage the command went through, oldest first, so ones that pass within a frame are kept.
+    /// The words of every stage the command went through, oldest first, so ones that pass within a frame are
+    /// kept.
     pub history: Vec<String>,
 }
 
 impl CommandStatus {
-    pub fn set_stage(&mut self, stage: String, finished: bool) {
-        self.history.push(stage.clone());
-        self.stage = stage;
+    pub fn set_stage(&mut self, stage: &str, text: String, finished: bool) {
+        if !text.is_empty() {
+            self.history.push(text.clone());
+        }
+        self.stage = stage.into();
+        self.text = text;
         self.finished = finished;
+    }
+
+    /// What the status line says: the name, with the stage's words once the engine has answered.
+    pub fn line(&self) -> String {
+        match self.text.as_str() {
+            "" => self.label.clone(),
+            text => format!("{}: {text}", self.label),
+        }
     }
 }
 
