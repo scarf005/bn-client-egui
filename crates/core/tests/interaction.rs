@@ -630,13 +630,20 @@ fn a_refused_or_empty_page_closes_the_list_until_the_next_boundary_and_a_stray_p
     );
 }
 
+/// The Rust files under `dir` and its subdirectories.
 fn files_under(dir: &str) -> Vec<String> {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let mut found = std::fs::read_dir(root.join(dir))
         .unwrap()
         .map(|e| e.unwrap().path())
-        .filter(|p| p.extension().is_some_and(|e| e == "rs"))
-        .map(|p| format!("{dir}/{}", p.file_name().unwrap().to_string_lossy()))
+        .flat_map(|p| {
+            let name = format!("{dir}/{}", p.file_name().unwrap().to_string_lossy());
+            match (p.is_dir(), p.extension().is_some_and(|e| e == "rs")) {
+                (true, _) => files_under(&name),
+                (false, true) => vec![name],
+                (false, false) => vec![],
+            }
+        })
         .collect::<Vec<_>>();
     found.sort();
     found
@@ -647,6 +654,12 @@ fn files_under(dir: &str) -> Vec<String> {
 /// draw what the core decides, and the binary only parses arguments.
 const CLIENT_OWNED: &[&str] = &[
     "crates/egui/src/app/component.rs",
+    "crates/egui/src/app/component/footer.rs",
+    "crates/egui/src/app/component/form.rs",
+    "crates/egui/src/app/component/list.rs",
+    "crates/egui/src/app/component/measure.rs",
+    "crates/egui/src/app/component/overmap.rs",
+    "crates/egui/src/app/component/placement.rs",
     "crates/egui/src/app/input.rs",
     "crates/egui/src/app/map.rs",
     "crates/egui/src/app/palette.rs",
