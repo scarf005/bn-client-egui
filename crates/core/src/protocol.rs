@@ -2218,6 +2218,10 @@ pub enum ScreenDock {
 pub struct Screen {
     /// One native screen instance: stable while it stays open, new when it is reopened.
     pub screen_id: String,
+    /// What screen this is, the same at every opening and in every language; none where the engine does not
+    /// name it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
     pub role: ScreenRole,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub title: Option<Text>,

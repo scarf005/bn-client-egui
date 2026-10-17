@@ -692,6 +692,8 @@ fn live_engine_says_hello_with_0_2_and_shows_the_main_menu() {
             .collect::<Vec<_>>()
     );
     assert!(common::main_menu_tabs(&model).contains(&"new_game".into()));
+    let top = model.screens().last().and_then(|s| s.kind.clone());
+    assert_eq!(top.as_deref(), Some("main_menu"));
 }
 
 #[test]
