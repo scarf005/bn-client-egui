@@ -305,25 +305,6 @@ pub struct PaneTotals {
     pub over_volume: bool,
 }
 
-impl PaneTotals {
-    /// `weight[/max] unit`, as the native header prints it.
-    pub fn weight_text(&self) -> String {
-        Self::text(&self.weight, &self.weight_max, &self.weight_unit)
-    }
-
-    /// `volume[/max] unit`, as the native header prints it.
-    pub fn volume_text(&self) -> String {
-        Self::text(&self.volume, &self.volume_max, &self.volume_unit)
-    }
-
-    fn text(value: &str, max: &str, unit: &str) -> String {
-        match max.is_empty() {
-            true => format!("{value} {unit}"),
-            false => format!("{value}/{max} {unit}"),
-        }
-    }
-}
-
 /// The engine's current interaction, rendered generically.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Menu {
@@ -347,9 +328,6 @@ pub struct Menu {
     pub field: Option<MenuField>,
     /// The pane of the selected tab, when the menu has tabs.
     pub pane: Option<String>,
-    /// Panes the engine lists by name with one of them current, though it lists only that one's rows:
-    /// `(id, label, current)`. Another one is reached with the engine's `NEXT_TAB` action.
-    pub pane_tabs: Vec<(String, String, bool)>,
     /// The row the engine's own cursor is on, which its navigation keys move.
     pub focus: Option<String>,
     /// Every pane the engine names, as `(id, label)` in its order.

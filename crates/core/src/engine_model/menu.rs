@@ -43,12 +43,6 @@ impl Pane {
             page: self.page.as_ref().map(|p| (p.number, p.count)),
         })
     }
-
-    /// The pane as a tab the engine switches to with its `NEXT_TAB` action: `(id, label, current)`.
-    fn tab(&self) -> Option<(String, String, bool)> {
-        matches!(self.role.as_str(), "current" | "inactive")
-            .then(|| (self.id.clone(), self.label.clone(), self.role == "current"))
-    }
 }
 
 /// The panes the engine names, in its order; none when it names none.
@@ -140,7 +134,6 @@ impl EngineModel {
                 .collect(),
             panes: panes.iter().filter_map(Pane::shown).collect(),
             can_cancel: i.allow_cancel,
-            pane_tabs: panes.iter().filter_map(Pane::tab).collect(),
             pane: all()
                 .find(|c| tab(c) && c.selected)
                 .and_then(|c| pane_of(&c.label).cloned()),
