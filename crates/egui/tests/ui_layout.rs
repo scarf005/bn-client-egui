@@ -69,7 +69,7 @@ fn the_map_gets_most_of_the_window_and_the_sidebar_sits_beside_it() {
 fn the_message_log_is_in_the_sidebar_below_the_item_lists() {
     let (mut h, _script) = harness(egui::vec2(1100.0, 800.0));
     h.run_steps(5);
-    let log = h.get_by_label("Message log").rect();
+    let log = h.get_by_label("Resize message log").rect();
     let inventory = h.get_by_label("Inventory").rect();
     let map = h.get_by_label("Map").rect();
     assert!(log.min.y > inventory.max.y, "log below the lists");
@@ -217,7 +217,7 @@ fn the_message_log_keeps_two_fifths_of_the_sidebar_height_when_the_status_is_tal
         script.push(fixture(name));
     }
     h.run_steps(8);
-    let log = h.get_by_label("Message log").rect();
+    let log = h.get_by_label("Resize message log").rect();
     assert!(800.0 - log.min.y >= 800.0 * 0.35, "{log:?}");
 }
 
@@ -225,7 +225,7 @@ fn the_message_log_keeps_two_fifths_of_the_sidebar_height_when_the_status_is_tal
 fn the_resizable_log_keeps_its_default_share_instead_of_shrinking_to_its_content() {
     let (mut h, _script) = harness(egui::vec2(1100.0, 800.0));
     h.run_steps(10);
-    let log = h.get_by_label("Message log").rect();
+    let log = h.get_by_label("Resize message log").rect();
     assert!(800.0 - log.min.y >= 800.0 * 0.35, "{log:?}");
 }
 
@@ -233,7 +233,7 @@ fn the_resizable_log_keeps_its_default_share_instead_of_shrinking_to_its_content
 fn dragging_the_log_edge_resizes_it_and_the_size_sticks() {
     let (mut h, _script) = harness(egui::vec2(1100.0, 800.0));
     h.run_steps(5);
-    let heading = h.get_by_label("Message log").rect();
+    let heading = h.get_by_label("Resize message log").rect();
     let before = heading.min.y;
     let edge = h.get_by_label("Resize message log").rect().center();
     h.hover_at(edge);
@@ -246,7 +246,7 @@ fn dragging_the_log_edge_resizes_it_and_the_size_sticks() {
     }
     h.drop_at(edge + egui::vec2(0.0, -120.0));
     h.run_steps(5);
-    let after = h.get_by_label("Message log").rect().min.y;
+    let after = h.get_by_label("Resize message log").rect().min.y;
     assert!(after < before - 60.0, "{before} -> {after}");
 }
 

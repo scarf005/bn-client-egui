@@ -3,8 +3,8 @@ use crate::interaction::InvokeError;
 use crate::markup::{self, Run};
 
 use crate::protocol::{
-    Column, Editor, InvokeArgs, List, Look, Mark, ModTileset, Row, Screen, ScreenRole, Shortcut,
-    TileAction,
+    Column, Component, Editor, InvokeArgs, ItemList, List, Look, Mark, ModTileset, Row, Screen,
+    ScreenRole, Shortcut, TileAction,
 };
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Pos {
@@ -607,6 +607,14 @@ pub trait GameModel: MenuModel {
             .find(|s| s.role == ScreenRole::Map)
             .map_or_else(Vec::new, |s| s.shortcuts.clone())
     }
+    /// The avatar's item lists the map screen names beside it, in the engine's order; none before it names them.
+    fn item_lists(&self) -> Vec<ItemList> {
+        let map = self.screens().iter().find(|s| s.role == ScreenRole::Map);
+        match map.and_then(|s| s.root.as_ref()) {
+            Some(Component::Map(m)) => m.item_lists.clone(),
+            _ => vec![],
+        }
+    }
     /// The engine's cursor (look mode, aiming) moves to view square `at`; a `click` on the square it is
     /// already on confirms it, a hover never does.
     fn aim(&mut self, _at: Pos, _click: bool) -> bool {
@@ -676,6 +684,15 @@ pub trait GameModel: MenuModel {
     /// The sidebar as the game's panel options arrange it; none before the engine reports them.
     fn sidebar_layout(&self) -> Option<crate::sidebar::Layout> {
         None
+    }
+    /// The heading of the game's message log panel; none before the engine names it.
+    fn log_label(&self) -> Option<String> {
+        let layout = self.sidebar_layout()?;
+        let log = layout
+            .panels
+            .into_iter()
+            .find(|p| p.body == crate::sidebar::Body::Log);
+        log.map(|p| p.label)
     }
     /// The game's own message log, oldest first.
     fn native_log(&self) -> &[LogLine] {
@@ -755,6 +772,23 @@ impl GameModel for FakeModel {
 
     fn take_effects(&mut self) -> Vec<Effect> {
         std::mem::take(&mut self.effects)
+    }
+
+    fn item_lists(&self) -> Vec<ItemList> {
+        use crate::protocol::{ItemListId, Text};
+        let list = |id, label: &str, verb: &str| ItemList {
+            id,
+            label: Text::Plain(label.into()),
+            verb: Text::Plain(verb.into()),
+        };
+        vec![
+            list(ItemListId::Ground, "Ground", "Pick up"),
+            list(ItemListId::Inventory, "Inventory", "Drop"),
+        ]
+    }
+
+    fn log_label(&self) -> Option<String> {
+        Some("Message log".into())
     }
 
     fn size(&self) -> Pos {

@@ -54,7 +54,7 @@ fn wheel(h: &mut H, at: egui::Pos2, dy: f32) {
 #[test]
 fn the_wheel_over_the_inventory_scrolls_to_items_below_the_fold() {
     let mut h = crowded();
-    let log_top = h.get_by_label("Message log").rect().min.y;
+    let log_top = h.get_by_label("Resize message log").rect().min.y;
     let ground = h.get_by_label("Ground").rect();
     let first = drop_rect(&h, 0);
     assert!(
@@ -86,7 +86,7 @@ fn the_wheel_over_the_map_leaves_the_sidebar_where_it_is() {
 #[test]
 fn tabbing_to_an_item_below_the_fold_scrolls_it_into_view() {
     let mut h = crowded();
-    let log_top = h.get_by_label("Message log").rect().min.y;
+    let log_top = h.get_by_label("Resize message log").rect().min.y;
     h.get_by_label("Drop item59").focus();
     h.run_steps(4);
     let rect = drop_rect(&h, 59);

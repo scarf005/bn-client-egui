@@ -616,7 +616,7 @@ fn a_screen_without_components_stays_with_the_0_1_drawing() {
         "screen the engine has not described by components yet",
     );
     let (mut app, h) = open(bare);
-    assert!(lines(&render(&mut app)).join("\n").contains("Message log"));
+    assert!(lines(&render(&mut app)).join("\n").contains("Actions"));
     press(&mut app, KeyCode::Char('z'));
     assert!(operations(&h).iter().all(|op| op["kind"] != "invoke"));
 }

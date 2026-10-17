@@ -315,7 +315,7 @@ fn loading_screen_shows_title_progress_bar_and_steps_instead_of_the_map() {
     ] {
         assert!(s.contains(want), "{want} in:\n{s}");
     }
-    assert!(!s.contains("Message log"), "game UI hidden:\n{s}");
+    assert!(!s.contains("Actions"), "game UI hidden:\n{s}");
 }
 
 #[test]
@@ -325,7 +325,7 @@ fn loading_screen_goes_away_when_the_engine_is_done() {
     h.push(json!({"jsonrpc":"2.0","method":"bn.loading","params":{"epoch":"e7f3","done":true}}));
     app.model.poll();
     let s = text(&render(&mut app));
-    assert!(s.contains("Message log") && !s.contains("Loading world"));
+    assert!(s.contains("Actions") && !s.contains("Loading world"));
 }
 
 #[test]
@@ -1068,6 +1068,9 @@ fn item_lists_beside_the_map_show_colour_tags_as_colour_not_text() {
         }
         fn pick_up(&mut self, _: &str) {}
         fn drop_item(&mut self, _: &str) {}
+        fn item_lists(&self) -> Vec<bn_client_core::protocol::ItemList> {
+            self.0.item_lists()
+        }
         fn messages(&self) -> &[String] {
             self.0.messages()
         }

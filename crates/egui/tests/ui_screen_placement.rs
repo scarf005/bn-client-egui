@@ -39,8 +39,7 @@ fn playing<'a>(size: egui::Vec2, screen: Option<Value>) -> (H<'a>, ScriptHandle)
     script.push(fixture("events_41_walk"));
     h.run_steps(4);
     if let Some(screen) = screen {
-        let map =
-            json!({"screen_id": "screen:map", "role": "map", "root": null, "affordances": []});
+        let map = fixture("subscribe_result")["result"]["interaction"]["stack"][0].clone();
         script.push(json!({"jsonrpc": "2.0", "method": "bn.events", "params": {"epoch": "e7f3", "events": [{
             "sequence": "42", "revision": "33", "type": "interaction.changed", "changes": {"interaction": {
             "boundary_id": "b:60",

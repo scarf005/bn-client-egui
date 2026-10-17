@@ -3,6 +3,7 @@
 use super::App;
 use crate::a11y;
 use crate::display::Display;
+use bn_client_core::protocol::ItemListId;
 use bn_client_core::sidebar::{Body, Direction, Layout, Panel};
 use bn_client_core::{Cell, GameModel, LogLine, markup};
 use eframe::egui::{self, accesskit};
@@ -17,16 +18,10 @@ const ICON: f32 = 24.0;
 /// The least height an item list keeps, whatever room the window has left.
 const MIN_LIST: f32 = 4.0 * ICON;
 
-#[derive(Clone, Copy, PartialEq)]
-enum Column {
-    Ground,
-    Inventory,
-}
-
-/// Drag payload: which column the item comes from and which item it is.
+/// Drag payload: which list the item comes from and which item it is.
 #[derive(Clone)]
 struct Dragged {
-    from: Column,
+    from: ItemListId,
     /// The engine's id of the row, so a list that changes before the drop still moves this item.
     item_id: String,
 }
@@ -121,18 +116,16 @@ impl<M: GameModel> App<M> {
     fn items(&mut self, ui: &mut egui::Ui) {
         let mut moved = None;
         let season = self.model.season();
-        for column in [Column::Ground, Column::Inventory] {
-            let (title, verb, items, cells, ids) = match column {
-                Column::Ground => (
-                    "Ground",
-                    "Pick up",
+        for list in self.model.item_lists() {
+            let column = list.id;
+            let (title, verb) = (list.label.shown(), list.verb.shown());
+            let (items, cells, ids) = match column {
+                ItemListId::Ground => (
                     self.model.ground(),
                     self.model.ground_cells(),
                     self.model.ground_ids(),
                 ),
-                Column::Inventory => (
-                    "Inventory",
-                    "Drop",
+                ItemListId::Inventory => (
                     self.model.inventory(),
                     self.model.inventory_cells(),
                     self.model.inventory_ids(),
@@ -153,17 +146,17 @@ impl<M: GameModel> App<M> {
                     idle.bg_stroke = egui::Stroke::NONE;
                     ui.dnd_drop_zone::<Dragged, _>(egui::Frame::NONE, |ui| {
                         ui.set_min_size(egui::vec2(ui.available_width(), 0.0));
-                        ui.heading(title);
+                        ui.heading(&title);
                         // A long list scrolls inside the room the window has left, so the status above it
                         // stays in view; the ground takes at most two fifths of it for itself.
                         let room =
                             (ui.clip_rect().max.y - ui.next_widget_position().y).max(MIN_LIST);
                         let room = match column {
-                            Column::Ground => room * 0.4,
-                            Column::Inventory => room,
+                            ItemListId::Ground => room * 0.4,
+                            ItemListId::Inventory => room,
                         };
                         egui::ScrollArea::vertical()
-                            .id_salt(title)
+                            .id_salt(&title)
                             .max_height(room)
                             .auto_shrink([false, true])
                             .show(ui, |ui| {
@@ -176,7 +169,7 @@ impl<M: GameModel> App<M> {
                                         let button_w = ui
                                             .painter()
                                             .layout_no_wrap(
-                                                verb.into(),
+                                                verb.clone(),
                                                 egui::TextStyle::Button.resolve(ui.style()),
                                                 egui::Color32::WHITE,
                                             )
@@ -200,7 +193,7 @@ impl<M: GameModel> App<M> {
                                             from: column,
                                             item_id: item_id.clone(),
                                         });
-                                        let button = ui.button(verb);
+                                        let button = ui.button(&verb);
                                         ui.ctx().accesskit_node_builder(button.id, |b| {
                                             b.set_label(format!("{verb} {}", markup::plain(name)))
                                         });
@@ -226,11 +219,11 @@ impl<M: GameModel> App<M> {
         }
         match moved {
             Some(Dragged {
-                from: Column::Ground,
+                from: ItemListId::Ground,
                 item_id,
             }) => self.model.pick_up(&item_id),
             Some(Dragged {
-                from: Column::Inventory,
+                from: ItemListId::Inventory,
                 item_id,
             }) => self.model.drop_item(&item_id),
             None => {}
@@ -242,6 +235,7 @@ impl<M: GameModel> App<M> {
         let shown = native.iter().map(LogLine::shown).collect::<Vec<_>>();
         let native_live = self.native_live.update(&shown).to_owned();
         let command_live = self.command_live.update(self.model.messages()).to_owned();
+        let heading = self.model.log_label();
         // The log's lines, commands and sounds scroll inside the panel: content taller than the panel would
         // otherwise make the panel report a lower edge, and the panels above it would be drawn under it.
         let room = ui.available_height();
@@ -252,6 +246,7 @@ impl<M: GameModel> App<M> {
                 message_log(
                     ui,
                     LogOptions {
+                        heading: heading.as_deref(),
                         native,
                         commands: self.model.messages(),
                         live: [&native_live, &command_live],
@@ -296,8 +291,9 @@ fn glyph_icon(painter: &egui::Painter, rect: egui::Rect, cell: &Cell) {
     );
 }
 
-/// What the message log shows, and the height of the panel it sits in.
+/// What the message log shows under the engine's heading, and the height of the panel it sits in.
 pub(super) struct LogOptions<'a> {
+    pub heading: Option<&'a str>,
     pub native: &'a [LogLine],
     pub commands: &'a [String],
     pub live: [&'a str; 2],
@@ -309,12 +305,15 @@ pub(super) struct LogOptions<'a> {
 /// polite live region, so history is never re-announced.
 pub(super) fn message_log(ui: &mut egui::Ui, options: LogOptions) {
     let LogOptions {
+        heading,
         native,
         commands,
         live,
         room,
     } = options;
-    ui.heading("Message log");
+    if let Some(heading) = heading {
+        ui.heading(heading);
+    }
     if !native.is_empty() {
         a11y::live_region(ui, live[0]);
     }

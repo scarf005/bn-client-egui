@@ -26,9 +26,8 @@ fn char_width(ui: &egui::Ui) -> f32 {
         .x
 }
 
-/// The sidebar lines under a "Status" heading.
+/// The status lines of an avatar whose engine sent no panel options, under no heading.
 pub fn show(ui: &mut egui::Ui, lines: &[Line]) {
-    ui.heading("Status");
     rows(ui, "status", lines, true);
 }
 

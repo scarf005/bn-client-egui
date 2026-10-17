@@ -48,7 +48,9 @@ fn submits(h: &ScriptHandle) -> Vec<Value> {
 }
 
 /// An `interaction.changed` event at `sequence` carrying these actions and interaction.
+/// The interaction over the session's map, which stays at the bottom of the stack as the engine keeps it.
 fn show(sequence: u32, actions: Value, interaction: Value) -> Value {
+    let map = fixture("subscribe_result")["result"]["interaction"]["stack"].clone();
     json!({"jsonrpc":"2.0","method":"bn.events","params":{"epoch":"e7f3","events":[{
         "sequence": sequence.to_string(), "revision": (sequence - 9).to_string(),
         "type": "interaction.changed",
@@ -57,7 +59,8 @@ fn show(sequence: u32, actions: Value, interaction: Value) -> Value {
             "readiness": {"phase":"playing","game_ready":true,
                 "accepts_interaction_commands":true,"accepts_registered_actions":true},
             "actions": actions,
-            "interaction": interaction}}}]}})
+            "interaction": interaction,
+            "stack": map}}}]}})
 }
 
 fn choice(id: &str, label: &str) -> Value {

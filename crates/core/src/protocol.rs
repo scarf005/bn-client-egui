@@ -2171,6 +2171,27 @@ pub struct MapComponent {
     pub target: Option<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub overmap: Option<OvermapWire>,
+    /// The avatar's item lists the world map shows beside it, in order, also while the map is covered.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub item_lists: Vec<ItemList>,
+}
+
+/// A list of the avatar's items beside the map, under the engine's heading.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ItemList {
+    pub id: ItemListId,
+    pub label: Text,
+    /// What moving a row out of the list does.
+    pub verb: Text,
+}
+
+/// The avatar member that holds an item list's rows.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ItemListId {
+    #[serde(rename = "avatar.ground")]
+    Ground,
+    #[serde(rename = "avatar.inventory")]
+    Inventory,
 }
 
 impl MapComponent {

@@ -4,7 +4,7 @@ mod component;
 mod settings;
 
 use bn_client_core::markup::plain;
-use bn_client_core::protocol::SidebarSide;
+use bn_client_core::protocol::{ItemListId, SidebarSide};
 use bn_client_core::sidebar::{self as native, Body};
 use bn_client_core::{ActionEntry, Failure, GameModel, Loading, Menu, MenuChoice, Pos, Rgb, keys};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
@@ -569,12 +569,12 @@ impl<M: GameModel> TuiApp<M> {
             }
         };
         self.components.set_sidebar(side, left);
-        // The game's panels, else the status rows alone.
+        // The game's panels, else the status rows alone under no heading.
         let panels = match &layout {
             Some(l) => l.panels.clone(),
             None => vec![native::Panel {
                 id: String::new(),
-                label: "Status".into(),
+                label: String::new(),
                 height: None,
                 body: Body::Status(self.model.sidebar()),
             }],
@@ -617,7 +617,11 @@ impl<M: GameModel> TuiApp<M> {
         let lines = all[end.saturating_sub(LOG_LINES)..end].to_vec();
         if log_shown {
             f.render_widget(
-                Paragraph::new(lines).block(Block::bordered().title("Message log")),
+                Paragraph::new(lines).block(
+                    self.model
+                        .log_label()
+                        .map_or_else(Block::bordered, |l| Block::bordered().title(l)),
+                ),
                 log,
             );
         }
@@ -869,8 +873,18 @@ impl<M: GameModel> TuiApp<M> {
                 .chain(items.iter().map(row))
                 .collect::<Vec<_>>()
         };
-        let mut lines = section("Ground", self.model.ground());
-        lines.extend(section("Inventory", self.model.inventory()));
+        let lines = self
+            .model
+            .item_lists()
+            .iter()
+            .flat_map(|list| {
+                let items = match list.id {
+                    ItemListId::Ground => self.model.ground(),
+                    ItemListId::Inventory => self.model.inventory(),
+                };
+                section(&list.label.shown(), items)
+            })
+            .collect::<Vec<_>>();
         f.render_widget(
             Paragraph::new(lines)
                 .wrap(Wrap { trim: false })
