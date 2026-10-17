@@ -207,3 +207,37 @@ fn a_long_described_list_keeps_its_load_more_row_and_description_inside_the_wind
     // The description under the button has the room too: its 96 px height must fit under it.
     assert!(more.max.y + 96.0 <= 800.0, "{more:?}");
 }
+
+/// The interaction gone: the game is back on the map, as revision `revision`.
+fn closed(revision: u32) -> Value {
+    let mut event = menu_event(|_| {});
+    let change = &mut event["params"]["events"][0];
+    change["changes"]["interaction"]["interaction"] = Value::Null;
+    change["sequence"] = (revision + 10).to_string().into();
+    change["revision"] = revision.to_string().into();
+    event
+}
+
+#[test]
+fn text_typed_while_busy_into_a_prompt_that_closes_is_not_sent_into_the_next_one() {
+    let (mut h, script) = harness(vec![]);
+    open(&mut h, &script, prompt("", 33));
+    h.get_by_label("Filter").focus();
+    h.run_steps(2);
+    h.get_by_label("Filter").type_text("m");
+    h.run_steps(2);
+    // "mod" waits for the first fill, and the prompt closes before it can go out.
+    h.get_by_label("Filter").type_text("od");
+    h.run_steps(2);
+    script.push(closed(34));
+    finish(&script, 4, "c:5");
+    h.run_steps(3);
+    assert!(h.state().model.menu().is_none());
+    script.push(prompt("", 35));
+    h.run_steps(3);
+    assert_eq!(
+        filled(&script),
+        ["m"],
+        "nothing typed into the closed prompt went out"
+    );
+}
