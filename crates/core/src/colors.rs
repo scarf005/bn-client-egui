@@ -4,7 +4,23 @@
 use crate::color_table::NAMED;
 use crate::model::Rgb;
 use serde_json::Value;
+use std::collections::HashMap;
 use std::path::Path;
+use std::sync::LazyLock;
+
+/// `NAMED` by name, the `c_` names also by their bare name (`light_gray`); no bare name has `_` second, as the
+/// prefixed names all do.
+static BY_NAME: LazyLock<HashMap<&str, (u8, u8)>> = LazyLock::new(|| {
+    NAMED
+        .iter()
+        .flat_map(|&(name, fg, bg)| {
+            [Some(name), name.strip_prefix("c_")]
+                .into_iter()
+                .flatten()
+                .map(move |key| (key, (fg, bg)))
+        })
+        .collect()
+});
 
 /// Palette keys of `colors.json` in curses colour order: indices 0..7, then their bold halves.
 const KEYS: [&str; 16] = [
@@ -71,14 +87,9 @@ impl ColorMap {
 
     /// Foreground, and background when it is not black. Unknown names read as `c_light_gray`.
     pub fn resolve(&self, name: &str) -> (Rgb, Option<Rgb>) {
-        let full = if name.contains('_') && name.as_bytes().get(1) == Some(&b'_') {
-            name.to_string()
-        } else {
-            format!("c_{name}")
-        };
-        let find = |n: &str| NAMED.iter().find(|(k, ..)| *k == n);
-        let &(_, fg, bg) = find(&full)
-            .or_else(|| find("c_light_gray"))
+        let &(fg, bg) = BY_NAME
+            .get(name)
+            .or_else(|| BY_NAME.get("c_light_gray"))
             .expect("c_light_gray is in the table");
         let bg = (bg != 0).then(|| self.palette[usize::from(bg)]);
         (self.palette[usize::from(fg)], bg)
