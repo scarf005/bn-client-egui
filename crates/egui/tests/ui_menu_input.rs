@@ -4,7 +4,7 @@ use bn_client_egui::{App, Clock, EngineModel, GameModel};
 use common::{fixture, session};
 use eframe::egui;
 use egui_kittest::Harness;
-use egui_kittest::kittest::Queryable;
+use egui_kittest::kittest::{NodeT, Queryable};
 use serde_json::{Value, json};
 
 type H<'a> = Harness<'a, App<EngineModel>>;
@@ -235,6 +235,11 @@ fn text_typed_while_busy_into_a_prompt_that_closes_is_not_sent_into_the_next_one
     assert!(h.state().model.menu().is_none());
     script.push(prompt("", 35));
     h.run_steps(3);
+    assert_eq!(
+        h.get_by_label("Filter").accesskit_node().value().as_deref(),
+        Some(""),
+        "the new prompt shows the engine's text"
+    );
     assert_eq!(
         filled(&script),
         ["m"],

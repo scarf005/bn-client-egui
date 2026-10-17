@@ -13,6 +13,7 @@ impl<M: GameModel> App<M> {
     /// The engine's current interaction, drawn generically: title, message, tabs, choices, cancel.
     pub(super) fn menu(&mut self, ctx: &egui::Context) {
         let Some(menu) = self.model.menu() else {
+            self.forget_prompt();
             self.focus_menu = false;
             self.menu_ids.clear();
             self.action_ids.clear();
@@ -126,7 +127,7 @@ impl<M: GameModel> App<M> {
                             self.prompt_focused = Some(field.id.clone());
                         }
                     } else {
-                        self.prompt_focused = None;
+                        self.forget_prompt();
                     }
                     // A run of rows refused for the same reason says it once.
                     let any_hotkey = menu.choices.iter().any(|c| !c.hotkey.is_empty());
@@ -346,6 +347,15 @@ impl<M: GameModel> App<M> {
         }
     }
 
+    /// Drops what the prompt that closed kept: the text not sent yet, its composition and its sends.
+    fn forget_prompt(&mut self) {
+        self.prompt = Default::default();
+        self.prompt_send = None;
+        self.prompt_sent.clear();
+        self.prompt_composing = false;
+        self.prompt_focused = None;
+    }
+
     /// The engine's text prompt, such as a list filter: a box whose every change is sent and that Enter
     /// submits. The text is the engine's until the box is edited.
     fn text_prompt(
@@ -362,7 +372,7 @@ impl<M: GameModel> App<M> {
             let echo = self.prompt_sent.contains(&field.value);
             let sending = self.prompt_send.is_some() || self.model.busy();
             if fresh {
-                self.prompt_sent.clear();
+                self.forget_prompt();
             }
             if fresh || !(echo || sending) {
                 self.prompt.1.clone_from(&field.value);
