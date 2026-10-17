@@ -1356,3 +1356,15 @@ fn the_typing_state_of_closed_prompts_is_not_kept() {
     }
     assert_eq!(kept.first(), kept.last(), "{kept:?}");
 }
+
+#[test]
+fn hovering_an_off_tab_gives_the_engines_reason() {
+    let mut screen = recipe_screen("tabs", "list", "pick");
+    screen["root"]["tabs"][1]["enabled"] = json!(false);
+    screen["root"]["tabs"][1]["denial"] = json!("Nothing to make here.");
+    let (mut h, _script) = harness(screen);
+    assert!(h.query_by_label("Nothing to make here.").is_none());
+    h.get_by_label("Tools").hover();
+    h.run_steps(6);
+    h.get_by_label("Nothing to make here.");
+}
