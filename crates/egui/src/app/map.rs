@@ -257,23 +257,24 @@ impl<M: GameModel> App<M> {
     /// What a screen reader says of the map: the player's and the cursor's squares, the planned route and the aim.
     fn map_status(&self, origin: Pos, cursor: Pos, route: &[Pos]) -> String {
         let player = self.model.player();
+        // The engine's mouse-view text when it has answered for this square; nothing for an unknown square.
+        let said = self.model.hover_text(cursor).map_or_else(
+            || self.model.cell(cursor).desc,
+            |lines| {
+                let lines = lines.iter().map(|l| l.trim()).filter(|l| !l.is_empty());
+                lines.collect::<Vec<_>>().join(" ")
+            },
+        );
+        let said = match said.trim_end_matches('.') {
+            "" => String::new(),
+            said => format!(": {said}"),
+        };
         let mut status = format!(
-            "Player at ({}, {}). Cursor ({}, {}): {}.",
+            "Player at ({}, {}). Cursor ({}, {}){said}.",
             player.x + origin.x,
             player.y + origin.y,
             cursor.x + origin.x,
             cursor.y + origin.y,
-            // The engine's mouse-view text when it has answered for this square.
-            self.model
-                .hover_text(cursor)
-                .map_or_else(
-                    || self.model.cell(cursor).desc,
-                    |lines| {
-                        let lines = lines.iter().map(|l| l.trim()).filter(|l| !l.is_empty());
-                        lines.collect::<Vec<_>>().join(" ")
-                    },
-                )
-                .trim_end_matches('.')
         );
         if let Some(end) = route.last() {
             status += &format!(
@@ -441,7 +442,7 @@ impl<M: GameModel> App<M> {
                 }
             } else {
                 let desc = self.model.cell(under).desc;
-                if desc != "unknown" {
+                if !desc.is_empty() {
                     ui.add(egui::Label::new(desc).wrap_mode(egui::TextWrapMode::Extend));
                 }
             }

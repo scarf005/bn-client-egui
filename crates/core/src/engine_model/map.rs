@@ -143,7 +143,6 @@ impl EngineModel {
         let unknown = Cell {
             glyph: ' ',
             color: Rgb(128, 128, 128),
-            desc: "unknown".into(),
             ..Cell::default()
         };
         let Some(p) = self.abs(at) else {
@@ -223,7 +222,6 @@ impl EngineModel {
                 None => Cell {
                     glyph: '?',
                     color: Rgb(128, 128, 128),
-                    desc: "sensed".into(),
                     ..Cell::default()
                 },
             },
