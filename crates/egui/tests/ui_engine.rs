@@ -624,6 +624,27 @@ fn a_key_prompt_fills_its_field_with_the_next_key_and_a_function_key_by_its_name
     );
 }
 
+#[test]
+fn a_key_prompt_names_shift_tab_as_the_engine_does() {
+    let (mut h, script) = harness();
+    let field = json!({"id":"field:key","label":"New key","description":"","value":"","type":"key",
+        "max_length":-1,"printable":false});
+    open_settings(&mut h, &script, Some(field));
+    h.get_by_label("Press the new key");
+    h.event(egui::Event::Key {
+        key: egui::Key::Tab,
+        physical_key: None,
+        pressed: true,
+        repeat: false,
+        modifiers: egui::Modifiers::SHIFT,
+    });
+    h.run_steps(3);
+    assert_eq!(
+        operations(&script),
+        [json!({"kind":"fill","field_id":"field:key","value":"BACKTAB","submit":true})]
+    );
+}
+
 /// A list menu whose second row is disabled, with a hotkey on each; `field` is the prompt it also shows.
 fn hotkey_menu(h: &mut H, script: &ScriptHandle, field: Option<serde_json::Value>) {
     h.run_steps(3);
