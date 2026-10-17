@@ -14,6 +14,15 @@ type H<'a> = Harness<'a, App<EngineModel>>;
 
 /// A client whose settings are kept in `settings`, showing a menu of `can_cancel` and 30 rows.
 fn menu_window<'a>(settings: &std::path::Path, can_cancel: bool) -> (H<'a>, ScriptHandle) {
+    menu_window_titled(settings, can_cancel, "Pick up")
+}
+
+/// `menu_window` with the menu titled `title`.
+fn menu_window_titled<'a>(
+    settings: &std::path::Path,
+    can_cancel: bool,
+    title: &str,
+) -> (H<'a>, ScriptHandle) {
     let (t, script) = session();
     let app = App::new(EngineModel::new(Box::new(t))).with_settings(settings.into());
     let mut h = Harness::builder()
@@ -27,6 +36,10 @@ fn menu_window<'a>(settings: &std::path::Path, can_cancel: bool) -> (H<'a>, Scri
     let change = &mut menu["params"]["events"][0]["changes"]["interaction"];
     change["interaction"]["allow_cancel"] = can_cancel.into();
     change["interaction"]["context"] = "UILIST".into();
+    change["interaction"]["title"] = title.into();
+    change["stack"] = json!([
+        {"screen_id": "screen:map", "kind": "map", "role": "map", "root": null, "affordances": []},
+        {"screen_id": "screen:9", "kind": "uilist", "role": "dialog", "root": null, "affordances": []}]);
     change["interaction"]["choices"] = (0..30)
         .map(|i| {
             json!({"id":format!("c:{i}"),"label":format!("entry {i}"),"description":"","denial":"",
@@ -82,8 +95,13 @@ fn title_bar(h: &H) -> egui::Rect {
 
 /// The window as a whole.
 fn window(h: &H) -> egui::Rect {
+    window_titled(h, "Pick up")
+}
+
+/// The window titled `title` as a whole.
+fn window_titled(h: &H, title: &str) -> egui::Rect {
     let dialog = h
-        .get_all_by_label("Pick up")
+        .get_all_by_label(title)
         .find(|n| n.accesskit_node().role() == egui::accesskit::Role::Dialog);
     dialog.unwrap().rect()
 }
@@ -231,12 +249,21 @@ fn a_menu_window_is_narrowed_by_dragging_its_left_edge() {
 
 /// A client whose settings are kept in `settings`, in a game with the inventory's drop screen over the map.
 fn inventory_window<'a>(settings: &std::path::Path) -> (H<'a>, ScriptHandle) {
+    inventory_window_as(settings, |_| {})
+}
+
+/// `inventory_window` with the drop screen as `edit` leaves it.
+fn inventory_window_as<'a>(
+    settings: &std::path::Path,
+    edit: impl FnOnce(&mut Value),
+) -> (H<'a>, ScriptHandle) {
     let path = format!(
         "{}/../core/tests/fixtures/0.2.examples/inventory.json",
         env!("CARGO_MANIFEST_DIR")
     );
     let all = serde_json::from_str::<Value>(&std::fs::read_to_string(path).unwrap()).unwrap();
-    let screen = all["valid"][0]["value"].clone();
+    let mut screen = all["valid"][0]["value"].clone();
+    edit(&mut screen);
     let (t, script) = session();
     let app = App::new(EngineModel::new(Box::new(t))).with_settings(settings.into());
     let mut h = Harness::builder()
@@ -259,7 +286,12 @@ fn inventory_window<'a>(settings: &std::path::Path) -> (H<'a>, ScriptHandle) {
 
 /// The inventory window, and a point on its title bar left of the close button.
 fn inventory_frame(h: &H) -> (egui::Rect, egui::Pos2) {
-    let window = h.get_by_label("Multidrop").rect();
+    titled_frame(h, "Multidrop")
+}
+
+/// The window titled `title`, and a point on its title bar left of the close button.
+fn titled_frame(h: &H, title: &str) -> (egui::Rect, egui::Pos2) {
+    let window = h.get_by_label(title).rect();
     let close = h.get_by_label("Close window").rect();
     (window, egui::pos2(window.center().x, close.center().y))
 }
@@ -324,7 +356,7 @@ fn a_screen_window_kept_wider_than_the_screen_opens_no_wider_than_its_room() {
     let (h, _) = inventory_window(&file);
     let (fresh, _) = inventory_frame(&h);
     drop(h);
-    let kept = json!({"windows": {"screen:Multidrop": {
+    let kept = json!({"windows": {"screen:inventory": {
         "pos": [16.0, 39.0], "size": [3000.0, 745.0], "collapsed": false}}});
     std::fs::write(&file, kept.to_string()).unwrap();
     let (h, _) = inventory_window(&file);
@@ -332,5 +364,77 @@ fn a_screen_window_kept_wider_than_the_screen_opens_no_wider_than_its_room() {
     assert!(
         opened.width() <= fresh.width() + 1.0,
         "{fresh:?} vs {opened:?}"
+    );
+}
+
+#[test]
+fn a_screen_window_is_found_where_it_was_left_when_it_opens_under_another_title() {
+    let file = settings("windows-screen-retitled");
+    let (mut h, _) = inventory_window(&file);
+    let (before, title) = inventory_frame(&h);
+    let by = egui::vec2(60.0, -10.0);
+    drag(&mut h, title, title + by);
+    let (moved, _) = inventory_frame(&h);
+    assert!(
+        (moved.min - before.min - by).length() < 2.0,
+        "{before:?} -> {moved:?}"
+    );
+    drop(h);
+    // The same screen in another language, or with a count in its title.
+    let (h, _) = inventory_window_as(&file, |s| s["title"] = "Déposer (3)".into());
+    let (again, _) = titled_frame(&h, "Déposer (3)");
+    assert!(
+        (again.min - moved.min).length() < 2.0,
+        "{again:?} vs {moved:?}"
+    );
+    let kept = serde_json::from_str::<Value>(&std::fs::read_to_string(&file).unwrap()).unwrap();
+    let kinds = kept["windows"]
+        .as_object()
+        .unwrap()
+        .keys()
+        .cloned()
+        .collect::<Vec<_>>();
+    assert_eq!(kinds, ["screen:inventory"]);
+}
+
+#[test]
+fn a_screen_the_engine_does_not_name_leaves_nothing_to_find_after_a_restart() {
+    let file = settings("windows-screen-unnamed");
+    let unnamed = |s: &mut Value| drop(s.as_object_mut().unwrap().remove("kind"));
+    let (mut h, _) = inventory_window_as(&file, unnamed);
+    let (before, title) = inventory_frame(&h);
+    drag(&mut h, title, title + egui::vec2(60.0, -10.0));
+    drop(h);
+    let (h, _) = inventory_window_as(&file, unnamed);
+    let (again, _) = inventory_frame(&h);
+    assert!(
+        (again.min - before.min).length() < 2.0,
+        "{again:?} vs {before:?}"
+    );
+    let kept =
+        std::fs::read_to_string(&file).map_or(Value::Null, |t| serde_json::from_str(&t).unwrap());
+    assert!(
+        kept["windows"].as_object().is_none_or(|w| w.is_empty()),
+        "{kept}"
+    );
+}
+
+#[test]
+fn a_menu_window_is_found_where_it_was_left_when_it_opens_under_another_title() {
+    let file = settings("windows-menu-retitled");
+    let (mut h, _) = menu_window(&file, true);
+    let title = title_bar(&h);
+    drag(
+        &mut h,
+        title.center(),
+        title.center() + egui::vec2(-80.0, 90.0),
+    );
+    let moved = window(&h);
+    drop(h);
+    let (h, _) = menu_window_titled(&file, true, "Ramasser");
+    let again = window_titled(&h, "Ramasser");
+    assert!(
+        (again.min - moved.min).length() < 2.0,
+        "{again:?} vs {moved:?}"
     );
 }
