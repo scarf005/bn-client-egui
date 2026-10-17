@@ -1106,6 +1106,18 @@ fn a_remembered_cell_lists_its_memorized_terrain_and_overlay_and_is_marked_remem
 }
 
 #[test]
+fn the_avatars_square_shows_the_avatars_own_glyph_and_colour_over_what_it_stands_on() {
+    let m = tiled_session();
+    let origin = m.origin();
+    let me = m.cell(Pos {
+        x: 3 - origin.x,
+        y: 4 - origin.y,
+    });
+    let body = me.layers.iter().find(|l| l.id == "player_female").unwrap();
+    assert_eq!((me.glyph, me.color, me.bg), ('@', body.color, body.bg));
+}
+
+#[test]
 fn creatures_and_the_avatar_draw_over_the_terrain_with_their_overlays() {
     let m = tiled_session();
     let at = |x: i32, y: i32| {
