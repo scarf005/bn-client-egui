@@ -492,6 +492,24 @@ fn key_field_takes_the_next_key_as_the_text_of_its_fill() {
 }
 
 #[test]
+fn a_key_field_takes_a_key_the_screen_binds_as_its_text_and_the_screen_does_not_run_it() {
+    let form = example("menu.json", "key field of a keybinding prompt");
+    let fill = affordance(
+        "bn:fill:field",
+        &[],
+        json!({"text": {"field_id": "field:key"}}),
+    );
+    let down = affordance("down", &["DOWN"], json!({}));
+    let (mut h, script) = harness(dialog(form, vec![fill, down]));
+    h.key_press(egui::Key::ArrowDown);
+    h.run_steps(3);
+    assert_eq!(
+        submits(&script),
+        [boundary_invoke("bn:fill:field", json!({"text": "DOWN"}))]
+    );
+}
+
+#[test]
 fn text_draws_its_markup_without_the_tags_and_its_tone() {
     let text =
         json!({"id": "message", "kind": "text", "markup": "You'll owe $12.00", "tone": "bad"});
