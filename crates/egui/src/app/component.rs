@@ -17,8 +17,8 @@ use bn_client_core::protocol::{
 };
 use bn_client_core::{Cell, GameModel, Pos, Rgb, markup};
 use eframe::egui::{self, WidgetInfo, WidgetType};
-use std::cell::{Cell as Slot, RefCell};
-use std::collections::HashSet;
+use std::cell::RefCell;
+use std::collections::{HashMap, HashSet};
 
 /// The margin around each pane of a split, on every side.
 const PANE_MARGIN: i8 = 2;
@@ -41,8 +41,8 @@ pub(super) struct Screens {
     denial: Option<String>,
     /// The list the keys just moved the focus in, to be scrolled to it.
     reveal: Option<String>,
-    /// The height the list drawn last had, for the rows a page key moves.
-    list_height: Slot<f32>,
+    /// The height each list had in the last frame, by component id, for the rows a page key moves in it.
+    list_heights: RefCell<HashMap<String, f32>>,
     /// The squares of this frame's list rows left for their item's sprite, painted once the window is drawn.
     icons: RefCell<Vec<RowIcon>>,
     /// What this frame's overmap draws, painted once the window is drawn, so that a tileset's sprites come
@@ -366,6 +366,8 @@ impl<M: GameModel> App<M> {
         let kind = screen_kind(&markup::plain(
             &top.title.as_ref().map(Text::shown).unwrap_or_default(),
         ));
+        // Only the lists drawn this frame have a page.
+        self.screens.list_heights.borrow_mut().clear();
         let shown = self.screen_window(ctx, top, &mut out);
         if self.keep_window(ctx, &kind, &shown)
             && let Some(cancel) = cancel
@@ -392,7 +394,10 @@ impl<M: GameModel> App<M> {
     pub(super) fn component_keys(&mut self, ctx: &egui::Context) {
         self.keys_consumed = false;
         self.sync_screens();
-        let page = self.page_rows(ctx);
+        let spacing = &ctx.global_style().spacing;
+        let row = spacing.interact_size.y + spacing.item_spacing.y;
+        let heights = self.screens.list_heights.borrow().clone();
+        let page = |id: &str| heights.get(id).map_or(1, |h| ((h / row) as usize).max(1));
         let keys = super::input::frame_keys(ctx).into_iter().map(|k| k.token);
         // A text box has the typing; its keys are not the screen's, except Escape, which closes the screen.
         let typing = ctx.text_edit_focused();
@@ -405,7 +410,7 @@ impl<M: GameModel> App<M> {
             let out = self
                 .screens
                 .interaction
-                .press(top, &key, page, &|list| model.rows(list));
+                .press(top, &key, &page, &|list| model.rows(list));
             self.settle(out);
         }
     }
@@ -433,13 +438,6 @@ impl<M: GameModel> App<M> {
         let spacing = ui.spacing();
         let buttons = 2.0 * (spacing.interact_size.y + spacing.item_spacing.y);
         (ui.available_height() - DESCRIPTION_HEIGHT - buttons).max(DESCRIPTION_HEIGHT)
-    }
-
-    /// How many rows a list shows at once: the rows of the list drawn last.
-    fn page_rows(&self, ctx: &egui::Context) -> usize {
-        let spacing = &ctx.global_style().spacing;
-        let row = spacing.interact_size.y + spacing.item_spacing.y;
-        ((self.screens.list_height.get() / row) as usize).max(1)
     }
 
     /// Hands what the player did to the interaction core.
@@ -1667,7 +1665,10 @@ impl<M: GameModel> App<M> {
             });
         }
         let list_height = Self::list_height(ui);
-        self.screens.list_height.set(list_height);
+        self.screens
+            .list_heights
+            .borrow_mut()
+            .insert(id.clone(), list_height);
         let mut area = egui::ScrollArea::vertical()
             .id_salt(("list", id))
             .auto_shrink([false, true])

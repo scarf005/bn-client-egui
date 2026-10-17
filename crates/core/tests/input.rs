@@ -168,7 +168,7 @@ fn no_page(list: &List) -> Vec<&Row> {
 }
 
 fn press(ui: &mut Interaction, screen: &Screen, key: &str) -> Outcome {
-    ui.press(screen, key, 3, &no_page)
+    ui.press(screen, key, &|_| 3, &no_page)
 }
 
 fn invoked(outcome: &Outcome) -> Option<(&str, Value)> {
@@ -332,6 +332,27 @@ fn tab_cycles_the_components_that_hold_rows() {
         !press(&mut ui, &alone, "TAB").consumed,
         "nowhere else to go"
     );
+}
+
+#[test]
+fn a_page_key_moves_by_the_page_of_the_list_that_has_the_focus() {
+    let rows = |p: &str| {
+        (0..9)
+            .map(|i| row(&format!("{p}{i}"), json!({})))
+            .collect::<Vec<_>>()
+    };
+    let two = json!({"id": "root", "kind": "split", "relation": "peers", "children": [
+        {"id": "one", "kind": "list", "columns": [], "selection": "single", "total": 9, "rows": rows("a")},
+        {"id": "two", "kind": "list", "columns": [], "selection": "single", "total": 9, "rows": rows("b")}]});
+    let screen = screen_with(two, json!([]));
+    let page = |id: &str| if id == "one" { 5 } else { 2 };
+    let mut ui = Interaction::default();
+    ui.focus_row("two", "b0");
+    ui.press(&screen, "NPAGE", &page, &no_page);
+    assert_eq!(ui.focus().row_id.as_deref(), Some("b2"));
+    ui.focus_row("one", "a0");
+    ui.press(&screen, "NPAGE", &page, &no_page);
+    assert_eq!(ui.focus().row_id.as_deref(), Some("a5"));
 }
 
 #[test]
@@ -634,11 +655,11 @@ fn keyboard_navigation_reaches_rows_the_model_holds_past_the_first_page() {
     let mut ui = Interaction::default();
     let rows = |list| held.rows(list);
     assert_eq!(
-        ui.press(&screen, "END", 3, &rows).revealed.as_deref(),
+        ui.press(&screen, "END", &|_| 3, &rows).revealed.as_deref(),
         Some("d")
     );
-    ui.press(&screen, "UP", 3, &rows);
-    let out = ui.press(&screen, "RETURN", 3, &rows);
+    ui.press(&screen, "UP", &|_| 3, &rows);
+    let out = ui.press(&screen, "RETURN", &|_| 3, &rows);
     assert_eq!(invoked(&out), Some(("pick", json!({"row": "c"}))));
 }
 

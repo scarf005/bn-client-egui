@@ -403,7 +403,11 @@ impl View {
         };
         let outcome = match described(model.screens()) {
             Some(screen) => {
-                let outcome = self.ui.press(screen, &name, PAGE, &|list| model.rows(list));
+                let extents = &self.extents;
+                let page = |id: &str| extents.get(id).map_or(PAGE, |w| w.visible);
+                let outcome = self
+                    .ui
+                    .press(screen, &name, &page, &|list| model.rows(list));
                 if !outcome.consumed {
                     self.scroll_text(screen, &name);
                 }

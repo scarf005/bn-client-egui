@@ -134,12 +134,12 @@ impl Interaction {
     /// runs its row; an affordance the engine binds to it runs; Escape and Return run the `cancel` and `confirm` affordances, or a list's `activate` on its
     /// focused row; a row's hotkey chooses the row; the arrows, Home, End, Page keys and Tab move the focus
     /// (or the tab, or the grid cursor); else the `any_key` affordance runs. `page` is the rows a page key
-    /// moves; `rows` gives the rows of a list that are loaded.
+    /// moves in the list with that id; `rows` gives the rows of a list that are loaded.
     pub fn press<'r>(
         &mut self,
         screen: &'r Screen,
         key: &str,
-        page: usize,
+        page: &dyn Fn(&str) -> usize,
         rows: &dyn Fn(&'r List) -> Vec<&'r Row>,
     ) -> Outcome {
         if self.ask.is_some() {
@@ -438,7 +438,7 @@ impl Interaction {
         &mut self,
         screen: &'r Screen,
         key: &str,
-        page: usize,
+        page: &dyn Fn(&str) -> usize,
         rows: &dyn Fn(&'r List) -> Vec<&'r Row>,
     ) -> Option<Outcome> {
         let parts = components(screen);
@@ -474,8 +474,10 @@ impl Interaction {
         let vertical = match key {
             "UP" => Some(-1),
             "DOWN" => Some(1),
-            "PPAGE" => Some(-(page.max(1) as isize)),
-            "NPAGE" => Some(page.max(1) as isize),
+            "PPAGE" | "NPAGE" => {
+                let by = current.map_or(1, |c| page(c.id()).max(1)) as isize;
+                Some(if key == "PPAGE" { -by } else { by })
+            }
             _ => None,
         };
         let horizontal = match key {
