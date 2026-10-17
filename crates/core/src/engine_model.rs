@@ -36,6 +36,8 @@ const VIEW: Pos = Pos { x: 40, y: 25 };
 const MAX_VIEWPORT: i32 = 512;
 /// Heard sounds kept; older ones have long faded.
 const MAX_SOUNDS: usize = 50;
+/// The log lines kept: the engine contract keeps the newest 100 (`messages` in the snapshot).
+const MAX_LOG_LINES: usize = 100;
 const RESIZE_DEBOUNCE: std::time::Duration = std::time::Duration::from_millis(250);
 
 #[derive(Clone, Copy)]
@@ -619,6 +621,8 @@ impl GameModel for EngineModel {
                 self.native.push(line);
             }
         }
+        self.native
+            .drain(..self.native.len().saturating_sub(MAX_LOG_LINES));
         let at_main_menu = interaction::titled(self.replica.stack());
         if at_main_menu && !std::mem::replace(&mut self.at_main_menu, true) {
             self.messages.clear();
