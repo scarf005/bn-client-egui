@@ -1115,36 +1115,38 @@ impl<M: GameModel> App<M> {
             let c = colors.index(index);
             egui::Color32::from_rgb(c.0, c.1, c.2)
         };
-        ui.spacing_mut().item_spacing.y = 0.0;
-        for row in &canvas.rows {
-            let mut job = egui::text::LayoutJob::default();
-            for (text, fg, bg) in row {
-                job.append(
-                    text,
-                    0.0,
-                    egui::TextFormat {
-                        color: paint(*fg),
-                        background: if *bg == 0 {
-                            egui::Color32::TRANSPARENT
-                        } else {
-                            paint(*bg)
+        // The rows touch; what follows the canvas keeps the theme's spacing.
+        ui.scope(|ui| {
+            ui.spacing_mut().item_spacing.y = 0.0;
+            for row in &canvas.rows {
+                let mut job = egui::text::LayoutJob::default();
+                for (text, fg, bg) in row {
+                    job.append(
+                        text,
+                        0.0,
+                        egui::TextFormat {
+                            color: paint(*fg),
+                            background: if *bg == 0 {
+                                egui::Color32::TRANSPARENT
+                            } else {
+                                paint(*bg)
+                            },
+                            font_id: font.clone(),
+                            ..Default::default()
                         },
-                        font_id: font.clone(),
-                        ..Default::default()
-                    },
-                );
+                    );
+                }
+                // An empty row keeps its height.
+                if row.is_empty() {
+                    job.append(
+                        " ",
+                        0.0,
+                        egui::TextFormat::simple(font.clone(), egui::Color32::BLACK),
+                    );
+                }
+                ui.add(egui::Label::new(job).wrap_mode(egui::TextWrapMode::Extend));
             }
-            // An empty row keeps its height.
-            if row.is_empty() {
-                job.append(
-                    " ",
-                    0.0,
-                    egui::TextFormat::simple(font.clone(), egui::Color32::BLACK),
-                );
-            }
-            ui.add(egui::Label::new(job).wrap_mode(egui::TextWrapMode::Extend));
-        }
-        ui.spacing_mut().item_spacing.y = 4.0;
+        });
     }
 
     fn form(&self, ui: &mut egui::Ui, screen: &Screen, form: &Form, out: &mut Vec<Intent>) {
