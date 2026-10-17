@@ -37,7 +37,6 @@ fn connects_with_hello_then_subscribe_and_exposes_the_map() {
         'Z',
         "entities draw over terrain"
     );
-    assert_eq!(m.cell(Pos { x: 0, y: 0 }).desc, "unknown");
     assert_eq!(m.ground(), ["knife_combat", "tin_can"]);
     assert_eq!(m.inventory(), ["flashlight"]);
 }
@@ -755,6 +754,19 @@ fn remembered_furniture_stays_drawn_from_its_memory_overlay() {
         '.',
         "bare remembered floor draws terrain"
     );
+}
+
+#[test]
+fn an_unknown_or_sensed_square_has_no_words_the_engine_did_not_send() {
+    let (t, h) = session();
+    let mut m = connected(t);
+    assert_eq!(m.cell(Pos { x: 0, y: 0 }).desc, "", "unknown");
+    h.push(cell_event(
+        41,
+        json!({"at": {"dim":"","x":5,"y":4,"z":0}, "known": "sensed"}),
+    ));
+    m.poll();
+    assert_eq!(m.cell(Pos { x: 22, y: 12 }).desc, "", "sensed");
 }
 
 #[test]
