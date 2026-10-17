@@ -144,3 +144,43 @@ fn live_a_word_typed_fast_into_a_filter_arrives_in_order() {
         h.query_by_label("/mode").is_some()
     });
 }
+
+/// Whether the top screen asks for a key.
+fn asks_for_a_key(h: &H) -> bool {
+    let screens = h.state().model.screens();
+    let root = screens.last().and_then(|s| s.root.as_ref());
+    serde_json::to_value(root)
+        .unwrap()
+        .to_string()
+        .contains(r#""type":"key""#)
+}
+
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn live_a_key_prompt_takes_an_arrow_as_the_new_key() {
+    let mut h = start();
+    world_screen(&mut h);
+    h.event(egui::Event::Text("?".into()));
+    run_until(&mut h, "the keybindings", 30, |h| {
+        h.query_by_label("Filter").is_some()
+    });
+    // Add a local key to the first action.
+    h.event(egui::Event::Text("+".into()));
+    settle(&mut h);
+    h.key_press(egui::Key::Enter);
+    run_until(&mut h, "the key prompt", 30, |h| asks_for_a_key(h));
+    h.key_press(egui::Key::ArrowDown);
+    run_until(&mut h, "the prompt to take the key", 30, |h| {
+        !asks_for_a_key(h)
+    });
+    let title = h
+        .state()
+        .model
+        .screens()
+        .last()
+        .and_then(|s| s.title.clone());
+    assert!(
+        title.is_none_or(|t| t.shown() != "Keybindings"),
+        "the arrow was the new key, not a move in the list"
+    );
+}
