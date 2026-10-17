@@ -1,6 +1,6 @@
 //! Input handling of the interaction core: gating invokes by their rows, collecting arguments, and keys.
 
-use bn_client_core::interaction::{ArgKind, Interaction, Reason, Refusal, gate};
+use bn_client_core::interaction::{ArgKind, Interaction, InvokeError, Reason, Refusal, gate};
 use bn_client_core::protocol::{Affordance, InvokeArgs, Screen, Text};
 use serde_json::{Value, json};
 
@@ -754,5 +754,50 @@ fn return_stays_the_engines_when_it_names_no_cursor() {
         invoked(&press(&mut ui, &screen, "RETURN")).map(|(id, _)| id),
         Some("CONFIRM"),
         "a focus of the client's own is no cursor the engine lost"
+    );
+}
+
+#[test]
+fn a_refusal_shows_the_engines_reason_and_words_only_what_the_client_refused() {
+    let screen = menu(
+        &["a"],
+        vec![
+            json!({"id": "said", "label": "Said", "keys": ["s"], "enabled": false,
+                "denial": "Later", "expect": "screen"}),
+            json!({"id": "mute", "label": "Mute", "keys": ["m"], "enabled": false,
+                "expect": "screen"}),
+            json!({"id": "take", "label": "Take", "keys": ["t"], "enabled": true,
+                "expect": "boundary", "args": {"pos": {"unit": "square"}}}),
+        ],
+    );
+    let mut ui = Interaction::default();
+    assert_eq!(press(&mut ui, &screen, "s").note(), Some("Later".into()));
+    // The engine names the reason for whatever it turns off; the client has no words of its own for it.
+    assert_eq!(press(&mut ui, &screen, "m").note(), None);
+    press(&mut ui, &screen, "t");
+    assert_eq!(
+        press(&mut ui, &screen, "RETURN").note(),
+        Some(Reason::Missing(ArgKind::Pos).words().unwrap())
+    );
+    assert_eq!(InvokeError::Disabled(None).note(), None);
+    assert_eq!(
+        InvokeError::Disabled(Some(Text::Plain("Later".into()))).note(),
+        Some("Later".into())
+    );
+    assert_eq!(InvokeError::Busy.note(), Reason::Busy.words());
+}
+
+#[test]
+fn an_off_tab_is_refused_with_the_engines_denial() {
+    let tabs = json!({"id": "tabs", "kind": "tabs", "tabs": [
+        {"id": "t", "label": "T", "selected": false, "enabled": false, "denial": "Empty"}]});
+    let screen = screen_with(
+        tabs,
+        json!([{"id": "go", "label": "Go", "keys": [], "enabled": true, "expect": "boundary",
+            "args": {"row": {"component_id": "tabs"}}}]),
+    );
+    assert_eq!(
+        gate(&screen, &the(&screen, "go"), &on_row("t")),
+        refused(Reason::RowDisabled, Some("Empty"))
     );
 }
