@@ -465,14 +465,12 @@ impl<M: GameModel> App<M> {
 
     /// Hands what the player did to the interaction core.
     fn apply(&mut self, intent: Intent) {
-        if let Intent::More(component) = &intent {
-            return self.model.more_rows(component);
-        }
         let interaction = &mut self.screens.interaction;
         let Some(top) = sliced(self.model.screens()) else {
             return;
         };
         let out = match intent {
+            Intent::More(component) => return self.model.more_rows(&component),
             Intent::Focus { component, row } => return interaction.focus_row(&component, &row),
             Intent::Mark { component, row } => return interaction.toggle_pick(&component, &row),
             Intent::MarkCount {
@@ -480,7 +478,6 @@ impl<M: GameModel> App<M> {
                 row,
                 count,
             } => return interaction.set_pick_count(&component, &row, Some(count)),
-            Intent::More(_) => return,
             Intent::Text(typed) => return interaction.answer_text(&typed),
             Intent::Cancel => return interaction.cancel(),
             Intent::Run(id) => interaction.activate(top, &id),
