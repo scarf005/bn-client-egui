@@ -129,12 +129,14 @@ fn engine_key(key: egui::Key, modifiers: egui::Modifiers) -> Option<String> {
 /// The state of a typing prompt between frames.
 #[derive(Clone, Default)]
 struct Typing {
+    /// The screen the prompt is on: a prompt on another screen starts anew.
+    screen: String,
     /// The value the engine last showed.
     engine: String,
     text: String,
     /// The text last handed out, so it goes out once.
     handed: String,
-    /// Every text handed out, to tell the engine's echo of one from news.
+    /// The texts handed out that the engine has not echoed yet, to tell an echo of one from news.
     sent: Vec<String>,
     composing: bool,
     entered: bool,
@@ -162,20 +164,28 @@ pub fn typing_prompt(
     value: &str,
     busy: bool,
 ) -> Typed {
-    let key = egui::Id::new(("typing", screen, id));
-    let fresh = ui.data(|d| d.get_temp::<Typing>(key)).is_none();
-    let mut state = ui
+    // One state per field id, so the prompts of closed screens leave nothing behind.
+    let key = egui::Id::new(("typing", id));
+    let kept = ui
         .data(|d| d.get_temp::<Typing>(key))
-        .unwrap_or_else(|| Typing {
-            engine: value.into(),
-            text: value.into(),
-            handed: value.into(),
-            ..Typing::default()
-        });
+        .filter(|t| t.screen == screen);
+    let fresh = kept.is_none();
+    let mut state = kept.unwrap_or_else(|| Typing {
+        screen: screen.into(),
+        engine: value.into(),
+        text: value.into(),
+        handed: value.into(),
+        ..Typing::default()
+    });
     if !fresh && state.engine != value {
-        if !(state.sent.iter().any(|sent| sent == value) || busy) {
+        let echoed = state.sent.iter().position(|sent| sent == value);
+        if !(echoed.is_some() || busy) {
             state.text = value.into();
             state.handed = value.into();
+        }
+        // The sends before an echoed one are answered too.
+        if let Some(at) = echoed {
+            state.sent.drain(..=at);
         }
         state.engine = value.into();
     }
