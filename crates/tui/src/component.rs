@@ -4,7 +4,7 @@
 
 use super::{color, token};
 use bn_client_core::colors::ColorMap;
-use bn_client_core::interaction::{self, ArgKind, Interaction, InvokeError, Reason, Window};
+use bn_client_core::interaction::{self, ArgKind, Interaction, Window};
 use bn_client_core::markup::Run;
 use bn_client_core::protocol::{
     AffordanceRole, Component, FieldKind, Form, Grid, GridCell, InvokeArgs, List, MapComponent,
@@ -402,19 +402,10 @@ impl View {
         };
         if let Some((id, args)) = outcome.invoke {
             if let Err(e) = model.invoke_affordance(&id, args) {
-                self.note = Some(match e {
-                    InvokeError::Disabled(Some(reason)) => reason.shown(),
-                    InvokeError::Disabled(None) => Reason::Disabled.words(),
-                    InvokeError::NoScreen => Reason::NoScreen.words(),
-                    InvokeError::Unknown(_) => Reason::Unknown.words(),
-                    InvokeError::Busy => Reason::Busy.words(),
-                    InvokeError::Args(_) => Reason::BadArgs.words(),
-                });
+                self.note = e.note();
             }
-        } else if let Some(denial) = outcome.denial {
-            self.note = Some(denial.shown());
-        } else if let Some(reason) = outcome.reason {
-            self.note = Some(reason.words());
+        } else if let Some(note) = outcome.note() {
+            self.note = Some(note);
         }
     }
 }

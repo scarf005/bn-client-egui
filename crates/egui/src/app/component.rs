@@ -15,7 +15,7 @@ use super::{App, sidebar};
 use crate::layout::{self, Extent};
 use crate::windows::{self, Place, Shown, WindowSpec};
 use crate::{a11y, editor, text};
-use bn_client_core::interaction::{self, ArgKind, InvokeError, Reason};
+use bn_client_core::interaction::{self, ArgKind, InvokeError};
 use bn_client_core::protocol::{
     Affordance, AffordanceRole, CanvasComponent, Component, Editor, EditorValue, FieldKind, Form,
     FormField, Grid, InvokeArgs, List, MapComponent, MapMode, OvermapTile, OvermapWire, PanelStat,
@@ -211,11 +211,7 @@ impl<M: GameModel> App<M> {
     /// Shows what the core decided and sends the call it built.
     fn settle(&mut self, out: interaction::Outcome) {
         self.keys_consumed |= out.consumed;
-        self.screens.denial = out
-            .denial
-            .as_ref()
-            .map(Text::shown)
-            .or_else(|| out.reason.map(Reason::words));
+        self.screens.denial = out.note();
         if out.revealed.is_some() {
             self.screens.reveal = out.revealed;
         }
@@ -389,6 +385,12 @@ impl<M: GameModel> App<M> {
                         );
                         let label = self.line(ui, &marked);
                         let button = self.control(ui, label, &tab.id, on, tab.selected);
+                        let button = match (&tab.denial, on) {
+                            (Some(denial), false) => {
+                                button.on_disabled_hover_text(markup::plain(&denial.shown()))
+                            }
+                            _ => button,
+                        };
                         a11y::tab(ui.ctx(), button.id, tab.selected);
                         if let (true, Some(a)) = (button.clicked(), select) {
                             out.push(Intent::Focus {

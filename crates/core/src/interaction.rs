@@ -73,8 +73,20 @@ pub enum InvokeError {
     Args(ArgError),
 }
 
-/// Why the client did not send an invoke, as data: the renderer maps it to its own words when the engine
-/// gave no `denial`.
+impl InvokeError {
+    /// What to tell the player: the engine's reason for what it turned off, else the client's words.
+    pub fn note(&self) -> Option<String> {
+        match self {
+            InvokeError::Disabled(denial) => denial.as_ref().map(Text::shown),
+            InvokeError::NoScreen => Reason::NoScreen.words(),
+            InvokeError::Unknown(_) => Reason::Unknown.words(),
+            InvokeError::Busy => Reason::Busy.words(),
+            InvokeError::Args(_) => Reason::BadArgs.words(),
+        }
+    }
+}
+
+/// Why the client did not send an invoke, as data.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Reason {
     NoScreen,
@@ -93,20 +105,20 @@ pub enum Reason {
 }
 
 impl Reason {
-    /// The client's words for a refusal the engine gave no `denial` for.
-    pub fn words(self) -> String {
-        match self {
+    /// The client's words for a refusal of its own; none for what the engine turned off, whose `denial` says why.
+    pub fn words(self) -> Option<String> {
+        let words = match self {
+            Reason::Disabled | Reason::RowDisabled => return None,
             Reason::NoScreen | Reason::Unknown | Reason::BadArgs => "Not available.",
-            Reason::Disabled => "Not available now.",
-            Reason::RowDisabled | Reason::NotOnThisRow => "Not for this row.",
+            Reason::NotOnThisRow => "Not for this row.",
             Reason::Missing(ArgKind::Row | ArgKind::Rows) => "Choose a row first.",
             Reason::Missing(ArgKind::Count) => "Enter a count first.",
             Reason::Missing(ArgKind::Text) => "Enter text first.",
             Reason::Missing(ArgKind::Pos) => "Choose a square first.",
             Reason::Missing(ArgKind::Pane) => "Choose a pane first.",
             Reason::Busy => "Busy.",
-        }
-        .into()
+        };
+        Some(words.into())
     }
 }
 
@@ -196,8 +208,8 @@ fn available_on(
             .iter()
             .find(|tab| tab.id == row_id)
             .filter(|tab| !tab.enabled)
-            .map_or(Availability::ON, |_| {
-                Availability::off(Reason::RowDisabled, None)
+            .map_or(Availability::ON, |tab| {
+                Availability::off(Reason::RowDisabled, tab.denial.clone())
             }),
         _ => Availability::ON,
     }

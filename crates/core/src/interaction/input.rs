@@ -11,7 +11,7 @@ pub struct Outcome {
     pub invoke: Option<(String, InvokeArgs)>,
     /// The engine's reason for a refusal, to show.
     pub denial: Option<Text>,
-    /// Why it was refused, as data; a renderer words it when the engine gave no `denial`.
+    /// Why it was refused, as data.
     pub reason: Option<Reason>,
     /// The row, cell or field the focus moved to, which the view scrolls into sight.
     pub revealed: Option<String>,
@@ -20,6 +20,14 @@ pub struct Outcome {
 }
 
 impl Outcome {
+    /// What to tell the player of a refusal: the engine's `denial`, else the client's words for its own.
+    pub fn note(&self) -> Option<String> {
+        self.denial
+            .as_ref()
+            .map(Text::shown)
+            .or_else(|| self.reason.and_then(Reason::words))
+    }
+
     fn handled() -> Self {
         Self {
             consumed: true,
