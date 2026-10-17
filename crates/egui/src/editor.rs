@@ -78,9 +78,7 @@ pub fn value_editor(
 
 /// The engine asks for a key: the next key press names it. Escape is left to the cancel button.
 pub fn key_prompt(ui: &mut egui::Ui) -> Option<String> {
-    let label = ui.label("Press the new key");
-    ui.ctx()
-        .accesskit_node_builder(label.id, |b| b.set_live(accesskit::Live::Assertive));
+    key_wait(ui);
     ui.input(|i| {
         i.events.iter().find_map(|event| match event {
             egui::Event::Text(text) if !text.trim().is_empty() => Some(text.clone()),
@@ -93,6 +91,13 @@ pub fn key_prompt(ui: &mut egui::Ui) -> Option<String> {
             _ => None,
         })
     })
+}
+
+/// The line that asks for the key, read out as soon as it shows.
+pub fn key_wait(ui: &mut egui::Ui) {
+    let label = ui.label("Press the new key");
+    ui.ctx()
+        .accesskit_node_builder(label.id, |b| b.set_live(accesskit::Live::Assertive));
 }
 
 /// The engine's name for keys that produce no text, as keybinding files spell them.

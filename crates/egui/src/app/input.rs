@@ -270,7 +270,7 @@ impl<M: GameModel> App<M> {
 /// engine's key names (`SPACE`, `ESC`, `RETURN`, `UP`, `PPAGE`); typed characters arrive as text instead.
 fn key_name(key: egui::Key, mods: egui::Modifiers) -> Option<String> {
     use egui::Key;
-    const NAMED: [(Key, &str); 13] = [
+    const NAMED: [(Key, &str); 14] = [
         (Key::ArrowUp, "UP"),
         (Key::ArrowDown, "DOWN"),
         (Key::ArrowLeft, "LEFT"),
@@ -284,6 +284,7 @@ fn key_name(key: egui::Key, mods: egui::Modifiers) -> Option<String> {
         (Key::End, "END"),
         (Key::PageUp, "PPAGE"),
         (Key::PageDown, "NPAGE"),
+        (Key::Insert, "INSERT"),
     ];
     const FUNCTION: [Key; 12] = [
         Key::F1,

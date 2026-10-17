@@ -327,6 +327,23 @@ fn editor_of(field: &FormField) -> Editor {
     }
 }
 
+/// The fill of the screen's enabled key field with `key` as its text.
+fn key_fill(screen: &Screen, key: &str) -> Option<Intent> {
+    walk(screen.root.as_ref()?).into_iter().find_map(|c| {
+        let Component::Form(form) = c else {
+            return None;
+        };
+        let field = form.fields.iter().find(|f| f.kind == FieldKind::Key)?;
+        let fill = interaction::form_fill(screen, form, &field.id).filter(|a| a.enabled)?;
+        Some(Intent::Fill {
+            affordance: fill.id.clone(),
+            form: form.head.id.clone(),
+            field: field.id.clone(),
+            value: key.into(),
+        })
+    })
+}
+
 /// The client's words for a refusal the engine gave no reason for.
 fn reason_words(reason: Reason) -> String {
     match reason {
@@ -406,6 +423,12 @@ impl<M: GameModel> App<M> {
             let Some(top) = sliced(self.model.screens()) else {
                 return;
             };
+            // An enabled key field takes the key as its text, and the screen does not see it; Escape still
+            // closes the screen.
+            if let Some(fill) = key_fill(top, &key).filter(|_| key != "ESC") {
+                self.keys_consumed = true;
+                return self.apply(fill);
+            }
             let model = &self.model;
             let out = self
                 .screens
@@ -1188,9 +1211,13 @@ impl<M: GameModel> App<M> {
                 continue;
             }
             let committed = match field.kind {
+                // The key itself is taken with the screen's keys (`key_fill`).
                 FieldKind::Key => {
                     ui.label(&label);
-                    on.then(|| editor::key_prompt(ui)).flatten()
+                    if on {
+                        editor::key_wait(ui);
+                    }
+                    None
                 }
                 _ => editor::value_editor(ui, &id, &label, &editor_of(field), on),
             };
