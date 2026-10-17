@@ -1320,3 +1320,39 @@ fn a_page_key_moves_the_focus_by_the_rows_its_own_list_shows() {
         "moved {moved} rows; the list shows {one}, the other {two}"
     );
 }
+
+/// The stack with `screen` over the map, as event `sequence`.
+fn stack_event(sequence: u32, screen: Value) -> Value {
+    json!({"jsonrpc": "2.0", "method": "bn.events", "params": {"epoch": "e7f3", "events": [{
+        "sequence": sequence.to_string(), "revision": (sequence - 9).to_string(),
+        "type": "interaction.changed", "changes": {"interaction": {
+        "boundary_id": format!("b:{sequence}"),
+        "readiness": {"phase": "playing", "game_ready": true, "accepts_interaction_commands": true,
+            "accepts_registered_actions": true},
+        "actions": [], "interaction": null,
+        "stack": [{"screen_id": "screen:map:e7f3", "role": "map", "root": null, "affordances": []},
+            screen]}}}]}})
+}
+
+#[test]
+fn the_typing_state_of_closed_prompts_is_not_kept() {
+    let prompt = |n: u32| {
+        let form = json!({"id": "form:f", "kind": "form", "affordances": ["fill", "submit"],
+            "fields": [{"id": "field:t", "label": "Filter", "value": "", "type": "text"}],
+            "submit": "submit"});
+        let text = json!({"text": {"field_id": "field:t"}});
+        let mut submit = affordance("submit", &[], text.clone());
+        submit["role"] = json!("confirm");
+        json!({"screen_id": format!("screen:{n}"), "role": "dialog", "title": "Filter", "root": form,
+            "affordances": [affordance("fill", &[], text), submit]})
+    };
+    let (mut h, script) = harness(prompt(0));
+    let mut kept = vec![];
+    for n in 1..20 {
+        script.push(stack_event(40 + n, prompt(n)));
+        h.run_steps(3);
+        h.get_by_role(egui::accesskit::Role::TextInput);
+        kept.push(h.ctx.data(|d| d.len()));
+    }
+    assert_eq!(kept.first(), kept.last(), "{kept:?}");
+}
