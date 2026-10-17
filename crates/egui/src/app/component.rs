@@ -121,6 +121,33 @@ fn word_width(ui: &egui::Ui, text: &str, font: &egui::FontId) -> f32 {
         .fold(0.0, f32::max)
 }
 
+/// What `extent` needs, with the margin a split leaves around its pane.
+fn with_margin(extent: Extent) -> Extent {
+    let margin = 2.0 * f32::from(PANE_MARGIN);
+    Extent {
+        min: extent.min + margin,
+        natural: extent.natural + margin,
+        ..extent
+    }
+}
+
+/// A stat's value with its maximum and unit, as the panel shows it.
+fn stat_text(stat: &PanelStat) -> String {
+    let max = stat
+        .max
+        .as_ref()
+        .map_or(String::new(), |m| format!("/{}", m.shown()));
+    let unit = stat
+        .unit
+        .as_ref()
+        .map_or(String::new(), |u| format!(" {}", u.shown()));
+    format!("{}{max}{unit}", markup::plain(&stat.value.shown()))
+}
+
+fn tone_color(tone: Tone) -> egui::Color32 {
+    if tone == Tone::Good { GOOD } else { BAD }
+}
+
 /// A list row's item and the square it is drawn in.
 struct RowIcon {
     painter: egui::Painter,
@@ -824,17 +851,9 @@ impl<M: GameModel> App<M> {
     ) {
         let gap = ui.spacing().item_spacing.x;
         let room = ui.available_width();
-        let margin = 2.0 * f32::from(PANE_MARGIN);
         let extents = parts
             .iter()
-            .map(|c| {
-                let e = self.extent(ui, c, room);
-                Extent {
-                    min: e.min + margin,
-                    natural: e.natural + margin,
-                    ..e
-                }
-            })
+            .map(|c| with_margin(self.extent(ui, c, room)))
             .collect::<Vec<_>>();
         let widths = layout::split_widths(&extents, room, gap);
         let mut panes = |ui: &mut egui::Ui| {
@@ -918,16 +937,10 @@ impl<M: GameModel> App<M> {
                 inside(&tabs.child).map_or(row, |child| stacked(row, child))
             }
             Component::Split(split) => {
-                let margin = 2.0 * f32::from(PANE_MARGIN);
                 let parts = split
                     .children
                     .iter()
-                    .map(|c| self.extent(ui, c, room))
-                    .map(|e| Extent {
-                        min: e.min + margin,
-                        natural: e.natural + margin,
-                        ..e
-                    })
+                    .map(|c| with_margin(self.extent(ui, c, room)))
                     .collect::<Vec<_>>();
                 Extent {
                     min: parts.iter().map(|p| p.min).sum::<f32>() + layout::gaps(parts.len(), gap),
@@ -939,17 +952,12 @@ impl<M: GameModel> App<M> {
             Component::Panel(panel) => {
                 let frame = egui::Frame::group(ui.style()).total_margin().sum().x;
                 let stats = panel.stats.iter().flatten().map(|stat| {
-                    let max = stat
-                        .max
-                        .as_ref()
-                        .map_or(String::new(), |m| format!("/{}", m.shown()));
-                    let unit = stat
-                        .unit
-                        .as_ref()
-                        .map_or(String::new(), |u| format!(" {}", u.shown()));
-                    let value = format!("{}{max}{unit}", markup::plain(&stat.value.shown()));
                     let label = markup::plain(&stat.label.shown());
-                    fixed(text_width(ui, &label, &font) + gap + text_width(ui, &value, &font))
+                    fixed(
+                        text_width(ui, &label, &font)
+                            + gap
+                            + text_width(ui, &stat_text(stat), &font),
+                    )
                 });
                 let lines = [Some(prose(&markup::plain(&panel.title.shown())))]
                     .into_iter()
@@ -1052,26 +1060,18 @@ impl<M: GameModel> App<M> {
     }
 
     fn stat(&self, ui: &mut egui::Ui, stat: &PanelStat) {
-        let max = stat.max.as_ref().map(|m| format!("/{}", m.shown()));
-        let unit = stat.unit.as_ref().map(|u| format!(" {}", u.shown()));
-        let value = markup::plain(&stat.value.shown());
+        let shown = stat_text(stat);
         let label = markup::plain(&stat.label.shown());
-        if value.is_empty() && max.is_none() && unit.is_none() {
-            let tone = stat.tone.map(|t| if t == Tone::Good { GOOD } else { BAD });
-            ui.label(egui::RichText::new(label).color(tone.unwrap_or(ui.visuals().text_color())));
+        let color = stat.tone.map_or(ui.visuals().text_color(), tone_color);
+        if shown.is_empty() {
+            ui.label(egui::RichText::new(label).color(color));
             return;
         }
-        let shown = format!(
-            "{value}{}{}",
-            max.unwrap_or_default(),
-            unit.unwrap_or_default()
-        );
-        let tone = stat.tone.map(|t| if t == Tone::Good { GOOD } else { BAD });
         // The label and the value are parts of their own; the engine's text carries any punctuation.
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 4.0;
             ui.label(label);
-            ui.label(egui::RichText::new(shown).color(tone.unwrap_or(ui.visuals().text_color())));
+            ui.label(egui::RichText::new(shown).color(color));
         });
     }
 
@@ -1090,8 +1090,7 @@ impl<M: GameModel> App<M> {
         let show = |ui: &mut egui::Ui| {
             ui.scope(|ui| {
                 if let Some(tone) = block.tone {
-                    ui.visuals_mut().override_text_color =
-                        Some(if tone == Tone::Good { GOOD } else { BAD });
+                    ui.visuals_mut().override_text_color = Some(tone_color(tone));
                 }
                 ui.add(egui::Label::new(job).wrap_mode(wrap));
             });
