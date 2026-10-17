@@ -266,50 +266,59 @@ impl<M: GameModel> App<M> {
     }
 }
 
-/// The engine's name for a pressed key, with Ctrl and Shift folded in (`CTRL+S`, `BACKTAB`). Named like the
-/// engine's key names (`SPACE`, `ESC`, `RETURN`, `UP`, `PPAGE`); typed characters arrive as text instead.
-fn key_name(key: egui::Key, mods: egui::Modifiers) -> Option<String> {
-    use egui::Key;
-    const NAMED: [(Key, &str); 14] = [
-        (Key::ArrowUp, "UP"),
-        (Key::ArrowDown, "DOWN"),
-        (Key::ArrowLeft, "LEFT"),
-        (Key::ArrowRight, "RIGHT"),
-        (Key::Escape, "ESC"),
-        (Key::Enter, "RETURN"),
-        (Key::Tab, "TAB"),
-        (Key::Backspace, "BACKSPACE"),
-        (Key::Delete, "DELETE"),
-        (Key::Home, "HOME"),
-        (Key::End, "END"),
-        (Key::PageUp, "PPAGE"),
-        (Key::PageDown, "NPAGE"),
-        (Key::Insert, "INSERT"),
+/// The engine's name for a pressed key, with Ctrl and Shift folded in (`CTRL+S`, `BACKTAB`); typed characters
+/// arrive as text instead, so a character key counts only with Ctrl.
+pub(crate) fn key_name(key: egui::Key, mods: egui::Modifiers) -> Option<String> {
+    use egui::Key as K;
+    use keys::Key;
+    const FUNCTION: [K; 15] = [
+        K::F1,
+        K::F2,
+        K::F3,
+        K::F4,
+        K::F5,
+        K::F6,
+        K::F7,
+        K::F8,
+        K::F9,
+        K::F10,
+        K::F11,
+        K::F12,
+        K::F13,
+        K::F14,
+        K::F15,
     ];
-    const FUNCTION: [Key; 12] = [
-        Key::F1,
-        Key::F2,
-        Key::F3,
-        Key::F4,
-        Key::F5,
-        Key::F6,
-        Key::F7,
-        Key::F8,
-        Key::F9,
-        Key::F10,
-        Key::F11,
-        Key::F12,
-    ];
-    let base = NAMED
-        .iter()
-        .find(|(k, _)| *k == key)
-        .map(|(_, n)| n.to_string())
-        .or_else(|| {
-            FUNCTION
-                .iter()
-                .position(|k| *k == key)
-                .map(|n| keys::function(n as u8 + 1))
-        })
-        .or_else(|| mods.ctrl.then(|| key.name().to_string()))?;
-    Some(keys::chord(&base, mods.ctrl, mods.shift))
+    let base = match key {
+        K::ArrowUp => Key::Up,
+        K::ArrowDown => Key::Down,
+        K::ArrowLeft => Key::Left,
+        K::ArrowRight => Key::Right,
+        K::Escape => Key::Escape,
+        K::Enter => Key::Enter,
+        K::Tab => Key::Tab,
+        K::Backspace => Key::Backspace,
+        K::Delete => Key::Delete,
+        K::Home => Key::Home,
+        K::End => Key::End,
+        K::PageUp => Key::PageUp,
+        K::PageDown => Key::PageDown,
+        _ => match FUNCTION.iter().position(|k| *k == key) {
+            Some(n) => Key::F(n as u8 + 1),
+            None if mods.ctrl => {
+                let mut chars = key.name().chars();
+                match (chars.next(), chars.next()) {
+                    (Some(only), None) => Key::Char(only.to_ascii_lowercase()),
+                    _ => return None,
+                }
+            }
+            None => return None,
+        },
+    };
+    keys::name(
+        base,
+        keys::Mods {
+            ctrl: mods.ctrl,
+            shift: mods.shift,
+        },
+    )
 }

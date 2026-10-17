@@ -2,7 +2,7 @@
 
 use crate::TuiApp;
 use bn_client_core::{GameModel, Menu};
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent};
 
 /// A value being typed for a row or field.
 pub(super) struct Edit {
@@ -25,31 +25,6 @@ impl Edit {
     }
 }
 
-/// The engine's name for a pressed key, as keybinding files spell it.
-pub(super) fn engine_key(key: KeyEvent) -> Option<String> {
-    let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
-    Some(match key.code {
-        KeyCode::Char(' ') => "SPACE".into(),
-        KeyCode::Char(c) if ctrl => format!("CTRL+{}", c.to_ascii_uppercase()),
-        KeyCode::Char(c) => c.to_string(),
-        KeyCode::F(n) => format!("F{n}"),
-        KeyCode::Up => "UP".into(),
-        KeyCode::Down => "DOWN".into(),
-        KeyCode::Left => "LEFT".into(),
-        KeyCode::Right => "RIGHT".into(),
-        KeyCode::Home => "HOME".into(),
-        KeyCode::End => "END".into(),
-        KeyCode::PageUp => "PPAGE".into(),
-        KeyCode::PageDown => "NPAGE".into(),
-        KeyCode::Enter => "RETURN".into(),
-        KeyCode::Tab => "TAB".into(),
-        KeyCode::Backspace => "BACKSPACE".into(),
-        KeyCode::Delete => "DELETE".into(),
-        KeyCode::Insert => "INSERT".into(),
-        _ => return None,
-    })
-}
-
 impl<M: GameModel> TuiApp<M> {
     /// Handles the keys settings screens add; false leaves the key to the plain menu.
     pub(super) fn settings_key(&mut self, menu: &Menu, key: KeyEvent) -> bool {
@@ -59,7 +34,7 @@ impl<M: GameModel> TuiApp<M> {
             if key.code == KeyCode::Esc {
                 return false;
             }
-            if let Some(name) = engine_key(key) {
+            if let Some(name) = super::token(key) {
                 self.model.fill(&prompt.id, &name, true);
             }
             return true;

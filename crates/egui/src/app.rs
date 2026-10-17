@@ -10,6 +10,7 @@ use eframe::egui::{self, accesskit};
 
 mod component;
 mod input;
+pub(crate) use input::key_name;
 mod map;
 mod menu;
 mod palette;

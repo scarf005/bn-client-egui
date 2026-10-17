@@ -1,21 +1,64 @@
 //! Names of the keys the engine does not send as typed text. Which key runs which action is the
 //! engine's to say: it sends `keys` with every action, including the player's own rebinds.
 
-/// The engine's name for a key pressed with modifiers: `CTRL+S` for a control letter, `BACKTAB` for
-/// Shift+Tab, else `base` unchanged (shifted letters and symbols already arrive as typed text).
-pub fn chord(base: &str, ctrl: bool, shift: bool) -> String {
-    match base {
-        "TAB" if shift => "BACKTAB".into(),
-        b if ctrl && b.len() == 1 && b.as_bytes()[0].is_ascii_alphabetic() => {
-            format!("CTRL+{}", b.to_ascii_uppercase())
-        }
-        b => b.into(),
-    }
+/// A pressed key, whatever device it came from. Each client maps only its own device keys to this.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Key {
+    Char(char),
+    Up,
+    Down,
+    Left,
+    Right,
+    Home,
+    End,
+    PageUp,
+    PageDown,
+    Enter,
+    Tab,
+    Backspace,
+    Delete,
+    Escape,
+    /// Function key `n`.
+    F(u8),
 }
 
-/// The engine's name for function key `n` (1 to 12).
-pub fn function(n: u8) -> String {
-    format!("F{n}")
+/// The modifiers held with a key. Shifted letters and symbols already arrive as typed text.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Mods {
+    pub ctrl: bool,
+    pub shift: bool,
+}
+
+/// The engine's name for a key, as its keybinding files spell it, or `None` for a key the engine has no
+/// name for. Like the native game, Ctrl takes only letters (`CTRL+S`; Ctrl+I and Ctrl+J are the control
+/// codes of `TAB` and `RETURN`) and Shift only Tab (`BACKTAB`).
+pub fn name(key: Key, mods: Mods) -> Option<String> {
+    let named = match key {
+        Key::Char(' ') => "SPACE",
+        Key::Char(c) if mods.ctrl && c.is_ascii_alphabetic() => match c.to_ascii_uppercase() {
+            'I' => "TAB",
+            'J' => "RETURN",
+            upper => return Some(format!("CTRL+{upper}")),
+        },
+        Key::Char(c) => return Some(c.to_string()),
+        Key::Up => "UP",
+        Key::Down => "DOWN",
+        Key::Left => "LEFT",
+        Key::Right => "RIGHT",
+        Key::Home => "HOME",
+        Key::End => "END",
+        Key::PageUp => "PPAGE",
+        Key::PageDown => "NPAGE",
+        Key::Enter => "RETURN",
+        Key::Tab if mods.shift => "BACKTAB",
+        Key::Tab => "TAB",
+        Key::Backspace => "BACKSPACE",
+        Key::Delete => "DELETE",
+        Key::Escape => "ESC",
+        Key::F(n @ 1..=15) => return Some(format!("F{n}")),
+        Key::F(_) => return None,
+    };
+    Some(named.into())
 }
 
 /// The engine's name for the numpad key a typed digit may have come from.

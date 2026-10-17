@@ -123,33 +123,31 @@ fn color(c: Rgb) -> Color {
 }
 
 /// The game's key token for a terminal key, or `None` for keys the game has no name for.
-fn token(key: KeyEvent) -> Option<String> {
-    let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+pub(crate) fn token(key: KeyEvent) -> Option<String> {
+    use keys::Key;
     let base = match key.code {
-        KeyCode::Char(' ') => "SPACE".into(),
-        KeyCode::Char(c) => c.to_string(),
-        KeyCode::Up => "UP".into(),
-        KeyCode::Down => "DOWN".into(),
-        KeyCode::Left => "LEFT".into(),
-        KeyCode::Right => "RIGHT".into(),
-        KeyCode::Home => "HOME".into(),
-        KeyCode::End => "END".into(),
-        KeyCode::PageUp => "PPAGE".into(),
-        KeyCode::PageDown => "NPAGE".into(),
-        KeyCode::Enter => "RETURN".into(),
-        KeyCode::Tab => "TAB".into(),
-        KeyCode::BackTab => "BACKTAB".into(),
-        KeyCode::Backspace => "BACKSPACE".into(),
-        KeyCode::Delete => "DELETE".into(),
-        KeyCode::Esc => "ESC".into(),
-        KeyCode::F(n @ 1..=12) => keys::function(n),
+        KeyCode::Char(c) => Key::Char(c),
+        KeyCode::Up => Key::Up,
+        KeyCode::Down => Key::Down,
+        KeyCode::Left => Key::Left,
+        KeyCode::Right => Key::Right,
+        KeyCode::Home => Key::Home,
+        KeyCode::End => Key::End,
+        KeyCode::PageUp => Key::PageUp,
+        KeyCode::PageDown => Key::PageDown,
+        KeyCode::Enter => Key::Enter,
+        KeyCode::Tab | KeyCode::BackTab => Key::Tab,
+        KeyCode::Backspace => Key::Backspace,
+        KeyCode::Delete => Key::Delete,
+        KeyCode::Esc => Key::Escape,
+        KeyCode::F(n) => Key::F(n),
         _ => return None,
     };
-    Some(keys::chord(
-        &base,
-        ctrl,
-        key.modifiers.contains(KeyModifiers::SHIFT),
-    ))
+    let mods = keys::Mods {
+        ctrl: key.modifiers.contains(KeyModifiers::CONTROL),
+        shift: key.code == KeyCode::BackTab || key.modifiers.contains(KeyModifiers::SHIFT),
+    };
+    keys::name(base, mods)
 }
 
 impl<M: GameModel> TuiApp<M> {

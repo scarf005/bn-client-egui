@@ -87,7 +87,7 @@ pub fn key_prompt(ui: &mut egui::Ui) -> Option<String> {
                 pressed: true,
                 modifiers,
                 ..
-            } => engine_key(*key, *modifiers),
+            } if *key != egui::Key::Escape => crate::app::key_name(*key, *modifiers),
             _ => None,
         })
     })
@@ -98,32 +98,6 @@ pub fn key_wait(ui: &mut egui::Ui) {
     let label = ui.label("Press the new key");
     ui.ctx()
         .accesskit_node_builder(label.id, |b| b.set_live(accesskit::Live::Assertive));
-}
-
-/// The engine's name for keys that produce no text, as keybinding files spell them.
-fn engine_key(key: egui::Key, modifiers: egui::Modifiers) -> Option<String> {
-    use egui::Key::*;
-    let name = match key {
-        ArrowUp => "UP",
-        ArrowDown => "DOWN",
-        ArrowLeft => "LEFT",
-        ArrowRight => "RIGHT",
-        Enter => "RETURN",
-        Tab => "TAB",
-        Backspace => "BACKSPACE",
-        Delete => "DELETE",
-        Home => "HOME",
-        End => "END",
-        PageUp => "PPAGE",
-        PageDown => "NPAGE",
-        Insert => "INSERT",
-        F1 | F2 | F3 | F4 | F5 | F6 | F7 | F8 | F9 | F10 | F11 | F12 => key.name(),
-        letter if modifiers.ctrl && letter.name().len() == 1 => {
-            return Some(format!("CTRL+{}", letter.name()));
-        }
-        _ => return None,
-    };
-    Some(name.to_string())
 }
 
 /// The state of a typing prompt between frames.

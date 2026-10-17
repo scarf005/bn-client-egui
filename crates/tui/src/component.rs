@@ -2,7 +2,6 @@
 //! affordances with their keys and denials. This module only draws and moves the client-local focus; the
 //! core (`interaction::*`) gathers every argument and the model sends every command.
 
-use super::settings::engine_key;
 use super::{color, token};
 use bn_client_core::colors::ColorMap;
 use bn_client_core::interaction::{self, ArgKind, Interaction, InvokeError, Reason, Window};
@@ -156,7 +155,7 @@ impl Typing {
     fn key(&mut self, key: KeyEvent) -> bool {
         if self.named {
             // Esc is left to cancel the prompt.
-            let Some(name) = engine_key(key).filter(|_| key.code != KeyCode::Esc) else {
+            let Some(name) = token(key).filter(|_| key.code != KeyCode::Esc) else {
                 return false;
             };
             self.text = name;
