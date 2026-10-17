@@ -92,6 +92,24 @@ pub enum Reason {
     BadArgs,
 }
 
+impl Reason {
+    /// The client's words for a refusal the engine gave no `denial` for.
+    pub fn words(self) -> String {
+        match self {
+            Reason::NoScreen | Reason::Unknown | Reason::BadArgs => "Not available.",
+            Reason::Disabled => "Not available now.",
+            Reason::RowDisabled | Reason::NotOnThisRow => "Not for this row.",
+            Reason::Missing(ArgKind::Row | ArgKind::Rows) => "Choose a row first.",
+            Reason::Missing(ArgKind::Count) => "Enter a count first.",
+            Reason::Missing(ArgKind::Text) => "Enter text first.",
+            Reason::Missing(ArgKind::Pos) => "Choose a square first.",
+            Reason::Missing(ArgKind::Pane) => "Choose a pane first.",
+            Reason::Busy => "Busy.",
+        }
+        .into()
+    }
+}
+
 /// A refusal with the engine's own reason for it, when it gave one.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Refusal {

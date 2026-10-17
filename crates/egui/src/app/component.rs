@@ -127,17 +127,6 @@ fn driven(component: &Component, affordance: &Affordance) -> bool {
     }
 }
 
-/// The client's words for a refusal the engine gave no reason for.
-fn reason_words(reason: Reason) -> String {
-    match reason {
-        Reason::NoScreen | Reason::Unknown | Reason::BadArgs => "Not available.",
-        Reason::Disabled | Reason::RowDisabled | Reason::NotOnThisRow => "Not available now.",
-        Reason::Missing(_) => "Choose something first.",
-        Reason::Busy => "Busy.",
-    }
-    .into()
-}
-
 /// `text` in the game colour, as the native markup writes it.
 pub(super) fn tagged(color: Option<&str>, text: &str) -> String {
     match color {
@@ -228,7 +217,7 @@ impl<M: GameModel> App<M> {
             .denial
             .as_ref()
             .map(Text::shown)
-            .or_else(|| out.reason.map(reason_words));
+            .or_else(|| out.reason.map(Reason::words));
         if out.revealed.is_some() {
             self.screens.reveal = out.revealed;
         }

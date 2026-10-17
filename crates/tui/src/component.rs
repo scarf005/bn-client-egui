@@ -405,17 +405,17 @@ impl View {
             if let Err(e) = model.invoke_affordance(&id, args) {
                 self.note = Some(match e {
                     InvokeError::Disabled(Some(reason)) => reason.shown(),
-                    InvokeError::Disabled(None) => words(Reason::Disabled),
-                    InvokeError::NoScreen => words(Reason::NoScreen),
-                    InvokeError::Unknown(_) => words(Reason::Unknown),
-                    InvokeError::Busy => words(Reason::Busy),
-                    InvokeError::Args(_) => words(Reason::BadArgs),
+                    InvokeError::Disabled(None) => Reason::Disabled.words(),
+                    InvokeError::NoScreen => Reason::NoScreen.words(),
+                    InvokeError::Unknown(_) => Reason::Unknown.words(),
+                    InvokeError::Busy => Reason::Busy.words(),
+                    InvokeError::Args(_) => Reason::BadArgs.words(),
                 });
             }
         } else if let Some(denial) = outcome.denial {
             self.note = Some(denial.shown());
         } else if let Some(reason) = outcome.reason {
-            self.note = Some(words(reason));
+            self.note = Some(reason.words());
         }
     }
 }
@@ -440,24 +440,6 @@ impl View {
             self.ui.scroll_by(id, by, window);
         }
     }
-}
-
-/// The client's words for a refusal the engine gave no reason for.
-fn words(reason: Reason) -> String {
-    match reason {
-        Reason::NoScreen => "no screen",
-        Reason::Unknown => "unknown action",
-        Reason::Disabled => "unavailable",
-        Reason::RowDisabled | Reason::NotOnThisRow => "not for this row",
-        Reason::Missing(ArgKind::Row | ArgKind::Rows) => "choose a row",
-        Reason::Missing(ArgKind::Count) => "enter a count",
-        Reason::Missing(ArgKind::Text) => "enter text",
-        Reason::Missing(ArgKind::Pos) => "choose a square",
-        Reason::Missing(ArgKind::Pane) => "choose a pane",
-        Reason::Busy => "busy",
-        Reason::BadArgs => "wrong arguments",
-    }
-    .into()
 }
 
 /// Each affordance with its keys, the off ones dim with their reason, flowed into lines.
