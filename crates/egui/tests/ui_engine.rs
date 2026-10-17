@@ -63,31 +63,31 @@ fn engine_map_renders_and_a_click_submits_a_travel_through_the_protocol() {
 }
 
 #[test]
-fn planned_route_is_announced_and_cleared_by_an_empty_route() {
+fn planned_route_is_announced_in_the_engine_words_and_cleared_by_an_empty_route() {
     let (mut h, script) = harness();
     h.run_steps(3);
-    let event = |sequence: &str, route: serde_json::Value| {
+    let event = |sequence: &str, changes: serde_json::Value| {
         json!({"jsonrpc":"2.0","method":"bn.events","params":{"epoch":"e7f3","events":[{
-            "sequence": sequence, "revision": "32", "type": "cells.seen",
-            "changes": {"route": route}}]}})
+            "sequence": sequence, "revision": "32", "type": "cells.seen", "changes": changes}]}})
     };
     let at = |x| json!({"dim":"","x":x,"y":4,"z":0});
-    script.push(event("41", json!([at(4), at(5)])));
+    let said = "경로 2칸. 끝을 다시 고르면 갑니다.";
+    script.push(event(
+        "41",
+        json!({"route": [at(4), at(5)], "route_text": said}),
+    ));
     h.run_steps(3);
     assert_eq!(h.state().model.route().len(), 2);
-    let end = h.state().model.route()[1];
     let map = h.get_by_label("Map");
     let description = map.accesskit_node().description().unwrap_or_default();
-    assert!(
-        description.contains(&format!("Route of 2 squares to ({}, {})", end.x, end.y)),
-        "{description}"
-    );
-    script.push(event("42", json!([])));
+    assert!(description.ends_with(&format!(" {said}")), "{description}");
+    assert!(!description.contains("Route"), "{description}");
+    script.push(event("42", json!({"route": []})));
     h.run_steps(3);
     assert!(h.state().model.route().is_empty());
     let map = h.get_by_label("Map");
     let description = map.accesskit_node().description().unwrap_or_default();
-    assert!(!description.contains("Route"), "{description}");
+    assert!(!description.contains(said), "{description}");
 }
 
 #[test]

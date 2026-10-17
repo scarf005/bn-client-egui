@@ -591,21 +591,32 @@ fn route_is_replaced_by_each_event_and_cleared_by_an_empty_one() {
     let (t, h) = session();
     let mut m = connected(t);
     assert!(m.route().is_empty());
-    h.push(change(41, json!({"route": [pos(4, 4), pos(5, 4)]})));
+    h.push(change(
+        41,
+        json!({"route": [pos(4, 4), pos(5, 4)], "route_text": "Route of 2 squares."}),
+    ));
     m.poll();
     assert_eq!(m.route(), [Pos { x: 21, y: 12 }, Pos { x: 22, y: 12 }]);
+    assert_eq!(m.route_text().as_deref(), Some("Route of 2 squares."));
     h.push(change(42, json!({"cells": []})));
     m.poll();
     assert_eq!(m.route().len(), 2, "events without route keep the plan");
+    assert_eq!(
+        m.route_text().as_deref(),
+        Some("Route of 2 squares."),
+        "and its line"
+    );
     h.push(change(43, json!({"route": []})));
     m.poll();
     assert!(m.route().is_empty());
+    assert_eq!(m.route_text(), None);
 }
 
 #[test]
 fn route_in_the_snapshot_header_is_decoded() {
     let mut sub = fixture("subscribe_result");
     sub["result"]["route"] = json!([pos(4, 4), pos(4, 5)]);
+    sub["result"]["route_text"] = json!("Route of 2 squares.");
     let (t, _h) = ScriptedTransport::new();
     let t = t.on("bn.hello", vec![fixture("hello_result")]).on(
         "bn.subscribe",
@@ -613,6 +624,7 @@ fn route_in_the_snapshot_header_is_decoded() {
     );
     let m = connected(t);
     assert_eq!(m.route(), [Pos { x: 21, y: 12 }, Pos { x: 21, y: 13 }]);
+    assert_eq!(m.route_text().as_deref(), Some("Route of 2 squares."));
 }
 
 #[test]
