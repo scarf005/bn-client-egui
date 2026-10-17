@@ -8,7 +8,7 @@ Cataclysm: Bright Nights, built on egui/eframe (AccessKit). The UI talks to a
 License: AGPL-3.0-only (see LICENSE).
 
     cargo run --release -p bn-client-egui      # finds the engine itself (see below)
-    cargo run -p bn-client-egui -- --fake      # in-memory fake model, no engine
+    cargo run -p bn-client-egui --features fake -- --fake  # in-memory fake model, no engine
     cargo install --path crates/egui           # then just `bn-client-egui` (same for crates/tui: `bn-client-tui`)
     cargo test    # egui_kittest UI tests, protocol fixtures, reconstruction, scripted engine
 
@@ -40,7 +40,7 @@ map cursor of the mouse-and-keyboard view; TUI: Ctrl-C quits, Tab opens the acti
 mode starts and leaves with the keys the engine binds to its look action, with the cursor moved by the
 engine's direction keys.
 
-    cargo run -p bn-client-tui                 # same engine lookup; --fake for the fake model
+    cargo run -p bn-client-tui                 # same engine lookup; --features fake -- --fake for the fake model
 
 The map draws with the game's tilesets (`<game root>/gfx/<name>/tile_config.json`) like the native Tiles
 client, or as ASCII glyphs. The Tiles / ASCII buttons above the map switch at runtime and the Tileset menu picks

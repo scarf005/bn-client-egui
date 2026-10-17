@@ -4,7 +4,7 @@ use bn_client_egui::launch::{LaunchArgs, Opened, Search, open_engine, resolve};
 use bn_client_egui::setup::{Launcher, Starter};
 use bn_client_egui::theme;
 use bn_client_egui::transport::game_root;
-use bn_client_egui::{App, ConnectOptions, FakeModel, GameModel};
+use bn_client_egui::{App, ConnectOptions, GameModel};
 use clap::Parser;
 use eframe::egui;
 use std::path::PathBuf;
@@ -25,6 +25,7 @@ fn app<M: GameModel>(model: M) -> App<M> {
     }
 }
 
+#[cfg(feature = "fake")]
 fn run(model: impl GameModel + 'static, root: Option<PathBuf>) -> eframe::Result {
     eframe::run_native(
         "Cataclysm: Bright Nights client",
@@ -84,8 +85,9 @@ fn start_engine(
 
 fn main() -> eframe::Result {
     let cli = Cli::parse();
+    #[cfg(feature = "fake")]
     if cli.launch.fake {
-        return run(FakeModel::default(), None);
+        return run(bn_client_egui::FakeModel::default(), None);
     }
     let launch = cli.launch.clone();
     let found = resolve(cli.launch.engine.as_deref(), &Search::from_env());

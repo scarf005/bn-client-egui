@@ -34,6 +34,7 @@ pub struct LaunchArgs {
     #[arg(long, value_name = "PATH", env = "BN_ENGINE")]
     pub engine: Option<PathBuf>,
     /// Run the in-memory fake model instead of an engine
+    #[cfg(feature = "fake")]
     #[arg(long, conflicts_with = "engine")]
     pub fake: bool,
     /// BN language id the engine words its text in, e.g. ko_KR (default: the engine's own)

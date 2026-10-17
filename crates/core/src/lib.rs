@@ -18,8 +18,10 @@ pub mod watchdog;
 
 pub use clock::Clock;
 pub use engine_model::{ConnectOptions, EngineModel};
+#[cfg(feature = "fake")]
+pub use model::FakeModel;
 pub use model::{
-    ActionEntry, Cell, CommandStatus, Effect, Failure, FailureKind, FakeModel, GameModel, Heard,
-    Layer, Loading, LogLine, Menu, MenuChoice, MenuPane, Mutation, PaneTotals, Pos, Rgb, Shape,
+    ActionEntry, Cell, CommandStatus, Effect, Failure, FailureKind, GameModel, Heard, Layer,
+    Loading, LogLine, Menu, MenuChoice, MenuPane, Mutation, PaneTotals, Pos, Rgb, Shape,
     action_hint,
 };

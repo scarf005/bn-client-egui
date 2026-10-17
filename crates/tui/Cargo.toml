@@ -11,5 +11,9 @@ crossterm = "=0.29.0"
 ratatui = "=0.30.2"
 unicode-width = "=0.2.2"
 
+[features]
+fake = ["bn-client-core/fake"]
+
 [dev-dependencies]
+bn-client-core = { path = "../core", features = ["fake"] }
 serde_json = "=1.0.149"

@@ -440,7 +440,7 @@ pub struct Failure {
     pub engine: Option<std::path::PathBuf>,
 }
 
-/// What the UI needs from the game: `FakeModel` in tests, `EngineModel` against a real engine.
+/// What the UI needs from the game: `FakeModel` (feature `fake`) in tests, `EngineModel` against a real engine.
 pub trait GameModel {
     /// Called once per frame: drain engine messages. No-op for synchronous models.
     fn poll(&mut self) {}
@@ -670,6 +670,7 @@ pub trait GameModel {
     }
 }
 
+#[cfg(feature = "fake")]
 pub struct FakeModel {
     /// Map size; tests shrink it to emulate loading or a replaced map.
     pub size: Pos,
@@ -680,6 +681,7 @@ pub struct FakeModel {
     effects: Vec<Effect>,
 }
 
+#[cfg(feature = "fake")]
 impl FakeModel {
     /// An animation the next `take_effects` hands out.
     pub fn queue_effect(&mut self, effect: Effect) {
@@ -687,6 +689,7 @@ impl FakeModel {
     }
 }
 
+#[cfg(feature = "fake")]
 impl Default for FakeModel {
     fn default() -> Self {
         Self {
@@ -700,6 +703,7 @@ impl Default for FakeModel {
     }
 }
 
+#[cfg(feature = "fake")]
 impl GameModel for FakeModel {
     fn actions(&self) -> Vec<ActionEntry> {
         let action = |id: &str, name: &str, keys: &[&str]| ActionEntry {
