@@ -122,7 +122,11 @@ fn panels(avatar: &Avatar, colors: &ColorMap) -> Option<Panels> {
     let face = span(side.morale.face.clone(), &side.morale.color);
     let focus = labelled(&side.focus.label, &side.focus.value.to_string(), "white");
     let safe = span(
-        safe.enabled.then(|| safe.label.clone()).unwrap_or_default(),
+        if safe.enabled {
+            safe.label.clone()
+        } else {
+            Default::default()
+        },
         &safe.color,
     );
     let speed = labelled(

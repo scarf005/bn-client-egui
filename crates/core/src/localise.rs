@@ -642,7 +642,7 @@ mod tests {
         assert_eq!(fill("%.1f", Value::Float(2.25)), "2.2");
         assert_eq!(fill("%.1f", Value::Float(2.26)), "2.3");
         assert_eq!(fill("%f", Value::Float(1.5)), "1.500000");
-        assert_eq!(fill("%6.2f|", Value::Float(-3.14159)), " -3.14|");
+        assert_eq!(fill("%6.2f|", Value::Float(-3.14259)), " -3.14|");
         assert_eq!(fill("%d", Value::Float(3.9)), "3");
         assert_eq!(fill("%f", Value::Int(2)), "2.000000");
         assert_eq!(fill("%x", Value::Int(255)), "ff");

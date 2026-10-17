@@ -51,15 +51,6 @@ fn choice(id: &str, label: &str) -> Value {
         "selectable":true,"selected":false,"columns":[]})
 }
 
-fn list(count: usize) -> Value {
-    let rows = (0..count)
-        .map(|i| choice(&format!("entry:{i}"), &format!("Row {i}")))
-        .collect::<Vec<_>>();
-    json!({"schema_id":"s:list","kind":"choices","context":"UILIST","title":"Debug",
-        "message":"","allow_cancel":true,"choices":rows,"choice_total":count,
-        "allow_set_count":false})
-}
-
 fn refused(id: &str, label: &str, denial: &str) -> Value {
     let mut c = choice(id, label);
     c["enabled"] = false.into();

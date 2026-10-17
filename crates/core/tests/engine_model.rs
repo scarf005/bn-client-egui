@@ -1660,7 +1660,7 @@ fn a_click_on_the_target_cursors_square_is_the_enter_key_of_the_screen() {
 fn the_map_editors_square_and_keys_are_said_as_a_note() {
     let row = |id: &str, pane: &str, label: &str, description: &str, hotkey: &str| {
         json!({"id":id,"label":label,"description":description,"denial":"","hotkey":hotkey,
-            "pane_id":pane,"enabled":true,"selectable":hotkey.is_empty() == false,"selected":false,
+            "pane_id":pane,"enabled":true,"selectable":!hotkey.is_empty(),"selected":false,
             "columns":[]})
     };
     let (t, h) = session();

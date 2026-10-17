@@ -524,10 +524,10 @@ impl<M: GameModel> App<M> {
         ui.ctx()
             .accesskit_node_builder(live.id, |b| b.set_live(accesskit::Live::Polite));
         // With the log panel off, the client's own results and errors are said here instead.
-        if self.model.sidebar_layout().is_some_and(|l| !l.has_log()) {
-            if let Some(said) = self.model.messages().last() {
-                ui.label(said);
-            }
+        if self.model.sidebar_layout().is_some_and(|l| !l.has_log())
+            && let Some(said) = self.model.messages().last()
+        {
+            ui.label(said);
         }
         // Stops a wait or other activity, like the native interrupt key.
         if self.model.busy() {

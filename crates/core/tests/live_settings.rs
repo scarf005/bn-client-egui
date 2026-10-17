@@ -175,7 +175,10 @@ fn live_rule_screens_add_edit_move_and_remove_rules() {
     assert_eq!(cell(&model, "autopickup:rules", &knife, "i_e"), "Include");
     invoke(&mut model, "autopickup:select", Some(&axe), None);
     invoke(&mut model, "REMOVE_RULE", None, None);
-    assert_eq!(ids_of(&model, "autopickup:rules"), [knife.clone()]);
+    assert_eq!(
+        ids_of(&model, "autopickup:rules"),
+        std::slice::from_ref(&knife)
+    );
     quit(&mut model);
 
     // Safe mode: an empty rule is added, its pattern typed, its list kind switched, the rule removed.

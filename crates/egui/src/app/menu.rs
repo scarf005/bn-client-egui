@@ -65,7 +65,7 @@ impl<M: GameModel> App<M> {
             // The window offers its content the whole height a list may take, not half of what is free.
             height: Some(super::dialog_scroll_height(ctx)),
             frame: Some(frame),
-            ..self.window_spec(ctx, &kind, &title)
+            ..self.window_spec(ctx, kind, &title)
         };
         let shown = windows::show(ctx, spec, |ui| {
             ui.set_min_width(520.0);

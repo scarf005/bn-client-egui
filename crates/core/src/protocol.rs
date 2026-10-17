@@ -1786,6 +1786,8 @@ pub struct Head {
 }
 
 /// A generic component, by `kind`: a client draws each without knowing the screen.
+// A screen holds a few components, read once per screen: the size of the largest kind does not matter.
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Component {

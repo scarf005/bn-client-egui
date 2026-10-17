@@ -4,7 +4,7 @@
 mod common;
 use bn_client_egui::app::CELL;
 use bn_client_egui::transport::ScriptedTransport;
-use bn_client_egui::{App, EngineModel, GameModel};
+use bn_client_egui::{App, EngineModel};
 use common::{fixture, game_root};
 use eframe::egui;
 use egui_kittest::Harness;
