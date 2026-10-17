@@ -604,8 +604,8 @@ impl<M: GameModel> App<M> {
     }
 
     /// The game colour as a colour of the screen.
-    fn tint(&self, name: &str) -> Option<egui::Color32> {
-        Some(super::rgb(self.model.colors().resolve(name).0))
+    fn tint(&self, name: &str) -> egui::Color32 {
+        super::rgb(self.model.colors().resolve(name).0)
     }
 
     /// Buttons for the affordances: enabled as the affordance (and the row, when it overrides) says, with the
@@ -1242,7 +1242,7 @@ impl<M: GameModel> App<M> {
                         };
                         let glyph = cell.glyph.clone().unwrap_or_else(|| " ".into());
                         let name = cell.label.as_ref().map_or(glyph.clone(), Text::shown);
-                        let color = cell.color.as_deref().and_then(|c| self.tint(c));
+                        let color = cell.color.as_deref().map(|c| self.tint(c));
                         let at_cursor = grid
                             .cursor
                             .is_some_and(|c| (c.x, c.y) == (x as i32, y as i32));
