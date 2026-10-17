@@ -886,7 +886,8 @@
   "result": {
    "epoch": "e7f3",
    "command_id": "c:5",
-   "stage": "received"
+   "stage": "received",
+   "stage_text": "Received."
   }
  },
  "command_completed": {
@@ -896,6 +897,7 @@
    "epoch": "e7f3",
    "command_id": "c:5",
    "stage": "completed",
+   "stage_text": "Done.",
    "at": {
     "epoch": "e7f3",
     "sequence": "41",
@@ -910,6 +912,7 @@
    "epoch": "e7f3",
    "command_id": "c:5",
    "stage": "rejected",
+   "stage_text": "Refused.",
    "error": "stale_revision",
    "error_text": "The screen changed, try again."
   }

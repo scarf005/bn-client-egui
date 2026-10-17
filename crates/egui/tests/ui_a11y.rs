@@ -342,14 +342,14 @@ fn stages_reached_within_one_frame_are_announced_together() {
     open_menu(&mut h, &script);
     h.get_by_label("combat knife").click();
     h.run_steps(2);
-    for stage in ["executing", "completed"] {
+    for (stage, words) in [("executing", "Under way."), ("completed", "Done.")] {
         script.push(json!({"jsonrpc":"2.0","method":"bn.command","params":{
-            "epoch":"e7f3","command_id":"c:5","stage":stage}}));
+            "epoch":"e7f3","command_id":"c:5","stage":stage,"stage_text":words}}));
     }
     h.run_steps(1);
     let live = announced(&h);
     assert!(
-        live.iter().any(|v| v == "combat knife: executing, done"),
+        live.iter().any(|v| v == "combat knife: Under way. Done."),
         "{live:?}"
     );
 }

@@ -212,7 +212,14 @@ fn open_menu(h: &mut H, script: &ScriptHandle) {
 }
 
 fn notice(stage: &str, error: Option<&str>) -> serde_json::Value {
-    let mut params = json!({"epoch":"e7f3","command_id":"c:5","stage":stage});
+    let words = match stage {
+        "validated" => "Accepted.",
+        "executing" => "Under way.",
+        "completed" => "Done.",
+        "rejected" => "Refused.",
+        _ => "Interrupted.",
+    };
+    let mut params = json!({"epoch":"e7f3","command_id":"c:5","stage":stage,"stage_text":words});
     if let Some(e) = error {
         params["error"] = e.into();
         params["error_text"] = "The game is not ready.".into();
@@ -253,12 +260,12 @@ fn pressed_choice_is_highlighted_and_others_wait_once_the_command_outlasts_a_bli
 }
 
 #[test]
-fn status_line_names_the_stage_and_shows_the_engines_reason_for_a_rejection() {
+fn status_line_names_the_stage_and_shows_the_engines_reason_for_a_rejection_in_its_words() {
     let (mut h, script) = harness();
     open_menu(&mut h, &script);
     h.get_by_label("Ready");
     click_choice(&mut h);
-    let line = h.get_by_label("combat knife: accepted");
+    let line = h.get_by_label("combat knife: Received.");
     assert_eq!(
         line.accesskit_node().live(),
         egui::accesskit::Live::Polite,
@@ -266,10 +273,10 @@ fn status_line_names_the_stage_and_shows_the_engines_reason_for_a_rejection() {
     );
     script.push(notice("executing", None));
     h.run_steps(2);
-    h.get_by_label("combat knife: executing");
+    h.get_by_label("combat knife: Under way.");
     script.push(notice("interrupted", Some("not_ready")));
     h.run_steps(2);
-    h.get_by_label("combat knife: interrupted: The game is not ready.");
+    h.get_by_label("combat knife: Interrupted. The game is not ready.");
 }
 
 #[test]
@@ -279,7 +286,7 @@ fn status_line_keeps_executing_until_the_boundary_is_reached_then_goes_back_to_r
     click_choice(&mut h);
     script.push(notice("executing", None));
     h.run_steps(40);
-    h.get_by_label("combat knife: executing");
+    h.get_by_label("combat knife: Under way.");
     assert!(h.state().model.busy(), "still busy without any bn.loading");
     script.push(notice("completed", None));
     h.run_steps(2);
@@ -328,7 +335,7 @@ fn reduced_motion_shows_a_still_mark_in_place_of_the_spinner() {
     h.run_steps(5);
     assert_eq!(spinners(&h), 0, "nothing spins");
     h.get_by_label("…");
-    h.get_by_label("combat knife: executing");
+    h.get_by_label("combat knife: Under way.");
 }
 
 #[test]
@@ -354,7 +361,7 @@ fn map_click_marks_the_cell_before_the_route_arrives() {
         h.state().marker(),
         Some(bn_client_egui::Pos { x: 22, y: 12 })
     );
-    h.get_by_label("Travel: accepted");
+    h.get_by_label("Travel: Received.");
     script.push(notice("completed", None));
     h.run_steps(3);
     assert_eq!(h.state().marker(), None, "cleared once the command ends");

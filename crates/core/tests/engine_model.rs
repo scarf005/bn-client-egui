@@ -124,6 +124,9 @@ fn a_rejected_command_is_reported_in_the_engines_words() {
         m.messages().last().unwrap(),
         "The screen changed, try again."
     );
+    let status = m.command().unwrap();
+    assert_eq!(status.stage, "rejected");
+    assert_eq!(status.text, "Refused. The screen changed, try again.");
 }
 
 #[test]
@@ -245,6 +248,7 @@ fn resync_mid_command_rebuilds_the_mirror_and_keeps_the_command_outcome() {
     assert!(!m.busy(), "the finished command no longer blocks input");
     let status = m.command().unwrap();
     assert_eq!((status.stage.as_str(), status.finished), ("done", true));
+    assert_eq!(status.text, "Done.", "in the engine's words");
 }
 
 #[test]
