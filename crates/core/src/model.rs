@@ -751,6 +751,14 @@ impl GameModel for FakeModel {
     }
 
     fn cell(&self, at: Pos) -> Cell {
+        if at == self.player {
+            return Cell {
+                glyph: '@',
+                color: Rgb(255, 255, 255),
+                desc: "you".into(),
+                ..Cell::default()
+            };
+        }
         if at.x == 20 && at.y != 12 {
             return Cell {
                 glyph: '#',

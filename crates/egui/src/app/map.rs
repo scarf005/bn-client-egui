@@ -583,20 +583,6 @@ impl<M: GameModel> App<M> {
                 egui::Stroke::new(2.0, egui::Color32::from_rgb(0, 200, 255)),
             );
         }
-        // The tile view draws the avatar as its own sprite.
-        let player = self.model.player();
-        let tiles = self.display.tiles();
-        let avatar_sprite =
-            tiles && (self.model.cell(player).layers.last()).is_some_and(|l| l.creature);
-        if !avatar_sprite {
-            painter.text(
-                canvas.rect(player).center(),
-                egui::Align2::CENTER_CENTER,
-                '@',
-                egui::FontId::monospace(canvas.cell_px - 2.0),
-                egui::Color32::YELLOW,
-            );
-        }
         if let Some(cursor) = cursor {
             canvas.outline(
                 painter,
@@ -606,6 +592,7 @@ impl<M: GameModel> App<M> {
         }
         // Effects stand on world squares: placed by the origin of this frame, not of when they arrived.
         let origin = self.model.origin();
+        let tiles = self.display.tiles();
         self.effects.paint(
             painter,
             now,

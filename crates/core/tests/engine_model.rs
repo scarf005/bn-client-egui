@@ -103,7 +103,11 @@ fn second_step_waits_for_the_first_command_to_finish() {
         "the view follows the avatar"
     );
     assert_eq!(m.origin(), Pos { x: -16, y: -8 });
-    assert_eq!(m.cell(Pos { x: 20, y: 12 }).glyph, '.');
+    assert_eq!(
+        m.cell(Pos { x: 20, y: 12 }).glyph,
+        '@',
+        "the avatar is drawn where it walked"
+    );
     m.invoke_action("RIGHT");
     let sent = submits(&h);
     assert_eq!(sent.len(), 2);

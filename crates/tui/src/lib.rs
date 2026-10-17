@@ -772,9 +772,7 @@ impl<M: GameModel> TuiApp<M> {
                     if let Some(bg) = cell.bg {
                         style = style.bg(color(bg));
                     }
-                    if at == player {
-                        (glyph, style) = ('@', Style::new().fg(Color::Yellow));
-                    } else if route.contains(&at) {
+                    if at != player && route.contains(&at) {
                         (glyph, style) = ('*', Style::new().fg(Color::Yellow));
                     }
                     if cursor == Some(at) {

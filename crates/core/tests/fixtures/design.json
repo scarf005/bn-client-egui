@@ -87,6 +87,7 @@
      "z": 0
     },
     "name": "Ada",
+    "look": {"kind": "avatar", "id": "avatar", "glyph": "@", "color": "white"},
     "stats": [],
     "inventory": [
      {
@@ -731,6 +732,7 @@
         "z": 0
        },
        "name": "Ada",
+       "look": {"kind": "avatar", "id": "avatar", "glyph": "@", "color": "white"},
        "stats": [],
        "inventory": [
         {

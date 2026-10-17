@@ -119,8 +119,27 @@ impl EngineModel {
             .collect()
     }
 
-    /// The cell without its square seed.
+    /// The cell without its square seed. The avatar's square shows the avatar's own glyph and colour over
+    /// what it stands on, as the native view draws it.
     pub(super) fn cell_at(&self, at: Pos) -> Cell {
+        let cell = self.square_at(at);
+        let here = self.abs(at).is_some_and(|p| self.avatar_pos() == Some(&p));
+        match self.replica.avatar().and_then(|a| a.look.as_ref()) {
+            Some(look) if here => {
+                let shown = self.styled(look, String::new());
+                Cell {
+                    glyph: shown.glyph,
+                    color: shown.color,
+                    bg: shown.bg,
+                    ..cell
+                }
+            }
+            _ => cell,
+        }
+    }
+
+    /// What is on a square, without the avatar's glyph.
+    fn square_at(&self, at: Pos) -> Cell {
         let unknown = Cell {
             glyph: ' ',
             color: Rgb(128, 128, 128),
