@@ -635,6 +635,17 @@ fn a_canvas_of_24_rows_is_not_clipped_by_the_dialog() {
 }
 
 #[test]
+fn what_follows_a_canvas_keeps_the_themes_spacing() {
+    let mut screen = game(20, vec![json!([["Score: 0", 15, 0]])]);
+    screen["affordances"] = json!([affordance("go", &[], json!({}))]);
+    let (h, _) = harness(screen);
+    let row = h.get_by_label("Score: 0").rect();
+    let button = h.get_by_label("go").rect();
+    let theme = h.ctx.global_style().spacing.item_spacing.y;
+    assert_eq!(button.min.y - row.max.y, theme, "{row:?} then {button:?}");
+}
+
+#[test]
 fn a_key_the_screen_binds_runs_its_affordance_before_the_client_moves_the_focus() {
     let down = json!({"id": "DOWN", "label": "Down", "keys": ["DOWN"], "enabled": true, "expect": "screen"});
     let (mut h, script) = harness(pick_list(vec![down]));
