@@ -41,27 +41,10 @@ pub(super) enum Placement {
 /// How the top screen is drawn: none when the map is on top or the engine has not described the screen by
 /// components yet, which stay with the 0.1 drawing.
 pub(super) fn placement(screens: &[Screen]) -> Option<Placement> {
-    let top = screens.last().filter(|s| s.root.is_some())?;
-    match top.role {
-        ScreenRole::Map => None,
-        ScreenRole::Screen => Some(Placement::Full),
+    match interaction::described(screens)?.role {
         ScreenRole::Dialog => Some(Placement::Over),
+        _ => Some(Placement::Full),
     }
-}
-
-fn described(screens: &[Screen]) -> Option<&Screen> {
-    placement(screens).and(screens.last())
-}
-
-/// The component and the ones inside it, outermost first.
-fn flatten(c: &Component) -> Vec<&Component> {
-    std::iter::once(c)
-        .chain(c.children().into_iter().flat_map(flatten))
-        .collect()
-}
-
-fn nodes(screen: &Screen) -> Vec<&Component> {
-    screen.root.iter().flat_map(flatten).collect()
 }
 
 /// The area of a window docked at `dock`: half the terminal, against the sidebar's inner edge on the sidebar's
@@ -141,7 +124,7 @@ struct Typing {
 impl Typing {
     /// The prompt of `screen`, started from the engine's value for it.
     fn of(screen: &Screen) -> Option<Self> {
-        nodes(screen).into_iter().find_map(|c| {
+        screen.components().into_iter().find_map(|c| {
             let Component::Form(form) = c else {
                 return None;
             };
@@ -207,7 +190,7 @@ impl View {
         if let Some((id, args)) = self.ui.take_select() {
             let _ = model.invoke_affordance(&id, args);
         }
-        let top = described(model.screens());
+        let top = interaction::described(model.screens());
         if self.typing.as_ref().map(|t| &t.screen) != top.map(|s| &s.screen_id) {
             self.typing = top.and_then(Typing::of);
         }
@@ -215,8 +198,10 @@ impl View {
 
     /// Sends the prompt's newest text, or submits it, once the engine can take it.
     fn send_typed<M: GameModel>(&mut self, model: &mut M) {
-        let (Some(typing), Some(screen)) = (self.typing.as_mut(), described(model.screens()))
-        else {
+        let (Some(typing), Some(screen)) = (
+            self.typing.as_mut(),
+            interaction::described(model.screens()),
+        ) else {
             return;
         };
         if model.busy() || (typing.text == typing.handed && !typing.submitting) {
@@ -249,8 +234,8 @@ impl View {
             let shown = self.extents.get(id).map_or(PAGE, |w| w.visible);
             known < list.total as usize && self.ui.scroll(id) + shown + PAGE >= known
         };
-        let ids = described(model.screens())
-            .map(nodes)
+        let ids = interaction::described(model.screens())
+            .map(Screen::components)
             .unwrap_or_default()
             .into_iter()
             .filter_map(|c| match c {
@@ -271,7 +256,7 @@ impl View {
         self.page(model);
         self.send_typed(model);
         let model = &*model;
-        let Some(screen) = described(model.screens()) else {
+        let Some(screen) = interaction::described(model.screens()) else {
             return;
         };
         let full = f.area();
@@ -337,7 +322,8 @@ impl View {
                     None => ask.text.clone(),
                 },
                 Some(ArgKind::Pane) => ask.panes.get(ask.pane_at).map(|id| {
-                    nodes(screen)
+                    screen
+                        .components()
                         .into_iter()
                         .find_map(|c| match c {
                             Component::Panel(p) if &p.head.id == id => Some(p.title.shown()),
@@ -401,7 +387,7 @@ impl View {
         let Some(name) = token(key) else {
             return;
         };
-        let outcome = match described(model.screens()) {
+        let outcome = match interaction::described(model.screens()) {
             Some(screen) => {
                 let extents = &self.extents;
                 let page = |id: &str| extents.get(id).map_or(PAGE, |w| w.visible);
@@ -446,7 +432,8 @@ impl View {
             "END" => isize::MAX / 2,
             _ => return,
         };
-        let text = nodes(screen)
+        let text = screen
+            .components()
             .into_iter()
             .find(|c| matches!(c, Component::Text(_)));
         if let Some((id, window)) = text.and_then(|c| Some((c.id(), *self.extents.get(c.id())?))) {

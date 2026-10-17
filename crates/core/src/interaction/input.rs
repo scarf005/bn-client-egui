@@ -88,25 +88,11 @@ pub fn form_fill<'a>(screen: &'a Screen, form: &Form, field_id: &str) -> Option<
         })
 }
 
-/// The components of the screen, each before the ones inside it.
-fn components(screen: &Screen) -> Vec<&Component> {
-    fn walk<'a>(component: &'a Component, found: &mut Vec<&'a Component>) {
-        found.push(component);
-        component
-            .children()
-            .into_iter()
-            .for_each(|child| walk(child, found));
-    }
-    let mut found = vec![];
-    screen.root.iter().for_each(|root| walk(root, &mut found));
-    found
-}
-
 /// The cursor a new screen starts with when the engine names none: the first row a list marks selected.
 pub(super) fn selected_focus(screen: Option<&Screen>) -> ScreenFocus {
     let selected = screen
         .into_iter()
-        .flat_map(components)
+        .flat_map(Screen::components)
         .find_map(|c| match c {
             Component::List(list) => list
                 .rows
@@ -222,7 +208,7 @@ impl Interaction {
         value: &str,
     ) -> Outcome {
         let affordance = screen.affordances.iter().find(|a| a.id == affordance_id);
-        let known = components(screen).into_iter().any(|c| match c {
+        let known = screen.components().into_iter().any(|c| match c {
             Component::Form(form) => {
                 form.head.id == form_id && form.fields.iter().any(|f| f.id == field_id)
             }
@@ -371,7 +357,7 @@ impl Interaction {
     /// Return on the focused row: runs its list's `activate`, the affordance the focused grid cell names, or
     /// starts editing the focused form field.
     fn activate_focused(&mut self, screen: &Screen) -> Option<Outcome> {
-        let parts = components(screen);
+        let parts = screen.components();
         let focused = self.focus.component_id.as_deref()?;
         match parts.iter().find(|c| c.id() == focused)? {
             Component::List(list) => {
@@ -402,7 +388,8 @@ impl Interaction {
         rows: &dyn Fn(&'r List) -> Vec<&'r Row>,
     ) -> Option<Outcome> {
         let focused = self.focus.component_id.clone();
-        let mut lists = components(screen)
+        let mut lists = screen
+            .components()
             .into_iter()
             .filter_map(|c| match c {
                 Component::List(list) => Some(list),
@@ -441,7 +428,7 @@ impl Interaction {
         page: &dyn Fn(&str) -> usize,
         rows: &dyn Fn(&'r List) -> Vec<&'r Row>,
     ) -> Option<Outcome> {
-        let parts = components(screen);
+        let parts = screen.components();
         let holders = parts
             .iter()
             .copied()
@@ -604,7 +591,7 @@ impl Interaction {
 
     /// Reads from the screen what an affordance's arguments are chosen among.
     pub(super) fn seed(&self, ask: &mut Ask, screen: &Screen, shape: &ArgShape) {
-        let parts = components(screen);
+        let parts = screen.components();
         if let Some(of) = &shape.pane {
             ask.panes = parts
                 .iter()

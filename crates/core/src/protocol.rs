@@ -1821,6 +1821,13 @@ impl Component {
         &self.head().id
     }
 
+    /// This component and every one inside it, each before the ones inside it.
+    pub fn nested(&self) -> Vec<&Component> {
+        std::iter::once(self)
+            .chain(self.children().into_iter().flat_map(Component::nested))
+            .collect()
+    }
+
     /// The components directly inside this one.
     pub fn children(&self) -> Vec<&Component> {
         match self {
@@ -2233,6 +2240,13 @@ pub struct Screen {
     /// The shortcut bar of the map screen, in the order the data gives; empty on every other screen.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub shortcuts: Vec<Shortcut>,
+}
+
+impl Screen {
+    /// The components of the screen, each before the ones inside it.
+    pub fn components(&self) -> Vec<&Component> {
+        self.root.iter().flat_map(Component::nested).collect()
+    }
 }
 
 /// A button of the map's shortcut bar.

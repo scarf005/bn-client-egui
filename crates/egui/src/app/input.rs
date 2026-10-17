@@ -1,9 +1,9 @@
 //! The keyboard of a frame: the keys the client keeps for its own view and focus, the keys that go to the engine,
 //! and the held walk.
 
-use super::{App, component, menu_forwards_keys, tab_is_engines};
+use super::{App, menu_forwards_keys, tab_is_engines};
 use crate::iso;
-use bn_client_core::{GameModel, Menu, keys};
+use bn_client_core::{GameModel, Menu, interaction, keys};
 use eframe::egui;
 
 /// A key pressed this frame, named like the engine's keys (`SPACE`, `ESC`, `RETURN`, `CTRL+S`); a typed
@@ -61,7 +61,7 @@ impl<M: GameModel> App<M> {
         // The palette and an open menu of the client (the map's right-click menu) have the keyboard; Escape closes
         // them.
         let client = self.palette.is_some() || egui::Popup::is_any_open(ctx);
-        match component::sliced(self.model.screens()) {
+        match interaction::described(self.model.screens()) {
             _ if client => {}
             Some(_) => self.component_keys(ctx),
             None => self.game_keys(ctx),

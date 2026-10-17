@@ -95,27 +95,13 @@ enum Intent {
     Cancel,
 }
 
-/// The screen on top, when the engine describes it by components. The map is drawn by the map view.
-pub(super) fn sliced(screens: &[Screen]) -> Option<&Screen> {
-    screens
-        .last()
-        .filter(|s| s.role != ScreenRole::Map && s.root.is_some())
-}
-
-/// `component` and every component inside it, in reading order.
-fn walk(component: &Component) -> Vec<&Component> {
-    std::iter::once(component)
-        .chain(component.children().into_iter().flat_map(walk))
-        .collect()
-}
-
 fn find<'a>(screen: &'a Screen, id: &str) -> Option<&'a Affordance> {
     screen.affordances.iter().find(|a| a.id == id)
 }
 
 /// The ids of the affordances some component names.
 fn claimed(root: &Component) -> HashSet<&str> {
-    walk(root)
+    root.nested()
         .into_iter()
         .flat_map(|c| {
             let extra = match c {
@@ -172,7 +158,7 @@ impl<M: GameModel> App<M> {
     /// The screen on top drawn from its components when the engine describes it so, else the 0.1 menu.
     pub(super) fn menu_or_screen(&mut self, ctx: &egui::Context) {
         self.sync_screens();
-        let Some(top) = sliced(self.model.screens()) else {
+        let Some(top) = interaction::described(self.model.screens()) else {
             return self.menu(ctx);
         };
         let mut out = vec![];
@@ -217,7 +203,7 @@ impl<M: GameModel> App<M> {
         let typing = ctx.text_edit_focused();
         let keys = keys.filter(|key| !typing || key == "ESC");
         for key in keys {
-            let Some(top) = sliced(self.model.screens()) else {
+            let Some(top) = interaction::described(self.model.screens()) else {
                 return;
             };
             // An enabled key field takes the key as its text, and the screen does not see it; Escape still
@@ -256,7 +242,7 @@ impl<M: GameModel> App<M> {
     /// Hands what the player did to the interaction core.
     fn apply(&mut self, intent: Intent) {
         let interaction = &mut self.screens.interaction;
-        let Some(top) = sliced(self.model.screens()) else {
+        let Some(top) = interaction::described(self.model.screens()) else {
             return;
         };
         let out = match intent {

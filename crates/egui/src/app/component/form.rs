@@ -33,7 +33,7 @@ fn editor_of(field: &FormField) -> Editor {
 
 /// The fill of the screen's enabled key field with `key` as its text.
 pub(super) fn key_fill(screen: &Screen, key: &str) -> Option<Intent> {
-    walk(screen.root.as_ref()?).into_iter().find_map(|c| {
+    screen.components().into_iter().find_map(|c| {
         let Component::Form(form) = c else {
             return None;
         };

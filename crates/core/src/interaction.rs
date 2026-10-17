@@ -24,6 +24,13 @@ pub fn titled(stack: &[Screen]) -> bool {
     !stack.is_empty() && stack.iter().all(|s| s.role != ScreenRole::Map)
 }
 
+/// The top screen when the engine describes it by components and it is not the map, which the map view draws.
+pub fn described(stack: &[Screen]) -> Option<&Screen> {
+    stack
+        .last()
+        .filter(|s| s.role != ScreenRole::Map && s.root.is_some())
+}
+
 /// One member of an invoke's arguments.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ArgKind {
