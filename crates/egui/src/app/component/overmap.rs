@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::app::{CELL, rgb};
+use bn_client_core::protocol::OvermapWindow;
 
 /// One thing the overmap draws, in the order it is drawn.
 pub(super) enum OvermapPaint {
@@ -44,6 +45,114 @@ pub(super) struct OwnedTile {
     fallbacks: Vec<String>,
 }
 
+/// Where the overmap's shown squares sit on the screen.
+struct OvermapGrid {
+    origin: egui::Pos2,
+    cell: f32,
+    window: OvermapWindow,
+}
+
+impl OvermapGrid {
+    fn rect_of(&self, (col, row): (usize, usize)) -> egui::Rect {
+        let offset = egui::vec2(
+            (col - self.window.left) as f32,
+            (row - self.window.top) as f32,
+        );
+        egui::Rect::from_min_size(
+            self.origin + offset * self.cell,
+            egui::Vec2::splat(self.cell),
+        )
+    }
+
+    /// The shown cell under `p`, the nearest one at the edges.
+    fn cell_at(&self, p: egui::Pos2) -> (usize, usize) {
+        let v = (p - self.origin) / self.cell;
+        let w = &self.window;
+        (
+            w.left + (v.x as usize).min(w.cols - 1),
+            w.top + (v.y as usize).min(w.rows - 1),
+        )
+    }
+
+    fn shows(&self, (col, row): (usize, usize)) -> bool {
+        let w = &self.window;
+        (w.left..w.left + w.cols).contains(&col) && (w.top..w.top + w.rows).contains(&row)
+    }
+}
+
+/// What the hover says of a square away from the cursor: where it is, and its note.
+fn square_status(om: &OvermapWire, at: &WorldPos) -> String {
+    [
+        Some(format!("({}, {}, {})", at.x, at.y, at.z)),
+        om.note(at).map(str::to_owned),
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>()
+    .join(" ")
+}
+
+/// The overmap as a canvas named by the screen's title and described by the cursor's square and the notes.
+fn overmap_a11y(
+    ui: &egui::Ui,
+    response: &egui::Response,
+    screen: &Screen,
+    om: &OvermapWire,
+    status: &str,
+) {
+    let title = screen
+        .title
+        .as_ref()
+        .map(|t| markup::plain(&t.shown()))
+        .unwrap_or_default();
+    response.widget_info(|| WidgetInfo::labeled(WidgetType::Other, true, &title));
+    ui.ctx().accesskit_node_builder(response.id, |b| {
+        b.set_role(egui::accesskit::Role::Canvas);
+        let notes = (!om.notes.is_empty())
+            .then(|| [om.notes_title.clone()].into_iter().chain(om.note_lines()))
+            .into_iter()
+            .flatten();
+        b.set_description(
+            [status.to_owned()]
+                .into_iter()
+                .chain(notes)
+                .filter(|t| !t.is_empty())
+                .collect::<Vec<_>>()
+                .join(" "),
+        );
+    });
+}
+
+/// The legend and the notes beside the overmap; a click on a note moves the cursor to it.
+fn overmap_side_panel(
+    ui: &mut egui::Ui,
+    om: &OvermapWire,
+    mover: Option<&Affordance>,
+    out: &mut Vec<Intent>,
+) {
+    ui.vertical(|ui| {
+        for line in &om.legend {
+            ui.add(
+                egui::Label::new(egui::RichText::new(line).monospace())
+                    .wrap_mode(egui::TextWrapMode::Extend),
+            );
+        }
+        if !om.notes.is_empty() {
+            ui.separator();
+            ui.heading(&om.notes_title);
+        }
+        for note in &om.notes {
+            let link = ui.link(format!("({}, {}) {}", note.pos.x, note.pos.y, note.text));
+            if let (true, Some(mover)) = (link.clicked(), mover) {
+                out.push(Intent::Move {
+                    affordance: mover.id.clone(),
+                    at: note.pos.clone(),
+                });
+            }
+        }
+    });
+}
+
 impl<M: GameModel> App<M> {
     /// The overmap squares around the cursor, cut to the room the window has: hovering names a square, a
     /// click moves the cursor there, and a click on the cursor runs the map's other affordance (travel). The
@@ -72,146 +181,37 @@ impl<M: GameModel> App<M> {
                 .accesskit_node_builder(label.id, |b| b.set_live(egui::accesskit::Live::Polite));
         }
         let status = status.join(" ");
-
-        let cell_px = self.display.cell(CELL);
-        let font = egui::FontId::monospace(cell_px - 2.0);
+        let cell = self.display.cell(CELL);
         // The squares that fit, kept around the cursor.
-        let room = ui.available_size();
-        let fit = |space: f32| ((space / cell_px) as usize).max(1);
-        let Some(window) = om.window(&cursor, (fit(room.x * 0.7), fit(ui.available_height())))
-        else {
+        let fit = |space: f32| ((space / cell) as usize).max(1);
+        let room = (fit(ui.available_width() * 0.7), fit(ui.available_height()));
+        let Some(window) = om.window(&cursor, room) else {
             return;
         };
-        let (cursor_col, cursor_row) = om.cell_of(&cursor).unwrap_or((om.cols / 2, om.rows / 2));
-        let (left, top, cols, rows) = (window.left, window.top, window.cols, window.rows);
-        let colors = self.model.colors();
-        let square_status = |at: &WorldPos| {
-            if *at == cursor {
-                return status.clone();
-            }
-            [
-                Some(format!("({}, {}, {})", at.x, at.y, at.z)),
-                om.note(at).map(str::to_owned),
-            ]
-            .into_iter()
-            .flatten()
-            .collect::<Vec<_>>()
-            .join(" ")
-        };
         ui.horizontal_top(|ui| {
-            let (response, painter) = ui.allocate_painter(
-                egui::vec2(cols as f32 * cell_px, rows as f32 * cell_px),
-                egui::Sense::click(),
-            );
-            let title = screen
-                .title
-                .as_ref()
-                .map(|t| markup::plain(&t.shown()))
-                .unwrap_or_default();
-            response.widget_info(|| WidgetInfo::labeled(WidgetType::Other, true, &title));
-            ui.ctx().accesskit_node_builder(response.id, |b| {
-                b.set_role(egui::accesskit::Role::Canvas);
-                let notes = (!om.notes.is_empty())
-                    .then(|| [om.notes_title.clone()].into_iter().chain(om.note_lines()))
-                    .into_iter()
-                    .flatten();
-                b.set_description(
-                    [status.clone()]
-                        .into_iter()
-                        .chain(notes)
-                        .filter(|t| !t.is_empty())
-                        .collect::<Vec<_>>()
-                        .join(" "),
-                );
-            });
-            let rect_of = |col: usize, row: usize| {
-                egui::Rect::from_min_size(
-                    response.rect.min
-                        + egui::vec2((col - left) as f32, (row - top) as f32) * cell_px,
-                    egui::Vec2::splat(cell_px),
-                )
-            };
+            let size = egui::vec2(window.cols as f32, window.rows as f32) * cell;
+            let (response, painter) = ui.allocate_painter(size, egui::Sense::click());
+            overmap_a11y(ui, &response, screen, om, &status);
             painter.rect_filled(response.rect, 0.0, egui::Color32::BLACK);
-            let mut paints = self.screens.overmap.borrow_mut();
-            for row in top..top + rows {
-                for col in left..left + cols {
-                    let Some((glyph, fg, bg)) = om.cells.get(row).and_then(|r| r.get(col)) else {
-                        continue;
-                    };
-                    let at = om.square(col, row);
-                    let bg = colors.index(*bg);
-                    paints.push(OvermapPaint::Square {
-                        painter: painter.clone(),
-                        rect: rect_of(col, row),
-                        tile: om.tile(col, row).map(|t| OwnedTile {
-                            id: t.id.into(),
-                            rotation: t.rotation,
-                            subtile: t.subtile.into(),
-                            fallbacks: t.fallbacks.to_vec(),
-                        }),
-                        glyph: glyph.clone(),
-                        color: colors.index(*fg),
-                        bg: (bg != Rgb(0, 0, 0)).then_some(bg),
-                        overlay: at == om.player || om.note(&at).is_some() || om.path.contains(&at),
-                        font: font.clone(),
-                    });
-                }
-            }
-            for (i, step) in om.path.iter().enumerate() {
-                let Some((col, row)) = om.cell_of(step).filter(|(c, r)| {
-                    (left..left + cols).contains(c) && (top..top + rows).contains(r)
-                }) else {
-                    continue;
-                };
-                let alpha = if i + 1 == om.path.len() { 140 } else { 70 };
-                paints.push(OvermapPaint::Fill {
-                    painter: painter.clone(),
-                    rect: rect_of(col, row),
-                    color: egui::Color32::from_rgba_unmultiplied(0, 200, 255, alpha),
-                });
-            }
-            for label in &om.labels {
-                let Some((col, row)) = om.cell_of(&label.pos).filter(|(c, r)| {
-                    (left..left + cols).contains(c) && (top..top + rows).contains(r)
-                }) else {
-                    continue;
-                };
-                paints.push(OvermapPaint::Text {
-                    painter: painter.clone(),
-                    rect: rect_of(col, row),
-                    text: label.text.clone(),
-                    color: colors.index(label.foreground),
-                    font: font.clone(),
-                });
-            }
-            // The mission's target, marked at the edge of the squares shown when it lies beyond them.
-            if let Some(mark) = om.target_mark(&window, &cursor) {
-                paints.push(OvermapPaint::Text {
-                    painter: painter.clone(),
-                    rect: rect_of(mark.col, mark.row),
-                    text: mark.arrow.into(),
-                    color: colors.index(1),
-                    font: font.clone(),
-                });
-            }
-            paints.push(OvermapPaint::Outline {
-                painter: painter.clone(),
-                rect: rect_of(cursor_col, cursor_row),
-            });
-            drop(paints);
+            let grid = OvermapGrid {
+                origin: response.rect.min,
+                cell,
+                window,
+            };
+            let paints = self.overmap_paints(om, &grid, &cursor, &painter);
+            self.screens.overmap.borrow_mut().extend(paints);
             let square_at = |p: egui::Pos2| {
-                let v = (p - response.rect.min) / cell_px;
-                om.square(
-                    left + (v.x as usize).min(cols - 1),
-                    top + (v.y as usize).min(rows - 1),
-                )
+                let (col, row) = grid.cell_at(p);
+                om.square(col, row)
             };
             response.clone().on_hover_ui_at_pointer(|ui| {
                 if let Some(p) = response.hover_pos() {
-                    ui.add(
-                        egui::Label::new(square_status(&square_at(p)))
-                            .wrap_mode(egui::TextWrapMode::Extend),
-                    );
+                    let at = square_at(p);
+                    let text = match at == cursor {
+                        true => status.clone(),
+                        false => square_status(om, &at),
+                    };
+                    ui.add(egui::Label::new(text).wrap_mode(egui::TextWrapMode::Extend));
                 }
             });
             if let Some(p) = response
@@ -219,7 +219,7 @@ impl<M: GameModel> App<M> {
                 .filter(|_| response.clicked())
             {
                 let at = square_at(p);
-                match (at == cursor, &runner, &mover) {
+                match (at == cursor, runner, mover) {
                     (true, Some(run), _) => out.push(Intent::Run(run.id.clone())),
                     (_, _, Some(mover)) => out.push(Intent::Move {
                         affordance: mover.id.clone(),
@@ -229,28 +229,81 @@ impl<M: GameModel> App<M> {
                 }
                 ui.ctx().request_repaint();
             }
-            ui.vertical(|ui| {
-                for line in &om.legend {
-                    ui.add(
-                        egui::Label::new(egui::RichText::new(line).monospace())
-                            .wrap_mode(egui::TextWrapMode::Extend),
-                    );
-                }
-                if !om.notes.is_empty() {
-                    ui.separator();
-                    ui.heading(&om.notes_title);
-                }
-                for note in &om.notes {
-                    let link = ui.link(format!("({}, {}) {}", note.pos.x, note.pos.y, note.text));
-                    if let (true, Some(mover)) = (link.clicked(), &mover) {
-                        out.push(Intent::Move {
-                            affordance: mover.id.clone(),
-                            at: note.pos.clone(),
-                        });
-                    }
-                }
-            });
+            overmap_side_panel(ui, om, mover, out);
         });
+    }
+
+    /// What the shown squares draw, in order: the terrain, the route, the names, the mission target's mark and
+    /// the cursor.
+    fn overmap_paints(
+        &self,
+        om: &OvermapWire,
+        grid: &OvermapGrid,
+        cursor: &WorldPos,
+        painter: &egui::Painter,
+    ) -> Vec<OvermapPaint> {
+        let colors = self.model.colors();
+        let font = egui::FontId::monospace(grid.cell - 2.0);
+        let w = &grid.window;
+        let shown = |at: &WorldPos| om.cell_of(at).filter(|&cell| grid.shows(cell));
+        let squares = (w.top..w.top + w.rows)
+            .flat_map(|row| (w.left..w.left + w.cols).map(move |col| (col, row)))
+            .filter_map(|(col, row)| {
+                let (glyph, fg, bg) = om.cells.get(row)?.get(col)?;
+                let at = om.square(col, row);
+                let bg = colors.index(*bg);
+                Some(OvermapPaint::Square {
+                    painter: painter.clone(),
+                    rect: grid.rect_of((col, row)),
+                    tile: om.tile(col, row).map(|t| OwnedTile {
+                        id: t.id.into(),
+                        rotation: t.rotation,
+                        subtile: t.subtile.into(),
+                        fallbacks: t.fallbacks.to_vec(),
+                    }),
+                    glyph: glyph.clone(),
+                    color: colors.index(*fg),
+                    bg: (bg != Rgb(0, 0, 0)).then_some(bg),
+                    overlay: at == om.player || om.note(&at).is_some() || om.path.contains(&at),
+                    font: font.clone(),
+                })
+            });
+        let route = om.path.iter().enumerate().filter_map(|(i, step)| {
+            let alpha = if i + 1 == om.path.len() { 140 } else { 70 };
+            Some(OvermapPaint::Fill {
+                painter: painter.clone(),
+                rect: grid.rect_of(shown(step)?),
+                color: egui::Color32::from_rgba_unmultiplied(0, 200, 255, alpha),
+            })
+        });
+        let names = om.labels.iter().filter_map(|label| {
+            Some(OvermapPaint::Text {
+                painter: painter.clone(),
+                rect: grid.rect_of(shown(&label.pos)?),
+                text: label.text.clone(),
+                color: colors.index(label.foreground),
+                font: font.clone(),
+            })
+        });
+        // The mission's target, marked at the edge of the squares shown when it lies beyond them.
+        let target = om.target_mark(w, cursor).map(|mark| OvermapPaint::Text {
+            painter: painter.clone(),
+            rect: grid.rect_of((mark.col, mark.row)),
+            text: mark.arrow.into(),
+            color: colors.index(1),
+            font: font.clone(),
+        });
+        let at_cursor = om.cell_of(cursor).unwrap_or((om.cols / 2, om.rows / 2));
+        let outline = OvermapPaint::Outline {
+            painter: painter.clone(),
+            rect: grid.rect_of(at_cursor),
+        };
+        squares
+            .chain(route)
+            .chain(names)
+            .chain(target)
+            .chain([outline])
+            .collect()
     }
 
     /// Paints what the overmap collected, now that the window is drawn.
