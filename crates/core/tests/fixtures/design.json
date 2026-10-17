@@ -76,7 +76,25 @@
       "name": "Pick up"
      , "keys": ["g"]}
     ],
-    "interaction": null
+    "interaction": null,
+    "stack": [
+     {
+      "screen_id": "screen:map:e7f3",
+      "kind": "map",
+      "role": "map",
+      "root": {
+       "id": "map:world",
+       "kind": "map",
+       "affordances": ["bn:travel", "bn:context"],
+       "mode": "world",
+       "item_lists": [
+        {"id": "avatar.ground", "label": "Ground", "verb": "Pick up"},
+        {"id": "avatar.inventory", "label": "Inventory", "verb": "Drop"}
+       ]
+      },
+      "affordances": []
+     }
+    ]
    },
    "avatar": {
     "id": "e:avatar",

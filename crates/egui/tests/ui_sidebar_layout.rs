@@ -119,19 +119,52 @@ fn the_compass_lists_each_direction_and_its_creatures_nearest_first() {
 }
 
 #[test]
-fn the_message_log_follows_its_panel() {
-    assert!(
-        shown("right", 44, &all_panels())
-            .query_by_label("Message log")
-            .is_some()
-    );
+fn the_message_log_follows_its_panel_under_its_label() {
+    let h = shown("right", 44, &all_panels());
+    assert!(h.query_by_label("<Log>").is_some());
+    assert!(h.query_by_label("Message log").is_none());
     let mut off = all_panels();
     off[4]["enabled"] = json!(false);
-    assert!(
-        shown("right", 44, &off)
-            .query_by_label("Message log")
-            .is_none()
-    );
+    assert!(shown("right", 44, &off).query_by_label("<Log>").is_none());
+}
+
+/// The item lists are the ones the engine names beside the map, under its headings and with its verbs; a
+/// sidebar without the game's panel options has no heading the engine names.
+#[test]
+fn the_item_lists_carry_the_engines_headings_and_verbs() {
+    let (t, script) = session();
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(1400.0, 900.0))
+        .build_ui_state(
+            |ui, app: &mut App<EngineModel>| app.show(ui),
+            App::new(EngineModel::new(Box::new(t))),
+        );
+    h.run_steps(3);
+    let mut avatar = example("avatar with creatures on the compass");
+    avatar["sidebar"].as_object_mut().unwrap().remove("layout");
+    avatar["inventory"] = fixture("subscribe_result")["result"]["avatar"]["inventory"].clone();
+    let mut interaction = fixture("subscribe_result")["result"]["interaction"].clone();
+    interaction["stack"][0]["root"]["item_lists"] = json!([
+        {"id": "avatar.ground", "label": "바닥", "verb": "줍기"},
+        {"id": "avatar.inventory", "label": "소지품", "verb": "버리기"}
+    ]);
+    let mut event = fixture("events_41_walk");
+    event["params"]["events"][0]["changes"]["avatar"] = avatar;
+    event["params"]["events"][0]["changes"]["interaction"] = interaction;
+    script.push(event);
+    h.run_steps(5);
+    for shown in ["바닥", "소지품", "버리기 flashlight"] {
+        assert!(h.query_by_label(shown).is_some(), "{shown}");
+    }
+    for client in [
+        "Ground",
+        "Inventory",
+        "Drop flashlight",
+        "Status",
+        "Message log",
+    ] {
+        assert!(h.query_by_label(client).is_none(), "{client}");
+    }
 }
 
 #[test]

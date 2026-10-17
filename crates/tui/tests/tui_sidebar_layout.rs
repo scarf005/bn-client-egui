@@ -99,18 +99,47 @@ fn the_compass_lists_each_direction_and_its_creatures_nearest_first() {
 }
 
 #[test]
-fn the_message_log_follows_its_panel() {
-    assert!(
-        screen("right", 40, &all())
-            .iter()
-            .any(|r| r.contains("Message log"))
-    );
+fn the_message_log_follows_its_panel_under_its_label() {
+    let rows = screen("right", 40, &all());
+    assert!(rows.iter().any(|r| r.contains("<Log>")));
+    assert!(!rows.iter().any(|r| r.contains("Message log")));
     let off = ["Health", "Location", "Compass"].map(|id| panel(id, true));
     assert!(
         !screen("right", 40, &off)
             .iter()
-            .any(|r| r.contains("Message log"))
+            .any(|r| r.contains("<Log>"))
     );
+}
+
+#[test]
+fn the_item_lists_are_headed_by_the_engine() {
+    let (t, h) = session();
+    let mut model = EngineModel::new(Box::new(t));
+    model.poll();
+    // A sidebar without the game's panel options has no heading the engine names.
+    let mut avatar = example("avatar with creatures on the compass");
+    avatar["sidebar"].as_object_mut().unwrap().remove("layout");
+    let mut interaction = common::fixture("subscribe_result")["result"]["interaction"].clone();
+    interaction["stack"][0]["root"]["item_lists"] = json!([
+        {"id": "avatar.ground", "label": "<ground>", "verb": "<pick up>"},
+        {"id": "avatar.inventory", "label": "<inventory>", "verb": "<drop>"}
+    ]);
+    h.push(
+        json!({"jsonrpc":"2.0","method":"bn.events","params":{"epoch":"e7f3","events":[{
+        "sequence": "41", "revision": "32", "type": "cells.seen",
+        "changes": {"avatar": avatar, "interaction": interaction}}]}}),
+    );
+    model.poll();
+    let mut app = TuiApp::new(model);
+    let mut t = Terminal::new(TestBackend::new(120, 60)).unwrap();
+    t.draw(|f| app.draw(f)).unwrap();
+    let shown = format!("{:?}", t.backend().buffer());
+    for heading in ["<ground>", "<inventory>"] {
+        assert!(shown.contains(heading), "{heading}:\n{shown}");
+    }
+    for client in ["Ground", "Inventory", "Status"] {
+        assert!(!shown.contains(client), "{client}:\n{shown}");
+    }
 }
 
 #[test]
