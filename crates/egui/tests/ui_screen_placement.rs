@@ -52,11 +52,12 @@ fn playing<'a>(size: egui::Vec2, screen: Option<Value>) -> (H<'a>, ScriptHandle)
     (h, script)
 }
 
-fn window_of(h: &H, title: &str) -> egui::Rect {
-    let id = egui::Id::new(("dialog", title));
+/// The window of the screen the engine names `kind`.
+fn window_of(h: &H, kind: &str) -> egui::Rect {
+    let id = egui::Id::new(("dialog", format!("screen:{kind}")));
     h.ctx
         .memory(|m| m.area_rect(id))
-        .unwrap_or_else(|| panic!("no window {title}"))
+        .unwrap_or_else(|| panic!("no window {kind}"))
 }
 
 fn screen_rect(size: egui::Vec2) -> egui::Rect {
@@ -67,7 +68,7 @@ fn screen_rect(size: egui::Vec2) -> egui::Rect {
 fn a_full_screen_fills_the_map_room_and_leaves_the_sidebar_visible() {
     let size = egui::vec2(1280.0, 800.0);
     let (h, _) = playing(size, Some(example("crafting", "Crafting screen")));
-    let window = window_of(&h, "Crafting");
+    let window = window_of(&h, "crafting");
     let map = h.get_by_label("Map").rect();
     assert!(window.min.y <= 40.0, "{window:?}");
     assert!(window.max.y <= size.y, "{window:?}");
@@ -86,7 +87,7 @@ fn a_full_screen_fills_the_map_room_and_leaves_the_sidebar_visible() {
 fn a_dialog_is_centred_in_the_map_room_and_wholly_on_screen() {
     let size = egui::vec2(1280.0, 800.0);
     let (h, _) = playing(size, Some(example("info", "message log")));
-    let window = window_of(&h, "Messages");
+    let window = window_of(&h, "messages");
     assert!(screen_rect(size).contains_rect(window), "{window:?}");
     let map = h.get_by_label("Map").rect();
     assert!(
@@ -99,7 +100,7 @@ fn a_dialog_is_centred_in_the_map_room_and_wholly_on_screen() {
 fn the_look_screen_covers_neither_the_cursor_nor_the_avatar() {
     let size = egui::vec2(1280.0, 800.0);
     let (h, _) = playing(size, Some(example("look", "look-around screen")));
-    let window = window_of(&h, "Look Around");
+    let window = window_of(&h, "look");
     let map = h.get_by_label("Map").rect();
     let model = &h.state().model;
     let cells = model.focus().into_iter().chain([model.player()]);
@@ -113,7 +114,7 @@ fn the_look_screen_covers_neither_the_cursor_nor_the_avatar() {
 fn a_wide_dialog_is_as_wide_as_its_content_and_stays_inside_the_map_room() {
     let size = egui::vec2(1280.0, 800.0);
     let (h, _) = playing(size, Some(example("character", "character sheet")));
-    let window = window_of(&h, "John Smith | Male");
+    let window = window_of(&h, "character_sheet");
     let map = h.get_by_label("Map").rect();
     assert!(window.width() > 640.0, "{window:?}");
     assert!(screen_rect(size).contains_rect(window), "{window:?}");

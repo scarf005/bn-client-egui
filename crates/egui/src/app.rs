@@ -40,13 +40,12 @@ fn rgb(c: bn_client_core::Rgb) -> egui::Color32 {
 
 impl<M: GameModel> App<M> {
     /// A window of `kind` titled `title`, where the player left windows of its kind, else at the top centre,
-    /// 12% down, so the same click lands on the same control.
-    fn window_spec(&self, ctx: &egui::Context, kind: &str, title: &str) -> WindowSpec {
+    /// 12% down, so the same click lands on the same control. A window of no kind starts there every run.
+    fn window_spec(&self, ctx: &egui::Context, kind: Option<&str>, title: &str) -> WindowSpec {
         WindowSpec {
-            kind: kind.into(),
             title: title.into(),
-            id: a11y::dialog_id(title),
-            saved: self.display.window(kind),
+            id: a11y::dialog_id(kind.unwrap_or(title)),
+            saved: kind.and_then(|kind| self.display.window(kind)),
             origin: Origin::top_center(ctx),
             place: None,
             movable: false,
@@ -60,15 +59,25 @@ impl<M: GameModel> App<M> {
         }
     }
 
-    /// Remembers where the player left the window just shown, written once the pointer is up; true when its close
-    /// button was pressed.
-    fn keep_window<R>(&mut self, ctx: &egui::Context, kind: &str, shown: &Shown<R>) -> bool {
-        if let Some(state) = shown.state {
+    /// Remembers where the player left the window of `kind` just shown, written once the pointer is up; true when
+    /// its close button was pressed.
+    fn keep_window<R>(
+        &mut self,
+        ctx: &egui::Context,
+        kind: Option<&str>,
+        shown: &Shown<R>,
+    ) -> bool {
+        if let (Some(kind), Some(state)) = (kind, shown.state) {
             let settled = !ctx.input(|i| i.pointer.any_down());
             self.display.keep_window(kind, state, settled);
         }
         shown.closed
     }
+}
+
+/// The kind of window `screen` is kept as: the engine's name for the screen, none where it names none.
+fn screen_kind(screen: &bn_client_core::protocol::Screen) -> Option<String> {
+    screen.kind.as_ref().map(|kind| format!("screen:{kind}"))
 }
 
 /// The tallest a 0.1 menu's list grows: the room under the window's top, less its title, tabs and description.
@@ -483,8 +492,7 @@ impl<M: GameModel> App<M> {
         }
         let spec = WindowSpec {
             closable: true,
-            id: a11y::dialog_id("Client settings"),
-            ..self.window_spec(ctx, "client-settings", "Client settings")
+            ..self.window_spec(ctx, Some("client-settings"), "Client settings")
         };
         self.client_settings = !windows::show(ctx, spec, |ui| self.display.controls(ui)).closed;
     }

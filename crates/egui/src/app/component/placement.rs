@@ -74,11 +74,6 @@ pub(super) fn placement(
     }
 }
 
-/// The kind of window a screen is kept as: one per title, as the window itself is.
-pub(super) fn screen_kind(title: &str) -> String {
-    format!("screen:{title}")
-}
-
 /// A screen that puts a cursor on the map (look, aim), or asks to sit away from it, must not hide what the
 /// cursor is on: it moves as the cursor does rather than where the player drags it.
 pub(super) fn keeps_off_cursor(screen: &Screen) -> bool {

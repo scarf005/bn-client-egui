@@ -51,11 +51,7 @@ impl<M: GameModel> App<M> {
         let title = markup::plain(&menu.title);
         let frame = list_frame(ctx);
         let max_width = (ctx.content_rect().width() * 0.8).max(520.0);
-        let kind = if menu.context.is_empty() {
-            "menu"
-        } else {
-            menu.context.as_str()
-        };
+        let kind = self.model.screens().last().and_then(super::screen_kind);
         let spec = WindowSpec {
             title_bar: !title.is_empty(),
             closable: menu.can_cancel && !menu.acknowledges(),
@@ -66,8 +62,9 @@ impl<M: GameModel> App<M> {
             // The window offers its content the whole height a list may take, not half of what is free.
             height: Some(super::dialog_scroll_height(ctx)),
             frame: Some(frame),
-            ..self.window_spec(ctx, kind, &title)
+            ..self.window_spec(ctx, kind.as_deref(), &title)
         };
+        let window_id = spec.id;
         let shown = windows::show(ctx, spec, |ui| {
             ui.set_min_width(520.0);
             // Cancel sits right under the title, so it is at the same place for every dialog.
@@ -315,7 +312,7 @@ impl<M: GameModel> App<M> {
                     });
             }
         });
-        if self.keep_window(ctx, kind, &shown) {
+        if self.keep_window(ctx, kind.as_deref(), &shown) {
             self.model.cancel_menu();
         }
         self.menu_ids = ids;
@@ -335,7 +332,7 @@ impl<M: GameModel> App<M> {
         self.menu_focus = menu.focus.clone();
         self.menu_cursor = cursor_seen;
         self.focus_menu = entered && !focused;
-        a11y::dialog(ctx, &title, &menu.message);
+        a11y::dialog(ctx, window_id, &title, &menu.message);
         if let (Some(field), Some(value)) = (&menu.field, key_chosen) {
             ctx.request_repaint();
             self.model.fill(&field.id, &value, true);

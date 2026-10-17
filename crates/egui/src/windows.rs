@@ -55,8 +55,6 @@ pub enum Place {
 }
 
 pub struct WindowSpec {
-    /// The kind of window whose place is kept: every window of a kind shares it.
-    pub kind: String,
     pub title: String,
     pub id: egui::Id,
     pub saved: Option<WindowState>,

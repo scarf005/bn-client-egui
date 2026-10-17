@@ -7,15 +7,13 @@ pub fn name_window(ctx: &egui::Context, title: &str) {
     ctx.accesskit_node_builder(egui::accesskit_root_id(), |b| b.set_label(title));
 }
 
-/// The id a dialog window is given, so its accessibility nodes can be addressed.
-pub fn dialog_id(title: &str) -> egui::Id {
-    egui::Id::new(("dialog", title))
+/// The id the dialog window `key` names is given, so its accessibility nodes can be addressed.
+pub fn dialog_id(key: &str) -> egui::Id {
+    egui::Id::new(("dialog", key))
 }
 
-/// Announces a window made with `dialog_id` as a dialog, reads its message and names its otherwise
-/// anonymous title bar.
-pub fn dialog(ctx: &egui::Context, title: &str, message: &str) {
-    let id = dialog_id(title);
+/// Announces the window `id` as a dialog, reads its message and names its otherwise anonymous title bar.
+pub fn dialog(ctx: &egui::Context, id: egui::Id, title: &str, message: &str) {
     // egui registers the window under its area's `move` widget.
     ctx.accesskit_node_builder(id.with("move"), |b| {
         b.set_role(accesskit::Role::Dialog);

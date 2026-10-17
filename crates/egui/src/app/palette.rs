@@ -52,10 +52,10 @@ impl<M: GameModel> App<M> {
         let mut ids = Vec::new();
         let spec = WindowSpec {
             closable: true,
-            id: a11y::dialog_id("Actions"),
             width: Some(420.0),
-            ..self.window_spec(ctx, "palette", "Actions")
+            ..self.window_spec(ctx, Some("palette"), "Actions")
         };
+        let window_id = spec.id;
         let shown = windows::show(ctx, spec, |ui| {
             let search = ui.add(
                 egui::TextEdit::singleline(&mut query)
@@ -96,10 +96,10 @@ impl<M: GameModel> App<M> {
                     });
                 });
         });
-        if self.keep_window(ctx, "palette", &shown) {
+        if self.keep_window(ctx, Some("palette"), &shown) {
             self.palette = None;
         }
-        a11y::dialog(ctx, "Actions", "");
+        a11y::dialog(ctx, window_id, "Actions", "");
         self.palette_ids = ids;
         match invoke {
             Some(id) => {

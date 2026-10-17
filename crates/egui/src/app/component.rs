@@ -152,13 +152,11 @@ impl<M: GameModel> App<M> {
         };
         let mut out = vec![];
         let cancel = interaction::with_role(top, AffordanceRole::Cancel).map(|a| a.id.clone());
-        let kind = screen_kind(&markup::plain(
-            &top.title.as_ref().map(Text::shown).unwrap_or_default(),
-        ));
+        let kind = super::screen_kind(top);
         // Only the lists drawn this frame have a page.
         self.screens.list_heights.borrow_mut().clear();
         let shown = self.screen_window(ctx, top, &mut out);
-        if self.keep_window(ctx, &kind, &shown)
+        if self.keep_window(ctx, kind.as_deref(), &shown)
             && let Some(cancel) = cancel
         {
             out.push(Intent::Run(cancel));
@@ -306,7 +304,7 @@ impl<M: GameModel> App<M> {
                 Some(content + frame.total_margin().sum().x + ui.spacing().window_margin.sum().x)
             }
         };
-        let base = self.window_spec(ctx, &screen_kind(&title), &title);
+        let base = self.window_spec(ctx, super::screen_kind(screen).as_deref(), &title);
         // The help sits in the title bar, or last in the footer of a window that has none.
         let titled = interaction::with_role(screen, AffordanceRole::Help)
             .filter(|a| a.enabled && base.title_bar);
