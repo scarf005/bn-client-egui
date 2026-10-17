@@ -27,7 +27,7 @@ fn many_painted_sprites_in_one_frame_start_no_thread_each() {
     let mut display = Display::new(Some(&root), Some(settings));
     let ctx = egui::Context::default();
     let before = threads();
-    let _ = ctx.run_ui(egui::RawInput::default(), |ui| {
+    ctx.run_ui(egui::RawInput::default(), |ui| {
         display.update(ui.ctx());
         let painter = ui.painter().clone();
         for n in 0..200u32 {
@@ -43,7 +43,9 @@ fn many_painted_sprites_in_one_frame_start_no_thread_each() {
             let rect = egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(4.0, 4.0));
             display.paint(&painter, rect, &cell, None);
         }
-    });
+    })
+    .textures_delta
+    .clear();
     let started = threads().saturating_sub(before);
     assert!(
         started <= 4,
