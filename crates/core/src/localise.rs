@@ -716,6 +716,23 @@ mod tests {
     }
 
     #[test]
+    fn a_name_without_a_translation_reads_in_the_source_form_for_its_count() {
+        let rats = |n: u64| {
+            message(
+                json!({"key": "Two %s", "args": [{"key": "rat", "plural": n, "plural_key": "rats"}]}),
+            )
+        };
+        install(None);
+        assert_eq!(render(&rats(2)), "Two rats");
+        assert_eq!(render(&rats(1)), "Two rat");
+        install(Some(catalogue(
+            "nplurals=1; plural=0;",
+            &[("Two %s", "쥐 둘: %s")],
+        )));
+        assert_eq!(render(&rats(2)), "쥐 둘: rats");
+    }
+
+    #[test]
     fn a_text_argument_is_rendered_with_the_catalogue_too_and_the_empty_key_joins() {
         install(Some(catalogue(
             "nplurals=1; plural=0;",
