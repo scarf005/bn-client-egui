@@ -211,6 +211,10 @@ impl EngineModel {
                     .and_then(|c| c.light.as_ref()?.as_u64())
                     .map(|l| l as u8),
                 glow: shown.and_then(glow),
+                health: e.health.as_ref().map(|h| Health {
+                    fifths: h.fifths,
+                    color: self.colors.resolve(&h.color).0,
+                }),
                 depth: below.unwrap_or(0),
                 ..self.styled(look, desc)
             };
