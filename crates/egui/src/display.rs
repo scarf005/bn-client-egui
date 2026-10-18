@@ -6,7 +6,7 @@ use crate::windows::WindowState;
 use bn_client_core::localise::{Value as Arg, tr, tr_format};
 use bn_client_core::protocol::ModTileset;
 use bn_client_core::protocol::OvermapTile;
-use bn_client_core::{Cell, Glow, Layer, Rgb};
+use bn_client_core::{Cell, Glow, Health, Layer, Rgb};
 use eframe::egui::{self, Color32, Mesh, Rect, Shape, TextureHandle, TextureId, TextureOptions};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
@@ -1006,6 +1006,15 @@ pub fn query<'a>(layer: &'a Layer, season: Option<&'a str>) -> Query<'a> {
 /// A glyph's or its background's colour, darkened by `tint` as the filter of its square asks.
 pub(crate) fn glyph_color(c: Rgb, tint: Color32) -> Color32 {
     Color32::from_rgb(c.0, c.1, c.2).gamma_multiply(f32::from(tint.r()) / 255.0)
+}
+
+/// A hurt creature's health as a dark `track` filled for its fifths in the game's colour.
+pub(crate) fn health_bar(painter: &egui::Painter, track: Rect, health: Health) {
+    painter.rect_filled(track, 0.0, Color32::from_black_alpha(200));
+    let mut filled = track;
+    filled.set_width(track.width() * f32::from(health.fifths) / 5.0);
+    let Rgb(r, g, b) = health.color;
+    painter.rect_filled(filled, 0.0, Color32::from_rgb(r, g, b));
 }
 
 /// The ASCII stand-in of a thing the tileset has no sprite for.

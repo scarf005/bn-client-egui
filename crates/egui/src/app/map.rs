@@ -2,6 +2,7 @@
 //! right-click menu, and its paint.
 
 use super::{App, CELL, menu_item, rgb};
+use crate::display::health_bar;
 use crate::iso::{self, camera::Viewport, pages::Pages, scene::Scene};
 use bn_client_core::localise::{Value as Arg, tr, tr_format};
 use bn_client_core::{GameModel, Pos};
@@ -543,19 +544,25 @@ impl<M: GameModel> App<M> {
             for x in 0..canvas.size.x {
                 let cell = self.model.cell(Pos { x, y });
                 let square = canvas.flat_rect(Pos { x, y });
-                if tiles && self.display.paint(painter, square, &cell, season) {
-                    continue;
+                if !(tiles && self.display.paint(painter, square, &cell, season)) {
+                    if let Some(bg) = cell.bg {
+                        painter.rect_filled(square, 0.0, rgb(bg));
+                    }
+                    painter.text(
+                        square.center(),
+                        egui::Align2::CENTER_CENTER,
+                        cell.glyph,
+                        font.clone(),
+                        rgb(cell.color),
+                    );
                 }
-                if let Some(bg) = cell.bg {
-                    painter.rect_filled(square, 0.0, rgb(bg));
+                if let Some(health) = cell.health {
+                    let track = egui::Rect::from_min_max(
+                        egui::pos2(square.left(), square.bottom() - 2.0),
+                        square.right_bottom(),
+                    );
+                    health_bar(painter, track, health);
                 }
-                painter.text(
-                    square.center(),
-                    egui::Align2::CENTER_CENTER,
-                    cell.glyph,
-                    font.clone(),
-                    rgb(cell.color),
-                );
             }
         }
     }

@@ -7,7 +7,7 @@ pub mod pages;
 mod pick;
 pub mod scene;
 
-use crate::display::{Display, glyph_color};
+use crate::display::{Display, glyph_color, health_bar};
 use bn_client_core::GameModel;
 use camera::{Camera, Viewport};
 use eframe::egui;
@@ -162,5 +162,19 @@ pub fn paint_glyphs(
             egui::FontId::monospace(cell_px / 2.0),
             glyph_color(mark.layer.color, tint),
         );
+    }
+    // Under the creature, along the lowest corner of its square on the screen, a square wide.
+    for hurt in &scene.hurt {
+        let (x, y) = (hurt.square.0 as f32, hurt.square.1 as f32);
+        let foot = at(x + 0.5, y + 0.5, hurt.floor);
+        let bottom = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]
+            .map(|(dx, dy)| at(x + dx, y + dy, hurt.floor).y)
+            .into_iter()
+            .fold(foot.y, f32::max);
+        let track = egui::Rect::from_min_max(
+            egui::pos2(foot.x - cell_px / 2.0, bottom - 2.0),
+            egui::pos2(foot.x + cell_px / 2.0, bottom),
+        );
+        health_bar(painter, track, hurt.health);
     }
 }

@@ -6,7 +6,7 @@ use super::geometry::{
 use super::pages::Pages;
 use crate::display::{Fx, STRIP, light, query, resolve_layer};
 use crate::tileset::{Tileset, Turn};
-use bn_client_core::{GameModel, Layer, Pos};
+use bn_client_core::{GameModel, Health, Layer, Pos};
 use glam::Vec2;
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -31,6 +31,15 @@ pub struct Scene {
     columns: Vec<Option<Column>>,
     /// The things the tileset has no sprite for, which stand as their glyphs as on the flat map.
     pub glyphs: Vec<Mark>,
+    /// The hurt creatures, whose health bars lie along the bottom of their squares.
+    pub hurt: Vec<Hurt>,
+}
+
+/// A hurt creature standing on a square.
+pub struct Hurt {
+    pub square: (i32, i32),
+    pub floor: f32,
+    pub health: Health,
 }
 
 /// A glyph standing on a square.
@@ -150,6 +159,7 @@ pub fn build(
     let mut columns = vec![None; (width * height) as usize];
     let mut items = vec![];
     let mut glyphs = vec![];
+    let mut hurt = vec![];
     let mut squares = 0;
     for y in 0..height {
         for x in 0..width {
@@ -178,6 +188,11 @@ pub fn build(
                 depth => (24 * (u32::from(depth) + 1)).min(192) as u8,
             };
             let floor = -f32::from(cell.depth) * m.level;
+            hurt.extend(cell.health.map(|health| Hurt {
+                square: (x, y),
+                floor,
+                health,
+            }));
             let mut column = Column {
                 ground: floor,
                 solid: None,
@@ -316,5 +331,6 @@ pub fn build(
         heights: (low, high + 3.0 * m.level),
         columns,
         glyphs,
+        hurt,
     }
 }
