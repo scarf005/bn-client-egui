@@ -1,7 +1,7 @@
 use bn_client_egui::display::{self, settings_path};
 use bn_client_egui::fonts;
 use bn_client_egui::launch::{LaunchArgs, Opened, Search, open_engine, resolve};
-use bn_client_egui::localise::Catalogue;
+use bn_client_egui::localise::{Catalogue, tr};
 use bn_client_egui::setup::{Launcher, Starter};
 use bn_client_egui::theme;
 use bn_client_egui::transport::game_root;
@@ -29,7 +29,7 @@ fn app<M: GameModel>(model: M) -> App<M> {
 #[cfg(feature = "fake")]
 fn run(model: impl GameModel + 'static, root: Option<PathBuf>) -> eframe::Result {
     eframe::run_native(
-        "Cataclysm: Bright Nights client",
+        &tr("Cataclysm: Bright Nights client"),
         native_options(),
         Box::new(move |cc| {
             theme::apply(&cc.egui_ctx);
@@ -91,15 +91,15 @@ fn main() -> eframe::Result {
         return run(bn_client_egui::FakeModel::default(), None);
     }
     let launch = cli.launch.clone();
+    // The window and the first-run setup speak the asked language before any engine grants one.
+    let chrome = launch.locale.as_deref().and_then(Catalogue::client);
+    bn_client_egui::localise::install_client(chrome);
     let found = resolve(cli.launch.engine.as_deref(), &Search::from_env());
     eframe::run_native(
-        "Cataclysm: Bright Nights client",
+        &tr("Cataclysm: Bright Nights client"),
         native_options(),
         Box::new(move |cc| {
             theme::apply(&cc.egui_ctx);
-            // The first-run window speaks the asked language before any engine grants one.
-            let chrome = launch.locale.as_deref().and_then(Catalogue::client);
-            bn_client_egui::localise::install_client(chrome);
             let starter = launch.clone();
             let start: Starter = Box::new(move |ctx, engine| start_engine(ctx, engine, &starter));
             let remember = |l: Launcher| match bn_client_egui::launch::config_file() {

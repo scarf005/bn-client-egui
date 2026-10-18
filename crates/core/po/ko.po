@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: bn-client\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-18 09:38+0900\n"
+"POT-Creation-Date: 2026-10-18 13:23+0900\n"
 "PO-Revision-Date: 2026-10-18 09:30+0900\n"
 "Language-Team: Korean\n"
 "Language: ko\n"
@@ -91,6 +91,38 @@ msgstr "먼저 창을 고르세요."
 #: crates/core/src/interaction.rs:120
 msgid "Busy."
 msgstr "처리 중입니다."
+
+#: crates/core/src/launch.rs:112
+msgid "no Cataclysm: Bright Nights engine found. Searched:"
+msgstr "카타클리즘: 밝은 밤 엔진을 찾지 못했습니다. 찾아본 곳:"
+
+#: crates/core/src/launch.rs:117
+msgid ""
+"Set it once with `--engine /path/to/cataclysm-bn-tiles` (remembered "
+"afterwards), or export BN_ENGINE, or put the client next to the game."
+msgstr ""
+"`--engine /path/to/cataclysm-bn-tiles`로 한 번 지정하거나(이후 기억됨), BN_ENGINE을 "
+"export하거나, 클라이언트를 게임 옆에 두세요."
+
+#: crates/core/src/launch.rs:132
+msgid "--engine / BN_ENGINE: not set"
+msgstr "--engine / BN_ENGINE: 지정 안 됨"
+
+#: crates/core/src/launch.rs:148
+msgid "%s: saved %s is missing"
+msgstr "%s: 저장된 %s이(가) 없음"
+
+#: crates/core/src/launch.rs:155
+msgid "%s: no saved engine"
+msgstr "%s: 저장된 엔진 없음"
+
+#: crates/core/src/launch.rs:168
+msgid "PATH for %s: %s"
+msgstr "PATH에서 %s: %s"
+
+#: crates/core/src/launch.rs:195
+msgid "cannot start engine %s: %s"
+msgstr "엔진 %s을(를) 시작할 수 없음: %s"
 
 #: crates/egui/src/app.rs:314 crates/tui/src/lib.rs:678
 msgid "Engine: %s"
@@ -206,6 +238,10 @@ msgstr "타일셋을 쓸 수 없습니다: %s"
 #: crates/egui/src/display.rs:711
 msgid "Reduced motion"
 msgstr "움직임 줄이기"
+
+#: crates/egui/src/main.rs:32 crates/egui/src/main.rs:99
+msgid "Cataclysm: Bright Nights client"
+msgstr "카타클리즘: 밝은 밤 클라이언트"
 
 #: crates/egui/src/setup.rs:58
 msgid "No engine found"

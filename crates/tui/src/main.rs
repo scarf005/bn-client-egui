@@ -1,4 +1,5 @@
 use bn_client_core::launch::{LaunchArgs, Search, open_engine, resolve};
+use bn_client_core::localise::Catalogue;
 use bn_client_core::{ConnectOptions, GameModel};
 use bn_client_tui::TuiApp;
 use clap::Parser;
@@ -76,6 +77,9 @@ fn main() -> std::io::Result<()> {
     if cli.launch.fake {
         return run(bn_client_core::FakeModel::default());
     }
+    // Launch errors speak the asked language before any engine grants one.
+    let chrome = cli.launch.locale.as_deref().and_then(Catalogue::client);
+    bn_client_core::localise::install_client(chrome);
     let search = Search::from_env();
     let engine = resolve(cli.launch.engine.as_deref(), &search).unwrap_or_else(|e| {
         eprintln!("{e}");

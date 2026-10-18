@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: bn-client\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-18 09:38+0900\n"
+"POT-Creation-Date: 2026-10-18 13:23+0900\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -95,6 +95,36 @@ msgstr ""
 
 #: crates/core/src/interaction.rs:120
 msgid "Busy."
+msgstr ""
+
+#: crates/core/src/launch.rs:112
+msgid "no Cataclysm: Bright Nights engine found. Searched:"
+msgstr ""
+
+#: crates/core/src/launch.rs:117
+msgid ""
+"Set it once with `--engine /path/to/cataclysm-bn-tiles` (remembered "
+"afterwards), or export BN_ENGINE, or put the client next to the game."
+msgstr ""
+
+#: crates/core/src/launch.rs:132
+msgid "--engine / BN_ENGINE: not set"
+msgstr ""
+
+#: crates/core/src/launch.rs:148
+msgid "%s: saved %s is missing"
+msgstr ""
+
+#: crates/core/src/launch.rs:155
+msgid "%s: no saved engine"
+msgstr ""
+
+#: crates/core/src/launch.rs:168
+msgid "PATH for %s: %s"
+msgstr ""
+
+#: crates/core/src/launch.rs:195
+msgid "cannot start engine %s: %s"
 msgstr ""
 
 #: crates/egui/src/app.rs:314 crates/tui/src/lib.rs:678
@@ -210,6 +240,10 @@ msgstr ""
 
 #: crates/egui/src/display.rs:711
 msgid "Reduced motion"
+msgstr ""
+
+#: crates/egui/src/main.rs:32 crates/egui/src/main.rs:99
+msgid "Cataclysm: Bright Nights client"
 msgstr ""
 
 #: crates/egui/src/setup.rs:58

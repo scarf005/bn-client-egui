@@ -5,6 +5,7 @@
 
 use crate::colors::ColorMap;
 use crate::engine_model::{ConnectOptions, EngineModel};
+use crate::localise::{Value as Arg, tr, tr_format};
 use crate::transport::{Profile, StdioTransport, Transport, game_root};
 use clap::Args;
 use serde_json::{Value, json};
@@ -108,15 +109,19 @@ pub struct NotFound(pub Vec<String>);
 
 impl std::fmt::Display for NotFound {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "no Cataclysm: Bright Nights engine found. Searched:")?;
+        writeln!(
+            f,
+            "{}",
+            tr("no Cataclysm: Bright Nights engine found. Searched:")
+        )?;
         for line in &self.0 {
             writeln!(f, "  - {line}")?;
         }
-        write!(
-            f,
+        let hint = tr(
             "Set it once with `--engine /path/to/cataclysm-bn-tiles` (remembered afterwards), or export BN_ENGINE, \
-             or put the client next to the game."
-        )
+             or put the client next to the game.",
+        );
+        write!(f, "{hint}")
     }
 }
 
@@ -128,7 +133,7 @@ pub fn resolve(flag: Option<&Path>, search: &Search) -> Result<PathBuf, NotFound
     if let Some(flag) = flag {
         return Ok(flag.to_path_buf());
     }
-    let mut searched = vec!["--engine / BN_ENGINE: not set".to_string()];
+    let mut searched = vec![tr("--engine / BN_ENGINE: not set")];
     let exe_dir = search.exe.as_deref().and_then(Path::parent);
     for dir in exe_dir.into_iter().flat_map(|d| d.ancestors().take(2)) {
         let hit = ENGINE_NAMES
@@ -143,12 +148,17 @@ pub fn resolve(flag: Option<&Path>, search: &Search) -> Result<PathBuf, NotFound
     if let Some(file) = &search.config_file {
         match saved_engine(file) {
             Some(saved) if is_file(&saved) => return Ok(saved),
-            Some(saved) => searched.push(format!(
-                "{}: saved {} is missing",
-                file.display(),
-                saved.display()
+            Some(saved) => searched.push(tr_format(
+                "%s: saved %s is missing",
+                &[
+                    Arg::Text(file.display().to_string()),
+                    Arg::Text(saved.display().to_string()),
+                ],
             )),
-            None => searched.push(format!("{}: no saved engine", file.display())),
+            None => searched.push(tr_format(
+                "%s: no saved engine",
+                &[Arg::Text(file.display().to_string())],
+            )),
         }
     }
     let cwd = std::env::current_dir().unwrap_or_default();
@@ -158,10 +168,12 @@ pub fn resolve(flag: Option<&Path>, search: &Search) -> Result<PathBuf, NotFound
         }
     }
     let path = search.path_var.as_deref().unwrap_or(OsStr::new(""));
-    searched.push(format!(
-        "PATH for {}: {}",
-        ENGINE_NAMES.join(", "),
-        path.to_string_lossy()
+    searched.push(tr_format(
+        "PATH for %s: %s",
+        &[
+            Arg::Text(ENGINE_NAMES.join(", ")),
+            Arg::Text(path.to_string_lossy().into_owned()),
+        ],
     ));
     Err(NotFound(searched))
 }
@@ -181,8 +193,15 @@ pub fn open_engine(
     profile: &Profile,
     options: ConnectOptions,
 ) -> Result<Opened, String> {
-    let transport = StdioTransport::spawn_with(engine, profile)
-        .map_err(|e| format!("cannot start engine {}: {e}", engine.display()))?;
+    let transport = StdioTransport::spawn_with(engine, profile).map_err(|e| {
+        tr_format(
+            "cannot start engine %s: %s",
+            &[
+                Arg::Text(engine.display().to_string()),
+                Arg::Text(e.to_string()),
+            ],
+        )
+    })?;
     let root = game_root(engine, std::env::var_os("BN_ROOT").map(PathBuf::from));
     let colors = root
         .as_deref()
@@ -291,6 +310,23 @@ mod tests {
             "game/client/{",
             "no saved engine",
             "PATH for",
+            "--engine",
+        ] {
+            assert!(msg.contains(needle), "{needle} missing in {msg}");
+        }
+    }
+
+    #[test]
+    fn a_korean_launch_words_every_searched_place_in_korean() {
+        let d = Dirs::new("korean");
+        crate::localise::install_client(crate::localise::Catalogue::client("ko_KR"));
+        let msg = resolve(None, &search(&d)).unwrap_err().to_string();
+        crate::localise::install_client(None);
+        for needle in [
+            "엔진을 찾지 못했습니다",
+            "지정 안 됨",
+            "저장된 엔진 없음",
+            "PATH에서",
             "--engine",
         ] {
             assert!(msg.contains(needle), "{needle} missing in {msg}");

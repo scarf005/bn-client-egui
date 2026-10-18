@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: bn-client\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-18 09:38+0900\n"
+"POT-Creation-Date: 2026-10-18 13:23+0900\n"
 "PO-Revision-Date: 2026-10-18 09:30+0900\n"
 "Language-Team: Japanese\n"
 "Language: ja\n"
@@ -91,6 +91,38 @@ msgstr "先にペインを選んでください。"
 #: crates/core/src/interaction.rs:120
 msgid "Busy."
 msgstr "処理中です。"
+
+#: crates/core/src/launch.rs:112
+msgid "no Cataclysm: Bright Nights engine found. Searched:"
+msgstr "Cataclysm: Bright Nights のエンジンが見つかりません。探した場所:"
+
+#: crates/core/src/launch.rs:117
+msgid ""
+"Set it once with `--engine /path/to/cataclysm-bn-tiles` (remembered "
+"afterwards), or export BN_ENGINE, or put the client next to the game."
+msgstr ""
+"`--engine /path/to/cataclysm-bn-tiles` で一度指定する(以後記憶されます)か、BN_ENGINE を export "
+"するか、クライアントをゲームの隣に置いてください。"
+
+#: crates/core/src/launch.rs:132
+msgid "--engine / BN_ENGINE: not set"
+msgstr "--engine / BN_ENGINE: 未設定"
+
+#: crates/core/src/launch.rs:148
+msgid "%s: saved %s is missing"
+msgstr "%s: 保存された %s がありません"
+
+#: crates/core/src/launch.rs:155
+msgid "%s: no saved engine"
+msgstr "%s: 保存されたエンジンなし"
+
+#: crates/core/src/launch.rs:168
+msgid "PATH for %s: %s"
+msgstr "PATH 内の %s: %s"
+
+#: crates/core/src/launch.rs:195
+msgid "cannot start engine %s: %s"
+msgstr "エンジン %s を起動できません: %s"
 
 #: crates/egui/src/app.rs:314 crates/tui/src/lib.rs:678
 msgid "Engine: %s"
@@ -206,6 +238,10 @@ msgstr "タイルセットを使えません: %s"
 #: crates/egui/src/display.rs:711
 msgid "Reduced motion"
 msgstr "動きを減らす"
+
+#: crates/egui/src/main.rs:32 crates/egui/src/main.rs:99
+msgid "Cataclysm: Bright Nights client"
+msgstr "Cataclysm: Bright Nights クライアント"
 
 #: crates/egui/src/setup.rs:58
 msgid "No engine found"
