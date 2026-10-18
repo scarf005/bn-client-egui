@@ -85,6 +85,7 @@ fn a_korean_connection_words_the_clients_own_chrome_in_korean() {
         .with_size(egui::vec2(1280.0, 720.0))
         .wgpu()
         .build_ui_state(|ui, app: &mut App<EngineModel>| app.show(ui), app);
+    bn_client_egui::theme::apply(&h.ctx);
     assert!(bn_client_egui::fonts::install(&h.ctx, &root));
     run_until(&mut h, "the main menu", 120, |h| {
         !h.state().model.screens().is_empty()

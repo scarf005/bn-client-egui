@@ -154,6 +154,7 @@ fn start<'a>(entry: &str) -> H<'a> {
         .with_step_dt(1.0 / 60.0)
         .wgpu()
         .build_ui_state(|ui, app: &mut App<EngineModel>| app.show(ui), app);
+    bn_client_egui::theme::apply(&h.ctx);
     bn_client_egui::fonts::install(&h.ctx, &root);
 
     run_until(&mut h, "the main menu", 120, |h| {
