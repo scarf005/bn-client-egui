@@ -607,6 +607,7 @@ impl GameModel for EngineModel {
                 id: line.id,
                 text: line.text,
                 count: line.count,
+                turn: line.turn,
                 label: line.label,
             };
             // Ids only grow and are never reused. A line past the newest one is new; any other is a

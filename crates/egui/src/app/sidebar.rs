@@ -329,7 +329,13 @@ pub(super) fn message_log(ui: &mut egui::Ui, options: LogOptions) {
         .show(ui, |ui| {
             let top = ui.next_widget_position().y;
             let mut tops = Vec::new();
-            for line in &native[native.len().saturating_sub(100)..] {
+            let shown = &native[native.len().saturating_sub(100)..];
+            for (n, line) in shown.iter().enumerate() {
+                // A rule parts one turn's lines from the next turn's.
+                let before = n.checked_sub(1).map(|p| &shown[p].turn);
+                if before.is_some_and(|t| t.is_some() && *t != line.turn) {
+                    ui.add(egui::Separator::default().spacing(2.0));
+                }
                 tops.push(ui.next_widget_position().y - top);
                 let text = egui::RichText::new(line.shown());
                 ui.label(line.color.map_or(text.clone(), |c| {

@@ -849,6 +849,9 @@ pub struct LoggedMessage {
     pub kind: String,
     pub color: String,
     pub count: u32,
+    /// The game turn the line was logged on, or last repeated on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub turn: Option<String>,
     /// The line as the native log prints it, with the repeat suffix.
     pub label: Text,
     /// The BN language id of a line that is not in the connection locale.

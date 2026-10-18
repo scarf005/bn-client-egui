@@ -139,6 +139,8 @@ pub struct LogLine {
     /// The game's colour for the message type.
     pub color: Option<Rgb>,
     pub count: u32,
+    /// The game turn the line was logged on, or last repeated on.
+    pub turn: Option<String>,
     /// The line as the game prints it, with the repeat count.
     pub label: String,
 }

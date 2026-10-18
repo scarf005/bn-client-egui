@@ -35,6 +35,8 @@ pub struct LoggedLine {
     /// The game's colour name for the message type.
     pub color: Option<String>,
     pub count: u32,
+    /// The game turn the line was logged on, or last repeated on.
+    pub turn: Option<String>,
     /// The line as the native log prints it, with the repeat suffix.
     pub label: String,
 }
@@ -106,6 +108,7 @@ impl Replica {
                     text: m.text.shown(),
                     color: Some(m.color),
                     count: m.count.max(1),
+                    turn: m.turn,
                     label: m.label.shown(),
                 })
                 .collect(),
@@ -199,6 +202,7 @@ impl Replica {
                                 count: data["count"]
                                     .as_u64()
                                     .map_or(1, |n| n.clamp(1, 1 << 31) as u32),
+                                turn: data["turn"].as_str().map(str::to_string),
                             });
                         }
                     }
