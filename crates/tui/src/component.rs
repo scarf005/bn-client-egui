@@ -8,8 +8,8 @@ use bn_client_core::interaction::{self, ArgKind, Interaction, Window};
 use bn_client_core::markup::Run;
 use bn_client_core::protocol::{
     AffordanceRole, Component, FieldKind, Form, Grid, GridCell, InvokeArgs, List, MapComponent,
-    Panel, Row, RowColumn, Screen, ScreenDock, ScreenRole, Selection, Split, Tabs, TextBlock,
-    TextRole, Tone, WorldPos,
+    Panel, Row, RowColumn, Screen, ScreenDock, ScreenRole, Split, Tabs, TextBlock, TextRole, Tone,
+    WorldPos,
 };
 use bn_client_core::{GameModel, Rgb};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -1167,18 +1167,15 @@ impl<M: GameModel> Painter<'_, M> {
         if current {
             style = style.add_modifier(Modifier::REVERSED);
         }
-        let picked = self.ui.picks(&list.head.id).iter().any(|p| p.id == row.id);
-        let boxed = matches!(list.selection, Selection::Multi | Selection::Count);
-        let mark = match (&row.mark, boxed) {
+        // The marks are the engine's: as in native curses, the keyboard marks through its keys, never a pick.
+        let mark = match &row.mark {
             _ if any_toggled => match row.toggled {
                 Some(true) => "[x] ".into(),
                 Some(false) => "[ ] ".into(),
                 None => "    ".into(),
             },
-            (Some(mark), _) => format!("{} ", mark.glyph),
-            (None, true) if picked => "x ".into(),
-            (None, true) => "- ".into(),
-            (None, false) => String::new(),
+            Some(mark) => format!("{} ", mark.glyph),
+            None => String::new(),
         };
         let hotkey = match (&row.hotkey, any_hotkey) {
             (Some(key), _) => format!("{key} "),
