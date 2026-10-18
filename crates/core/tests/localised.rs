@@ -176,3 +176,54 @@ fn every_compiled_catalogue_of_the_game_root_is_readable() {
         }
     }
 }
+
+#[test]
+fn the_snapshot_names_the_catalogues_of_the_game_and_its_mods_and_an_earlier_entry_wins() {
+    let dir = std::env::temp_dir().join(format!("bn-catalogues-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let (base, mod_catalogue) = (dir.join("base.mo"), dir.join("mod.mo"));
+    std::fs::write(
+        &base,
+        mo(&[
+            ("The %s dies!", "%s이(가) 죽었다!"),
+            ("%s x %d", "%s x %d회"),
+            ("rat", "쥐(기본)"),
+        ]),
+    )
+    .unwrap();
+    // A later entry with plural forms replaces an earlier one without, as the engine looks them up.
+    std::fs::write(
+        &mod_catalogue,
+        mo(&[
+            ("zombie", "좀비"),
+            ("%s x %d", "%s x %d (모드)"),
+            ("rat\0rats", "쥐(모드)\0쥐들(모드)"),
+        ]),
+    )
+    .unwrap();
+    let mut subscribe = subscribe_reply();
+    subscribe[0]["result"]["catalogues"] = json!([base, mod_catalogue]);
+    let (t, h) = ScriptedTransport::new();
+    let mut hello = fixture("hello_result");
+    hello["result"]["locale"] = json!("ko");
+    let mut model = EngineModel::new(Box::new(
+        t.on("bn.hello", vec![hello]).on("bn.subscribe", subscribe),
+    ));
+    model.poll();
+    let zombie = json!({"key": "The %s dies!", "args": [{"key": "zombie"}]});
+    let rat =
+        json!({"key": "The %s dies!", "args": [{"key": "rat", "plural": 2, "plural_key": "rats"}]});
+    h.push(fixture("events_41_walk"));
+    h.push(json!({"jsonrpc": "2.0", "method": "bn.events", "params": {"epoch": "e7f3", "events": [
+        {"sequence": "42", "revision": "32", "type": "message.logged", "data": {"id": "9", "text": zombie,
+            "kind": "good", "color": "c_light_green", "count": 2,
+            "label": {"key": "%s x %d", "args": [zombie, 2]}}},
+        {"sequence": "43", "revision": "32", "type": "message.logged", "data": {"id": "10", "text": rat,
+            "kind": "good", "color": "c_light_green", "count": 1, "label": rat}}]}}));
+    model.poll();
+    assert_eq!(
+        shown(&model),
+        ["좀비이(가) 죽었다! x 2회", "쥐(모드)이(가) 죽었다!"]
+    );
+    std::fs::remove_dir_all(&dir).unwrap();
+}
