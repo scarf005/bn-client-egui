@@ -2,7 +2,6 @@
 
 use super::{EngineModel, Pending, RESIZE_DEBOUNCE};
 use crate::localise::{self, Catalogue, Value as Arg, tr_format};
-use crate::markup;
 use crate::model::{Failure, FailureKind};
 use crate::protocol::{self, RpcError, Snapshot};
 use serde_json::{Value, json};
@@ -199,15 +198,11 @@ impl EngineModel {
         let described = result
             .ok()
             .and_then(|v| serde_json::from_value::<protocol::DescribeResult>(v).ok());
-        let lines = described
-            .iter()
-            .flat_map(|d| d.parts.iter())
-            .flat_map(|p| std::iter::once(&p.text).chain(p.detail.as_ref()))
-            .map(|text| markup::plain(text))
-            .collect();
         if let Some(h) = self.hovered.as_mut() {
-            h.lines = Some(lines);
-            h.actions = described.map(|d| d.actions).unwrap_or_default();
+            let (parts, actions) =
+                described.map_or_else(Default::default, |d| (d.parts, d.actions));
+            h.parts = Some(parts);
+            h.actions = actions;
         }
     }
 

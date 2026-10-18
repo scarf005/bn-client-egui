@@ -2712,6 +2712,35 @@ fn a_hovered_square_is_described_again_when_its_answer_is_for_an_older_revision(
 }
 
 #[test]
+fn a_hovered_square_keeps_each_fact_the_engine_described_with_its_kind_and_numbers() {
+    let (t, _) = session();
+    let reply = json!({"jsonrpc":"2.0","id":0,"result":{"parts":[
+        {"kind":"hp","text":"<color_c_yellow>|||</color>","values":{"hp":30,"max":50}},
+        {"kind":"creature","text":"<color_c_light_green>zombie</color>","id":"mon_zombie"},
+        {"kind":"description","text":"It shambles.","detail":"Slowly."}
+    ],"actions":[]}});
+    let mut m = connected(t.on("bn.world.describe", vec![reply]));
+    m.hover(Pos { x: 22, y: 12 });
+    m.poll();
+    let parts = m.hover_parts(Pos { x: 22, y: 12 }).expect("described");
+    let kinds = parts.iter().map(|p| p.kind.as_str()).collect::<Vec<_>>();
+    assert_eq!(kinds, ["hp", "creature", "description"]);
+    assert_eq!(parts[0].values["hp"], 30);
+    assert_eq!(parts[1].id.as_deref(), Some("mon_zombie"));
+    // The plain lines are the same facts, their details after them.
+    assert_eq!(
+        m.hover_text(Pos { x: 22, y: 12 }),
+        Some(vec![
+            "|||".into(),
+            "zombie".into(),
+            "It shambles.".into(),
+            "Slowly.".into()
+        ])
+    );
+    assert_eq!(m.hover_parts(Pos { x: 23, y: 12 }), None);
+}
+
+#[test]
 fn a_hovered_squares_description_stays_while_its_new_answer_is_pending() {
     let (t, h) = session();
     let reply = json!({"jsonrpc":"2.0","id":0,"result":{"parts":[{"kind":"terrain","text":"Wall"}],"actions":[]}});

@@ -603,7 +603,17 @@ pub trait GameModel: MenuModel {
     /// Asks for the native description of the hovered view square; it arrives with later polls.
     fn hover(&mut self, _at: Pos) {}
     /// The native description lines of view square `at`, once the engine has answered for it.
-    fn hover_text(&self, _at: Pos) -> Option<Vec<String>> {
+    fn hover_text(&self, at: Pos) -> Option<Vec<String>> {
+        let lines = self
+            .hover_parts(at)?
+            .iter()
+            .flat_map(|p| std::iter::once(&p.text).chain(&p.detail))
+            .map(|text| markup::plain(text))
+            .collect::<Vec<_>>();
+        (!lines.is_empty()).then_some(lines)
+    }
+    /// The facts the engine's mouse view prints of view square `at`, once it has answered for that square.
+    fn hover_parts(&self, _at: Pos) -> Option<Vec<crate::protocol::TilePart>> {
         None
     }
     /// What the avatar can do with view square `at`, in the order the engine lists it; asks the engine on

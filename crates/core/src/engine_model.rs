@@ -175,7 +175,7 @@ struct Hover {
     pos: WorldPos,
     revision: String,
     /// None while the answer is outstanding.
-    lines: Option<Vec<String>>,
+    parts: Option<Vec<protocol::TilePart>>,
     /// What the avatar can do with the square; empty until the first answer for it.
     actions: Vec<protocol::TileAction>,
 }
@@ -404,15 +404,15 @@ impl EngineModel {
         .expect("describe params serialize");
         // The square's earlier answer stands until the new one comes, so its text does not flip to the bare
         // cell and back, nor its open menu lose its actions, with every revision.
-        let (lines, actions) = self
+        let (parts, actions) = self
             .hovered
             .take()
             .filter(|h| h.pos == pos)
-            .map_or((None, Vec::new()), |h| (h.lines, h.actions));
+            .map_or((None, Vec::new()), |h| (h.parts, h.actions));
         self.hovered = Some(Hover {
             pos,
             revision: now.revision.clone(),
-            lines,
+            parts,
             actions,
         });
         self.call("bn.world.describe", params, Pending::Describe);
@@ -422,7 +422,7 @@ impl EngineModel {
     /// engine's window changed size, so a pointer that stays still keeps its description.
     fn refresh_hover(&mut self) {
         let stale = self.hovered.as_ref().filter(|h| {
-            h.lines.is_some()
+            h.parts.is_some()
                 && self
                     .replica
                     .at()
@@ -1113,13 +1113,10 @@ impl GameModel for EngineModel {
         self.ask_describe(pos);
     }
 
-    fn hover_text(&self, at: Pos) -> Option<Vec<String>> {
+    fn hover_parts(&self, at: Pos) -> Option<Vec<protocol::TilePart>> {
         let pos = self.abs(at)?;
         let h = self.hovered.as_ref()?;
-        (h.pos == pos)
-            .then(|| h.lines.clone())
-            .flatten()
-            .filter(|l| !l.is_empty())
+        (h.pos == pos).then(|| h.parts.clone()).flatten()
     }
 
     fn tile_actions(&mut self, at: Pos) -> Option<Vec<protocol::TileAction>> {
@@ -1134,7 +1131,7 @@ impl GameModel for EngineModel {
             return Some(Vec::new());
         }
         let h = self.hovered.as_ref()?;
-        (h.pos == pos && h.revision == now.revision && h.lines.is_some()).then(|| h.actions.clone())
+        (h.pos == pos && h.revision == now.revision && h.parts.is_some()).then(|| h.actions.clone())
     }
 
     fn context_click(&mut self, at: Pos) -> bool {
