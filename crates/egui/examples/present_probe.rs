@@ -3,7 +3,7 @@
 //!
 //! `BN_ENGINE=<engine> cargo run --release --features profile -p bn-client-egui --example present_probe`
 use bn_client_egui::transport::{Profile, StdioTransport, game_root};
-use bn_client_egui::{App, EngineModel, GameModel};
+use bn_client_egui::{App, EngineModel, GameModel, MenuModel};
 use eframe::egui;
 use std::time::{Duration, Instant};
 
@@ -94,7 +94,7 @@ impl Probe {
                 let (now, origin) = (square, *from);
                 match *sent {
                     None => {
-                        self.inject = Some(if self.step % 2 == 0 { "l" } else { "h" });
+                        self.inject = Some(if self.step.is_multiple_of(2) { "l" } else { "h" });
                         *sent = Some(Instant::now());
                     }
                     Some(at) if now != origin => {
