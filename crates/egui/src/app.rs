@@ -545,6 +545,16 @@ impl<M: GameModel> App<M> {
         {
             ui.label(said);
         }
+        if let Some(activity) = self.model.activity() {
+            ui.label(&activity.name);
+            if let Some(done) = activity.done {
+                let bar = egui::ProgressBar::new(f32::from(done) / 1000.0)
+                    .desired_width(120.0)
+                    .text(format!("{}%", done / 10))
+                    .corner_radius(0);
+                ui.add(bar);
+            }
+        }
         // Stops a wait or other activity, like the native interrupt key.
         if self.model.busy() {
             // Still, the activity is told by the status text above; only the motion goes.

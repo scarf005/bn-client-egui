@@ -597,6 +597,18 @@ impl<M: GameModel> App<M> {
                 egui::Stroke::new(1.0, egui::Color32::WHITE),
             );
         }
+        // How much of the avatar's activity is done, in a thin bar just over its square.
+        if let Some(done) = self.model.activity().and_then(|a| a.done) {
+            let square = canvas.rect(self.model.player());
+            let track = egui::Rect::from_min_size(
+                square.left_top() - egui::vec2(0.0, 6.0),
+                egui::vec2(square.width(), 4.0),
+            );
+            painter.rect_filled(track, 0.0, egui::Color32::from_black_alpha(180));
+            let mut filled = track;
+            filled.set_width(track.width() * f32::from(done) / 1000.0);
+            painter.rect_filled(filled, 0.0, ui.visuals().selection.bg_fill);
+        }
         // Effects stand on world squares: placed by the origin of this frame, not of when they arrived.
         let origin = self.model.origin();
         let tiles = self.display.tiles();
