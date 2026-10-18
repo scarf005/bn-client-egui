@@ -142,6 +142,42 @@ fn hovering_a_map_square_asks_the_engine_for_its_native_description_and_shows_it
 }
 
 #[test]
+fn a_long_description_wraps_in_tooltip_text_at_most_420_points_wide() {
+    let wearing = "Wearing: leather pants, dress shirt, undershirt, boxer briefs, pair of socks, pair of crocs, \
+        pair of medical gloves, lab coat, filter mask, skid lid, knit scarf, and leather belt";
+    let (t, _h) = session();
+    let reply =
+        |parts: Value| vec![json!({"jsonrpc":"2.0","id":0,"result":{"parts":parts,"actions":[]}})];
+    let t = t
+        .on(
+            "bn.world.describe",
+            reply(json!([{"kind":"terrain","text":"Floor"}])),
+        )
+        .on(
+            "bn.world.describe",
+            reply(json!([{"kind":"creature","text":"Gabrielle","detail":wearing}])),
+        );
+    let clock = Clock::manual();
+    let model = EngineModel::new(Box::new(t)).with_clock(clock.clone());
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(1600.0, 800.0))
+        .build_ui_state(
+            |ui, app: &mut App<EngineModel>| app.show(ui),
+            App::new(model).with_clock(clock),
+        );
+    h.run_steps(3);
+    let at = square(&mut h, (22.5, 12.5));
+    h.hover_at(at);
+    h.run_steps(8);
+    let shown = h.get_by_label(wearing).rect();
+    assert!(shown.width() <= 420.0, "{shown:?}");
+    assert!(
+        shown.height() > 2.0 * h.get_by_label("Gabrielle").rect().height() - 1.0,
+        "wrapped: {shown:?}"
+    );
+}
+
+#[test]
 fn left_click_travels_to_the_square_even_next_to_the_avatar() {
     let (mut h, script) = harness();
     h.run_steps(3);
