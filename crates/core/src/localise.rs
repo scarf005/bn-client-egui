@@ -830,4 +830,39 @@ mod tests {
         let korean = Catalogue::client("ko_KR").expect("the dialect falls back to its language");
         assert_eq!(korean.translation("Ready", None), Some("준비"));
     }
+
+    /// xgettext marks no Rust string `c-format`, so `msgfmt -c` cannot check what this does.
+    #[test]
+    fn every_built_in_translation_fills_the_same_placeholders_as_its_message() {
+        let args = (7001..7010).map(Value::Int).collect::<Vec<_>>();
+        let filled = |format: &str| {
+            let text = printf(format, &args);
+            (7001..7010)
+                .map(|n| text.matches(&n.to_string()).count())
+                .collect::<Vec<_>>()
+        };
+        let po = Path::new(env!("CARGO_MANIFEST_DIR")).join("po");
+        for path in std::fs::read_dir(&po).unwrap().flatten().map(|e| e.path()) {
+            if path.extension().is_none_or(|e| e != "po") {
+                continue;
+            }
+            for message in polib::po_file::parse(&path).unwrap().messages() {
+                let (source, words) = match message.is_plural() {
+                    true => (
+                        message.msgid_plural().unwrap(),
+                        message.msgstr_plural().unwrap().clone(),
+                    ),
+                    false => (message.msgid(), vec![message.msgstr().unwrap().into()]),
+                };
+                for word in words {
+                    assert_eq!(
+                        filled(&word),
+                        filled(source),
+                        "{}: {word:?} for {source:?}",
+                        path.display()
+                    );
+                }
+            }
+        }
+    }
 }
