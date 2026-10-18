@@ -440,7 +440,7 @@ pub enum FailureKind {
     Exited,
     /// A request has been outstanding longer than the watchdog allows.
     Stalled,
-    /// The engine refused the protocol this client speaks: another engine build is needed.
+    /// The engine refused this client's hello: its protocol, which needs another engine build, or its language.
     Incompatible,
 }
 

@@ -471,6 +471,25 @@ fn live_engine_killed_mid_game_shows_the_failure_and_restart_brings_the_menu_bac
 }
 
 /// A noise interrupts a wait with "Stop waiting?"; answering No lets it go on. True when it was asked.
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn live_engine_refuses_a_language_it_has_no_catalogue_for_in_its_own_words() {
+    let engine = std::path::PathBuf::from(std::env::var_os("BN_ENGINE").expect("set BN_ENGINE"));
+    let transport = StdioTransport::spawn_fresh(&engine).expect("engine starts");
+    let options = bn_client_core::ConnectOptions {
+        locale: Some("xx_XX".into()),
+        ..Default::default()
+    };
+    let mut model = EngineModel::open(Box::new(transport), options);
+    wait_for(&mut model, "the refusal", |m| m.failure().is_some());
+    let failure = model.failure().unwrap();
+    assert_eq!(failure.kind, bn_client_core::FailureKind::Incompatible);
+    assert_eq!(
+        failure.message,
+        "The game has no translation for this language."
+    );
+}
+
 fn keep_waiting(model: &mut EngineModel) -> bool {
     let no = model
         .menu()

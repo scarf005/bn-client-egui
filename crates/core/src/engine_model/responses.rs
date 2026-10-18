@@ -280,11 +280,15 @@ fn reason_of(e: &RpcError) -> String {
         .map_or_else(|| e.message.clone(), String::from)
 }
 
-/// A hello the engine cannot accept from this client at all: another protocol version, or none.
+/// A hello the engine cannot accept from this client at all: another protocol version, none, or a language
+/// it cannot word.
 fn incompatible(e: &RpcError) -> bool {
     e.code == METHOD_NOT_FOUND
         || e.code == INVALID_PARAMS
-        || e.data.as_ref().map(error_kind).as_deref() == Some("negotiation_failed")
+        || matches!(
+            e.data.as_ref().map(error_kind).as_deref(),
+            Some("negotiation_failed" | "unavailable_locale")
+        )
 }
 
 fn error_kind(e: &Value) -> String {
