@@ -8,7 +8,7 @@ pub fn job(runs: &[Run], font: &egui::FontId) -> LayoutJob {
     let mut job = LayoutJob::default();
     for run in runs {
         let color = run.color.map_or(egui::Color32::PLACEHOLDER, |c| {
-            egui::Color32::from_rgb(c.0, c.1, c.2)
+            crate::theme::readable(c, None)
         });
         job.append(
             &run.text,

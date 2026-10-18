@@ -580,6 +580,9 @@ impl<M: GameModel> App<M> {
             let c = colors.index(index);
             egui::Color32::from_rgb(c.0, c.1, c.2)
         };
+        let ink = |fg: u8, bg: u8| {
+            crate::theme::readable(colors.index(fg), (bg != 0).then(|| colors.index(bg)))
+        };
         // The rows touch; what follows the canvas keeps the theme's spacing.
         ui.scope(|ui| {
             ui.spacing_mut().item_spacing.y = 0.0;
@@ -590,7 +593,7 @@ impl<M: GameModel> App<M> {
                         text,
                         0.0,
                         egui::TextFormat {
-                            color: paint(*fg),
+                            color: ink(*fg, *bg),
                             background: if *bg == 0 {
                                 egui::Color32::TRANSPARENT
                             } else {
@@ -639,7 +642,7 @@ impl<M: GameModel> App<M> {
                         let marked = cell.selected == Some(true) || at_cursor;
                         if !actionable {
                             let shown = match marked {
-                                true => shown.background_color(super::menu::BAR),
+                                true => shown.background_color(crate::theme::SELECTION),
                                 false => shown,
                             };
                             ui.add_sized(size, egui::Label::new(shown));

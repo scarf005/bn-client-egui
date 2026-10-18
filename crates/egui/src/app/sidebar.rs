@@ -332,10 +332,9 @@ pub(super) fn message_log(ui: &mut egui::Ui, options: LogOptions) {
             for line in &native[native.len().saturating_sub(100)..] {
                 tops.push(ui.next_widget_position().y - top);
                 let text = egui::RichText::new(line.shown());
-                ui.label(
-                    line.color
-                        .map_or(text.clone(), |c| text.color(super::rgb(c))),
-                );
+                ui.label(line.color.map_or(text.clone(), |c| {
+                    text.color(crate::theme::readable(c, None))
+                }));
             }
             tops
         });

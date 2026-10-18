@@ -77,7 +77,7 @@ struct Grid<'a> {
 fn format_of(span: &Span) -> TextFormat {
     TextFormat {
         font_id: FontId::monospace(14.0),
-        color: Color32::from_rgb(span.color.0, span.color.1, span.color.2),
+        color: crate::theme::readable(span.color, None),
         ..Default::default()
     }
 }
