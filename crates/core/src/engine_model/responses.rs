@@ -136,7 +136,13 @@ impl EngineModel {
         self.mark("subscribed");
         self.subscribing = false;
         match result.map(serde_json::from_value::<Snapshot>) {
-            Ok(Ok(s)) => self.replica.begin(s),
+            Ok(Ok(s)) => {
+                if let Some(catalogue) = Catalogue::load_all(&s.catalogues) {
+                    self.catalogue = Some(Arc::new(catalogue));
+                    localise::install(self.catalogue.clone());
+                }
+                self.replica.begin(s)
+            }
             Ok(Err(e)) => self.tell(tr_format("Bad snapshot: %s", &[Arg::Text(e.to_string())])),
             Err(e) => self.report_failure(&reason_of(&e)),
         }

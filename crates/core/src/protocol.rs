@@ -919,6 +919,10 @@ pub struct Snapshot {
     /// The newest message log lines, oldest first; omitted when the log is empty.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub messages: Vec<LoggedMessage>,
+    /// The catalogue files the connection's LocalisedStrings are worded from, in lookup order; omitted for a
+    /// language with none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub catalogues: Vec<std::path::PathBuf>,
     pub parts: u32,
 }
 

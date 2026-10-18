@@ -12,7 +12,8 @@ use crate::protocol::{LocalisedString, TextArg};
 use serde_json::Number;
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::path::Path;
+use std::collections::hash_map::Entry;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 /// The engine's catalogue for one language.
@@ -89,6 +90,28 @@ impl Catalogue {
             })
             .find(|path| path.is_file())?;
         Self::parse(&std::fs::read(path).ok()?).ok()
+    }
+
+    /// The catalogue files at `paths` as one, looked up as the engine looks them up: an earlier file's entry wins
+    /// unless only a later one has plural forms. None when no file reads.
+    pub fn load_all(paths: &[PathBuf]) -> Option<Self> {
+        paths
+            .iter()
+            .filter_map(|path| Self::parse(&std::fs::read(path).ok()?).ok())
+            .reduce(|mut first, later| {
+                for (id, forms) in later.entries {
+                    match first.entries.entry(id) {
+                        Entry::Vacant(free) => {
+                            free.insert(forms);
+                        }
+                        Entry::Occupied(mut held) if held.get().len() < 2 && forms.len() > 1 => {
+                            held.insert(forms);
+                        }
+                        Entry::Occupied(_) => {}
+                    }
+                }
+                first
+            })
     }
 
     /// The client's own catalogue of `locale`, built in; none for a language it has no words for.
