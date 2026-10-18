@@ -13,7 +13,13 @@ type H<'a> = Harness<'a, App<EngineModel>>;
 
 /// The fixture session whose avatar draws as the test tileset's `mon_a`.
 fn session() -> ScriptedTransport {
+    session_with(|_| {})
+}
+
+/// The fixture session, its subscribe result changed by `edit`.
+fn session_with(edit: impl FnOnce(&mut Value)) -> ScriptedTransport {
     let mut subscribe = fixture("subscribe_result");
+    edit(&mut subscribe);
     subscribe["result"]["avatar"]["look"] = json!({
         "kind": "avatar", "id": "avatar", "glyph": "@", "color": "white", "tile": "mon_a"
     });
@@ -30,7 +36,11 @@ fn session() -> ScriptedTransport {
 }
 
 fn harness<'a>(root: &Path, settings: PathBuf) -> H<'a> {
-    let app = App::new(EngineModel::new(Box::new(session())))
+    harness_of(root, settings, session())
+}
+
+fn harness_of<'a>(root: &Path, settings: PathBuf, session: ScriptedTransport) -> H<'a> {
+    let app = App::new(EngineModel::new(Box::new(session)))
         .with_root(root.to_path_buf())
         .with_settings(settings);
     Harness::builder()
@@ -358,4 +368,51 @@ fn starting_up_and_following_the_engine_write_no_settings_but_a_click_does() {
     h.get_by_label("Tiles").click();
     h.run_steps(3);
     assert!(settings.exists(), "the player's click is saved");
+}
+
+/// The thin bars painted in this frame: rects 2 pt high.
+fn bars(h: &H) -> Vec<egui::epaint::RectShape> {
+    h.output()
+        .shapes
+        .iter()
+        .filter_map(|c| match &c.shape {
+            egui::Shape::Rect(r) if r.rect.height() == 2.0 => Some(r.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn a_hurt_creature_has_its_health_bar_along_the_bottom_of_its_square_in_tiles_and_ascii() {
+    let root = game_root("ui-health");
+    let hurt = session_with(|s| {
+        s["result"]["entities"][0]["health"] = json!({"fifths": 2, "color": "c_light_red"});
+    });
+    let mut h = harness_of(&root, root.join("settings.json"), hurt);
+    settle(&mut h);
+    let color = h.state().model.colors().resolve("c_light_red").0;
+    let filled = egui::Color32::from_rgb(color.0, color.1, color.2);
+    for mode in ["tiles", "ASCII"] {
+        if mode == "ASCII" {
+            common::open_client_settings(&mut h);
+            h.get_by_label("ASCII").click();
+            h.run_steps(3);
+        }
+        let bars = bars(&h);
+        let part = bars.iter().find(|r| r.fill == filled).expect(mode);
+        let track = bars.iter().find(|r| r.fill != filled).expect(mode);
+        assert_eq!(part.rect.left_bottom(), track.rect.left_bottom(), "{mode}");
+        assert!(
+            (part.rect.width() / track.rect.width() - 0.4).abs() < 0.01,
+            "{mode}: {part:?} {track:?}"
+        );
+    }
+}
+
+#[test]
+fn a_creature_at_full_health_has_no_health_bar() {
+    let root = game_root("ui-health-full");
+    let mut h = harness(&root, root.join("settings.json"));
+    settle(&mut h);
+    assert!(bars(&h).is_empty(), "{:?}", bars(&h));
 }

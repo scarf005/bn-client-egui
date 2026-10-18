@@ -18,7 +18,16 @@ type H<'a> = Harness<'a, App<EngineModel>>;
 
 /// The fixture session; `bound` are keys the engine binds to an action of its own, `drink`.
 fn session(bound: &[&str]) -> (ScriptedTransport, ScriptHandle) {
+    session_with(bound, |_| {})
+}
+
+/// The fixture session, its subscribe result changed by `edit`.
+fn session_with(
+    bound: &[&str],
+    edit: impl FnOnce(&mut Value),
+) -> (ScriptedTransport, ScriptHandle) {
     let mut subscribe = fixture("subscribe_result");
+    edit(&mut subscribe);
     if !bound.is_empty() {
         let actions = subscribe["result"]["interaction"]["actions"]
             .as_array_mut()
@@ -58,7 +67,15 @@ fn harness_bound<'a>(
     renderer: bool,
     bound: &[&str],
 ) -> (H<'a>, ScriptHandle) {
-    let (t, handle) = session(bound);
+    harness_of(root, settings, renderer, session(bound))
+}
+
+fn harness_of<'a>(
+    root: &Path,
+    settings: &Path,
+    renderer: bool,
+    (t, handle): (ScriptedTransport, ScriptHandle),
+) -> (H<'a>, ScriptHandle) {
     let model = EngineModel::new(Box::new(t));
     let mut app = App::new(model)
         .with_root(root.to_path_buf())
@@ -450,4 +467,42 @@ fn a_tile_is_as_wide_in_3d_as_in_the_flat_map_at_every_zoom_for_any_tile_size_an
             );
         }
     }
+}
+
+#[test]
+fn a_hurt_creature_has_its_health_bar_under_it_on_the_3d_map() {
+    let root = iso_root("health");
+    let hurt = session_with(&[], |s| {
+        s["result"]["entities"][0]["health"] = json!({"fifths": 2, "color": "c_light_red"});
+    });
+    let (mut h, _) = harness_of(&root, &root.join("settings.json"), true, hurt);
+    settle(&mut h);
+    let size = h.state().model.size();
+    let zombie = (0..size.y)
+        .flat_map(|y| (0..size.x).map(move |x| Pos { x, y }))
+        .find(|&at| h.state().model.cell(at).health.is_some())
+        .expect("the hurt zombie");
+    let feet = screen_of(&mut h, zombie);
+    let color = h.state().model.colors().resolve("c_light_red").0;
+    let filled = egui::Color32::from_rgb(color.0, color.1, color.2);
+    let bars = h
+        .output()
+        .shapes
+        .iter()
+        .filter_map(|c| match &c.shape {
+            egui::Shape::Rect(r) if r.rect.height() == 2.0 => Some(r.clone()),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    let part = bars
+        .iter()
+        .find(|r| r.fill == filled)
+        .expect("a filled part");
+    let track = bars.iter().find(|r| r.fill != filled).expect("a track");
+    assert!(
+        (track.rect.center().x - feet.x).abs() < 1.0,
+        "{track:?} {feet:?}"
+    );
+    assert!(track.rect.top() > feet.y, "{track:?} {feet:?}");
+    assert!((part.rect.width() / track.rect.width() - 0.4).abs() < 0.01);
 }
