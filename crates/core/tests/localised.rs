@@ -103,6 +103,17 @@ fn a_korean_connection_reads_a_converted_line_and_its_repeat_in_korean() {
 }
 
 #[test]
+fn a_connection_in_a_dialect_reads_its_languages_catalogue_as_the_engine_does() {
+    let root = root("ko_KR");
+    let (mut model, h) = connect("ko_KR", Some(&root));
+    h.push(fixture("events_41_walk"));
+    h.push(logged(42, "9", 1));
+    model.poll();
+    assert_eq!(shown(&model), ["좀비이(가) 죽었다!"]);
+    std::fs::remove_dir_all(&root).unwrap();
+}
+
+#[test]
 fn a_connection_in_the_engines_language_reads_the_format_itself() {
     let root = root("en");
     let (mut model, h) = connect("en", Some(&root));
