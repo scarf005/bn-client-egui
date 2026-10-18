@@ -1109,3 +1109,16 @@ fn the_tui_lets_go_of_the_animations_and_sounds_it_does_not_play() {
         "the tick dropped the animation facts"
     );
 }
+
+#[test]
+fn a_korean_connection_words_the_status_line_in_korean() {
+    let mut hello = fixture("hello_result");
+    hello["result"]["locale"] = json!("ko");
+    let (t, _h) = bn_client_core::transport::ScriptedTransport::new();
+    let t = t
+        .on("bn.hello", vec![hello])
+        .on("bn.subscribe", common::subscribe_reply());
+    let mut app = TuiApp::new(connected(t));
+    let s = text(&render(&mut app));
+    assert!(s.contains("준비") && !s.contains("Ready"), "{s}");
+}

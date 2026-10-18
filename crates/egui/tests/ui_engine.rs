@@ -930,3 +930,25 @@ fn a_menu_entry_is_where_it_stays_on_the_first_frame_the_menu_is_shown() {
         "first frames moved the entry: {seen:?}"
     );
 }
+
+#[test]
+fn a_korean_connection_words_the_clients_own_status_and_buttons_in_korean() {
+    let mut hello = fixture("hello_result");
+    hello["result"]["locale"] = json!("ko");
+    let (t, _script) = bn_client_egui::transport::ScriptedTransport::new();
+    let t = t
+        .on("bn.hello", vec![hello])
+        .on("bn.subscribe", common::subscribe_reply())
+        .on("bn.subscribe", common::subscribe_reply());
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(1100.0, 800.0))
+        .build_ui_state(
+            |ui, app: &mut App<EngineModel>| app.show(ui),
+            App::new(EngineModel::new(Box::new(t))),
+        );
+    h.run_steps(3);
+    h.get_by_label("준비");
+    h.get_by_label("클라이언트 설정");
+    h.get_by_label("지도");
+    assert!(h.query_by_label("Ready").is_none());
+}
