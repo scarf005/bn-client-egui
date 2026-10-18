@@ -8,6 +8,7 @@ fn span(text: &str) -> Span {
     Span {
         text: text.into(),
         color: Rgb(255, 255, 255),
+        gauge: None,
     }
 }
 

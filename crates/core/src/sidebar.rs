@@ -9,6 +9,15 @@ use crate::protocol::{Avatar, Look, SidebarSide, SidebarText};
 pub struct Span {
     pub text: String,
     pub color: Rgb,
+    /// The engine's numbers behind a bar that ends the text in `BAR` cells, for a client that draws the bar.
+    pub gauge: Option<Gauge>,
+}
+
+/// `current` of `max`, such as a limb's health.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Gauge {
+    pub current: i64,
+    pub max: i64,
 }
 
 impl Span {
@@ -19,6 +28,7 @@ impl Span {
             .map(|run| Span {
                 text: run.text,
                 color: run.color.unwrap_or(self.color),
+                gauge: None,
             })
             .collect()
     }
@@ -34,7 +44,7 @@ impl Span {
 pub type Line = Vec<Span>;
 
 /// Cells of a health bar.
-const BAR: i64 = 5;
+pub const BAR: i64 = 5;
 
 /// The colour of labels and of values whose colour means nothing.
 const PLAIN: &str = "light_gray";
@@ -90,6 +100,11 @@ fn panels(avatar: &Avatar, colors: &ColorMap) -> Option<Panels> {
         color: colors
             .resolve(if color.is_empty() { PLAIN } else { color })
             .0,
+        gauge: None,
+    };
+    let gauged = |span: Span, current: i64, max: i64| Span {
+        gauge: Some(Gauge { current, max }),
+        ..span
     };
     let value = |t: &SidebarText| span(t.text.clone(), &t.color);
     let label = |t: &SidebarText| span(t.label.clone().unwrap_or_default(), PLAIN);
@@ -138,10 +153,14 @@ fn panels(avatar: &Avatar, colors: &ColorMap) -> Option<Panels> {
         format!("{} {}", movement.counter, movement.mode_text),
         &movement.color,
     );
-    let stamina = labelled(
-        &stamina.label,
-        &bar(stamina.current, stamina.max),
-        &stamina.color,
+    let stamina = gauged(
+        labelled(
+            &stamina.label,
+            &bar(stamina.current, stamina.max),
+            &stamina.color,
+        ),
+        stamina.current,
+        stamina.max,
     );
     let power = labelled(
         side.power.label.as_deref().unwrap_or_default(),
@@ -162,7 +181,11 @@ fn panels(avatar: &Avatar, colors: &ColorMap) -> Option<Panels> {
         .map(|limb| {
             vec![
                 value(&limb.label),
-                span(bar(limb.hp, limb.hp_max), &limb.color),
+                gauged(
+                    span(bar(limb.hp, limb.hp_max), &limb.color),
+                    limb.hp,
+                    limb.hp_max,
+                ),
             ]
         })
         .collect::<Vec<_>>();

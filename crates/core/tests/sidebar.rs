@@ -3,7 +3,7 @@ use bn_client_core::Rgb;
 use bn_client_core::colors::ColorMap;
 use bn_client_core::protocol::Avatar;
 use bn_client_core::protocol::{LayoutPanel, SidebarSide};
-use bn_client_core::sidebar::{Body, layout, lines};
+use bn_client_core::sidebar::{Body, Gauge, layout, lines};
 use serde_json::Value;
 
 fn avatar() -> Avatar {
@@ -99,6 +99,27 @@ fn limb_health_is_drawn_from_the_engines_numbers() {
     assert!(texts(&a)[0].starts_with("HEAD |||.."));
     a.sidebar.as_mut().unwrap().limbs[0].hp = 0;
     assert!(texts(&a)[0].starts_with("HEAD ....."));
+}
+
+#[test]
+fn a_limbs_bar_and_the_stamina_carry_the_engines_numbers() {
+    let mut a = avatar();
+    let side = a.sidebar.as_mut().unwrap();
+    side.limbs[0].hp = 27;
+    let (hp_max, stamina) = (side.limbs[0].hp_max, side.stamina.max);
+    let gauges = lines(&a, &ColorMap::default())
+        .into_iter()
+        .flatten()
+        .filter_map(|s| s.gauge.map(|g| (s.text, g)))
+        .collect::<Vec<_>>();
+    let gauge = |current, max| Gauge { current, max };
+    assert_eq!(
+        gauges,
+        [
+            ("|||..".to_string(), gauge(27, hp_max)),
+            ("Stm |||||".to_string(), gauge(stamina, stamina)),
+        ]
+    );
 }
 
 #[test]
@@ -252,6 +273,7 @@ fn a_spans_colour_tags_split_it_into_runs_and_do_not_count_as_width() {
     let span = bn_client_core::sidebar::Span {
         text: "<color_c_magenta>|. </color>broadsword".into(),
         color: Rgb(200, 200, 200),
+        gauge: None,
     };
     let runs = span.runs();
     assert_eq!(
