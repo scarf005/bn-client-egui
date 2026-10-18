@@ -803,6 +803,27 @@ mod overmap {
     }
 
     #[test]
+    fn a_note_is_listed_in_its_colour_without_its_colour_tags() {
+        let (mut h, script) = harness();
+        h.run_steps(3);
+        let mut event = common::overmap_event(100);
+        common::squares_mut(&mut event)["notes"] = json!([{"pos": {"dim": "", "x": 99, "y": 200, "z": 0},
+            "text": "<color_c_light_blue>Pond</color>"}]);
+        script.push(event);
+        h.run_steps(3);
+        h.get_by_label("(99, 200) Pond");
+        let pond = h.output().shapes.iter().find_map(|c| match &c.shape {
+            egui::Shape::Text(t) => t.galley.job.sections.iter().find_map(|s| {
+                let words = &t.galley.job.text[s.byte_range.start.0..s.byte_range.end.0];
+                (words == "Pond").then_some(s.format.color)
+            }),
+            _ => None,
+        });
+        let plain = h.ctx.global_style().visuals.text_color();
+        assert!(pond.is_some_and(|c| c != plain), "{pond:?}");
+    }
+
+    #[test]
     fn no_notes_leave_no_notes_heading() {
         let (mut h, script) = harness();
         h.run_steps(3);

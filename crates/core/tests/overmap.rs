@@ -361,3 +361,24 @@ mod switching {
         assert_eq!(hellos(&h).len(), 3);
     }
 }
+
+#[test]
+fn a_notes_colour_tags_are_not_part_of_its_words() {
+    let mut event = overmap_event(100);
+    let squares = squares_mut(&mut event);
+    squares["notes"] = json!([{"pos": {"dim": "", "x": 99, "y": 200, "z": 0},
+        "text": "<color_c_light_blue>Pond</color>"}]);
+    squares["cursor_note"] = "Note: <color_c_light_blue>Pond</color>".into();
+    let (t, h) = session();
+    let mut m = connected(t);
+    h.push(event);
+    m.poll();
+    let om = squares_of(&m);
+    assert_eq!(om.note(&at(99, 200, 0)).as_deref(), Some("Pond"));
+    assert_eq!(om.note_lines(), ["(99, 200, 0) Pond"]);
+    assert!(
+        om.status().iter().any(|l| *l == "Note: Pond"),
+        "{:?}",
+        om.status()
+    );
+}
