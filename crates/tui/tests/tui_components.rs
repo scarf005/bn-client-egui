@@ -793,3 +793,20 @@ fn the_npc_talk_screen_draws_its_history_beside_its_responses_and_special_keys()
     }
     assert!(operations(&h).is_empty());
 }
+
+/// The advanced inventory's items, which egui marks by click: native curses marks nothing there and moves the
+/// item under the cursor by its own keys, so the tui draws no mark the keyboard could never set.
+#[test]
+fn a_count_list_draws_no_pick_mark() {
+    let rows = ["rag", "nail"].map(|label| {
+        json!({"id": format!("item:{label}"), "label": label, "description": "", "denial": "",
+            "enabled": true, "selectable": true, "selected": false, "columns": []})
+    });
+    let items = json!({"id": "aim:items", "kind": "list", "affordances": [], "columns": [],
+        "rows": rows, "total": 2, "selection": "count"});
+    let (mut app, _) = open(screen(items, json!([])));
+    let text = lines(&render(&mut app));
+    let rag = text.iter().find(|l| l.contains("rag")).unwrap();
+    let nail = text.iter().find(|l| l.contains("nail")).unwrap();
+    assert!(!rag.contains('-') && !nail.contains('-'), "{text:#?}");
+}
