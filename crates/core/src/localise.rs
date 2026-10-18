@@ -107,7 +107,7 @@ impl Catalogue {
             .as_ref()
             .map_or_else(|| key.to_string(), |ctx| format!("{ctx}\u{4}{key}"));
         self.translation(&id, message.plural.as_ref().map(count))
-            .unwrap_or(key)
+            .unwrap_or_else(|| source(message))
     }
 
     /// The translation of the entry `id`, in the form for the count `n`.
@@ -387,8 +387,16 @@ pub fn render(message: &LocalisedString) -> String {
     }
     ACTIVE.with(|active| match active.borrow().as_deref() {
         Some(catalogue) => printf(catalogue.format(message), &args),
-        None => printf(&message.key, &args),
+        None => printf(source(message), &args),
     })
+}
+
+/// The message in the source language, in its form for its count as gettext falls back to it.
+fn source(message: &LocalisedString) -> &str {
+    match (message.plural.as_ref().map(count), &message.plural_key) {
+        (Some(n), Some(plural)) if n != 1 => plural,
+        _ => &message.key,
+    }
 }
 
 fn display(value: &Value, precision: Option<usize>) -> String {

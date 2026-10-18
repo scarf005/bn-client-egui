@@ -1803,6 +1803,9 @@ pub struct LocalisedString {
     /// The count that selects the plural form.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plural: Option<serde_json::Number>,
+    /// The msgid of the plural form, shown for a count other than one when no catalogue translates the key.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plural_key: Option<String>,
     /// The values of the placeholders, in order.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub args: Option<Vec<TextArg>>,
