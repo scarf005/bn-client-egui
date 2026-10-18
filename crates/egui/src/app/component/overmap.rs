@@ -83,14 +83,11 @@ impl OvermapGrid {
 
 /// What the hover says of a square away from the cursor: where it is, and its note.
 fn square_status(om: &OvermapWire, at: &WorldPos) -> String {
-    [
-        Some(format!("({}, {}, {})", at.x, at.y, at.z)),
-        om.note(at).map(str::to_owned),
-    ]
-    .into_iter()
-    .flatten()
-    .collect::<Vec<_>>()
-    .join(" ")
+    [Some(format!("({}, {}, {})", at.x, at.y, at.z)), om.note(at)]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// The overmap as a canvas named by the screen's title and described by the cursor's square and the notes.
@@ -124,34 +121,41 @@ fn overmap_a11y(
     });
 }
 
-/// The legend and the notes beside the overmap; a click on a note moves the cursor to it.
-fn overmap_side_panel(
-    ui: &mut egui::Ui,
-    om: &OvermapWire,
-    mover: Option<&Affordance>,
-    out: &mut Vec<Intent>,
-) {
-    ui.vertical(|ui| {
-        for line in &om.legend {
-            ui.add(
-                egui::Label::new(egui::RichText::new(line).monospace())
-                    .wrap_mode(egui::TextWrapMode::Extend),
-            );
-        }
-        if !om.notes.is_empty() {
-            ui.separator();
-            ui.heading(&om.notes_title);
-        }
-        for note in &om.notes {
-            let link = ui.link(format!("({}, {}) {}", note.pos.x, note.pos.y, note.text));
-            if let (true, Some(mover)) = (link.clicked(), mover) {
-                out.push(Intent::Move {
-                    affordance: mover.id.clone(),
-                    at: note.pos.clone(),
-                });
+impl<M: GameModel> App<M> {
+    /// The legend and the notes beside the overmap, each note in its colour; a click on a note moves the cursor to
+    /// it.
+    fn overmap_side_panel(
+        &self,
+        ui: &mut egui::Ui,
+        om: &OvermapWire,
+        mover: Option<&Affordance>,
+        out: &mut Vec<Intent>,
+    ) {
+        ui.vertical(|ui| {
+            for line in &om.legend {
+                ui.add(
+                    egui::Label::new(egui::RichText::new(line).monospace())
+                        .wrap_mode(egui::TextWrapMode::Extend),
+                );
             }
-        }
-    });
+            if !om.notes.is_empty() {
+                ui.separator();
+                ui.heading(&om.notes_title);
+            }
+            for note in &om.notes {
+                let link = ui.link(self.line(
+                    ui,
+                    &format!("({}, {}) {}", note.pos.x, note.pos.y, note.text),
+                ));
+                if let (true, Some(mover)) = (link.clicked(), mover) {
+                    out.push(Intent::Move {
+                        affordance: mover.id.clone(),
+                        at: note.pos.clone(),
+                    });
+                }
+            }
+        });
+    }
 }
 
 impl<M: GameModel> App<M> {
@@ -177,7 +181,7 @@ impl<M: GameModel> App<M> {
         // What the engine says of the cursor square, a line each.
         let status = om.status();
         for line in &status {
-            let label = ui.label(*line);
+            let label = ui.label(line);
             ui.ctx()
                 .accesskit_node_builder(label.id, |b| b.set_live(egui::accesskit::Live::Polite));
         }
@@ -230,7 +234,7 @@ impl<M: GameModel> App<M> {
                 }
                 ui.ctx().request_repaint();
             }
-            overmap_side_panel(ui, om, mover, out);
+            self.overmap_side_panel(ui, om, mover, out);
         });
     }
 

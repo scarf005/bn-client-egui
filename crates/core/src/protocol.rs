@@ -705,16 +705,16 @@ impl OvermapWire {
         })
     }
 
-    /// The text of the note on this square, if any.
-    pub fn note(&self, at: &WorldPos) -> Option<&str> {
+    /// The words of the note on this square, if any, without the colour tags the native list draws.
+    pub fn note(&self, at: &WorldPos) -> Option<String> {
         self.notes
             .iter()
             .find(|n| n.pos == *at)
-            .map(|n| n.text.as_str())
+            .map(|n| crate::markup::plain(&n.text))
     }
 
-    /// The status lines the engine says of the cursor square, in the order it says them.
-    pub fn status(&self) -> Vec<&str> {
+    /// The status lines the engine says of the cursor square, in the order it says them, without colour tags.
+    pub fn status(&self) -> Vec<String> {
         [
             self.cursor_here.as_deref(),
             Some(self.cursor_description.as_str()),
@@ -724,6 +724,7 @@ impl OvermapWire {
         .into_iter()
         .flatten()
         .filter(|t| !t.is_empty())
+        .map(crate::markup::plain)
         .collect()
     }
 
@@ -731,7 +732,10 @@ impl OvermapWire {
     pub fn note_lines(&self) -> Vec<String> {
         self.notes
             .iter()
-            .map(|n| format!("({}, {}, {}) {}", n.pos.x, n.pos.y, n.pos.z, n.text))
+            .map(|n| {
+                let words = crate::markup::plain(&n.text);
+                format!("({}, {}, {}) {words}", n.pos.x, n.pos.y, n.pos.z)
+            })
             .collect()
     }
 }

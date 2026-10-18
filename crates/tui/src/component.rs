@@ -919,7 +919,7 @@ impl<M: GameModel> Painter<'_, M> {
         };
         let cursor = map.cursor().unwrap_or_else(|| om.origin.clone());
         let mut notes = om.legend.clone();
-        notes.extend(om.status().into_iter().map(str::to_owned));
+        notes.extend(om.status());
         if !om.notes.is_empty() {
             notes.push(om.notes_title.clone());
         }

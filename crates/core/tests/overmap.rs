@@ -135,7 +135,7 @@ fn the_overmap_screen_is_a_map_component_with_squares_cursor_and_notes() {
         (om.cursor_here.as_deref(), om.cursor_note.as_deref()),
         (None, None)
     );
-    assert_eq!(om.note(&at(99, 200, 0)), Some("cache"));
+    assert_eq!(om.note(&at(99, 200, 0)).as_deref(), Some("cache"));
     assert_eq!(om.path, [at(101, 200, 0), at(102, 200, 0)]);
     assert!(m.menu().is_none(), "the overmap is not a list menu");
     assert!(m.focus().is_none(), "its cursor is not a map square");
