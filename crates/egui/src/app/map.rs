@@ -8,6 +8,9 @@ use bn_client_core::{GameModel, Pos};
 use eframe::egui::{self, accesskit};
 use std::sync::Arc;
 
+/// The widest a square's tooltip text gets before its lines wrap; the tooltip's frame adds its margins.
+const TOOLTIP_WIDTH: f32 = 420.0;
+
 /// The 3D scene of the map and the pages it samples.
 type Scene3d = (Arc<Scene>, Arc<Pages>);
 
@@ -434,16 +437,20 @@ impl<M: GameModel> App<M> {
                 return;
             }
             // The engine's own mouse-view text when it has answered for this square.
-            if let Some(lines) = self.model.hover_text(under) {
-                for line in lines {
-                    // A tooltip at the pointer gets almost no width to wrap in; one line never wraps.
-                    ui.add(egui::Label::new(line).wrap_mode(egui::TextWrapMode::Extend));
-                }
-            } else {
+            let lines = self.model.hover_text(under).unwrap_or_else(|| {
                 let desc = self.model.cell(under).desc;
-                if !desc.is_empty() {
-                    ui.add(egui::Label::new(desc).wrap_mode(egui::TextWrapMode::Extend));
-                }
+                (!desc.is_empty()).then_some(desc).into_iter().collect()
+            });
+            // A tooltip at the pointer gets almost no width to wrap in: its text takes its widest line's width, up
+            // to `TOOLTIP_WIDTH`, and wraps the longer lines there.
+            let font = egui::TextStyle::Body.resolve(ui.style());
+            let widest = lines
+                .iter()
+                .map(|l| super::component::text_width(ui, l, &font))
+                .fold(0.0, f32::max);
+            ui.set_width(widest.ceil().min(TOOLTIP_WIDTH));
+            for line in lines {
+                ui.add(egui::Label::new(line).wrap_mode(egui::TextWrapMode::Wrap));
             }
         });
     }

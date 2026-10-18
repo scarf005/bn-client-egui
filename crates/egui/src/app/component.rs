@@ -27,6 +27,7 @@ use eframe::egui::{self, WidgetInfo, WidgetType};
 use footer::*;
 use form::*;
 use list::*;
+pub(super) use measure::text_width;
 use measure::*;
 use overmap::*;
 use placement::*;

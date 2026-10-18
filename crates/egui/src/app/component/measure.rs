@@ -11,7 +11,8 @@ pub(super) struct ListWidths {
 /// The smallest font a canvas is drawn in.
 const CANVAS_MIN_FONT: f32 = 10.0;
 
-fn text_width(ui: &egui::Ui, text: &str, font: &egui::FontId) -> f32 {
+/// The width of `text` on one line.
+pub(in crate::app) fn text_width(ui: &egui::Ui, text: &str, font: &egui::FontId) -> f32 {
     ui.painter()
         .layout_no_wrap(text.into(), font.clone(), egui::Color32::WHITE)
         .size()
