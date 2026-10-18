@@ -48,7 +48,7 @@ pub struct Layer {
     pub creature: bool,
     /// Whether this is the terrain of its square, which a 3D view draws as ground or as a wall.
     pub terrain: bool,
-    /// Terrain the game data flags as a wall, which a 3D view raises.
+    /// Terrain that stands as a wall (a wall, a closed door or a window), which a 3D view raises.
     pub wall: bool,
     /// Whether the thing is a part of a vehicle.
     pub vehicle: bool,

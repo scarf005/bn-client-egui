@@ -59,7 +59,7 @@ pub struct Look {
     /// Items on the square when there are several, on the displayed item.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stack: Option<u32>,
-    /// Terrain the game data flags as a wall.
+    /// Terrain that stands as a wall: a wall, or a closed door or window in a wall's line.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub wall: bool,
     /// Paint of a vehicle part, as `#rrggbb`.
