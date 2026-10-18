@@ -171,6 +171,9 @@ pub struct EffectCue {
     #[serde(default)]
     pub angle: Option<i32>,
     pub stacks: bool,
+    /// How long after the last effect with a wait this one may play; none for no wait.
+    #[serde(default)]
+    pub wait_ms: Option<u64>,
 }
 
 #[derive(Clone, Debug, PartialEq, Deserialize)]
@@ -592,7 +595,16 @@ mod tests {
             volume,
             angle: None,
             stacks,
+            wait_ms: None,
         })
+    }
+
+    fn paced(variant: &str, wait_ms: u64) -> Cue {
+        let Cue::Effect(mut cue) = played("plmove", variant, 100, false) else {
+            unreachable!()
+        };
+        cue.wait_ms = Some(wait_ms);
+        Cue::Effect(cue)
     }
 
     fn channel(id: Option<&str>, volume: u32, loops: i32, fade_ms: u64) -> Cue {
@@ -710,6 +722,35 @@ mod tests {
             start + Duration::from_secs(1),
         );
         assert_eq!(out.plays.len(), 3);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn an_effect_with_a_wait_plays_only_once_the_last_one_with_a_wait_is_that_old() {
+        let dir = pack_dir("paced");
+        std::fs::write(
+            dir.join("steps.json"),
+            r#"[ { "type": "sound_effect", "id": "plmove", "variant": "walk_barefoot", "files": [ "step.ogg" ] },
+                 { "type": "sound_effect", "id": "plmove", "variant": "clear_obstacle", "files": [ "bump.ogg" ] } ]"#,
+        )
+        .unwrap();
+        let mut player = Player::new(SoundPack::load(&dir).unwrap());
+        let mut out = Recorder::default();
+        let start = Instant::now();
+        let at = |ms| start + Duration::from_millis(ms);
+        player.apply(paced("walk_barefoot", 400), &mut out, at(0));
+        player.apply(paced("walk_barefoot", 400), &mut out, at(399));
+        player.apply(paced("walk_barefoot", 400), &mut out, at(400));
+        // An obstacle plays at once and delays the next step.
+        player.apply(paced("clear_obstacle", 0), &mut out, at(500));
+        player.apply(paced("walk_barefoot", 400), &mut out, at(850));
+        player.apply(paced("walk_barefoot", 400), &mut out, at(900));
+        let files = out
+            .plays
+            .iter()
+            .map(|p| p.file.file_name().unwrap().to_str().unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(files, ["step.ogg", "step.ogg", "bump.ogg", "step.ogg"]);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
@@ -870,7 +911,7 @@ mod tests {
 
     #[test]
     fn cues_decode_from_their_events() {
-        let data = serde_json::json!({"id": "fire_gun", "variant": "glock_19", "volume": 90, "angle": 270, "stacks": true});
+        let data = serde_json::json!({"id": "fire_gun", "variant": "glock_19", "volume": 90, "angle": 270, "stacks": true, "wait_ms": 80});
         assert_eq!(
             Cue::of_event("sound.played", &data),
             Some(Cue::Effect(EffectCue {
@@ -879,6 +920,7 @@ mod tests {
                 volume: 90,
                 angle: Some(270),
                 stacks: true,
+                wait_ms: Some(80),
             }))
         );
         let stop = serde_json::json!({"channel": "radio", "fade_ms": 300});
