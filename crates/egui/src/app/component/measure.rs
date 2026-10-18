@@ -191,18 +191,18 @@ impl<M: GameModel> App<M> {
     pub(super) fn list_widths(&self, ui: &egui::Ui, list: &List, rows: &[&Row]) -> ListWidths {
         let font = egui::TextStyle::Body.resolve(ui.style());
         let spacing = ui.spacing();
-        let height = spacing.interact_size.y;
         let pad = 2.0 * spacing.button_padding.x;
         let widest = |texts: &mut dyn Iterator<Item = f32>| texts.fold(0.0, f32::max);
+        let squares = self.squares(rows);
+        let icon = if squares {
+            list::ICON + spacing.item_spacing.x
+        } else {
+            0.0
+        };
         let label = widest(
             &mut rows.iter().filter(|r| r.header != Some(true)).map(|row| {
-                let square = row.look.is_some() && self.display.tiles();
+                let square = squares && row.look.is_some();
                 let marked = Self::row_markup(list, row, false, square);
-                let icon = if square {
-                    height + spacing.item_spacing.x
-                } else {
-                    0.0
-                };
                 icon + text_width(ui, &markup::plain(&marked), &font) + pad
             }),
         );

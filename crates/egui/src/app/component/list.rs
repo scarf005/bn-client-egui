@@ -8,6 +8,9 @@ const PREFETCH: usize = 20;
 /// Height the description under a list may take.
 const DESCRIPTION_HEIGHT: f32 = 96.0;
 
+/// Side of the square a row's item is drawn in; rows of a list with items are a little taller.
+pub(super) const ICON: f32 = 24.0;
+
 /// A list row's item and the square it is drawn in.
 pub(super) struct RowIcon {
     pub(super) painter: egui::Painter,
@@ -20,6 +23,8 @@ struct RowLayout<'a> {
     label: f32,
     height: f32,
     columns: &'a [f32],
+    /// Every row keeps the item column, so the text of rows without an item lines up with the rest.
+    squares: bool,
 }
 
 /// The columns' captions over their values, past the label and the item's square (`lead` wide).
@@ -28,11 +33,16 @@ fn list_header(ui: &mut egui::Ui, list: &List, lead: f32, layout: &RowLayout) {
         ui.allocate_space(egui::vec2(layout.label + lead, layout.height));
         for (column, w) in list.columns.iter().zip(layout.columns) {
             let caption = markup::plain(&column.label.shown());
-            ui.add_sized(
-                [*w, layout.height],
-                egui::Label::new(egui::RichText::new(caption).weak()).truncate(),
-            );
+            right_aligned(ui, [*w, layout.height], egui::RichText::new(caption).weak());
         }
+    });
+}
+
+/// A value at the right of its column, so the digits of a column line up.
+fn right_aligned(ui: &mut egui::Ui, size: [f32; 2], text: impl Into<egui::WidgetText>) {
+    let layout = egui::Layout::right_to_left(egui::Align::Center);
+    ui.allocate_ui_with_layout(size.into(), layout, |ui| {
+        ui.add(egui::Label::new(text).truncate())
     });
 }
 
@@ -89,18 +99,20 @@ impl<M: GameModel> App<M> {
         let spacing = ui.spacing().item_spacing.x;
         // The rows sit in a scroll area, which keeps room for its bar.
         let width = ui.available_width() - ui.spacing().scroll.allocated_width();
-        let height = ui.spacing().interact_size.y;
         // The columns take what their content needs; the label keeps the rest, less the item's square.
         let widths = self.list_widths(ui, list, &rows);
-        let squares = rows
-            .iter()
-            .any(|r| r.look.is_some() && self.display.tiles());
-        let icon = if squares { height + spacing } else { 0.0 };
+        let squares = self.squares(&rows);
+        let interact = ui.spacing().interact_size.y;
+        let (height, icon) = match squares {
+            true => (interact.max(ICON + 2.0), ICON + spacing),
+            false => (interact, 0.0),
+        };
         let columns_w = widths.columns.iter().map(|w| w + spacing).sum::<f32>();
         let layout = RowLayout {
             label: (width - columns_w - icon).max(0.0),
             height,
             columns: &widths.columns,
+            squares,
         };
         if !list.columns.is_empty() {
             list_header(ui, list, icon, &layout);
@@ -119,6 +131,7 @@ impl<M: GameModel> App<M> {
             area = area.vertical_scroll_offset(interaction.scroll(id) as f32 * step);
         }
         area.show_rows(ui, height, rows.len(), |ui, range| {
+            crate::app::menu::list_row_style(ui);
             for row in &rows[range.clone()] {
                 ui.horizontal(|ui| self.list_row(ui, list, row, cursor, &layout, out));
             }
@@ -168,14 +181,17 @@ impl<M: GameModel> App<M> {
             .as_ref()
             .filter(|_| self.display.tiles())
             .and_then(|look| self.model.look_cell(look));
-        if let Some(cell) = &cell {
-            let size = egui::Vec2::splat(layout.height);
-            let (rect, _) = ui.allocate_exact_size(size, egui::Sense::hover());
-            self.screens.icons.borrow_mut().push(RowIcon {
-                painter: ui.painter_at(rect),
-                rect,
-                cell: cell.clone(),
-            });
+        if layout.squares {
+            let (column, _) =
+                ui.allocate_exact_size(egui::vec2(ICON, layout.height), egui::Sense::hover());
+            let rect = egui::Rect::from_center_size(column.center(), egui::Vec2::splat(ICON));
+            if let Some(cell) = &cell {
+                self.screens.icons.borrow_mut().push(RowIcon {
+                    painter: ui.painter_at(rect),
+                    rect,
+                    cell: cell.clone(),
+                });
+            }
         }
         let marked = Self::row_markup(list, row, pick.is_some(), cell.is_some());
         // A refused row is plain dim text: the game's colours would hide that it is.
@@ -239,11 +255,13 @@ impl<M: GameModel> App<M> {
                 .find(|c| c.key.as_deref() == Some(column.key.as_str()))
                 .map(|c| tagged(c.color.as_deref(), &c.value.shown()))
                 .unwrap_or_default();
-            ui.add_sized(
-                [*column_w, layout.height],
-                egui::Label::new(self.line(ui, &value)).truncate(),
-            );
+            right_aligned(ui, [*column_w, layout.height], self.line(ui, &value));
         }
+    }
+
+    /// Whether the rows draw their items in squares: some row has an item and the map is drawn in tiles.
+    pub(super) fn squares(&self, rows: &[&Row]) -> bool {
+        self.display.tiles() && rows.iter().any(|r| r.look.is_some())
     }
 
     /// The focused row's description under the list, and why it is refused when it is.
