@@ -81,10 +81,13 @@ impl Catalogue {
     /// The catalogue of `locale` under the game root; none for the source language, which has no file, and
     /// for a language that is not compiled.
     pub fn load(root: &Path, locale: &str) -> Option<Self> {
-        let path = root
-            .join("lang/mo")
-            .join(locale)
-            .join("LC_MESSAGES/cataclysm-bn.mo");
+        let path = names(locale)
+            .map(|name| {
+                root.join("lang/mo")
+                    .join(name)
+                    .join("LC_MESSAGES/cataclysm-bn.mo")
+            })
+            .find(|path| path.is_file())?;
         Self::parse(&std::fs::read(path).ok()?).ok()
     }
 
