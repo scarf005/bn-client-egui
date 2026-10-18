@@ -835,6 +835,10 @@ impl GameModel for EngineModel {
         crate::sounds::grouped(&self.sounds, self.clock.now())
     }
 
+    fn activity(&self) -> Option<crate::protocol::Activity> {
+        self.replica.avatar()?.activity.clone()
+    }
+
     fn sidebar(&self) -> Vec<crate::sidebar::Line> {
         self.replica
             .avatar()

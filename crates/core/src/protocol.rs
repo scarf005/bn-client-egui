@@ -291,6 +291,18 @@ pub struct Avatar {
     /// The stacks on the avatar's own square; absent from engines that predate it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ground: Option<Vec<InventoryItem>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub activity: Option<Activity>,
+}
+
+/// What the avatar is busy with over turns: the engine's id and words for it and, for one of a set length, the
+/// thousandths of it done.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Activity {
+    pub id: String,
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub done: Option<u16>,
 }
 
 /// An avatar in an event. The members named in `keep` are left out and carry over from the previous
@@ -316,6 +328,9 @@ pub struct AvatarChange {
     pub compass: Option<Vec<CompassDirection>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ground: Option<Vec<InventoryItem>>,
+    /// Never kept: absent means the avatar is not busy.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub activity: Option<Activity>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub keep: Vec<String>,
 }
@@ -366,6 +381,7 @@ impl AvatarChange {
             } else {
                 self.ground.clone()
             },
+            activity: self.activity,
             id: self.id,
             at: self.at,
             name: self.name,

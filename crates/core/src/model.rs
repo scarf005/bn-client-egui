@@ -687,6 +687,10 @@ pub trait GameModel: MenuModel {
     fn look_cell(&self, _look: &Look) -> Option<Cell> {
         None
     }
+    /// What the avatar is busy with, as the engine names it; none when it is not busy.
+    fn activity(&self) -> Option<crate::protocol::Activity> {
+        None
+    }
     /// The avatar's sidebar as coloured lines; empty before the engine reports one.
     fn sidebar(&self) -> Vec<crate::sidebar::Line> {
         vec![]

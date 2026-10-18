@@ -1,6 +1,6 @@
 use bn_client_core::protocol::{self, EventsParams, Incoming, Resync, Snapshot, SnapshotPart};
 use bn_client_core::replica::{Outcome, Replica};
-use serde_json::Value;
+use serde_json::{Value, json};
 
 fn fixture(name: &str) -> Value {
     let text = std::fs::read_to_string(concat!(
@@ -349,13 +349,14 @@ fn an_event_avatar_keeps_the_members_it_names_and_clears_the_others() {
         .unwrap(),
     )
     .unwrap();
-    let full = examples["valid"]
+    let mut full = examples["valid"]
         .as_array()
         .unwrap()
         .iter()
         .find(|e| e["name"] == "avatar with sidebar")
         .map(|e| e["value"].clone())
         .unwrap();
+    full["activity"] = json!({"id": "ACT_CRAFT", "name": "crafting", "done": 350});
     let event = |sequence: &str, revision: &str, avatar: AvatarChange| EventsParams {
         epoch: "e7f3".into(),
         events: vec![Event {
@@ -380,6 +381,14 @@ fn an_event_avatar_keeps_the_members_it_names_and_clears_the_others() {
     );
     let before = r.avatar().unwrap().clone();
     assert!(before.sidebar.is_some());
+    assert_eq!(
+        before.activity,
+        Some(protocol::Activity {
+            id: "ACT_CRAFT".into(),
+            name: "crafting".into(),
+            done: Some(350)
+        })
+    );
 
     let moved = |keep: &[&str]| AvatarChange {
         at: protocol::WorldPos {
@@ -393,6 +402,7 @@ fn an_event_avatar_keeps_the_members_it_names_and_clears_the_others() {
         inventory: None,
         sidebar: None,
         ground: None,
+        activity: None,
         keep: keep.iter().map(|k| k.to_string()).collect(),
         ..avatar.clone()
     };
@@ -405,6 +415,7 @@ fn an_event_avatar_keeps_the_members_it_names_and_clears_the_others() {
     assert_eq!(kept.stats, before.stats);
     assert_eq!(kept.sidebar, before.sidebar);
     assert_eq!(kept.inventory, before.inventory);
+    assert_eq!(kept.activity, None, "an activity is never kept");
 
     assert_eq!(r.events(event("43", "34", moved(&[]))), Outcome::Applied);
     let cleared = r.avatar().unwrap();
