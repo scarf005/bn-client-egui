@@ -23,6 +23,13 @@ pub struct Glow {
     pub strength: u8,
 }
 
+/// How hurt the creature on a square is: the fifths of the game's health bar and its colour.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Health {
+    pub fifths: u8,
+    pub color: Rgb,
+}
+
 /// One thing drawn in a cell, with what a tileset needs to pick its sprite the way the game does and
 /// the glyph that stands in for it when the tileset has none.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -90,6 +97,8 @@ pub struct Cell {
     /// The game's light level of a square in sight: 0 dark, 1 low, 2 bright only, 3 lit, 4 bright.
     pub light: Option<u8>,
     pub glow: Option<Glow>,
+    /// The creature drawn here is hurt.
+    pub health: Option<Health>,
     /// How many levels down the layers lie, seen through open air; 0 on the avatar's own level.
     pub depth: u8,
     /// The game's per-square seed for weighted sprite variants, also for squares nothing is known about.

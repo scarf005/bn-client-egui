@@ -1003,6 +1003,7 @@ fn tiled_session() -> EngineModel {
         );
     subscribe["result"]["entities"][0]["attitude"] = json!("hostile");
     subscribe["result"]["entities"][0]["aware"] = json!(true);
+    subscribe["result"]["entities"][0]["health"] = json!({"fifths": 2, "color": "c_light_red"});
     let mut part = fixture("snapshot_part_1");
     part["params"]["cells"].as_array_mut().unwrap().extend([
         json!({"at": {"dim": "", "x": 9, "y": 8, "z": 0}, "known": "visible", "light": 1,
@@ -1180,9 +1181,18 @@ fn creatures_and_the_avatar_draw_over_the_terrain_with_their_overlays() {
     let sprite = &zombie.layers[1];
     assert!(sprite.mirrored && sprite.creature);
     assert_eq!(sprite.fallbacks, ["mon_zombie_base"]);
+    // A hurt creature has the game's health bar.
+    assert_eq!(
+        zombie.health,
+        Some(bn_client_core::Health {
+            fifths: 2,
+            color: m.colors().resolve("c_light_red").0
+        })
+    );
     // The avatar stands over the items on the ground: its gendered sprite, then the jacket, which has
     // no glyph to fall back on.
     let me = at(3, 4);
+    assert_eq!(me.health, None);
     let ids = me.layers.iter().map(|l| l.id.as_str()).collect::<Vec<_>>();
     assert_eq!(
         ids,

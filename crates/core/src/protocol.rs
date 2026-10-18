@@ -142,6 +142,13 @@ pub enum Known {
     Sensed,
 }
 
+/// A hurt creature's health in the fifths and native colour name of the game's look-around bar.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Health {
+    pub fifths: u8,
+    pub color: String,
+}
+
 /// The coloured light on a square in sight: its `#rrggbb` and its strength, 1 to 255.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Glow {
@@ -247,6 +254,9 @@ pub struct Entity {
     /// The creature is aware of the avatar.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub aware: bool,
+    /// None at full health.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub health: Option<Health>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub statuses: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

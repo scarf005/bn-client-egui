@@ -21,7 +21,7 @@ pub use engine_model::{ConnectOptions, EngineModel};
 #[cfg(feature = "fake")]
 pub use model::FakeModel;
 pub use model::{
-    ActionEntry, Cell, CommandStatus, Effect, Failure, FailureKind, GameModel, Glow, Heard, Layer,
-    Loading, LogLine, Menu, MenuChoice, MenuModel, MenuPane, Mutation, PaneTotals, Pos, Rgb, Shape,
-    action_hint,
+    ActionEntry, Cell, CommandStatus, Effect, Failure, FailureKind, GameModel, Glow, Health, Heard,
+    Layer, Loading, LogLine, Menu, MenuChoice, MenuModel, MenuPane, Mutation, PaneTotals, Pos, Rgb,
+    Shape, action_hint,
 };
