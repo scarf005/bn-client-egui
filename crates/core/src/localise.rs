@@ -397,7 +397,8 @@ fn value(arg: &TextArg) -> Value {
     }
 }
 
-/// The message in this thread's language, placeholders filled. The empty key joins its arguments.
+/// The message in this thread's language, placeholders filled. The empty key joins its arguments; a message
+/// with no values reads as written, as the engine shows it.
 pub fn render(message: &LocalisedString) -> String {
     let args = message
         .args
@@ -408,9 +409,16 @@ pub fn render(message: &LocalisedString) -> String {
     if message.key.is_empty() {
         return args.iter().map(|arg| display(arg, None)).collect();
     }
+    let fill = |format: &str| {
+        if args.is_empty() {
+            format.to_owned()
+        } else {
+            printf(format, &args)
+        }
+    };
     ACTIVE.with(|active| match active.borrow().as_deref() {
-        Some(catalogue) => printf(catalogue.format(message), &args),
-        None => printf(source(message), &args),
+        Some(catalogue) => fill(catalogue.format(message)),
+        None => fill(source(message)),
     })
 }
 
