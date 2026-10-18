@@ -168,7 +168,9 @@ fn the_town_in_3d_from_every_side_and_what_a_frame_costs() {
         h.state().model.menu().is_some()
     });
     choose(&mut h, "menu:tab", "new_game");
-    choose(&mut h, "menu:entry", "new_game:play_now");
+    // BN_ISO_ENTRY picks another way to start, such as `new_game:play_now_default` for the evacuee's shelter.
+    let entry = std::env::var("BN_ISO_ENTRY").unwrap_or("new_game:play_now".into());
+    choose(&mut h, "menu:entry", &entry);
     run_until(&mut h, "the map", 900, |h| h.state().model.size().x > 0);
     run_until(&mut h, "the settled game", 300, |h| {
         h.state().model.menu().is_none() && !h.state().model.busy()
