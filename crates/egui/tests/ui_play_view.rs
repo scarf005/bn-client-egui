@@ -55,3 +55,48 @@ fn the_view_mode_tileset_and_motion_choices_are_in_the_client_settings_window() 
         assert!(h.query_by_label(choice).is_some(), "{choice}");
     }
 }
+
+#[test]
+fn the_top_bar_names_the_avatars_activity_and_how_much_of_it_is_done() {
+    let (t, script) = session();
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(1280.0, 800.0))
+        .build_ui_state(
+            |ui, app: &mut App<EngineModel>| app.show(ui),
+            App::new(EngineModel::new(Box::new(t))),
+        );
+    h.run_steps(3);
+    let mut busy = fixture("events_41_walk");
+    busy["params"]["events"][0]["changes"]["avatar"]["activity"] =
+        serde_json::json!({"id": "ACT_CRAFT", "name": "crafting", "done": 350});
+    script.push(busy);
+    h.run_steps(4);
+    let name = h.get_by_label("crafting").rect();
+    let bar = h.get_by_label("35%").rect();
+    let top = h.get_by_label("Actions").rect();
+    assert!(
+        name.max.y <= top.max.y + 4.0 && bar.max.y <= top.max.y + 4.0,
+        "{name:?} {bar:?} {top:?}"
+    );
+    // Over the avatar's square, a thin track filled for the part done.
+    let rects = h
+        .output()
+        .shapes
+        .iter()
+        .filter_map(|c| match &c.shape {
+            egui::Shape::Rect(r) if r.rect.height() == 4.0 => Some(r.clone()),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    let filled = h.ctx.global_style().visuals.selection.bg_fill;
+    let track = rects.iter().find(|r| r.fill != filled).expect("a track");
+    let part = rects
+        .iter()
+        .find(|r| r.fill == filled)
+        .expect("a filled part");
+    assert_eq!(part.rect.min, track.rect.min);
+    assert!(
+        (part.rect.width() / track.rect.width() - 0.35).abs() < 0.01,
+        "{part:?} {track:?}"
+    );
+}
