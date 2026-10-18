@@ -3,6 +3,7 @@
 use super::App;
 use crate::a11y;
 use crate::display::Display;
+use bn_client_core::localise::tr;
 use bn_client_core::protocol::ItemListId;
 use bn_client_core::sidebar::{Body, Direction, Layout, Panel};
 use bn_client_core::{Cell, GameModel, LogLine, markup};
@@ -50,7 +51,7 @@ impl<M: GameModel> App<M> {
         );
         ui.ctx().accesskit_node_builder(handle.id, |b| {
             b.set_role(accesskit::Role::Splitter);
-            b.set_label("Resize message log");
+            b.set_label(tr("Resize message log"));
         });
         if handle.hovered() || handle.dragged() {
             ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeVertical);

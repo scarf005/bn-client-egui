@@ -1,0 +1,245 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the bn-client package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: bn-client\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-18 09:38+0900\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=CHARSET\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
+
+#: crates/core/src/engine_model.rs:585
+msgid "The engine has not answered for %d second."
+msgid_plural "The engine has not answered for %d seconds."
+msgstr[0] ""
+msgstr[1] ""
+
+#: crates/core/src/engine_model.rs:708
+msgid "The engine could not be restarted: %s"
+msgstr ""
+
+#: crates/core/src/engine_model/commands.rs:128
+msgid "Travel"
+msgstr ""
+
+#: crates/core/src/engine_model/commands.rs:129
+msgid "Right click"
+msgstr ""
+
+#: crates/core/src/engine_model/commands.rs:141
+#: crates/egui/src/app/component/form.rs:168 crates/egui/src/app/menu.rs:73
+msgid "Cancel"
+msgstr ""
+
+#: crates/core/src/engine_model/commands.rs:145
+msgid "Command"
+msgstr ""
+
+#: crates/core/src/engine_model/responses.rs:141
+msgid "Bad snapshot: %s"
+msgstr ""
+
+#: crates/core/src/engine_model/session.rs:269
+msgid "Bad engine message: %s"
+msgstr ""
+
+#: crates/core/src/engine_model/session.rs:277
+msgid "Engine connection closed."
+msgstr ""
+
+#: crates/core/src/engine_model/session.rs:279
+msgid "The engine stopped (%s)."
+msgstr ""
+
+#: crates/core/src/engine_model/session.rs:280
+msgid "The engine stopped."
+msgstr ""
+
+#: crates/core/src/interaction.rs:113
+msgid "Not available."
+msgstr ""
+
+#: crates/core/src/interaction.rs:114
+msgid "Not for this row."
+msgstr ""
+
+#: crates/core/src/interaction.rs:115
+msgid "Choose a row first."
+msgstr ""
+
+#: crates/core/src/interaction.rs:116
+msgid "Enter a count first."
+msgstr ""
+
+#: crates/core/src/interaction.rs:117
+msgid "Enter text first."
+msgstr ""
+
+#: crates/core/src/interaction.rs:118
+msgid "Choose a square first."
+msgstr ""
+
+#: crates/core/src/interaction.rs:119
+msgid "Choose a pane first."
+msgstr ""
+
+#: crates/core/src/interaction.rs:120
+msgid "Busy."
+msgstr ""
+
+#: crates/egui/src/app.rs:314 crates/tui/src/lib.rs:678
+msgid "Engine: %s"
+msgstr ""
+
+#: crates/egui/src/app.rs:319 crates/tui/src/lib.rs:684
+msgid "Last engine output:"
+msgstr ""
+
+#: crates/egui/src/app.rs:326
+msgid "Restart"
+msgstr ""
+
+#: crates/egui/src/app.rs:340
+msgid "%s: %s (%d of %d)"
+msgstr ""
+
+#: crates/egui/src/app.rs:356
+msgid "Loading image"
+msgstr ""
+
+#: crates/egui/src/app.rs:475
+msgid "Resize sidebar"
+msgstr ""
+
+#: crates/egui/src/app.rs:502 crates/egui/src/app.rs:513
+msgid "Client settings"
+msgstr ""
+
+#: crates/egui/src/app.rs:510 crates/egui/src/app/palette.rs:57
+#: crates/egui/src/app/palette.rs:103 crates/tui/src/lib.rs:858
+#: crates/tui/src/lib.rs:1027
+msgid "Actions"
+msgstr ""
+
+#: crates/egui/src/app.rs:528 crates/tui/src/lib.rs:647
+msgid "Ready"
+msgstr ""
+
+#: crates/egui/src/app.rs:556
+msgid "Interrupt"
+msgstr ""
+
+#: crates/egui/src/app/component/form.rs:143 crates/egui/src/editor.rs:99
+msgid "Press the new key"
+msgstr ""
+
+#: crates/egui/src/app/component/form.rs:165
+msgid "OK"
+msgstr ""
+
+#: crates/egui/src/app/component/overmap.rs:414 crates/egui/src/app/map.rs:204
+#: crates/tui/src/lib.rs:734
+msgid "Map"
+msgstr ""
+
+#: crates/egui/src/app/map.rs:129 crates/tui/src/lib.rs:744
+msgid "No map loaded"
+msgstr ""
+
+#: crates/egui/src/app/map.rs:277
+msgid "Player at (%d, %d). Cursor (%d, %d)."
+msgstr ""
+
+#: crates/egui/src/app/map.rs:280
+msgid "Player at (%d, %d). Cursor (%d, %d): %s."
+msgstr ""
+
+#: crates/egui/src/app/map.rs:507
+msgid "Map actions"
+msgstr ""
+
+#: crates/egui/src/app/menu.rs:257
+msgid "Space or Enter closes this popup"
+msgstr ""
+
+#: crates/egui/src/app/menu.rs:285
+msgid "Load more (%d of %d)"
+msgstr ""
+
+#: crates/egui/src/app/palette.rs:63
+msgid "Search"
+msgstr ""
+
+#: crates/egui/src/app/palette.rs:67
+msgid "Search actions"
+msgstr ""
+
+#: crates/egui/src/app/sidebar.rs:54
+msgid "Resize message log"
+msgstr ""
+
+#: crates/egui/src/display.rs:515
+msgid "No tileset found in the game's gfx folder."
+msgstr ""
+
+#: crates/egui/src/display.rs:669
+msgid "Tiles"
+msgstr ""
+
+#: crates/egui/src/display.rs:688
+msgid "none"
+msgstr ""
+
+#: crates/egui/src/display.rs:691
+msgid "Tileset"
+msgstr ""
+
+#: crates/egui/src/display.rs:707
+msgid "Tileset unavailable: %s"
+msgstr ""
+
+#: crates/egui/src/display.rs:711
+msgid "Reduced motion"
+msgstr ""
+
+#: crates/egui/src/setup.rs:58
+msgid "No engine found"
+msgstr ""
+
+#: crates/egui/src/setup.rs:60
+msgid "Path to cataclysm-bn-tiles:"
+msgstr ""
+
+#: crates/egui/src/setup.rs:63
+msgid "Use"
+msgstr ""
+
+#: crates/egui/src/setup.rs:75
+msgid "%s is not an executable file"
+msgstr ""
+
+#: crates/tui/src/lib.rs:649
+msgid "%s [Esc: interrupt]"
+msgstr ""
+
+#: crates/tui/src/lib.rs:688
+msgid "R: restart the engine    Ctrl-C: quit"
+msgstr ""
+
+#: crates/tui/src/settings.rs:136
+msgid "Press the new key (Esc cancels)"
+msgstr ""
+
+#: crates/tui/src/settings.rs:139
+msgid "/ filter: %s"
+msgstr ""

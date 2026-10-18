@@ -1,6 +1,7 @@
 //! Value editors for form fields and the key prompt of the keybindings screen. Each draws one control
 //! and returns the value to send.
 
+use bn_client_core::localise::tr;
 use bn_client_core::protocol::Editor;
 use eframe::egui::{self, accesskit};
 
@@ -95,7 +96,7 @@ pub fn key_prompt(ui: &mut egui::Ui) -> Option<String> {
 
 /// The line that asks for the key, read out as soon as it shows.
 pub fn key_wait(ui: &mut egui::Ui) {
-    let label = ui.label("Press the new key");
+    let label = ui.label(tr("Press the new key"));
     ui.ctx()
         .accesskit_node_builder(label.id, |b| b.set_live(accesskit::Live::Assertive));
 }

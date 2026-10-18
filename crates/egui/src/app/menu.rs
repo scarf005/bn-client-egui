@@ -3,6 +3,7 @@
 use super::App;
 use crate::windows::{self, WindowSpec};
 use crate::{a11y, editor};
+use bn_client_core::localise::{Value as Arg, tr, tr_format};
 use bn_client_core::{GameModel, markup};
 use eframe::egui::{self, accesskit};
 
@@ -69,7 +70,7 @@ impl<M: GameModel> App<M> {
             ui.set_min_width(520.0);
             // Cancel sits right under the title, so it is at the same place for every dialog.
             if menu.can_cancel && !menu.acknowledges() {
-                let button = ui.add_enabled(self.idle(), egui::Button::new("Cancel"));
+                let button = ui.add_enabled(self.idle(), egui::Button::new(tr("Cancel")));
                 ids.extend(button.enabled().then_some(button.id));
                 cancel |= button.clicked();
             }
@@ -253,7 +254,7 @@ impl<M: GameModel> App<M> {
                                 if choice.id == "acknowledge" {
                                     // Screen readers keep the engine's own name for the row.
                                     b.set_label(markup::plain(&choice.label));
-                                    b.set_description("Space or Enter closes this popup");
+                                    b.set_description(tr("Space or Enter closes this popup"));
                                 }
                             });
                             if choice.id != "acknowledge"
@@ -280,10 +281,12 @@ impl<M: GameModel> App<M> {
             let (shown, all) = (listed.inner_rect.height(), listed.content_size.y);
             more |= paged && all > shown && listed.state.offset.y + shown + 1.0 >= all;
             if menu.total > menu.choices.len() {
-                let rest = ui.button(format!(
-                    "Load more ({} of {})",
-                    menu.choices.len(),
-                    menu.total
+                let rest = ui.button(tr_format(
+                    "Load more (%d of %d)",
+                    &[
+                        Arg::Int(menu.choices.len() as i64),
+                        Arg::Int(menu.total as i64),
+                    ],
                 ));
                 more |= rest.clicked();
             }

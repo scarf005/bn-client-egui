@@ -62,3 +62,44 @@ fn clicking_a_main_menu_entry_shows_the_command_status() {
     });
     println!("Tutorial done after {:?}", clicked.elapsed());
 }
+
+/// Set `SHOT_DIR` to keep the main menu as a PNG.
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn a_korean_connection_words_the_clients_own_chrome_in_korean() {
+    let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
+    let root = bn_client_egui::transport::game_root(
+        engine.as_ref(),
+        std::env::var_os("BN_ROOT").map(Into::into),
+    )
+    .expect("game root");
+    let transport = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
+    let options = bn_client_egui::ConnectOptions {
+        locale: Some("ko_KR".into()),
+        ..Default::default()
+    };
+    let app = App::new(EngineModel::open(Box::new(transport), options))
+        .with_root(root.clone())
+        .with_target_format(eframe::wgpu::TextureFormat::Rgba8Unorm);
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(1280.0, 720.0))
+        .wgpu()
+        .build_ui_state(|ui, app: &mut App<EngineModel>| app.show(ui), app);
+    assert!(bn_client_egui::fonts::install(&h.ctx, &root));
+    run_until(&mut h, "the main menu", 120, |h| {
+        !h.state().model.screens().is_empty()
+    });
+    for _ in 0..10 {
+        h.run_steps(1);
+    }
+    h.get_by_label("준비");
+    h.get_by_label("클라이언트 설정");
+    assert!(h.query_by_label("Ready").is_none());
+    let image = h.render().expect("renders");
+    if let Some(dir) = std::env::var_os("SHOT_DIR") {
+        std::fs::create_dir_all(&dir).unwrap();
+        image
+            .save(std::path::Path::new(&dir).join("main-menu-ko.png"))
+            .unwrap();
+    }
+}

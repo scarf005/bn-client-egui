@@ -1,6 +1,7 @@
 //! Settings screens in the terminal: the key prompt and text fields of the 0.1 prompts.
 
 use crate::TuiApp;
+use bn_client_core::localise::{Value as Arg, tr, tr_format};
 use bn_client_core::{GameModel, Menu};
 use crossterm::event::{KeyCode, KeyEvent};
 
@@ -132,10 +133,10 @@ impl<M: GameModel> TuiApp<M> {
             return vec![];
         };
         match (field.kind.as_str(), &self.edit) {
-            ("key", _) => vec!["Press the new key (Esc cancels)".into()],
+            ("key", _) => vec![tr("Press the new key (Esc cancels)")],
             (_, Some(edit)) => vec![format!("{}: {}", field.label, edit.shown())],
             _ if !menu.entries().is_empty() => {
-                vec![format!("/ filter: {}", field.value)]
+                vec![tr_format("/ filter: %s", &[Arg::Text(field.value.clone())])]
             }
             _ => vec![format!("{}: {}_", field.label, field.value)],
         }

@@ -1,7 +1,7 @@
 //! What the engine answers: command stages and the response to each kind of request.
 
 use super::{EngineModel, Pending, RESIZE_DEBOUNCE};
-use crate::localise::{self, Catalogue};
+use crate::localise::{self, Catalogue, Value as Arg, tr_format};
 use crate::markup;
 use crate::model::{Failure, FailureKind};
 use crate::protocol::{self, RpcError, Snapshot};
@@ -124,7 +124,9 @@ impl EngineModel {
             .data_root
             .as_deref()
             .and_then(|root| Catalogue::load(root, value["locale"].as_str()?).map(Arc::new));
+        self.chrome = value["locale"].as_str().and_then(Catalogue::client);
         localise::install(self.catalogue.clone());
+        localise::install_client(self.chrome.clone());
         self.screen_queue = serde_json::from_value::<protocol::Hello>(value.clone())
             .map_or(1, |hello| hello.screen_queue());
         self.set_credits(&value);
@@ -136,7 +138,7 @@ impl EngineModel {
         self.subscribing = false;
         match result.map(serde_json::from_value::<Snapshot>) {
             Ok(Ok(s)) => self.replica.begin(s),
-            Ok(Err(e)) => self.tell(format!("Bad snapshot: {e}")),
+            Ok(Err(e)) => self.tell(tr_format("Bad snapshot: %s", &[Arg::Text(e.to_string())])),
             Err(e) => self.report_failure(&reason_of(&e)),
         }
     }

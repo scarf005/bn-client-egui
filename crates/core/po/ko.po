@@ -1,0 +1,240 @@
+# Korean translation of the bn-client chrome.
+# This file is distributed under the same license as the bn-client package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: bn-client\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-18 09:38+0900\n"
+"PO-Revision-Date: 2026-10-18 09:30+0900\n"
+"Language-Team: Korean\n"
+"Language: ko\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#: crates/core/src/engine_model.rs:585
+msgid "The engine has not answered for %d second."
+msgid_plural "The engine has not answered for %d seconds."
+msgstr[0] "엔진이 %d초 동안 응답하지 않았습니다."
+
+#: crates/core/src/engine_model.rs:708
+msgid "The engine could not be restarted: %s"
+msgstr "엔진을 다시 시작하지 못했습니다: %s"
+
+#: crates/core/src/engine_model/commands.rs:128
+msgid "Travel"
+msgstr "이동"
+
+#: crates/core/src/engine_model/commands.rs:129
+msgid "Right click"
+msgstr "오른쪽 클릭"
+
+#: crates/core/src/engine_model/commands.rs:141
+#: crates/egui/src/app/component/form.rs:168 crates/egui/src/app/menu.rs:73
+msgid "Cancel"
+msgstr "취소"
+
+#: crates/core/src/engine_model/commands.rs:145
+msgid "Command"
+msgstr "명령"
+
+#: crates/core/src/engine_model/responses.rs:141
+msgid "Bad snapshot: %s"
+msgstr "잘못된 스냅샷: %s"
+
+#: crates/core/src/engine_model/session.rs:269
+msgid "Bad engine message: %s"
+msgstr "잘못된 엔진 메시지: %s"
+
+#: crates/core/src/engine_model/session.rs:277
+msgid "Engine connection closed."
+msgstr "엔진 연결이 끊겼습니다."
+
+#: crates/core/src/engine_model/session.rs:279
+msgid "The engine stopped (%s)."
+msgstr "엔진이 멈췄습니다(%s)."
+
+#: crates/core/src/engine_model/session.rs:280
+msgid "The engine stopped."
+msgstr "엔진이 멈췄습니다."
+
+#: crates/core/src/interaction.rs:113
+msgid "Not available."
+msgstr "사용할 수 없습니다."
+
+#: crates/core/src/interaction.rs:114
+msgid "Not for this row."
+msgstr "이 줄에는 쓸 수 없습니다."
+
+#: crates/core/src/interaction.rs:115
+msgid "Choose a row first."
+msgstr "먼저 줄을 고르세요."
+
+#: crates/core/src/interaction.rs:116
+msgid "Enter a count first."
+msgstr "먼저 개수를 입력하세요."
+
+#: crates/core/src/interaction.rs:117
+msgid "Enter text first."
+msgstr "먼저 글을 입력하세요."
+
+#: crates/core/src/interaction.rs:118
+msgid "Choose a square first."
+msgstr "먼저 칸을 고르세요."
+
+#: crates/core/src/interaction.rs:119
+msgid "Choose a pane first."
+msgstr "먼저 창을 고르세요."
+
+#: crates/core/src/interaction.rs:120
+msgid "Busy."
+msgstr "처리 중입니다."
+
+#: crates/egui/src/app.rs:314 crates/tui/src/lib.rs:678
+msgid "Engine: %s"
+msgstr "엔진: %s"
+
+#: crates/egui/src/app.rs:319 crates/tui/src/lib.rs:684
+msgid "Last engine output:"
+msgstr "마지막 엔진 출력:"
+
+#: crates/egui/src/app.rs:326
+msgid "Restart"
+msgstr "다시 시작"
+
+#: crates/egui/src/app.rs:340
+msgid "%s: %s (%d of %d)"
+msgstr "%s: %s (%d/%d)"
+
+#: crates/egui/src/app.rs:356
+msgid "Loading image"
+msgstr "불러오기 그림"
+
+#: crates/egui/src/app.rs:475
+msgid "Resize sidebar"
+msgstr "사이드바 크기 조절"
+
+#: crates/egui/src/app.rs:502 crates/egui/src/app.rs:513
+msgid "Client settings"
+msgstr "클라이언트 설정"
+
+#: crates/egui/src/app.rs:510 crates/egui/src/app/palette.rs:57
+#: crates/egui/src/app/palette.rs:103 crates/tui/src/lib.rs:858
+#: crates/tui/src/lib.rs:1027
+msgid "Actions"
+msgstr "행동"
+
+#: crates/egui/src/app.rs:528 crates/tui/src/lib.rs:647
+msgid "Ready"
+msgstr "준비"
+
+#: crates/egui/src/app.rs:556
+msgid "Interrupt"
+msgstr "중단"
+
+#: crates/egui/src/app/component/form.rs:143 crates/egui/src/editor.rs:99
+msgid "Press the new key"
+msgstr "새 키를 누르세요"
+
+#: crates/egui/src/app/component/form.rs:165
+msgid "OK"
+msgstr "확인"
+
+#: crates/egui/src/app/component/overmap.rs:414 crates/egui/src/app/map.rs:204
+#: crates/tui/src/lib.rs:734
+msgid "Map"
+msgstr "지도"
+
+#: crates/egui/src/app/map.rs:129 crates/tui/src/lib.rs:744
+msgid "No map loaded"
+msgstr "불러온 지도가 없습니다"
+
+#: crates/egui/src/app/map.rs:277
+msgid "Player at (%d, %d). Cursor (%d, %d)."
+msgstr "플레이어 (%d, %d). 커서 (%d, %d)."
+
+#: crates/egui/src/app/map.rs:280
+msgid "Player at (%d, %d). Cursor (%d, %d): %s."
+msgstr "플레이어 (%d, %d). 커서 (%d, %d): %s."
+
+#: crates/egui/src/app/map.rs:507
+msgid "Map actions"
+msgstr "지도 행동"
+
+#: crates/egui/src/app/menu.rs:257
+msgid "Space or Enter closes this popup"
+msgstr "Space나 Enter로 이 창을 닫습니다"
+
+#: crates/egui/src/app/menu.rs:285
+msgid "Load more (%d of %d)"
+msgstr "더 불러오기 (%d/%d)"
+
+#: crates/egui/src/app/palette.rs:63
+msgid "Search"
+msgstr "찾기"
+
+#: crates/egui/src/app/palette.rs:67
+msgid "Search actions"
+msgstr "행동 찾기"
+
+#: crates/egui/src/app/sidebar.rs:54
+msgid "Resize message log"
+msgstr "메시지 기록 크기 조절"
+
+#: crates/egui/src/display.rs:515
+msgid "No tileset found in the game's gfx folder."
+msgstr "게임의 gfx 폴더에 타일셋이 없습니다."
+
+#: crates/egui/src/display.rs:669
+msgid "Tiles"
+msgstr "타일"
+
+#: crates/egui/src/display.rs:688
+msgid "none"
+msgstr "없음"
+
+#: crates/egui/src/display.rs:691
+msgid "Tileset"
+msgstr "타일셋"
+
+#: crates/egui/src/display.rs:707
+msgid "Tileset unavailable: %s"
+msgstr "타일셋을 쓸 수 없습니다: %s"
+
+#: crates/egui/src/display.rs:711
+msgid "Reduced motion"
+msgstr "움직임 줄이기"
+
+#: crates/egui/src/setup.rs:58
+msgid "No engine found"
+msgstr "엔진을 찾지 못했습니다"
+
+#: crates/egui/src/setup.rs:60
+msgid "Path to cataclysm-bn-tiles:"
+msgstr "cataclysm-bn-tiles 경로:"
+
+#: crates/egui/src/setup.rs:63
+msgid "Use"
+msgstr "사용"
+
+#: crates/egui/src/setup.rs:75
+msgid "%s is not an executable file"
+msgstr "%s은(는) 실행 파일이 아닙니다"
+
+#: crates/tui/src/lib.rs:649
+msgid "%s [Esc: interrupt]"
+msgstr "%s [Esc: 중단]"
+
+#: crates/tui/src/lib.rs:688
+msgid "R: restart the engine    Ctrl-C: quit"
+msgstr "R: 엔진 다시 시작    Ctrl-C: 종료"
+
+#: crates/tui/src/settings.rs:136
+msgid "Press the new key (Esc cancels)"
+msgstr "새 키를 누르세요 (Esc: 취소)"
+
+#: crates/tui/src/settings.rs:139
+msgid "/ filter: %s"
+msgstr "/ 필터: %s"

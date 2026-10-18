@@ -3,6 +3,7 @@
 use crate::tileset::{self, PaintQuery, Paints, Placed, Query, Tileset, TilesetInfo, Turn};
 use crate::tint::{Paint, tint_pixel};
 use crate::windows::WindowState;
+use bn_client_core::localise::{Value as Arg, tr, tr_format};
 use bn_client_core::protocol::ModTileset;
 use bn_client_core::protocol::OvermapTile;
 use bn_client_core::{Cell, Layer, Rgb};
@@ -511,7 +512,7 @@ impl Display {
             return;
         }
         let Some(dir) = self.chosen().map(|t| t.dir.clone()) else {
-            self.problem = Some("no tileset found in the game's gfx folder".into());
+            self.problem = Some(tr("No tileset found in the game's gfx folder."));
             return;
         };
         match Tileset::load_with(&dir, self.mods.as_deref()) {
@@ -665,7 +666,7 @@ impl Display {
         let before = self.settings.clone();
         ui.vertical(|ui| {
             ui.horizontal(|ui| {
-                for (tiles, label) in [(true, "Tiles"), (false, "ASCII")] {
+                for (tiles, label) in [(true, tr("Tiles")), (false, "ASCII".into())] {
                     if ui
                         .selectable_label(self.wants_tiles() == tiles, label)
                         .clicked()
@@ -684,10 +685,10 @@ impl Display {
                     }
                 });
             });
-            let shown = self.chosen().map_or("none".to_string(), |t| t.view.clone());
+            let shown = self.chosen().map_or_else(|| tr("none"), |t| t.view.clone());
             let mut pick = None;
             ui.add_enabled_ui(self.wants_tiles(), |ui| {
-                egui::ComboBox::from_label("Tileset")
+                egui::ComboBox::from_label(tr("Tileset"))
                     .selected_text(shown)
                     .show_ui(ui, |ui| {
                         for t in &self.tilesets {
@@ -702,9 +703,12 @@ impl Display {
                 self.settings.tileset = pick;
             }
             if let Some(problem) = &self.problem {
-                ui.label(format!("Tileset unavailable: {problem}"));
+                ui.label(tr_format(
+                    "Tileset unavailable: %s",
+                    &[Arg::Text(problem.clone())],
+                ));
             }
-            ui.checkbox(&mut self.settings.reduced_motion, "Reduced motion");
+            ui.checkbox(&mut self.settings.reduced_motion, tr("Reduced motion"));
         });
         if self.settings != before {
             self.save();

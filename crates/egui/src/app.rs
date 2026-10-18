@@ -4,6 +4,7 @@ use crate::effects::Effects;
 use crate::iso::{self, View3d};
 use crate::text;
 use crate::windows::{self, Origin, Shown, WindowSpec};
+use bn_client_core::localise::{Value as Arg, tr, tr_format};
 use bn_client_core::protocol::SidebarSide;
 use bn_client_core::{CommandStatus, Failure, GameModel, Loading, Pos, interaction};
 use eframe::egui::{self, accesskit};
@@ -309,17 +310,20 @@ impl<M: GameModel> App<M> {
         ui.ctx()
             .accesskit_node_builder(heading.id, |b| b.set_live(accesskit::Live::Assertive));
         if let Some(engine) = &failure.engine {
-            ui.label(format!("Engine: {}", engine.display()));
+            ui.label(tr_format(
+                "Engine: %s",
+                &[Arg::Text(engine.display().to_string())],
+            ));
         }
         if !failure.stderr.is_empty() {
-            ui.label("Last engine output:");
+            ui.label(tr("Last engine output:"));
             egui::ScrollArea::vertical().show(ui, |ui| {
                 for line in &failure.stderr {
                     ui.monospace(line);
                 }
             });
         }
-        let restart = ui.button("Restart");
+        let restart = ui.button(tr("Restart"));
         if restart.clicked() {
             self.model.restart();
         }
@@ -332,11 +336,14 @@ impl<M: GameModel> App<M> {
     fn loading_content(&mut self, ui: &mut egui::Ui, loading: &Loading) {
         ui.heading(&loading.title);
         if let Some(step) = loading.entries.get(loading.index) {
-            let status = format!(
-                "{}: {step} ({} of {})",
-                loading.title,
-                loading.index + 1,
-                loading.entries.len()
+            let status = tr_format(
+                "%s: %s (%d of %d)",
+                &[
+                    Arg::Text(loading.title.clone()),
+                    Arg::Text(step.clone()),
+                    Arg::Int(loading.index as i64 + 1),
+                    Arg::Int(loading.entries.len() as i64),
+                ],
             );
             let live = ui.label(status);
             ui.ctx()
@@ -346,7 +353,7 @@ impl<M: GameModel> App<M> {
             let uri = format!("file://{}", root.join(image).display());
             ui.add(
                 egui::Image::new(uri)
-                    .alt_text("Loading image")
+                    .alt_text(tr("Loading image"))
                     .max_size(egui::vec2(
                         ui.available_width(),
                         ui.available_height() * 0.6,
@@ -465,7 +472,7 @@ impl<M: GameModel> App<M> {
                 ui.allocate_rect(rect, egui::Sense::hover());
             });
         self.sidebar = Some((side, sidebar.response.rect));
-        label_resize_handle(ui.ctx(), &name, "Resize sidebar");
+        label_resize_handle(ui.ctx(), &name, &tr("Resize sidebar"));
         crate::toolbar::show(ui, &mut self.model);
         self.region = Some(ui.available_rect_before_wrap());
         egui::CentralPanel::default()
@@ -492,7 +499,7 @@ impl<M: GameModel> App<M> {
         }
         let spec = WindowSpec {
             closable: true,
-            ..self.window_spec(ctx, Some("client-settings"), "Client settings")
+            ..self.window_spec(ctx, Some("client-settings"), &tr("Client settings"))
         };
         self.client_settings = !windows::show(ctx, spec, |ui| self.display.controls(ui)).closed;
     }
@@ -500,10 +507,10 @@ impl<M: GameModel> App<M> {
     /// The pressed control's name and stage, announced politely; stays until the next command.
     fn bar(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
-            if ui.button("Actions").clicked() {
+            if ui.button(tr("Actions")).clicked() {
                 self.palette = self.palette.is_none().then(String::new);
             }
-            if ui.button("Client settings").clicked() {
+            if ui.button(tr("Client settings")).clicked() {
                 self.client_settings = !self.client_settings;
             }
             self.status(ui);
@@ -518,7 +525,7 @@ impl<M: GameModel> App<M> {
         let text = command
             .as_ref()
             .filter(|s| !(s.finished && s.stage == "done"))
-            .map_or_else(|| "Ready".into(), CommandStatus::line);
+            .map_or_else(|| tr("Ready"), CommandStatus::line);
         // Every stage reached since the last frame is said, even one that is not shown afterwards.
         let news = command
             .as_ref()
@@ -546,7 +553,7 @@ impl<M: GameModel> App<M> {
             } else {
                 ui.spinner();
             }
-            if ui.button("Interrupt").clicked() {
+            if ui.button(tr("Interrupt")).clicked() {
                 self.model.interrupt();
             }
         }

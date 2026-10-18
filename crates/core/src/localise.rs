@@ -2,8 +2,11 @@
 //! (`lang/mo/<locale>/LC_MESSAGES/cataclysm-bn.mo` of the game root), its plural form comes from the
 //! catalogue header, and its placeholders are filled the way the engine's `string_format` fills them.
 //!
-//! The catalogue of the connection is installed per thread, by the thread that polls the model, which is
-//! also the thread that draws: `Text::shown` reads it without a handle.
+//! The client words its own chrome with `tr` and its kin from its built-in catalogues (`crates/core/po`), in
+//! the same language and with the same plural and placeholder rules.
+//!
+//! The catalogues of the connection are installed per thread, by the thread that polls the model, which is
+//! also the thread that draws: `Text::shown` and `tr` read them without a handle.
 
 use crate::protocol::{LocalisedString, TextArg};
 use serde_json::Number;
@@ -85,6 +88,14 @@ impl Catalogue {
         Self::parse(&std::fs::read(path).ok()?).ok()
     }
 
+    /// The client's own catalogue of `locale`, built in; none for a language it has no words for.
+    pub fn client(locale: &str) -> Option<Arc<Self>> {
+        names(locale)
+            .find_map(|name| CLIENT.iter().find(|(language, _)| *language == name))
+            .and_then(|(_, bytes)| Self::parse(bytes).ok())
+            .map(Arc::new)
+    }
+
     /// The format of `message` in this language: the translation, or its key when the catalogue has none.
     fn format<'a>(&'a self, message: &'a LocalisedString) -> &'a str {
         let key = message.key.as_str();
@@ -92,16 +103,29 @@ impl Catalogue {
             .ctx
             .as_ref()
             .map_or_else(|| key.to_string(), |ctx| format!("{ctx}\u{4}{key}"));
-        let form = message
-            .plural
-            .as_ref()
-            .map_or(0, |n| self.plural.form(count(n)));
+        self.translation(&id, message.plural.as_ref().map(count))
+            .unwrap_or(key)
+    }
+
+    /// The translation of the entry `id`, in the form for the count `n`.
+    fn translation(&self, id: &str, n: Option<u64>) -> Option<&str> {
+        let form = n.map_or(0, |n| self.plural.form(n));
         self.entries
-            .get(&id)
+            .get(id)
             .and_then(|forms| forms.get(form).or(forms.first()))
-            .map_or(key, String::as_str)
+            .map(String::as_str)
     }
 }
+
+/// The catalogue names a BN language id is looked up by, as the engine looks up its own: the id itself, then
+/// the language without its dialect (`ko_KR`, then `ko`).
+fn names(locale: &str) -> impl Iterator<Item = &str> {
+    let language = locale.split_once('_').map(|(language, _)| language);
+    std::iter::once(locale).chain(language)
+}
+
+/// The client's catalogues by locale, compiled from `crates/core/po` by the build script.
+const CLIENT: &[(&str, &[u8])] = include!(concat!(env!("OUT_DIR"), "/catalogues.rs"));
 
 /// The plural rule of a catalogue: the C expression of its `Plural-Forms` header over `n`.
 #[derive(Default)]
@@ -285,6 +309,7 @@ fn count(n: &Number) -> u64 {
 
 thread_local! {
     static ACTIVE: RefCell<Option<Arc<Catalogue>>> = const { RefCell::new(None) };
+    static CHROME: RefCell<Option<Arc<Catalogue>>> = const { RefCell::new(None) };
 }
 
 /// Makes `catalogue` the one this thread renders with; none renders every message from its key.
@@ -292,11 +317,47 @@ pub fn install(catalogue: Option<Arc<Catalogue>>) {
     ACTIVE.with(|active| *active.borrow_mut() = catalogue);
 }
 
+/// Makes `catalogue` the one this thread words the client's chrome with; none words it in English.
+pub fn install_client(catalogue: Option<Arc<Catalogue>>) {
+    CHROME.with(|chrome| *chrome.borrow_mut() = catalogue);
+}
+
 /// A value of a placeholder.
-enum Value {
+pub enum Value {
     Int(i64),
     Float(f64),
     Text(String),
+}
+
+/// The client's words `msgid` in this thread's language.
+pub fn tr(msgid: &str) -> String {
+    tr_format(msgid, &[])
+}
+
+/// The client's words `msgid` in this thread's language, placeholders filled.
+pub fn tr_format(msgid: &str, args: &[Value]) -> String {
+    let format = CHROME.with(|chrome| {
+        let chrome = chrome.borrow();
+        chrome
+            .as_deref()
+            .and_then(|c| c.translation(msgid, None))
+            .map(String::from)
+    });
+    printf(format.as_deref().unwrap_or(msgid), args)
+}
+
+/// The client's words for the count `n` in this thread's language, placeholders filled: `one` or `other` in
+/// English.
+pub fn tr_plural(one: &str, other: &str, n: u64, args: &[Value]) -> String {
+    let format = CHROME.with(|chrome| {
+        let chrome = chrome.borrow();
+        chrome
+            .as_deref()
+            .and_then(|c| c.translation(one, Some(n)))
+            .map(String::from)
+    });
+    let english = if n == 1 { one } else { other };
+    printf(format.as_deref().unwrap_or(english), args)
 }
 
 fn value(arg: &TextArg) -> Value {
@@ -713,5 +774,57 @@ mod tests {
         let le = mo(&header("nplurals=1; plural=0;"), &[("Hi", "안녕")]);
         assert_ne!(bytes, le);
         assert_eq!(Catalogue::parse(&bytes).unwrap().entries["Hi"], ["안녕"]);
+    }
+
+    #[test]
+    fn the_clients_words_follow_its_catalogue_and_fall_back_to_english() {
+        install_client(Some(catalogue(
+            "nplurals=2; plural=(n != 1);",
+            &[
+                ("Cursor (%d, %d)", "%2$d, %1$d: Zeiger"),
+                ("%d second", "%d Sekunde\0%d Sekunden"),
+            ],
+        )));
+        // Through bindings, so `xgettext` does not take these test words for the client's.
+        let (cursor, second, seconds) = ("Cursor (%d, %d)", "%d second", "%d seconds");
+        let at = [Value::Int(3), Value::Int(4)];
+        assert_eq!(tr_format(cursor, &at), "4, 3: Zeiger");
+        let count = |n: u64| tr_plural(second, seconds, n, &[Value::Int(n as i64)]);
+        assert_eq!([1, 2].map(count), ["1 Sekunde", "2 Sekunden"]);
+        let ready = "Ready";
+        assert_eq!(tr(ready), "Ready");
+        install_client(None);
+        assert_eq!([1, 5].map(count), ["1 second", "5 seconds"]);
+        assert_eq!(tr_format(cursor, &at), "Cursor (3, 4)");
+    }
+
+    /// `tools/update_po.sh` merges every extracted message into each language, untranslated until worded.
+    #[test]
+    fn every_built_in_language_words_every_extracted_message() {
+        let po = Path::new(env!("CARGO_MANIFEST_DIR")).join("po");
+        let languages = std::fs::read_dir(&po)
+            .unwrap()
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| p.extension().is_some_and(|e| e == "po"))
+            .collect::<Vec<_>>();
+        assert!(languages.len() >= 2, "{languages:?}");
+        for path in languages {
+            let locale = path.file_stem().unwrap().to_string_lossy().into_owned();
+            assert!(
+                Catalogue::client(&locale).is_some(),
+                "{locale} is not built in"
+            );
+            for message in polib::po_file::parse(&path).unwrap().messages() {
+                assert!(
+                    message.is_translated() && !message.flags().is_fuzzy(),
+                    "{locale} lacks {:?}",
+                    message.msgid()
+                );
+            }
+        }
+        assert!(Catalogue::client("en").is_none());
+        let korean = Catalogue::client("ko_KR").expect("the dialect falls back to its language");
+        assert_eq!(korean.translation("Ready", None), Some("준비"));
     }
 }

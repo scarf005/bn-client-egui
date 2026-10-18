@@ -3,6 +3,7 @@
 use super::App;
 use crate::a11y;
 use crate::windows::{self, WindowSpec};
+use bn_client_core::localise::tr;
 use bn_client_core::{GameModel, markup};
 use eframe::egui::{self, accesskit};
 
@@ -53,17 +54,17 @@ impl<M: GameModel> App<M> {
         let spec = WindowSpec {
             closable: true,
             width: Some(420.0),
-            ..self.window_spec(ctx, Some("palette"), "Actions")
+            ..self.window_spec(ctx, Some("palette"), &tr("Actions"))
         };
         let window_id = spec.id;
         let shown = windows::show(ctx, spec, |ui| {
             let search = ui.add(
                 egui::TextEdit::singleline(&mut query)
-                    .hint_text("Search")
+                    .hint_text(tr("Search"))
                     .desired_width(f32::INFINITY),
             );
             search.widget_info(|| {
-                egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Search actions")
+                egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, tr("Search actions"))
             });
             a11y::text_field(ui.ctx(), search.id);
             ids.push(search.id);
@@ -99,7 +100,7 @@ impl<M: GameModel> App<M> {
         if self.keep_window(ctx, Some("palette"), &shown) {
             self.palette = None;
         }
-        a11y::dialog(ctx, window_id, "Actions", "");
+        a11y::dialog(ctx, window_id, &tr("Actions"), "");
         self.palette_ids = ids;
         match invoke {
             Some(id) => {

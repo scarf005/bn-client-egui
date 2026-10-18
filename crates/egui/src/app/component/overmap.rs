@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::app::{CELL, rgb};
+use bn_client_core::localise::tr;
 use bn_client_core::protocol::OvermapWindow;
 
 /// One thing the overmap draws, in the order it is drawn.
@@ -410,7 +411,7 @@ impl<M: GameModel> App<M> {
         }
         let name = match (&map.head.label, map.mode) {
             (Some(label), _) => markup::plain(&label.shown()),
-            (None, MapMode::World) => "Map".into(),
+            (None, MapMode::World) => tr("Map"),
             (None, MapMode::Overmap) => screen
                 .title
                 .as_ref()

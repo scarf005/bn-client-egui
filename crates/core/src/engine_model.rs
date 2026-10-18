@@ -11,7 +11,7 @@ pub use session::ConnectOptions;
 use crate::clock::Clock;
 use crate::colors::ColorMap;
 use crate::interaction::{self, InvokeError, Pages};
-use crate::localise::{self, Catalogue};
+use crate::localise::{self, Catalogue, Value as Arg, tr_format, tr_plural};
 use crate::markup::{self, Run};
 use crate::model::{
     ActionEntry, Cell, CommandStatus, Effect, Failure, FailureKind, GameModel, Heard, Layer,
@@ -90,6 +90,8 @@ pub struct EngineModel {
     /// last hello granted.
     data_root: Option<std::path::PathBuf>,
     catalogue: Option<Arc<Catalogue>>,
+    /// The client's own catalogue for the locale asked for, then for the one the last hello granted.
+    chrome: Option<Arc<Catalogue>>,
     /// The ids of the tints the client's tileset has, and what the engine was last told.
     tint_ids: Vec<String>,
     tints_told: Vec<String>,
@@ -547,6 +549,7 @@ impl GameModel for EngineModel {
     fn poll(&mut self) {
         profiling::scope!("model.poll");
         localise::install(self.catalogue.clone());
+        localise::install_client(self.chrome.clone());
         let now = self.clock.now();
         // The client's lines stand beside the game's log for a while; they are not part of its history.
         let expired = self
@@ -578,9 +581,11 @@ impl GameModel for EngineModel {
         {
             self.failure = Some(Failure {
                 kind: FailureKind::Stalled,
-                message: format!(
-                    "The engine has not answered for {} seconds.",
-                    self.stall.as_secs()
+                message: tr_plural(
+                    "The engine has not answered for %d second.",
+                    "The engine has not answered for %d seconds.",
+                    self.stall.as_secs(),
+                    &[Arg::Int(self.stall.as_secs() as i64)],
                 ),
                 stderr: self.transport.stderr_tail(),
                 engine: None,
@@ -699,7 +704,10 @@ impl GameModel for EngineModel {
             Err(e) => {
                 self.respawn = Some(respawn);
                 if let Some(f) = &mut self.failure {
-                    f.message = format!("The engine could not be restarted: {e}");
+                    f.message = tr_format(
+                        "The engine could not be restarted: %s",
+                        &[Arg::Text(e.to_string())],
+                    );
                 }
                 false
             }

@@ -3,6 +3,7 @@
 mod component;
 mod settings;
 
+use bn_client_core::localise::{Value as Arg, tr, tr_format};
 use bn_client_core::markup::plain;
 use bn_client_core::protocol::{ItemListId, SidebarSide};
 use bn_client_core::sidebar::{self as native, Body};
@@ -643,9 +644,9 @@ impl<M: GameModel> TuiApp<M> {
         let command = self
             .model
             .command()
-            .map_or_else(|| "Ready".into(), |s| s.line());
+            .map_or_else(|| tr("Ready"), |s| s.line());
         let command = match self.model.busy() {
-            true => format!("{command} [Esc: interrupt]"),
+            true => tr_format("%s [Esc: interrupt]", &[Arg::Text(command)]),
             false => command,
         };
         // What the engine's mouse view prints for the hovered square, once it has answered.
@@ -673,15 +674,18 @@ impl<M: GameModel> TuiApp<M> {
     fn draw_failure(f: &mut Frame, failure: &Failure) {
         let mut lines = vec![Line::from(failure.message.clone()), Line::from("")];
         if let Some(engine) = &failure.engine {
-            lines.push(Line::from(format!("Engine: {}", engine.display())));
+            lines.push(Line::from(tr_format(
+                "Engine: %s",
+                &[Arg::Text(engine.display().to_string())],
+            )));
             lines.push(Line::from(""));
         }
         if !failure.stderr.is_empty() {
-            lines.push(Line::from("Last engine output:"));
+            lines.push(Line::from(tr("Last engine output:")));
             lines.extend(failure.stderr.iter().map(|l| Line::from(l.clone())));
             lines.push(Line::from(""));
         }
-        lines.push(Line::from("R: restart the engine    Ctrl-C: quit"));
+        lines.push(Line::from(tr("R: restart the engine    Ctrl-C: quit")));
         f.render_widget(Paragraph::new(lines), f.area());
     }
 
@@ -727,7 +731,7 @@ impl<M: GameModel> TuiApp<M> {
     }
 
     fn draw_map(&mut self, f: &mut Frame, area: Rect) {
-        let block = Block::bordered().title("Map");
+        let block = Block::bordered().title(tr("Map"));
         let inner = block.inner(area);
         f.render_widget(block, area);
         self.model.set_viewport(Pos {
@@ -737,7 +741,7 @@ impl<M: GameModel> TuiApp<M> {
         let size = self.model.size();
         if size.x <= 0 || size.y <= 0 {
             self.map_cells = Rect::default();
-            f.render_widget(Paragraph::new("No map loaded"), inner);
+            f.render_widget(Paragraph::new(tr("No map loaded")), inner);
             return;
         }
         let player = self.model.player();
@@ -851,7 +855,7 @@ impl<M: GameModel> TuiApp<M> {
             .map(|a| Line::raw(action_label(a)))
             .collect::<Vec<_>>();
         f.render_widget(
-            Paragraph::new(lines).block(Block::bordered().title("Actions")),
+            Paragraph::new(lines).block(Block::bordered().title(tr("Actions"))),
             area,
         );
     }
@@ -1020,8 +1024,9 @@ impl<M: GameModel> TuiApp<M> {
                 )
             })
             .collect();
+        let title = tr("Actions");
         let popup = Popup {
-            title: "Actions",
+            title: &title,
             header: vec![],
             tabs: vec![],
             rows,

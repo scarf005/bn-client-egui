@@ -3,6 +3,7 @@
 
 use super::{App, CELL, menu_item, rgb};
 use crate::iso::{self, camera::Viewport, pages::Pages, scene::Scene};
+use bn_client_core::localise::{Value as Arg, tr, tr_format};
 use bn_client_core::{GameModel, Pos};
 use eframe::egui::{self, accesskit};
 use std::sync::Arc;
@@ -125,7 +126,7 @@ impl<M: GameModel> App<M> {
         let now = self.map_viewport(ui, cell_px, three);
         let size = self.model.size();
         if size.x <= 0 || size.y <= 0 {
-            ui.label("No map loaded");
+            ui.label(tr("No map loaded"));
             return;
         }
         // The cursor is kept on a map square, so it stays there when the view scrolls; the engine's own
@@ -199,7 +200,8 @@ impl<M: GameModel> App<M> {
             self.iso.drag(response.drag_delta());
             ui.ctx().request_repaint();
         }
-        response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Other, true, "Map"));
+        response
+            .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Other, true, tr("Map")));
         self.map_wheel(ui, &response);
         self.map_view = Some((response.rect.min, cell_px));
         let scene = shown.as_ref().map(|(scene, _)| scene.as_ref());
@@ -265,17 +267,19 @@ impl<M: GameModel> App<M> {
                 lines.collect::<Vec<_>>().join(" ")
             },
         );
-        let said = match said.trim_end_matches('.') {
-            "" => String::new(),
-            said => format!(": {said}"),
+        let mut args = vec![
+            Arg::Int((player.x + origin.x).into()),
+            Arg::Int((player.y + origin.y).into()),
+            Arg::Int((cursor.x + origin.x).into()),
+            Arg::Int((cursor.y + origin.y).into()),
+        ];
+        let mut status = match said.trim_end_matches('.') {
+            "" => tr_format("Player at (%d, %d). Cursor (%d, %d).", &args),
+            said => {
+                args.push(Arg::Text(said.into()));
+                tr_format("Player at (%d, %d). Cursor (%d, %d): %s.", &args)
+            }
         };
-        let mut status = format!(
-            "Player at ({}, {}). Cursor ({}, {}){said}.",
-            player.x + origin.x,
-            player.y + origin.y,
-            cursor.x + origin.x,
-            cursor.y + origin.y,
-        );
         if let Some(route) = self.model.route_text() {
             status += &format!(" {route}");
         }
@@ -500,7 +504,7 @@ impl<M: GameModel> App<M> {
         if let Some(menu) = menu {
             ui.ctx().accesskit_node_builder(menu.response.id, |b| {
                 b.set_role(accesskit::Role::Menu);
-                b.set_label("Map actions");
+                b.set_label(tr("Map actions"));
             });
         }
     }

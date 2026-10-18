@@ -107,18 +107,18 @@ pub enum Reason {
 impl Reason {
     /// The client's words for a refusal of its own; none for what the engine turned off, whose `denial` says why.
     pub fn words(self) -> Option<String> {
-        let words = match self {
+        use crate::localise::tr;
+        Some(match self {
             Reason::Disabled | Reason::RowDisabled => return None,
-            Reason::NoScreen | Reason::Unknown | Reason::BadArgs => "Not available.",
-            Reason::NotOnThisRow => "Not for this row.",
-            Reason::Missing(ArgKind::Row | ArgKind::Rows) => "Choose a row first.",
-            Reason::Missing(ArgKind::Count) => "Enter a count first.",
-            Reason::Missing(ArgKind::Text) => "Enter text first.",
-            Reason::Missing(ArgKind::Pos) => "Choose a square first.",
-            Reason::Missing(ArgKind::Pane) => "Choose a pane first.",
-            Reason::Busy => "Busy.",
-        };
-        Some(words.into())
+            Reason::NoScreen | Reason::Unknown | Reason::BadArgs => tr("Not available."),
+            Reason::NotOnThisRow => tr("Not for this row."),
+            Reason::Missing(ArgKind::Row | ArgKind::Rows) => tr("Choose a row first."),
+            Reason::Missing(ArgKind::Count) => tr("Enter a count first."),
+            Reason::Missing(ArgKind::Text) => tr("Enter text first."),
+            Reason::Missing(ArgKind::Pos) => tr("Choose a square first."),
+            Reason::Missing(ArgKind::Pane) => tr("Choose a pane first."),
+            Reason::Busy => tr("Busy."),
+        })
     }
 }
 

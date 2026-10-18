@@ -3,6 +3,7 @@
 use super::{EngineModel, Pending};
 use crate::interaction::{self, InvokeError};
 use crate::keys;
+use crate::localise::tr;
 use crate::markup;
 use crate::model::{CommandStatus, MenuChoice, MenuModel};
 use crate::protocol::Operation;
@@ -124,8 +125,8 @@ impl EngineModel {
                     Some(affordance_id.clone()),
                 )
             }
-            Operation::Travel { .. } => (Some("Travel".into()), None),
-            Operation::Context { .. } => (Some("Right click".into()), None),
+            Operation::Travel { .. } => (Some(tr("Travel")), None),
+            Operation::Context { .. } => (Some(tr("Right click")), None),
             Operation::TileAction { action_id, pos } => {
                 let found = self
                     .hovered
@@ -137,11 +138,11 @@ impl EngineModel {
                     Some(action_id.clone()),
                 )
             }
-            Operation::Cancel => (Some("Cancel".into()), None),
+            Operation::Cancel => (Some(tr("Cancel")), None),
             _ => (None, None),
         };
         CommandStatus {
-            label: label.unwrap_or_else(|| "Command".into()),
+            label: label.unwrap_or_else(|| tr("Command")),
             target,
             stage: "sent".into(),
             text: String::new(),

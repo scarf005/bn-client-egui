@@ -1,6 +1,7 @@
 use bn_client_egui::display::{self, settings_path};
 use bn_client_egui::fonts;
 use bn_client_egui::launch::{LaunchArgs, Opened, Search, open_engine, resolve};
+use bn_client_egui::localise::Catalogue;
 use bn_client_egui::setup::{Launcher, Starter};
 use bn_client_egui::theme;
 use bn_client_egui::transport::game_root;
@@ -96,6 +97,9 @@ fn main() -> eframe::Result {
         native_options(),
         Box::new(move |cc| {
             theme::apply(&cc.egui_ctx);
+            // The first-run window speaks the asked language before any engine grants one.
+            let chrome = launch.locale.as_deref().and_then(Catalogue::client);
+            bn_client_egui::localise::install_client(chrome);
             let starter = launch.clone();
             let start: Starter = Box::new(move |ctx, engine| start_engine(ctx, engine, &starter));
             let remember = |l: Launcher| match bn_client_egui::launch::config_file() {

@@ -4,6 +4,7 @@ use super::{DEFAULT_MAX_HZ, EngineModel, Paged, Pending, Respawn, STALL, VIEW};
 use crate::clock::Clock;
 use crate::colors::ColorMap;
 use crate::interaction::Pages;
+use crate::localise::{Catalogue, Value as Arg, tr, tr_format};
 use crate::model::{Failure, FailureKind, Loading};
 use crate::protocol::{self, Incoming, LoadingNotice};
 use crate::replica::{Outcome, Replica};
@@ -64,6 +65,7 @@ impl EngineModel {
         } = options;
         let mut m = Self {
             max_hz,
+            chrome: locale.as_deref().and_then(Catalogue::client),
             locale,
             data_root: None,
             catalogue: None,
@@ -263,16 +265,19 @@ impl EngineModel {
                 };
             }
             Incoming::Progress | Incoming::Unknown(_) => {}
-            Incoming::Malformed(e) => self.tell(format!("Bad engine message: {e}")),
+            Incoming::Malformed(e) => self.tell(tr_format(
+                "Bad engine message: %s",
+                &[Arg::Text(e.to_string())],
+            )),
             Incoming::Closed => {
                 self.connected = false;
                 self.unanswered = 0;
                 self.running.clear();
                 self.busy = false;
-                self.tell("Engine connection closed.".into());
+                self.tell(tr("Engine connection closed."));
                 let message = match self.transport.exit_reason() {
-                    Some(reason) => format!("The engine stopped ({reason})."),
-                    None => "The engine stopped.".into(),
+                    Some(reason) => tr_format("The engine stopped (%s).", &[Arg::Text(reason)]),
+                    None => tr("The engine stopped."),
                 };
                 self.failure = Some(Failure {
                     kind: FailureKind::Exited,

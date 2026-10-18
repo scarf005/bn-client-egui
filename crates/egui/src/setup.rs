@@ -2,6 +2,7 @@
 //! client has no visible stderr, so the searched locations and a path field are shown instead.
 
 use bn_client_core::launch::{is_executable, save_engine};
+use bn_client_core::localise::{Value as Arg, tr, tr_format};
 use eframe::egui;
 use std::path::PathBuf;
 
@@ -54,12 +55,12 @@ impl Launcher {
 
     /// The setup window contents.
     pub fn show(&mut self, ui: &mut egui::Ui) {
-        ui.heading("No engine found");
+        ui.heading(tr("No engine found"));
         ui.label(&self.searched);
-        ui.label("Path to cataclysm-bn-tiles:");
+        ui.label(tr("Path to cataclysm-bn-tiles:"));
         let field = ui.text_edit_singleline(&mut self.input);
         let submitted = field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-        if ui.button("Use").clicked() || submitted {
+        if ui.button(tr("Use")).clicked() || submitted {
             self.use_input(ui.ctx());
         }
         if let Some(error) = &self.error {
@@ -70,7 +71,10 @@ impl Launcher {
     fn use_input(&mut self, ctx: &egui::Context) {
         let path = PathBuf::from(self.input.trim());
         if !is_executable(&path) {
-            self.error = Some(format!("{} is not an executable file", path.display()));
+            self.error = Some(tr_format(
+                "%s is not an executable file",
+                &[Arg::Text(path.display().to_string())],
+            ));
             return;
         }
         match (self.start)(ctx, path.clone()) {

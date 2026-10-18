@@ -1119,6 +1119,7 @@ fn a_korean_connection_words_the_status_line_in_korean() {
         .on("bn.hello", vec![hello])
         .on("bn.subscribe", common::subscribe_reply());
     let mut app = TuiApp::new(connected(t));
-    let s = text(&render(&mut app));
+    // A wide character fills two cells; the second holds a space.
+    let s = text(&render(&mut app)).replace(' ', "");
     assert!(s.contains("준비") && !s.contains("Ready"), "{s}");
 }

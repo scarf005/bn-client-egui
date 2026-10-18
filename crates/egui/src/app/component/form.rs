@@ -1,6 +1,7 @@
 //! Form fields and the arguments an affordance still asks the player for.
 
 use super::*;
+use bn_client_core::localise::tr;
 
 /// The form field as the value editors take it.
 fn editor_of(field: &FormField) -> Editor {
@@ -139,7 +140,7 @@ impl<M: GameModel> App<M> {
                     }
                 });
             } else if ask.capture {
-                ui.label("Press the new key");
+                ui.label(tr("Press the new key"));
             } else if let (Some(typed), Some(ArgKind::Text)) = (&ask.text, ask.asking) {
                 let mut shown = typed.clone();
                 let edit = ui.text_edit_singleline(&mut shown);
@@ -161,10 +162,10 @@ impl<M: GameModel> App<M> {
                 }
             });
             ui.horizontal(|ui| {
-                if ui.button("OK").clicked() {
+                if ui.button(tr("OK")).clicked() {
                     out.push(Intent::Confirm);
                 }
-                if ui.button("Cancel").clicked() {
+                if ui.button(tr("Cancel")).clicked() {
                     out.push(Intent::Cancel);
                 }
             });

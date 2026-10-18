@@ -15,4 +15,6 @@ The engine owns game rules and game text; this client only renders engine data a
   ask the engine for presentation, and do not derive facts in the client.
 - Client-owned: layout, widgets, input-device mapping to engine action ids, tileset rendering, transport, and client
   chrome strings.
+- Word every client chrome string with `localise::{tr, tr_format, tr_plural}` (printf placeholders, imported names
+  so `xgettext` finds them), then run `tools/update_po.sh` and translate each `crates/core/po/<locale>.po`.
 - Known violations to remove: `client-logic-audit.md` in the engine's `out/lanes/`.
