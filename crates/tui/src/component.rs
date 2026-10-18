@@ -439,7 +439,7 @@ fn affordance_lines(screen: &Screen, width: usize) -> Vec<Line<'static>> {
     for a in screen
         .affordances
         .iter()
-        .filter(|a| a.role != Some(AffordanceRole::Select))
+        .filter(|a| !matches!(a.role, Some(AffordanceRole::Select | AffordanceRole::Digit)))
     {
         let keys = match a.keys.is_empty() {
             true => String::new(),

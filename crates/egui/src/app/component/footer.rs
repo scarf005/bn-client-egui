@@ -27,7 +27,7 @@ impl<M: GameModel> App<M> {
             for a in affordances.iter().filter(|a| {
                 !matches!(
                     a.role,
-                    Some(AffordanceRole::Select | AffordanceRole::Navigate)
+                    Some(AffordanceRole::Select | AffordanceRole::Navigate | AffordanceRole::Digit)
                 )
             }) {
                 self.affordance_button(ui, a, row, out);
@@ -57,9 +57,9 @@ impl<M: GameModel> App<M> {
     }
 
     /// The screen's own actions under its content: the confirm and the cancel first, at most `FOOTER_BUTTONS`
-    /// buttons with the rest in a menu, and the help last. The navigation actions are the keys, the wheel and the
-    /// clicks the client already maps, so they are not drawn; in a window with a `title_bar` the cancel is its close
-    /// button and the help is there too.
+    /// buttons with the rest in a menu, and the help last. The navigation actions and a counting list's digits are
+    /// the keys, the wheel and the clicks the client already maps, so they are not drawn; in a window with a
+    /// `title_bar` the cancel is its close button and the help is there too.
     pub(super) fn footer(
         &self,
         ui: &mut egui::Ui,
@@ -69,7 +69,9 @@ impl<M: GameModel> App<M> {
     ) {
         let role = |a: &&Affordance, role| a.role == Some(role);
         let shown = affordances.iter().copied().filter(|a| match a.role {
-            Some(AffordanceRole::Select | AffordanceRole::Navigate) => false,
+            Some(AffordanceRole::Select | AffordanceRole::Navigate | AffordanceRole::Digit) => {
+                false
+            }
             Some(AffordanceRole::Cancel | AffordanceRole::Help) => !title_bar,
             _ => true,
         });

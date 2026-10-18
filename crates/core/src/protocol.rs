@@ -2364,6 +2364,8 @@ pub enum AffordanceRole {
     Navigate,
     /// Opens the native help or keybindings screen.
     Help,
+    /// Types its key, a digit, into a counting list's count; typing the digit already does it.
+    Digit,
 }
 
 /// Which expectation an invoke of the affordance carries; the engine assigns it.
