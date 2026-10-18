@@ -13,6 +13,8 @@ pub const BORDER: Color32 = Color32::from_rgb(0x3a, 0x3a, 0x3a);
 pub const SELECTION: Color32 = Color32::from_rgb(0x12, 0x40, 0x7a);
 /// The outline of what the pointer is over.
 pub const HOVER: Color32 = Color32::from_rgb(0x5a, 0x5a, 0x5a);
+/// The empty part of a gauge.
+pub const GAUGE: Color32 = Color32::from_rgb(0x30, 0x30, 0x30);
 
 /// The least contrast game text keeps against what it is drawn on (WCAG AA for body text).
 const MIN_CONTRAST: f32 = 4.5;
