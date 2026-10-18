@@ -33,10 +33,7 @@ fn harness<'a>(settings: &std::path::Path) -> (H<'a>, ScriptHandle) {
     if std::env::var_os("U1_SETTINGS").is_some() {
         app = app.with_settings(settings.into());
     }
-    let h = Harness::builder()
-        .with_size(egui::vec2(1100.0, 700.0))
-        .wgpu()
-        .build_ui_state(|ui, app: &mut App<EngineModel>| app.show(ui), app);
+    let h = common::shot_harness(egui::vec2(1100.0, 700.0), app);
     (h, script)
 }
 

@@ -16,13 +16,7 @@ fn harness<'a>() -> (H<'a>, ScriptHandle) {
     let (t, h) = session();
     let clock = bn_client_core::Clock::manual();
     let model = EngineModel::new(Box::new(t)).with_clock(clock.clone());
-    let harness = Harness::builder()
-        .with_size(egui::vec2(900.0, 560.0))
-        .wgpu()
-        .build_ui_state(
-            |ui, app: &mut App<EngineModel>| app.show(ui),
-            App::new(model).with_clock(clock),
-        );
+    let harness = common::shot_harness(egui::vec2(900.0, 560.0), App::new(model).with_clock(clock));
     (harness, h)
 }
 

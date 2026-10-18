@@ -5,7 +5,6 @@ use bn_client_egui::transport::ScriptedTransport;
 use bn_client_egui::{App, Clock, ConnectOptions, EngineModel};
 use common::fixture;
 use eframe::egui;
-use egui_kittest::Harness;
 use serde_json::{Value, json};
 
 fn example(name: &str) -> Value {
@@ -38,13 +37,7 @@ fn shot(screen: Value, name: &str) {
         .on("bn.subscribe", reply);
     let clock = Clock::manual();
     let model = EngineModel::open(Box::new(t), ConnectOptions::default()).with_clock(clock.clone());
-    let mut h = Harness::builder()
-        .with_size(egui::vec2(1100.0, 700.0))
-        .wgpu()
-        .build_ui_state(
-            |ui, app: &mut App<EngineModel>| app.show(ui),
-            App::new(model).with_clock(clock),
-        );
+    let mut h = common::shot_harness(egui::vec2(1100.0, 700.0), App::new(model).with_clock(clock));
     h.run_steps(6);
     let dir = std::path::PathBuf::from(std::env::var("SHOT_DIR").expect("SHOT_DIR"));
     std::fs::create_dir_all(&dir).unwrap();

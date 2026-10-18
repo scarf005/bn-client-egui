@@ -338,3 +338,20 @@ pub fn settle_windows<S>(h: &mut egui_kittest::Harness<'_, S>) {
         }
     }
 }
+
+/// The app on a GPU harness of `size` in the client's own theme and bundled fonts, as the client starts.
+pub fn shot_harness<'a>(
+    size: eframe::egui::Vec2,
+    app: bn_client_egui::App<EngineModel>,
+) -> egui_kittest::Harness<'a, bn_client_egui::App<EngineModel>> {
+    let h = egui_kittest::Harness::builder()
+        .with_size(size)
+        .wgpu()
+        .build_ui_state(
+            |ui, app: &mut bn_client_egui::App<EngineModel>| app.show(ui),
+            app,
+        );
+    bn_client_egui::theme::apply(&h.ctx);
+    bn_client_egui::fonts::install_bundled(&h.ctx);
+    h
+}

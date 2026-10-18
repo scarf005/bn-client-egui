@@ -57,13 +57,7 @@ fn the_map_with_its_action_palette() {
         .on("bn.subscribe", reply);
     let clock = Clock::manual();
     let model = EngineModel::open(Box::new(t), ConnectOptions::default()).with_clock(clock.clone());
-    let mut h = Harness::builder()
-        .with_size(egui::vec2(1100.0, 700.0))
-        .wgpu()
-        .build_ui_state(
-            |ui, app: &mut App<EngineModel>| app.show(ui),
-            App::new(model).with_clock(clock),
-        );
+    let mut h = common::shot_harness(egui::vec2(1100.0, 700.0), App::new(model).with_clock(clock));
     h.run_steps(6);
     h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::P);
     h.run_steps(4);

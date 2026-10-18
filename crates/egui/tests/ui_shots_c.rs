@@ -5,7 +5,6 @@ mod common;
 use bn_client_egui::{App, EngineModel};
 use common::{fixture, session};
 use eframe::egui;
-use egui_kittest::Harness;
 use serde_json::{Value, json};
 
 fn example(name: &str) -> Value {
@@ -25,13 +24,10 @@ fn panel(id: &str, label: &str, enabled: bool) -> Value {
 
 fn shot(name: &str, side: &str, width: u32, panels: &[Value]) {
     let (t, script) = session();
-    let mut h = Harness::builder()
-        .with_size(egui::vec2(1280.0, 800.0))
-        .wgpu()
-        .build_ui_state(
-            |ui, app: &mut App<EngineModel>| app.show(ui),
-            App::new(EngineModel::new(Box::new(t))),
-        );
+    let mut h = common::shot_harness(
+        egui::vec2(1280.0, 800.0),
+        App::new(EngineModel::new(Box::new(t))),
+    );
     h.run_steps(3);
     let mut event = fixture("events_41_walk");
     let mut avatar = example("avatar with creatures on the compass");
