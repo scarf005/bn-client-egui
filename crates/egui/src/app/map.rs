@@ -5,7 +5,8 @@ use super::{App, CELL, menu_item, rgb};
 use crate::display::health_bar;
 use crate::iso::{self, camera::Viewport, pages::Pages, scene::Scene};
 use bn_client_core::localise::{Value as Arg, tr, tr_format};
-use bn_client_core::{GameModel, Pos};
+use bn_client_core::markup;
+use bn_client_core::{Cell, GameModel, Pos, Rgb};
 use eframe::egui::{self, accesskit};
 use std::sync::Arc;
 
@@ -433,23 +434,85 @@ impl<M: GameModel> App<M> {
         let under = response
             .hover_pos()
             .map_or(cursor, |p| canvas.square_at(p, scene));
+        // A square nothing is known about says nothing.
+        let cell = self.model.cell(under);
+        let known = !(cell.layers.is_empty() && cell.desc.is_empty());
+        let season = self.model.season();
         response.clone().on_hover_ui_at_pointer(|ui| {
-            if !tip {
+            if !tip || !known {
                 return;
             }
-            // The engine's own mouse-view text when it has answered for this square.
-            let lines = self.model.hover_text(under).unwrap_or_else(|| {
-                let desc = self.model.cell(under).desc;
-                (!desc.is_empty()).then_some(desc).into_iter().collect()
-            });
+            // The engine's own mouse-view facts when it has answered for this square. A creature's name heads
+            // them beside its sprite, its health bar drawn as a bar.
+            let parts = self.model.hover_parts(under).unwrap_or_default();
+            let creature = parts.iter().find(|p| p.kind == "creature");
+            let hp = parts
+                .iter()
+                .find(|p| p.kind == "hp")
+                .filter(|_| creature.is_some());
+            // Under a heading, the creature's name and bar are drawn as such; what more it says stays a line.
+            let lines = match parts.is_empty() {
+                true => vec![cell.desc.clone()],
+                false => parts
+                    .iter()
+                    .flat_map(|p| match (creature.is_some(), p.kind.as_str()) {
+                        (true, "hp") => vec![],
+                        (true, "creature") => p.detail.iter().collect(),
+                        _ => std::iter::once(&p.text).chain(&p.detail).collect(),
+                    })
+                    .map(|text| markup::plain(text))
+                    .filter(|l| !l.trim().is_empty())
+                    .collect(),
+            };
             // A tooltip at the pointer gets almost no width to wrap in: its text takes its widest line's width, up
             // to `TOOLTIP_WIDTH`, and wraps the longer lines there.
             let font = egui::TextStyle::Body.resolve(ui.style());
+            let name = creature.map(|c| markup::plain(&c.text));
             let widest = lines
                 .iter()
+                .chain(&name)
                 .map(|l| super::component::text_width(ui, l, &font))
                 .fold(0.0, f32::max);
             ui.set_width(widest.ceil().min(TOOLTIP_WIDTH));
+            if let Some(name) = name {
+                ui.horizontal(|ui| {
+                    if self.display.tiles() {
+                        let (rect, _) = ui.allocate_exact_size(
+                            egui::vec2(CELL, CELL) * 2.0,
+                            egui::Sense::hover(),
+                        );
+                        let body = Cell {
+                            layers: cell
+                                .layers
+                                .iter()
+                                .skip_while(|l| !l.creature)
+                                .cloned()
+                                .collect(),
+                            ..Cell::default()
+                        };
+                        self.display
+                            .paint_icon(ui.painter(), rect, &body, season.as_deref());
+                    }
+                    ui.label(egui::RichText::new(name).strong());
+                });
+            }
+            if let Some(hp) = hp {
+                let value = |key: &str| hp.values.get(key).map(|&v| v as f32);
+                let done = match (value("hp"), value("max"), value("percent")) {
+                    (Some(hp), Some(max), _) if max > 0.0 => hp / max,
+                    (_, _, Some(percent)) => percent / 100.0,
+                    _ => 0.0,
+                };
+                let color = markup::runs(&hp.text, self.model.colors())
+                    .into_iter()
+                    .find_map(|r| r.color)
+                    .unwrap_or(Rgb(255, 255, 255));
+                let bar = egui::ProgressBar::new(done.clamp(0.0, 1.0))
+                    .desired_height(6.0)
+                    .fill(rgb(color))
+                    .corner_radius(0);
+                ui.add(bar);
+            }
             for line in lines {
                 ui.add(egui::Label::new(line).wrap_mode(egui::TextWrapMode::Wrap));
             }
