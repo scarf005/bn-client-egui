@@ -95,7 +95,10 @@ fn coloured_light_adds_its_colour_over_the_sprite_of_a_square_in_sight() {
         glow,
         ..Cell::default()
     };
-    assert_eq!(painted_tones(&mut display, &cell(None)), [egui::Color32::WHITE]);
+    assert_eq!(
+        painted_tones(&mut display, &cell(None)),
+        [egui::Color32::WHITE]
+    );
     let fire = Glow {
         color: Rgb(255, 128, 0),
         strength: 255,

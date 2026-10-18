@@ -243,8 +243,8 @@ pub struct Instance {
     pub uv_a: [f32; 2],
     pub uv_b: [f32; 2],
     /// Low byte: bit 0 for a board, bit 1 for a board at the near edge of its square; next byte: the visibility filter. Then the haze of a level seen
-    /// through, 0 to 255.
-    pub flags: [u32; 2],
+    /// through, 0 to 255. Last the coloured light added over the sprite, red, green and blue from the low byte up.
+    pub flags: [u32; 3],
 }
 
 /// Flag bits of an instance's first word: a board, and a board pushed to the near edge of its square.
@@ -269,6 +269,9 @@ pub struct Placement<'a> {
     /// The visibility filter: 0 plain, 1 low light, 2 remembered.
     pub filter: u32,
     pub haze: u8,
+    /// The red, green and blue coloured light adds over the sprite, times the sprite's own, as `display::light`
+    /// gives them.
+    pub light: [u8; 3],
     /// The sprite's place in its square, bottom first.
     pub order: u32,
     /// For a solid: which of the south, east, north and west edges of its square another solid at least as tall
@@ -286,7 +289,7 @@ fn instance(
     origin: [f32; 3],
     edges: ([f32; 3], [f32; 3]),
     uv: [Vec2; 3],
-    flags: [u32; 2],
+    flags: [u32; 3],
 ) -> Instance {
     let inner = uv[0] + (uv[1] + uv[2]) * INSET;
     Instance {
@@ -415,7 +418,9 @@ pub fn place(m: &Metrics, p: &Placement) -> Vec<Instance> {
     let s = p.sprite;
     let size = s.size();
     let (x, y) = (p.square.0 as f32, p.square.1 as f32);
-    let flags = [p.filter << 8, u32::from(p.haze)];
+    let [r, g, b] = p.light;
+    let light = u32::from_le_bytes([r, g, b, 0]);
+    let flags = [p.filter << 8, u32::from(p.haze), light];
     // A point of the sprite given in tile pixels from its top left corner, in its page's pixels.
     let at = |px: f32, py: f32| s.at + Vec2::new(px, py) / s.scale;
     // A span of the sprite in tile pixels, in its page's pixels.
@@ -513,7 +518,11 @@ pub fn place(m: &Metrics, p: &Placement) -> Vec<Instance> {
             let bias = LAYER_BIAS * p.order as f32;
             let edges = ([size.x * m.across, left, bias], [size.y * m.up, rest, 0.0]);
             // From the bottom left corner: along the width to the right, and up.
-            let flags = [flags[0] | BOARD | if m.iso { EDGE } else { 0 }, flags[1]];
+            let flags = [
+                flags[0] | BOARD | if m.iso { EDGE } else { 0 },
+                flags[1],
+                flags[2],
+            ];
             vec![instance(
                 [x + 0.5, y + 0.5, p.floor],
                 edges,
@@ -556,6 +565,7 @@ mod tests {
             sprite: s,
             filter: 0,
             haze: 0,
+            light: [0; 3],
             order: 0,
             covered: [false; 4],
             outline: None,

@@ -149,6 +149,24 @@ fn a_remembered_square_and_a_poorly_lit_one_take_the_filters_of_the_flat_map() {
 }
 
 #[test]
+fn coloured_light_on_a_square_in_sight_is_added_over_its_sprites_as_on_the_flat_map() {
+    let fire = json!({"color": "#ff8000", "strength": 255});
+    let mut lit = cell(4, 4, 0, "t_dirt");
+    lit["light"] = 3.into();
+    lit["glow"] = fire.clone();
+    let mut dim = cell(5, 4, 0, "t_dirt");
+    dim["light"] = 1.into();
+    dim["glow"] = fire;
+    let plain = cell(6, 4, 0, "t_dirt");
+    let m = model(vec![lit, dim, plain]);
+    let scene = scene_of(&m, "scene-glow");
+    let lights = [(4, 4), (5, 4), (6, 4)].map(|p| at(&scene, &m, p)[0].flags[2]);
+    // Red 255 and green 128 at the game's highest alpha, 176.
+    let fire = u32::from_le_bytes([176, 88, 0, 0]);
+    assert_eq!(lights, [fire, fire, 0]);
+}
+
+#[test]
 fn squares_nothing_is_known_about_are_not_drawn() {
     let m = model(vec![cell(4, 4, 0, "t_dirt")]);
     let scene = scene_of(&m, "scene-unknown");

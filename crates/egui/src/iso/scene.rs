@@ -4,7 +4,7 @@ use super::geometry::{
     Instance, Kind, Metrics, Outline, PageId, Placement, Shape, SpriteSource, borders, place, shape,
 };
 use super::pages::Pages;
-use crate::display::{Fx, STRIP, query, resolve_layer};
+use crate::display::{Fx, STRIP, light, query, resolve_layer};
 use crate::tileset::{Tileset, Turn};
 use bn_client_core::{GameModel, Layer, Pos};
 use glam::Vec2;
@@ -71,6 +71,7 @@ struct Item {
     sprite: SpriteSource,
     filter: u32,
     haze: u8,
+    light: [u8; 3],
     order: u32,
     form: Shape,
     outline: Option<Arc<Outline>>,
@@ -86,6 +87,7 @@ impl Item {
             sprite: &self.sprite,
             filter: self.filter,
             haze: self.haze,
+            light: self.light,
             order: self.order,
             covered,
             outline: self.outline.as_deref(),
@@ -161,6 +163,14 @@ pub fn build(
                 _ => Fx::Plain,
             };
             let filter = fx as u32;
+            // Coloured light falls on what is plainly or dimly in sight, as on the flat map.
+            let light = match (fx, cell.glow) {
+                (Fx::Plain | Fx::Shadow, Some(glow)) => {
+                    let [r, g, b, _] = light(glow).to_array();
+                    [r, g, b]
+                }
+                _ => [0; 3],
+            };
             let haze = match cell.depth {
                 0 => 0,
                 depth => (24 * (u32::from(depth) + 1)).min(192) as u8,
@@ -237,6 +247,7 @@ pub fn build(
                         sprite,
                         filter,
                         haze,
+                        light,
                         order,
                         form,
                         outline,

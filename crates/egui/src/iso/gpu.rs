@@ -161,7 +161,7 @@ impl Gpu {
         });
         let attributes = wgpu::vertex_attr_array![
             0 => Float32x3, 1 => Float32x3, 2 => Float32x3,
-            3 => Float32x2, 4 => Float32x2, 5 => Float32x2, 6 => Uint32x2
+            3 => Float32x2, 4 => Float32x2, 5 => Float32x2, 6 => Uint32x3
         ];
         let scene = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("iso3d scene"),

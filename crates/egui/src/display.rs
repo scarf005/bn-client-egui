@@ -6,7 +6,7 @@ use crate::windows::WindowState;
 use bn_client_core::localise::{Value as Arg, tr, tr_format};
 use bn_client_core::protocol::ModTileset;
 use bn_client_core::protocol::OvermapTile;
-use bn_client_core::{Cell, Layer, Rgb};
+use bn_client_core::{Cell, Glow, Layer, Rgb};
 use eframe::egui::{self, Color32, Mesh, Rect, Shape, TextureHandle, TextureId, TextureOptions};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
@@ -771,7 +771,7 @@ impl Display {
                 rect,
                 scale,
                 (placed, None),
-                (Fx::Plain, 255),
+                (Fx::Plain, Tone::Alpha(255)),
             );
         }
         self.drawn += usize::from(drawn);
@@ -805,7 +805,7 @@ impl Display {
                 rect,
                 scale,
                 (placed, None),
-                (Fx::Plain, 255),
+                (Fx::Plain, Tone::Alpha(255)),
             );
         }
         any
@@ -871,7 +871,7 @@ impl Display {
                     rect,
                     (sx, sy),
                     (placed, None),
-                    (Fx::Plain, 255),
+                    (Fx::Plain, Tone::Alpha(255)),
                 );
             }
         }
@@ -906,7 +906,7 @@ impl Display {
                     rect,
                     (sx, sy),
                     (placed, None),
-                    (Fx::Plain, 255),
+                    (Fx::Plain, Tone::Alpha(255)),
                 );
             }
             if any {
@@ -914,6 +914,11 @@ impl Display {
                 return true;
             }
         }
+        // Coloured light falls on what is plainly or dimly in sight.
+        let glow = cell
+            .glow
+            .filter(|_| fx == Fx::Plain || fx == Fx::Shadow)
+            .map(light);
         let mut drawn = 0;
         for layer in &cell.layers {
             let (layer, paints) = resolve_layer(&atlas.tileset, layer);
@@ -926,13 +931,26 @@ impl Display {
             });
             let mut any = false;
             for (placed, paint) in sprites {
-                any |= draw_sprite(painter, atlas, rect, (sx, sy), (placed, paint), (fx, 255));
+                let tone = Tone::Alpha(255);
+                any |= draw_sprite(painter, atlas, rect, (sx, sy), (placed, paint), (fx, tone));
+                if let Some(light) = glow {
+                    // The game adds the light's colour over the sprite it falls on.
+                    let tone = Tone::Light(light);
+                    draw_sprite(painter, atlas, rect, (sx, sy), (placed, paint), (fx, tone));
+                }
                 if cell.depth > 0 {
                     // A level seen through open air is hazed more the deeper it is.
                     let haze = (24 * (u32::from(cell.depth) + 1)).min(192) as u8;
                     atlas.request(Fx::ZOverlay);
                     let sprite = (placed, None);
-                    draw_sprite(painter, atlas, rect, (sx, sy), sprite, (Fx::ZOverlay, haze));
+                    draw_sprite(
+                        painter,
+                        atlas,
+                        rect,
+                        (sx, sy),
+                        sprite,
+                        (Fx::ZOverlay, Tone::Alpha(haze)),
+                    );
                 }
             }
             drawn += usize::from(any);
@@ -1015,13 +1033,31 @@ pub fn tiles_wanted(root: Option<&Path>, path: Option<&Path>) -> bool {
 }
 
 /// One sprite at its place in the cell, turned as the tileset asks; false when its sheet is not loaded.
+/// How a sprite is laid on what is under it.
+#[derive(Clone, Copy)]
+enum Tone {
+    /// Blended at this opacity.
+    Alpha(u8),
+    /// Added, multiplied by this colour, as the game adds coloured light.
+    Light(Color32),
+}
+
+/// The colour coloured light adds to a sprite: the game's tint, its alpha 40 to 176 with the square root of
+/// the light's strength, with no alpha of its own so that egui adds it.
+pub fn light(glow: Glow) -> Color32 {
+    let alpha = (40.0 + 136.0 * (f32::from(glow.strength) / 255.0).sqrt()).round() / 255.0;
+    let Rgb(r, g, b) = glow.color;
+    let add = |c: u8| (f32::from(c) * alpha).round() as u8;
+    Color32::from_rgba_premultiplied(add(r), add(g), add(b), 0)
+}
+
 fn draw_sprite(
     painter: &egui::Painter,
     atlas: &Atlas,
     cell: Rect,
     scale: (f32, f32),
     (placed, paint): (Placed, Option<Paint>),
-    (fx, opacity): (Fx, u8),
+    (fx, tone): (Fx, Tone),
 ) -> bool {
     // A painted sprite is made in the background; the plain one stands in until it is.
     let painted = paint.and_then(|p| atlas.painted(painter.ctx(), (placed, p), fx));
@@ -1035,10 +1071,10 @@ fn draw_sprite(
         return false;
     };
     // A sprite whose filtered sheet is still being decoded is darkened by colour meanwhile.
-    let tint = if shown == fx {
-        Color32::from_white_alpha(opacity)
-    } else {
-        fx.stand_in()
+    let tint = match tone {
+        Tone::Light(light) => light,
+        Tone::Alpha(opacity) if shown == fx => Color32::from_white_alpha(opacity),
+        Tone::Alpha(_) => fx.stand_in(),
     };
     let Some((n, _)) = atlas.tileset.locate(placed.sprite) else {
         return false;

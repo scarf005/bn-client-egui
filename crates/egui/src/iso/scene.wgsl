@@ -19,13 +19,13 @@ struct Quad {
     @location(3) uv: vec2<f32>,
     @location(4) uv_a: vec2<f32>,
     @location(5) uv_b: vec2<f32>,
-    @location(6) flags: vec2<u32>,
+    @location(6) flags: vec3<u32>,
 }
 
 struct Varying {
     @builtin(position) position: vec4<f32>,
     @location(0) uv: vec2<f32>,
-    @location(1) @interpolate(flat) flags: vec2<u32>,
+    @location(1) @interpolate(flat) flags: vec3<u32>,
 }
 
 @vertex
@@ -75,7 +75,10 @@ fn fs_main(v: Varying) -> @location(0) vec4<f32> {
     if texel.a < 0.5 {
         discard;
     }
-    let seen = filtered((v.flags.x >> 8u) & 255u, round(texel.rgb * 255.0)) / 255.0;
+    let filtered_rgb = filtered((v.flags.x >> 8u) & 255u, round(texel.rgb * 255.0)) / 255.0;
+    // Coloured light adds its colour, times the sprite's own, as the game draws it.
+    let light = unpack4x8unorm(v.flags.z).rgb;
+    let seen = min(filtered_rgb + filtered_rgb * light, vec3<f32>(1.0));
     // A level seen through open air is hazed toward cyan, more the deeper it is.
     let haze = f32(v.flags.y) / 255.0;
     return vec4<f32>(mix(seen, vec3<f32>(128.0, 255.0, 255.0) / 255.0, haze), 1.0);
