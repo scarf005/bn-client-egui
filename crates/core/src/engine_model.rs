@@ -14,7 +14,7 @@ use crate::interaction::{self, InvokeError, Pages};
 use crate::localise::{self, Catalogue, Value as Arg, tr_format, tr_plural};
 use crate::markup::{self, Run};
 use crate::model::{
-    ActionEntry, Cell, CommandStatus, Effect, Failure, FailureKind, GameModel, Heard, Layer,
+    ActionEntry, Cell, CommandStatus, Effect, Failure, FailureKind, GameModel, Glow, Heard, Layer,
     Loading, LogLine, Mutation, Pos, Rgb, Shape,
 };
 use crate::protocol::{

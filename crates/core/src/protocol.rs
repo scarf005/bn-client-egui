@@ -142,6 +142,13 @@ pub enum Known {
     Sensed,
 }
 
+/// The coloured light on a square in sight: its `#rrggbb` and its strength, 1 to 255.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Glow {
+    pub color: String,
+    pub strength: u8,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Memory {
     pub terrain: Look,
@@ -173,6 +180,8 @@ pub struct Cell {
     pub vehicle: Option<Look>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub light: Option<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub glow: Option<Glow>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub memory: Option<Memory>,
     /// Open air in sight on the avatar's level: how many levels down the square is that the native

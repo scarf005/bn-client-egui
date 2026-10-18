@@ -1006,6 +1006,7 @@ fn tiled_session() -> EngineModel {
     let mut part = fixture("snapshot_part_1");
     part["params"]["cells"].as_array_mut().unwrap().extend([
         json!({"at": {"dim": "", "x": 9, "y": 8, "z": 0}, "known": "visible", "light": 1,
+            "glow": {"color": "#ffd08a", "strength": 40},
             "terrain": {"kind": "terrain", "id": "t_wall", "glyph": "|", "color": "light_gray",
                 "looks_like": ["t_wall_base"], "subtile": "edge", "rotation": 1,
                 "tint_keys": ["WALL", "t_wall"], "tint_vars": {"fg": {"color": "#102030"}}},
@@ -1110,6 +1111,13 @@ fn a_cell_lists_its_sprites_bottom_first_with_the_engines_tile_selection() {
         Some("#102030")
     );
     assert_eq!(cell.light, Some(1));
+    assert_eq!(
+        cell.glow,
+        Some(bn_client_core::Glow {
+            color: bn_client_core::Rgb(0xff, 0xd0, 0x8a),
+            strength: 40
+        })
+    );
     assert!(!cell.remembered);
 }
 
@@ -1123,6 +1131,7 @@ fn a_remembered_cell_lists_its_memorized_terrain_and_overlay_and_is_marked_remem
     });
     assert!(cell.remembered);
     assert_eq!(cell.light, None);
+    assert_eq!(cell.glow, None);
     let layers = cell
         .layers
         .iter()

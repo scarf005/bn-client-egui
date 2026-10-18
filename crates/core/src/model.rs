@@ -16,6 +16,13 @@ pub struct Pos {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Rgb(pub u8, pub u8, pub u8);
 
+/// Coloured light the game tints a square in sight with: the light's colour and its strength, 1 to 255.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Glow {
+    pub color: Rgb,
+    pub strength: u8,
+}
+
 /// One thing drawn in a cell, with what a tileset needs to pick its sprite the way the game does and
 /// the glyph that stands in for it when the tileset has none.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -82,6 +89,7 @@ pub struct Cell {
     pub remembered: bool,
     /// The game's light level of a square in sight: 0 dark, 1 low, 2 bright only, 3 lit, 4 bright.
     pub light: Option<u8>,
+    pub glow: Option<Glow>,
     /// How many levels down the layers lie, seen through open air; 0 on the avatar's own level.
     pub depth: u8,
     /// The game's per-square seed for weighted sprite variants, also for squares nothing is known about.
