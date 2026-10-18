@@ -35,6 +35,14 @@ fn unifont_from_the_game_root_covers_hangul_in_both_font_families() {
 }
 
 #[test]
+fn the_bundled_faces_word_latin_hangul_and_kana_without_a_game_root() {
+    let ctx = egui::Context::default();
+    fonts::install_bundled(&ctx);
+    frame(&ctx);
+    assert!(covers(&ctx, "Inventory 인벤토리 インベントリ 漢字"));
+}
+
+#[test]
 fn missing_font_file_leaves_the_defaults_and_reports_false() {
     let ctx = egui::Context::default();
     assert!(!fonts::install(&ctx, std::path::Path::new("/nonexistent")));

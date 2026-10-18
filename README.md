@@ -5,7 +5,8 @@ Cataclysm: Bright Nights, built on egui/eframe (AccessKit). The UI talks to a
 `GameModel` trait with two implementations: `FakeModel` (in-memory, used by most tests) and
 `EngineModel` (unified engine protocol 0.2 over the engine's stdio, newline-delimited JSON-RPC).
 
-License: AGPL-3.0-only (see LICENSE).
+License: AGPL-3.0-only (see LICENSE). Bundled fonts: [Noto Sans CJK KR and Noto Sans Mono CJK KR](https://github.com/notofonts/noto-cjk)
+2.004, subset by `tools/subset_fonts.sh`, SIL Open Font License 1.1 (`crates/egui/assets/fonts/LICENSE`).
 
     cargo run --release -p bn-client-egui      # finds the engine itself (see below)
     cargo run -p bn-client-egui --features fake -- --fake  # in-memory fake model, no engine

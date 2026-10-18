@@ -33,6 +33,7 @@ fn run(model: impl GameModel + 'static, root: Option<PathBuf>) -> eframe::Result
         native_options(),
         Box::new(move |cc| {
             theme::apply(&cc.egui_ctx);
+            fonts::install_bundled(&cc.egui_ctx);
             if let Some(root) = &root {
                 fonts::install(&cc.egui_ctx, root);
             }
@@ -100,6 +101,7 @@ fn main() -> eframe::Result {
         native_options(),
         Box::new(move |cc| {
             theme::apply(&cc.egui_ctx);
+            fonts::install_bundled(&cc.egui_ctx);
             let starter = launch.clone();
             let start: Starter = Box::new(move |ctx, engine| start_engine(ctx, engine, &starter));
             let remember = |l: Launcher| match bn_client_egui::launch::config_file() {
