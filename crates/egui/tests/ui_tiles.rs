@@ -416,3 +416,43 @@ fn a_creature_at_full_health_has_no_health_bar() {
     settle(&mut h);
     assert!(bars(&h).is_empty(), "{:?}", bars(&h));
 }
+
+#[test]
+fn a_creatures_tooltip_shows_its_sprite_beside_its_name() {
+    let root = game_root("ui-tooltip-sprite");
+    let reply =
+        |parts: Value| vec![json!({"jsonrpc":"2.0","id":0,"result":{"parts":parts,"actions":[]}})];
+    let t = session()
+        .on(
+            "bn.world.describe",
+            reply(json!([{"kind":"terrain","text":"Floor"}])),
+        )
+        .on(
+            "bn.world.describe",
+            reply(json!([{"kind":"creature","text":"zombie","id":"mon_zombie"}])),
+        );
+    let mut h = harness_of(&root, root.join("settings.json"), t);
+    settle(&mut h);
+    let me = h.state().model.player();
+    let cell = h.state().display().cell(bn_client_egui::app::CELL) * h.state().display().zoom();
+    let map = h.get_by_label("Map").rect();
+    // The fixture's zombie stands three squares east of the avatar.
+    h.hover_at(map.min + egui::vec2(me.x as f32 + 3.5, me.y as f32 + 0.5) * cell);
+    h.run_steps(8);
+    let name = h.get_by_label("zombie").rect();
+    // What the tooltip paints before the name, back to its frame.
+    let shapes = &h.output().shapes;
+    let at = shapes
+        .iter()
+        .position(|c| matches!(&c.shape, egui::Shape::Text(t) if t.galley.job.text == "zombie"))
+        .expect("the name");
+    let sprite = shapes[..at]
+        .iter()
+        .rev()
+        .take_while(|c| !matches!(c.shape, egui::Shape::Rect(_)))
+        .any(|c| match &c.shape {
+            egui::Shape::Mesh(m) => m.calc_bounds().right() <= name.left() + 1.0,
+            _ => false,
+        });
+    assert!(sprite, "a sprite left of {name:?}");
+}

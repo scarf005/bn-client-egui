@@ -178,6 +178,92 @@ fn a_long_description_wraps_in_tooltip_text_at_most_420_points_wide() {
 }
 
 #[test]
+fn a_creatures_tooltip_has_its_name_as_heading_and_its_health_as_a_bar_in_the_bars_colour() {
+    let (t, _h) = session();
+    let reply =
+        |parts: Value| vec![json!({"jsonrpc":"2.0","id":0,"result":{"parts":parts,"actions":[]}})];
+    let t = t
+        .on(
+            "bn.world.describe",
+            reply(json!([{"kind":"terrain","text":"Floor"}])),
+        )
+        .on(
+            "bn.world.describe",
+            reply(json!([
+                {"kind":"hp","text":"<color_c_yellow>|||</color>","values":{"hp":30,"max":50}},
+                {"kind":"creature","text":"<color_c_light_green>zombie</color>","id":"mon_zombie"},
+                {"kind":"description","text":"It shambles."}
+            ])),
+        );
+    let clock = Clock::manual();
+    let model = EngineModel::new(Box::new(t)).with_clock(clock.clone());
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(1100.0, 800.0))
+        .build_ui_state(
+            |ui, app: &mut App<EngineModel>| app.show(ui),
+            App::new(model).with_clock(clock),
+        );
+    h.run_steps(3);
+    let at = square(&mut h, (22.5, 12.5));
+    h.hover_at(at);
+    h.run_steps(8);
+    let name = h.get_by_label("zombie").rect();
+    let bar = h.get_by_role(egui::accesskit::Role::ProgressIndicator);
+    assert_eq!(bar.accesskit_node().numeric_value(), Some(60.0));
+    assert!(
+        bar.rect().top() >= name.bottom(),
+        "{:?} {name:?}",
+        bar.rect()
+    );
+    let text = h.get_by_label("It shambles.").rect();
+    assert!(text.top() >= bar.rect().bottom(), "{text:?}");
+    // The bar stands for the native bar's text.
+    assert!(h.query_by_label("|||").is_none());
+    let yellow = h.state().model.colors().resolve("c_yellow").0;
+    let fill = egui::Color32::from_rgb(yellow.0, yellow.1, yellow.2);
+    let filled = h.output().shapes.iter().any(|c| match &c.shape {
+        egui::Shape::Rect(r) => r.fill == fill && r.rect.top() >= name.bottom(),
+        _ => false,
+    });
+    assert!(filled, "a bar in the native bar's colour");
+}
+
+#[test]
+fn a_square_nothing_is_known_about_has_no_tooltip() {
+    let (t, _h) = session();
+    let reply =
+        |parts: Value| vec![json!({"jsonrpc":"2.0","id":0,"result":{"parts":parts,"actions":[]}})];
+    let t = t
+        .on(
+            "bn.world.describe",
+            reply(json!([{"kind":"terrain","text":"Floor"}])),
+        )
+        .on(
+            "bn.world.describe",
+            reply(json!([{"kind":"terrain","text":"Unseen."}])),
+        );
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(1100.0, 800.0))
+        .build_ui_state(
+            |ui, app: &mut App<EngineModel>| app.show(ui),
+            App::new(EngineModel::new(Box::new(t))),
+        );
+    h.run_steps(3);
+    let size = h.state().model.size();
+    let unknown = (0..size.y)
+        .flat_map(|y| (0..size.x).map(move |x| bn_client_egui::Pos { x, y }))
+        .find(|&p| {
+            let cell = h.state().model.cell(p);
+            cell.layers.is_empty() && cell.desc.is_empty()
+        })
+        .expect("an unknown square");
+    let map = h.get_by_label("Map").rect();
+    h.hover_at(map.min + egui::vec2(unknown.x as f32 + 0.5, unknown.y as f32 + 0.5) * CELL);
+    h.run_steps(8);
+    assert!(h.query_by_label("Unseen.").is_none());
+}
+
+#[test]
 fn left_click_travels_to_the_square_even_next_to_the_avatar() {
     let (mut h, script) = harness();
     h.run_steps(3);
