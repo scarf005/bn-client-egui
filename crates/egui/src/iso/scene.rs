@@ -26,6 +26,8 @@ pub struct Scene {
     /// The size of the view in squares, and what each square drawn is, row by row.
     pub width: i32,
     pub height: i32,
+    /// The lowest ground and a height above the highest that no sprite reaches, so the light's view holds them.
+    pub heights: (f32, f32),
     columns: Vec<Option<Column>>,
     /// The things the tileset has no sprite for, which stand as their glyphs as on the flat map.
     pub glyphs: Vec<Mark>,
@@ -299,6 +301,9 @@ pub fn build(
             .or_default()
             .extend(place(&m, &item.placement(covered)));
     }
+    let (low, high) = items.iter().fold((0.0f32, 0.0f32), |(low, high), i| {
+        (i.floor.min(low), i.floor.max(high))
+    });
     Scene {
         version,
         batches: pages
@@ -308,6 +313,7 @@ pub fn build(
         squares,
         width,
         height,
+        heights: (low, high + 3.0 * m.level),
         columns,
         glyphs,
     }

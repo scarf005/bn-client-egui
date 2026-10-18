@@ -115,12 +115,13 @@ pub fn callback(
     (scene, pages): (Arc<Scene>, Arc<Pages>),
     stats: Arc<gpu::Stats>,
 ) -> egui::Shape {
+    let light = camera::light_view_proj(scene.width as f32, scene.height as f32, scene.heights);
     egui::Shape::Callback(egui_wgpu::Callback::new_paint_callback(
         rect,
         gpu::Paint {
+            camera: gpu::CameraUniform::new(view, light),
             scene,
             pages,
-            camera: view.into(),
             size: rect.size(),
             target,
             stats,

@@ -118,8 +118,9 @@ fn reddish(c: egui::Color32) -> bool {
     c.r() > 140 && c.g() < 90 && c.b() < 90
 }
 
+/// Blue, lit or in the light's shadow.
 fn bluish(c: egui::Color32) -> bool {
-    c.b() > 130 && c.r() < 110
+    c.b() > 80 && c.b() > c.r() + 40
 }
 
 fn whitish(c: egui::Color32) -> bool {
@@ -229,6 +230,22 @@ fn the_room_seen_from_the_south_west_as_the_game_draws_it_and_from_the_north_wes
             (floor.0 + 0.83, floor.1 + 0.17, 0.0)
         )),
         "mark at 225"
+    );
+}
+
+#[test]
+#[ignore = "needs a Vulkan adapter"]
+fn the_wall_shades_the_floor_on_its_south_east_from_the_light_in_the_north_west() {
+    let mut h = harness("shadow");
+    settle(&mut h);
+    let image = save(&mut h, "iso3d-shadow.png");
+    // The avatar is at (3, 4); the wall's south end at (5, 4) shades (6, 5), and nothing stands north-west of (2, 2).
+    let shaded = pixel(&mut h, &image, (3.5, 1.5, 0.0));
+    let lit = pixel(&mut h, &image, (-0.5, -1.5, 0.0));
+    assert!(greenish(lit), "{lit:?}");
+    assert!(
+        f32::from(shaded.g()) < 0.75 * f32::from(lit.g()) && shaded.g() > 0,
+        "shaded {shaded:?}, lit {lit:?}"
     );
 }
 

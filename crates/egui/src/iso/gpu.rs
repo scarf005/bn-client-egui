@@ -1,7 +1,7 @@
 //! The 3D map on the GPU: the scene is drawn into a texture of its own, with a depth buffer egui's pass has
 //! not, and copied into the egui pass over the map's rectangle.
 
-use super::camera::Viewport;
+use super::camera::{LIGHT, Viewport};
 use super::geometry::{Instance, PageId};
 use super::pages::Pages;
 use super::scene::Scene;
@@ -9,28 +9,36 @@ use bytemuck::{Pod, Zeroable};
 use eframe::egui;
 use egui_wgpu::wgpu::{self, util::DeviceExt};
 use egui_wgpu::{CallbackResources, CallbackTrait, ScreenDescriptor};
+use glam::Mat4;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 
 const COLOR: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 const DEPTH: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
+/// The side of the square depth map of the light's view, in texels, at most.
+const SHADOW_SIZE: u32 = 4096;
 
 /// What the camera gives the shader.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Pod, Zeroable)]
 pub struct CameraUniform {
     view_proj: [[f32; 4]; 4],
+    light: [[f32; 4]; 4],
     right: [f32; 4],
     toward: [f32; 4],
+    sun: [f32; 4],
 }
 
-impl From<&Viewport> for CameraUniform {
-    fn from(v: &Viewport) -> Self {
+impl CameraUniform {
+    /// The camera of `v`, with the view of the light shadows are cast from.
+    pub fn new(v: &Viewport, light: Mat4) -> Self {
         Self {
             view_proj: v.view_proj().to_cols_array_2d(),
+            light: light.to_cols_array_2d(),
             right: v.right().extend(0.0).to_array(),
             toward: v.toward().extend(0.0).to_array(),
+            sun: LIGHT.with_z(0.0).normalize().extend(0.0).to_array(),
         }
     }
 }
@@ -63,6 +71,10 @@ struct Offscreen {
 struct Gpu {
     target: wgpu::TextureFormat,
     scene: wgpu::RenderPipeline,
+    /// Draws the depth of the scene as the light sees it into `shadow_map`.
+    shadow: wgpu::RenderPipeline,
+    shadow_map: wgpu::TextureView,
+    shadow_group: wgpu::BindGroup,
     blit: wgpu::RenderPipeline,
     camera: wgpu::Buffer,
     camera_group: wgpu::BindGroup,
@@ -127,6 +139,67 @@ impl Gpu {
         let sheet_layout =
             texture_layout(device, "iso3d sheet", wgpu::ShaderStages::VERTEX_FRAGMENT);
         let copy_layout = texture_layout(device, "iso3d copy", wgpu::ShaderStages::FRAGMENT);
+        let shadow_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("iso3d shadows"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        multisampled: false,
+                        sample_type: wgpu::TextureSampleType::Depth,
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Comparison),
+                    count: None,
+                },
+            ],
+        });
+        let side = SHADOW_SIZE.min(device.limits().max_texture_dimension_2d);
+        let shadow_map = device
+            .create_texture(&wgpu::TextureDescriptor {
+                label: Some("iso3d shadows"),
+                size: wgpu::Extent3d {
+                    width: side,
+                    height: side,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: DEPTH,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                    | wgpu::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            })
+            .create_view(&Default::default());
+        // A point is lit where it lies no deeper in the light's view than what the light sees first.
+        let shadowed = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("iso3d shadowed"),
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            compare: Some(wgpu::CompareFunction::LessEqual),
+            ..Default::default()
+        });
+        let shadow_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("iso3d shadows"),
+            layout: &shadow_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&shadow_map),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&shadowed),
+                },
+            ],
+        });
         let camera = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("iso3d camera"),
             size: std::mem::size_of::<CameraUniform>() as u64,
@@ -163,21 +236,64 @@ impl Gpu {
             0 => Float32x3, 1 => Float32x3, 2 => Float32x3,
             3 => Float32x2, 4 => Float32x2, 5 => Float32x2, 6 => Uint32x3
         ];
+        let instances = [Some(wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<Instance>() as u64,
+            step_mode: wgpu::VertexStepMode::Instance,
+            attributes: &attributes,
+        })];
+        let shadow = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("iso3d shadow"),
+            layout: Some(&layout(
+                "iso3d shadow",
+                &[Some(&camera_layout), Some(&sheet_layout)],
+            )),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs_shadow"),
+                compilation_options: Default::default(),
+                buffers: &instances,
+            },
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleStrip,
+                ..Default::default()
+            },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: DEPTH,
+                depth_write_enabled: Some(true),
+                depth_compare: Some(wgpu::CompareFunction::LessEqual),
+                stencil: Default::default(),
+                // A surface does not shadow itself where the light grazes it.
+                bias: wgpu::DepthBiasState {
+                    constant: 2,
+                    slope_scale: 2.0,
+                    clamp: 0.0,
+                },
+            }),
+            multisample: Default::default(),
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_shadow"),
+                compilation_options: Default::default(),
+                targets: &[],
+            }),
+            multiview_mask: None,
+            cache: None,
+        });
         let scene = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("iso3d scene"),
             layout: Some(&layout(
                 "iso3d scene",
-                &[Some(&camera_layout), Some(&sheet_layout)],
+                &[
+                    Some(&camera_layout),
+                    Some(&sheet_layout),
+                    Some(&shadow_layout),
+                ],
             )),
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: Some("vs_main"),
                 compilation_options: Default::default(),
-                buffers: &[Some(wgpu::VertexBufferLayout {
-                    array_stride: std::mem::size_of::<Instance>() as u64,
-                    step_mode: wgpu::VertexStepMode::Instance,
-                    attributes: &attributes,
-                })],
+                buffers: &instances,
             },
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleStrip,
@@ -233,6 +349,9 @@ impl Gpu {
         Self {
             target,
             scene,
+            shadow,
+            shadow_map,
+            shadow_group,
             blit,
             camera,
             camera_group,
@@ -400,6 +519,32 @@ impl Gpu {
         let Some(off) = &self.offscreen else {
             return;
         };
+        if let Some(instances) = &self.instances {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("iso3d shadow"),
+                color_attachments: &[],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &self.shadow_map,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            pass.set_pipeline(&self.shadow);
+            pass.set_bind_group(0, &self.camera_group, &[]);
+            pass.set_vertex_buffer(0, instances.slice(..));
+            for (page, first, count) in &runs {
+                if let Some(sheet) = self.sheets.get(page) {
+                    pass.set_bind_group(1, sheet, &[]);
+                    pass.draw(0..4, *first..*first + *count);
+                }
+            }
+        }
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("iso3d scene"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -427,6 +572,7 @@ impl Gpu {
         if let Some(instances) = &self.instances {
             pass.set_pipeline(&self.scene);
             pass.set_bind_group(0, &self.camera_group, &[]);
+            pass.set_bind_group(2, &self.shadow_group, &[]);
             pass.set_vertex_buffer(0, instances.slice(..));
             for (page, first, count) in &runs {
                 if let Some(sheet) = self.sheets.get(page) {

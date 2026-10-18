@@ -12,6 +12,24 @@ pub const PITCH_ISO: f32 = 0.615_479_7;
 pub const YAW_ISO: f32 = 3.0 * std::f32::consts::FRAC_PI_4;
 /// How far the eye sits from the target; orthographic, so it only has to clear the scene.
 const EYE_DISTANCE: f32 = 200.0;
+/// The way toward the light the map's shadows are cast from: high in the north-west, so that shadows fall to the
+/// south-east whatever the time, as Factorio draws them.
+pub const LIGHT: Vec3 = Vec3::new(-0.6, -0.4, 1.0);
+
+/// The view of the light over a scene of `width` by `height` squares whose sprites lie between the heights `low`
+/// and `high`: an orthographic projection that holds all of it, depth 0 nearest the light.
+pub fn light_view_proj(width: f32, height: f32, (low, high): (f32, f32)) -> Mat4 {
+    let middle = Vec3::new(width / 2.0, height / 2.0, (low + high) / 2.0);
+    let look = view::look_at_mat4(middle + LIGHT.normalize() * EYE_DISTANCE, middle, Vec3::Z);
+    let corners = [0.0, width]
+        .into_iter()
+        .flat_map(|x| [0.0, height].map(|y| (x, y)))
+        .flat_map(|(x, y)| [low, high].map(|z| look.transform_point3(Vec3::new(x, y, z))));
+    let (min, max) = corners.fold((Vec3::MAX, Vec3::MIN), |(min, max), p| {
+        (min.min(p), max.max(p))
+    });
+    directx::orthographic(min.x, max.x, min.y, max.y, min.z, max.z) * look
+}
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Camera {
