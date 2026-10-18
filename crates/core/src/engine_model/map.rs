@@ -39,6 +39,16 @@ fn paint(look: &Look, pick: impl Fn(&protocol::Tint) -> Option<&str>) -> Option<
     Some(Rgb(r, g, b))
 }
 
+/// The coloured light on a square in sight.
+fn glow(c: &WorldCell) -> Option<Glow> {
+    let glow = c.glow.as_ref()?;
+    let [r, g, b] = parse_hex(&glow.color)?;
+    Some(Glow {
+        color: Rgb(r, g, b),
+        strength: glow.strength,
+    })
+}
+
 /// `#rrggbb` to its channels.
 fn parse_hex(text: &str) -> Option<[u8; 3]> {
     let digits = text.strip_prefix('#').filter(|d| d.len() == 6)?;
@@ -200,6 +210,7 @@ impl EngineModel {
                 light: shown
                     .and_then(|c| c.light.as_ref()?.as_u64())
                     .map(|l| l as u8),
+                glow: shown.and_then(glow),
                 depth: below.unwrap_or(0),
                 ..self.styled(look, desc)
             };
@@ -217,6 +228,7 @@ impl EngineModel {
                     layers,
                     remembered: c.known == Known::Remembered,
                     light: c.light.as_ref().and_then(Value::as_u64).map(|l| l as u8),
+                    glow: glow(c),
                     ..self.styled(l, look_name(l))
                 },
                 None => Cell {
@@ -237,6 +249,7 @@ impl EngineModel {
                     remembered: lower.is_some_and(|c| c.known == Known::Remembered),
                     depth: below.unwrap_or(0),
                     light: lower.and_then(|c| c.light.as_ref()?.as_u64().map(|l| l as u8)),
+                    glow: lower.and_then(glow),
                     ..look.map_or(unknown, |l| self.styled(l, look_name(l)))
                 }
             }
