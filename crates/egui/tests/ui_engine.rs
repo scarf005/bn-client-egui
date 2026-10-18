@@ -536,6 +536,47 @@ fn native_log_lines_show_with_repeat_count_and_the_new_ones_are_announced_togeth
     );
 }
 
+#[test]
+fn a_rule_parts_the_log_lines_of_one_turn_from_the_next() {
+    let (mut h, script) = harness();
+    h.run_steps(3);
+    script.push(fixture("events_41_walk"));
+    for (sequence, id, text, turn) in [
+        (42, "7", "You open the door.", "10"),
+        (43, "8", "Bang!", "10"),
+        (44, "9", "You hear a scream.", "12"),
+    ] {
+        script.push(json!({"jsonrpc": "2.0", "method": "bn.events", "params": {"epoch": "e7f3",
+            "events": [{"sequence": sequence.to_string(), "revision": "32", "type": "message.logged",
+            "data": {"id": id, "text": text, "kind": "info", "color": "c_white", "count": 1,
+                "turn": turn, "label": text}}]}}));
+    }
+    h.run_steps(3);
+    let rect = |label: &str| h.get_by_label(label).rect();
+    let (door, bang, scream) = (
+        rect("You open the door."),
+        rect("Bang!"),
+        rect("You hear a scream."),
+    );
+    let rules = |above: egui::Rect, below: egui::Rect| {
+        h.output()
+            .shapes
+            .iter()
+            .filter(|c| match &c.shape {
+                egui::Shape::LineSegment { points, .. } => {
+                    points[0].y == points[1].y
+                        && points[0].y > above.center().y
+                        && points[0].y < below.center().y
+                        && points[0].x.max(points[1].x) > door.min.x
+                }
+                _ => false,
+            })
+            .count()
+    };
+    assert_eq!(rules(door, bang), 0, "one turn");
+    assert_eq!(rules(bang, scream), 1, "the next turn");
+}
+
 fn interrupts(script: &ScriptHandle) -> usize {
     let methods = script.sent_methods();
     methods.iter().filter(|m| *m == "bn.interrupt").count()
