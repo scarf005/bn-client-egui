@@ -1901,6 +1901,23 @@ mod failures {
     }
 
     #[test]
+    fn an_engine_without_the_asked_language_is_a_failure_with_its_reason() {
+        let (t, h) = ScriptedTransport::new();
+        let refused = json!({"jsonrpc": "2.0", "error": {"code": 1000, "message": "application error",
+            "data": {"kind": "unavailable_locale", "action": "hello",
+                "message": "The game has no translation for this language."}}});
+        let mut m = EngineModel::new(Box::new(t.on("bn.hello", vec![refused])));
+        m.poll();
+        let failure = m.failure().expect("the refusal is reported");
+        assert_eq!(failure.kind, FailureKind::Incompatible);
+        assert_eq!(
+            failure.message,
+            "The game has no translation for this language."
+        );
+        assert_eq!(h.sent_methods(), ["bn.hello"]);
+    }
+
+    #[test]
     fn an_engine_without_bn_hello_is_incompatible() {
         let (t, h) = ScriptedTransport::new();
         let unknown =
