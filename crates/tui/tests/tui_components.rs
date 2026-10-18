@@ -810,3 +810,22 @@ fn a_count_list_draws_no_pick_mark() {
     let nail = text.iter().find(|l| l.contains("nail")).unwrap();
     assert!(!rag.contains('-') && !nail.contains('-'), "{text:#?}");
 }
+
+#[test]
+fn a_typed_digit_of_a_counting_list_runs_its_digit_and_the_digits_are_not_listed() {
+    let text = json!({"id": "t", "kind": "text", "markup": "body"});
+    let affordances = json!([
+        {"id": "inventory:digit:6", "label": "6", "keys": ["6"], "enabled": true, "expect": "screen",
+            "role": "digit"},
+        {"id": "RIGHT", "label": "Mark", "keys": ["6"], "enabled": true, "expect": "screen",
+            "role": "navigate"}]);
+    let (mut app, h) = open(screen(text, affordances));
+    let shown = lines(&render(&mut app)).join("\n");
+    assert!(shown.contains("Mark [6]"), "{shown}");
+    assert!(!shown.contains("6 [6]"), "{shown}");
+    press(&mut app, KeyCode::Char('6'));
+    assert_eq!(
+        operations(&h),
+        [json!({"kind": "invoke", "affordance_id": "inventory:digit:6", "args": {}})]
+    );
+}

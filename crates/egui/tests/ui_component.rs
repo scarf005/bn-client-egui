@@ -1368,3 +1368,16 @@ fn hovering_an_off_tab_gives_the_engines_reason() {
     h.run_steps(6);
     h.get_by_label("Nothing to make here.");
 }
+
+#[test]
+fn a_typed_digit_of_a_counting_list_runs_its_digit_and_the_digits_are_no_buttons() {
+    let mut digit = screen_action("inventory:digit:6", "6", Some("digit"));
+    digit["keys"] = json!(["6"]);
+    let mut right = screen_action("RIGHT", "Mark", Some("navigate"));
+    right["keys"] = json!(["6"]);
+    let (mut h, script) = harness(dialog(chrome_body(), vec![digit, right]));
+    assert!(h.query_by_label("6").is_none());
+    h.event(egui::Event::Text("6".into()));
+    h.run_steps(3);
+    assert_eq!(submits(&script), [screen_invoke("inventory:digit:6")]);
+}
