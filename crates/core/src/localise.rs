@@ -632,6 +632,18 @@ mod tests {
     }
 
     #[test]
+    fn a_message_with_no_values_reads_as_written_as_the_engine_shows_it() {
+        let line = message(json!({"key": "You reeled in %s."}));
+        install(None);
+        assert_eq!(render(&line), "You reeled in %s.");
+        install(Some(catalogue(
+            "nplurals=1; plural=0;",
+            &[("You reeled in %s.", "%s 낚았다.")],
+        )));
+        assert_eq!(render(&line), "%s 낚았다.");
+    }
+
+    #[test]
     fn a_message_without_a_translation_or_a_catalogue_shows_its_key_filled() {
         let line = message(json!({"key": "The %s dies!", "args": ["zombie"]}));
         install(None);
