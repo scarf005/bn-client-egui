@@ -397,8 +397,8 @@ fn value(arg: &TextArg) -> Value {
     }
 }
 
-/// The message in this thread's language, placeholders filled. The empty key joins its arguments; a message
-/// with no values reads as written, as the engine shows it.
+/// The message in this thread's language, placeholders filled and `<npcname>` named. The empty key joins its
+/// arguments; a message with no values reads as written, as the engine shows it.
 pub fn render(message: &LocalisedString) -> String {
     let args = message
         .args
@@ -416,10 +416,15 @@ pub fn render(message: &LocalisedString) -> String {
             printf(format, &args)
         }
     };
-    ACTIVE.with(|active| match active.borrow().as_deref() {
+    let filled = ACTIVE.with(|active| match active.borrow().as_deref() {
         Some(catalogue) => fill(catalogue.format(message)),
         None => fill(source(message)),
-    })
+    });
+    // As the engine names its creature: after the values are filled.
+    match &message.npcname {
+        Some(name) => filled.replace("<npcname>", &name.shown()),
+        None => filled,
+    }
 }
 
 /// The message in the source language, in its form for its count as gettext falls back to it.
