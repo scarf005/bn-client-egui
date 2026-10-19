@@ -710,3 +710,65 @@ fn what_covers_nothing_of_a_person_drawn_from_above_still_lies_on_the_ground() {
     assert_eq!(quads.len(), 2, "{quads:?}");
     assert!(quads.iter().all(|i| i.origin[2].abs() < 0.01), "{quads:?}");
 }
+
+/// A square of terrain `id` the engine calls a window in a wall's line.
+fn window(x: i32, y: i32, id: &str) -> Value {
+    let mut glazed = wall(x, y, id);
+    glazed["terrain"]["window"] = true.into();
+    glazed
+}
+
+#[test]
+fn a_window_drawn_from_above_is_a_sill_and_a_lintel_of_its_wall_with_the_opening_between() {
+    let m = model(vec![window(4, 4, "t_wall")]);
+    let scene = flat_scene_of(&m, "flat-window");
+    let quads = planes(&scene);
+    // Each of the sill and the lintel: a top, a bottom and four sides.
+    assert_eq!(quads.len(), 2 * 6, "{quads:?}");
+    let mut lids = quads
+        .iter()
+        .filter(|i| i.b[2] == 0.0)
+        .map(|i| i.origin[2])
+        .collect::<Vec<_>>();
+    lids.sort_by(f32::total_cmp);
+    let expected = [0.0, 0.9, 2.4, 3.0];
+    assert!(
+        lids.iter().zip(expected).all(|(a, b)| (a - b).abs() < 0.01),
+        "{lids:?}"
+    );
+    // Nothing is drawn in the opening.
+    assert!(
+        quads.iter().all(|i| {
+            let (high, low) = (i.origin[2], i.origin[2] + i.b[2].min(0.0));
+            high <= 0.9 + 0.01 || low >= 2.4 - 0.01
+        }),
+        "{quads:?}"
+    );
+    let (x, y) = square(&m, (4, 4));
+    assert_eq!(scene.column(x, y).unwrap().solid, Some((0.0, 3.0)));
+}
+
+#[test]
+fn a_wall_beside_a_window_keeps_the_face_seen_through_its_opening_and_hides_the_windows() {
+    let m = model(vec![window(4, 4, "t_wall"), wall(5, 4, "t_wall")]);
+    let scene = flat_scene_of(&m, "flat-window-wall");
+    // The wall's six faces; the sill and the lintel without their east sides against it.
+    assert_eq!(planes(&scene).len(), 6 + 2 * 5);
+    let (x, _) = square(&m, (5, 4));
+    let between = sides(&planes(&scene))
+        .into_iter()
+        .filter(|i| i.a[0] == 0.0 && i.origin[0] == x as f32)
+        .collect::<Vec<_>>();
+    assert_eq!(between.len(), 1, "{between:?}");
+    assert!(
+        (between[0].b[2] + 3.0).abs() < 1e-4,
+        "the wall's: {between:?}"
+    );
+}
+
+#[test]
+fn a_window_of_an_isometric_tileset_is_its_walls_box() {
+    let m = model(vec![window(5, 4, "t_wall")]);
+    let wall = planes(&scene_of(&m, "scene-window-box"));
+    assert_eq!(wall.len(), 5, "a lid and four faces");
+}
