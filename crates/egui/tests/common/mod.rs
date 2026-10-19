@@ -323,6 +323,22 @@ pub fn open_client_settings<S>(h: &mut egui_kittest::Harness<'_, S>) {
     }
 }
 
+/// A double click at `at` for the next frame: both clicks in that one frame, where kittest's `click` takes a
+/// frame for each event and two of them are further apart than egui's double-click delay.
+pub fn double_click<S>(h: &mut egui_kittest::Harness<'_, S>, at: eframe::egui::Pos2) {
+    use eframe::egui::{Event, Modifiers, PointerButton};
+    let events = &mut h.input_mut().events;
+    events.push(Event::PointerMoved(at));
+    for pressed in [true, false, true, false] {
+        events.push(Event::PointerButton {
+            pos: at,
+            button: PointerButton::Primary,
+            pressed,
+            modifiers: Modifiers::NONE,
+        });
+    }
+}
+
 /// Runs frames until no window moves: a window smaller than the room grows to its size over a few frames, and a
 /// click aimed before that lands on a neighbour.
 pub fn settle_windows<S>(h: &mut egui_kittest::Harness<'_, S>) {

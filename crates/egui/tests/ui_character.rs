@@ -136,13 +136,14 @@ fn the_bionics_list_draws_its_rows_by_identity_and_the_power() {
 }
 
 #[test]
-fn the_mutation_list_draws_both_columns_and_a_click_picks_the_row_by_identity() {
+fn the_mutation_list_draws_both_columns_and_a_double_click_picks_the_row_by_identity() {
     let screen = example("mutation screen");
     let (mut h, script) = open(screen.clone());
     let passive = &find(&screen["root"], "mutations:passive:rows").unwrap()["rows"][0];
     let active = &find(&screen["root"], "mutations:active:rows").unwrap()["rows"][0];
     first(&h, passive["label"].as_str().unwrap());
-    first(&h, active["label"].as_str().unwrap()).click();
+    let at = first(&h, active["label"].as_str().unwrap()).rect().center();
+    common::double_click(&mut h, at);
     h.run_steps(3);
     let last = operations(&script).pop().expect("a command");
     assert_eq!(last["affordance_id"], "bn:activate:mutations:pick:active");
@@ -150,7 +151,7 @@ fn the_mutation_list_draws_both_columns_and_a_click_picks_the_row_by_identity() 
 }
 
 #[test]
-fn a_click_on_a_spell_chooses_it_by_the_spells_identity() {
+fn a_double_click_on_a_spell_chooses_it_by_the_spells_identity() {
     let screen = example("spell menu");
     let (mut h, script) = open(screen.clone());
     let list = find(&screen["root"], "list:choices").unwrap();
@@ -160,7 +161,8 @@ fn a_click_on_a_spell_chooses_it_by_the_spells_identity() {
         .iter()
         .find(|r| r["id"].as_str().unwrap().starts_with("spell:"))
         .unwrap();
-    first(&h, spell["label"].as_str().unwrap()).click();
+    let at = first(&h, spell["label"].as_str().unwrap()).rect().center();
+    common::double_click(&mut h, at);
     h.run_steps(3);
     let last = operations(&script).pop().expect("a command");
     assert_eq!(last["affordance_id"], list["activate"]);
@@ -256,7 +258,7 @@ fn a_skill_category_is_a_heading_that_sends_nothing_and_a_skill_is_a_row() {
     first(&h, skill["label"].as_str().unwrap()).click();
     h.run_steps(3);
     let last = last_invoke(&script);
-    assert_eq!(last["affordance_id"], "bn:activate:character:focus:skills");
+    assert_eq!(last["affordance_id"], "character:focus:skills");
     assert_eq!(last["args"]["row"], skill["id"]);
 }
 
@@ -271,7 +273,7 @@ fn a_click_on_a_stat_row_moves_the_engines_cursor_to_it_by_the_rows_id() {
     first(&h, rows[1]["label"].as_str().unwrap()).click();
     h.run_steps(3);
     let last = last_invoke(&script);
-    assert_eq!(last["affordance_id"], "bn:activate:character:focus:stats");
+    assert_eq!(last["affordance_id"], "character:focus:stats");
     assert_eq!(last["args"]["row"], rows[1]["id"]);
 }
 
@@ -411,7 +413,8 @@ fn a_key_row_of_the_spell_menu_is_chosen_by_its_own_row_id() {
         .iter()
         .find(|r| r["id"].as_str().unwrap().starts_with("action:key:"))
         .unwrap();
-    first(&h, key["label"].as_str().unwrap()).click();
+    let at = first(&h, key["label"].as_str().unwrap()).rect().center();
+    common::double_click(&mut h, at);
     h.run_steps(3);
     let last = last_invoke(&script);
     assert_eq!(last["affordance_id"], list["activate"]);

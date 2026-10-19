@@ -1,4 +1,5 @@
 //! Needs a real engine build: `BN_ENGINE=/path/to/cataclysm-bn-tiles cargo test -p bn-client-egui --test live_generic -- --ignored --nocapture`
+mod common;
 use bn_client_egui::transport::StdioTransport;
 use bn_client_egui::watchdog::Watchdog;
 use bn_client_egui::{App, EngineModel, GameModel, MenuModel};
@@ -37,34 +38,37 @@ fn start<'a>() -> H<'a> {
     });
     h.run_steps(10);
     h.get_by_label("New Game").click();
+    run_until(&mut h, "the tutorial entry", 60, |h| {
+        !h.state().model.busy() && h.query_by_label("Tutorial").is_some()
+    });
+    // A list row runs on a double click, which a click a frame later would make a triple one.
+    let at = settled(&mut h, "Tutorial").center();
+    common::double_click(&mut h, at);
     run_until(&mut h, "the tutorial map", 300, |h| {
-        let chosen = h
-            .state()
-            .model
-            .command()
-            .is_some_and(|c| c.target.as_deref() == Some("new_game:tutorial"));
-        if !chosen && !h.state().model.busy() && h.query_by_label("Tutorial").is_some() {
-            h.get_by_label("Tutorial").click();
-        }
         h.state().model.size().x > 0
     });
     h
 }
 
-/// Clicks the widget whose label contains `label` once it stopped moving: a press lands where the widget was
+/// Where the widget whose label contains `label` is once it stopped moving: a press lands where the widget was
 /// last drawn, which a screen still laying itself out may have given to another widget.
-fn click_settled(h: &mut H, label: &str) {
+fn settled(h: &mut H, label: &str) -> egui::Rect {
     let mut seen = None;
     for _ in 0..100 {
         let rect = h.get_by_label_contains(label).rect();
         if seen == Some(rect) {
-            h.get_by_label_contains(label).click();
-            return;
+            return rect;
         }
         seen = Some(rect);
         h.run_steps(2);
     }
     panic!("{label} kept moving");
+}
+
+/// Clicks the widget whose label contains `label` once it stopped moving.
+fn click_settled(h: &mut H, label: &str) {
+    settled(h, label);
+    h.get_by_label_contains(label).click();
 }
 
 fn settle(h: &mut H, what: &str) {
