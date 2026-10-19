@@ -24,12 +24,7 @@ impl<M: GameModel> App<M> {
             return;
         }
         ui.horizontal_wrapped(|ui| {
-            for a in affordances.iter().filter(|a| {
-                !matches!(
-                    a.role,
-                    Some(AffordanceRole::Select | AffordanceRole::Navigate | AffordanceRole::Digit)
-                )
-            }) {
+            for a in affordances.iter().filter(|a| drawn_button(a)) {
                 self.affordance_button(ui, a, row, out);
             }
         });
@@ -134,4 +129,12 @@ impl<M: GameModel> App<M> {
             .collect::<Vec<_>>();
         self.affordance_buttons(ui, &own, row, out);
     }
+}
+
+/// Whether `a` is drawn as a button: picking, moving and digits run from their rows and keys instead.
+pub(super) fn drawn_button(a: &Affordance) -> bool {
+    !matches!(
+        a.role,
+        Some(AffordanceRole::Select | AffordanceRole::Navigate | AffordanceRole::Digit)
+    )
 }

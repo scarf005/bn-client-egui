@@ -57,7 +57,7 @@ impl<M: GameModel> App<M> {
         let refused = rows
             .iter()
             .any(|r| !r.enabled && !r.denial.shown().is_empty());
-        let below = f32::from(u8::from(described)) * DESCRIPTION_HEIGHT
+        let below = f32::from(u8::from(described)) * (DESCRIPTION_HEIGHT + spacing.item_spacing.y)
             + f32::from(u8::from(refused)) * line
             + f32::from(u8::from(buttons)) * 2.0 * line;
         (ui.available_height() - below).max(DESCRIPTION_HEIGHT)
@@ -132,7 +132,7 @@ impl<M: GameModel> App<M> {
             .iter()
             .filter_map(|a| find(screen, a))
             .collect::<Vec<_>>();
-        let list_height = Self::list_height(ui, &rows, !own.is_empty());
+        let list_height = Self::list_height(ui, &rows, own.iter().any(|a| drawn_button(a)));
         self.screens
             .list_heights
             .borrow_mut()
