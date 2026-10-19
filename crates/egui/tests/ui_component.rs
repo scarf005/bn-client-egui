@@ -1382,31 +1382,93 @@ fn a_typed_digit_of_a_counting_list_runs_its_digit_and_the_digits_are_no_buttons
     assert_eq!(submits(&script), [screen_invoke("inventory:digit:6")]);
 }
 
-#[test]
-fn a_list_with_no_descriptions_or_buttons_of_its_own_reaches_down_to_the_footer() {
+/// The room between the last row wholly above the footer and the footer, in rows, for a full screen whose
+/// list of 60 rows has `own` affordances.
+fn rows_left_above_the_footer(own: Vec<Value>) -> f32 {
     let rows = (0..60)
         .map(|i| {
             json!({"id": format!("r:{i}"), "label": format!("Row {i}"), "description": "",
             "denial": "", "enabled": true, "selectable": true, "selected": false, "columns": []})
         })
         .collect::<Vec<_>>();
+    let names = own.iter().map(|a| a["id"].clone()).collect::<Vec<_>>();
     let list = json!({"id": "parts", "kind": "list", "columns": [], "rows": rows,
-        "total": 60, "selection": "single"});
+        "total": 60, "selection": "single", "affordances": names});
     let leave = json!({"id": "RENAME", "label": "Leave", "keys": ["e"], "enabled": true,
         "expect": "screen"});
+    let mut affordances = own;
+    affordances.push(leave);
     let screen = json!({"screen_id": "screen:9", "role": "screen", "title": "Test", "root": list,
-        "affordances": [leave]});
-    let (h, _) = harness(screen);
-    let lowest = (0..60)
-        .filter_map(|i| h.query_by_label(&format!("Row {i}")).map(|n| n.rect()))
-        .map(|r| r.bottom())
-        .fold(f32::MIN, f32::max);
+        "affordances": affordances});
+    let (mut h, _) = harness(screen);
     let footer = h.get_by_label_contains("Leave").rect().top();
     let row = h.get_by_label("Row 0").rect().height();
+    // At the end of the list its last row sits on the room the list keeps under itself.
+    h.hover_at(h.get_by_label("Row 0").rect().center());
+    h.run_steps(2);
+    for _ in 0..40 {
+        h.event(egui::Event::MouseWheel {
+            unit: egui::MouseWheelUnit::Page,
+            delta: egui::vec2(0.0, -1.0),
+            modifiers: egui::Modifiers::NONE,
+            phase: egui::TouchPhase::Move,
+        });
+        h.run_steps(1);
+    }
+    h.run_steps(4);
+    let last = h.get_by_label("Row 59").rect().bottom();
+    (footer - last) / row
+}
+
+#[test]
+fn a_list_with_no_descriptions_or_buttons_of_its_own_reaches_down_to_the_footer() {
+    let left = rows_left_above_the_footer(vec![]);
+    assert!(left < 1.0, "{left} rows of room are left");
+    // A row's own picking affordance draws no button under the list.
+    let pick = json!({"id": "pick", "label": "Pick", "keys": [], "enabled": true, "expect": "boundary",
+        "role": "select", "args": {"row": {"component_id": "parts"}}});
+    let left = rows_left_above_the_footer(vec![pick]);
     assert!(
-        footer - lowest < 2.0 * row,
-        "rows end at {lowest}, the footer starts at {footer}"
+        left < 2.0,
+        "{left} rows of room are left beside a picking affordance"
     );
+}
+
+#[test]
+fn wrapped_peer_lists_share_the_height_so_every_line_shows_above_the_footer() {
+    let list = |id: &str| {
+        let rows = (0..60)
+            .map(|i| {
+                json!({"id": format!("{id}:{i}"), "label": format!("{id} row with a label long enough that three of them do not fit one line, number {i}"),
+                "description": "", "denial": "", "enabled": true, "selectable": true, "selected": false,
+                "columns": []})
+            })
+            .collect::<Vec<_>>();
+        json!({"id": id, "kind": "list", "columns": [], "rows": rows, "total": 60, "selection": "single"})
+    };
+    let root = json!({"id": "lists", "kind": "split", "relation": "peers",
+        "children": [list("Alpha"), list("Beta"), list("Gamma")]});
+    let leave = json!({"id": "RENAME", "label": "Leave", "keys": ["e"], "enabled": true,
+        "expect": "screen"});
+    let screen = json!({"screen_id": "screen:9", "role": "screen", "title": "Test", "root": root,
+        "affordances": [leave]});
+    let (mut h, _) = harness(screen);
+    bn_client_egui::theme::apply(&h.ctx);
+    bn_client_egui::fonts::install_bundled(&h.ctx);
+    common::settle_windows(&mut h);
+    let footer = h.get_by_label_contains("Leave").rect().top();
+    for id in ["Alpha", "Beta", "Gamma"] {
+        let first = h
+            .get_by_label(&format!(
+                "{id} row with a label long enough that three of them do not fit one line, number 0"
+            ))
+            .rect();
+        assert!(
+            first.bottom() <= footer,
+            "{id}'s first row ends at {} under the footer at {footer}",
+            first.bottom()
+        );
+    }
 }
 
 #[test]
