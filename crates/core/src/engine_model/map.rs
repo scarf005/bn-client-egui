@@ -96,6 +96,7 @@ impl EngineModel {
             creature: matches!(look.kind.as_str(), "monster" | "npc" | "avatar"),
             terrain: look.kind == "terrain",
             wall: look.wall,
+            window: look.window,
             coverage: look.coverage,
             vehicle: look.kind == "vehicle_part",
             seed,

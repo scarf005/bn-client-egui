@@ -221,6 +221,7 @@ pub fn build(
                 let kind = match (layer.terrain, chosen.as_ref().is_some_and(|c| c.joined)) {
                     (false, _) if layer.creature => Kind::Creature,
                     (false, _) if layer.vehicle => Kind::Vehicle,
+                    (true, _) if layer.window && !m.iso => Kind::Window,
                     (true, joined) if layer.wall => Kind::Wall { joined },
                     // A tileset drawn from above shows what covers some of a person as tall as that.
                     _ if layer.coverage > 0 && !m.iso => Kind::Standing {
@@ -237,9 +238,9 @@ pub fn build(
                     let Some(placed) = placed else {
                         continue;
                     };
-                    // The background under a wall, a vehicle part or what stands is its ground.
+                    // The background under a wall, a window, a vehicle part or what stands is its ground.
                     let kind = match (kind, under) {
-                        (Kind::Wall { .. }, true) => Kind::Terrain,
+                        (Kind::Wall { .. } | Kind::Window, true) => Kind::Terrain,
                         (Kind::Standing { .. }, true) if layer.terrain => Kind::Terrain,
                         (Kind::Vehicle | Kind::Standing { .. }, true) => Kind::Thing,
                         (kind, _) => kind,
@@ -274,7 +275,9 @@ pub fn build(
                         column.solid = Some((floor + low, floor + high));
                     }
                     let outline = match form {
-                        Shape::Extrude { .. } => pages.and_then(|p| p.outline(&sprite)),
+                        Shape::Extrude { .. } | Shape::Window { .. } => {
+                            pages.and_then(|p| p.outline(&sprite))
+                        }
                         _ => None,
                     };
                     items.push(Item {
