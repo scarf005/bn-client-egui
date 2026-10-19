@@ -50,6 +50,8 @@ pub struct Layer {
     pub terrain: bool,
     /// Terrain that stands as a wall (a wall, a closed door or a window), which a 3D view raises.
     pub wall: bool,
+    /// How much of a person the thing covers, in percent, which a 3D view raises it by; 0 when it lies flat.
+    pub coverage: u8,
     /// Whether the thing is a part of a vehicle.
     pub vehicle: bool,
     /// Picks between the weighted variants of a sprite, like the game's per-tile seed.

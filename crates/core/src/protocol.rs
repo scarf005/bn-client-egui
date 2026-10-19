@@ -62,6 +62,9 @@ pub struct Look {
     /// Terrain that stands as a wall: a wall, or a closed door or window in a wall's line.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub wall: bool,
+    /// How much of a person standing behind it the terrain or furniture covers, in percent; 0 when none.
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub coverage: u8,
     /// Paint of a vehicle part, as `#rrggbb`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tint: Option<Tint>,

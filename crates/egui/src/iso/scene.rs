@@ -221,8 +221,12 @@ pub fn build(
                 let kind = match (layer.terrain, chosen.as_ref().is_some_and(|c| c.joined)) {
                     (false, _) if layer.creature => Kind::Creature,
                     (false, _) if layer.vehicle => Kind::Vehicle,
-                    (false, _) => Kind::Thing,
                     (true, joined) if layer.wall => Kind::Wall { joined },
+                    // A tileset drawn from above shows what covers some of a person as tall as that.
+                    _ if layer.coverage > 0 && !m.iso => Kind::Standing {
+                        coverage: layer.coverage,
+                    },
+                    (false, _) => Kind::Thing,
                     (true, false) => Kind::Terrain,
                     (true, true) => Kind::Joined,
                 };
@@ -233,10 +237,11 @@ pub fn build(
                     let Some(placed) = placed else {
                         continue;
                     };
-                    // The background under a wall or a vehicle part is its ground.
+                    // The background under a wall, a vehicle part or what stands is its ground.
                     let kind = match (kind, under) {
                         (Kind::Wall { .. }, true) => Kind::Terrain,
-                        (Kind::Vehicle, true) => Kind::Thing,
+                        (Kind::Standing { .. }, true) if layer.terrain => Kind::Terrain,
+                        (Kind::Vehicle | Kind::Standing { .. }, true) => Kind::Thing,
                         (kind, _) => kind,
                     };
                     let Some(mut sprite) = source(tileset, placed.sprite) else {

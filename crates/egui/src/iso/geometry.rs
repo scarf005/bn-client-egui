@@ -57,6 +57,9 @@ const LEVEL: f32 = 3.0;
 const LAYER_BIAS: f32 = 0.002;
 /// A vehicle part of a tileset drawn from above stands this many squares tall: a person in it shows from the chest.
 const VEHICLE: f32 = 0.5;
+/// A person of a tileset drawn from above stands as an upright board as tall as the tile: one square. What covers
+/// some of a person stands that share of it.
+const PERSON: f32 = 1.0;
 
 impl Metrics {
     pub fn new(tile: (u32, u32), iso: bool, zlevel_height: Option<f32>) -> Self {
@@ -187,13 +190,17 @@ pub enum Kind {
     Joined,
     /// Terrain the engine says is a wall, and whether it joined it to its neighbours.
     Wall { joined: bool },
+    /// Terrain that is not a wall, or anything else that is not a creature or a vehicle part, as a tileset drawn from
+    /// above shows it, covering the given percent of a person.
+    Standing { coverage: u8 },
 }
 
 /// What `sprite` is drawn as. Terrain whose sprite is as wide as the tile is the ground when it hardly rises over
 /// its diamond; joined terrain that rises is a box, as a wall; anything else, a shrub or a mound as well, stands
 /// upright. A tileset drawn from above draws what stays inside its square from above too, so that lies on the
-/// ground, but for a creature, and a wall or a vehicle part is pushed up from it; what reaches out of its square, a
-/// tree, was drawn standing. An isometric tileset draws a wall's height itself: only the joins tell.
+/// ground, but for a creature, and a wall, a vehicle part or what covers some of a person is pushed up from it; what
+/// reaches out of its square, a tree, was drawn standing. An isometric tileset draws a wall's height itself: only the
+/// joins tell.
 pub fn shape(m: &Metrics, sprite: &SpriteSource, kind: Kind) -> Shape {
     let size = sprite.size();
     if !m.iso {
@@ -203,6 +210,9 @@ pub fn shape(m: &Metrics, sprite: &SpriteSource, kind: Kind) -> Shape {
             (Kind::Creature, _) | (_, false) => Shape::Board,
             (Kind::Wall { .. }, true) => Shape::Extrude { top: m.level },
             (Kind::Vehicle, true) => Shape::Extrude { top: VEHICLE },
+            (Kind::Standing { coverage }, true) => Shape::Extrude {
+                top: PERSON * f32::from(coverage.min(100)) / 100.0,
+            },
             _ => Shape::Floor { z: 0.0 },
         };
     }
