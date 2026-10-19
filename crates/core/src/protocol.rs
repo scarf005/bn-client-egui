@@ -1813,6 +1813,9 @@ pub struct LocalisedString {
     /// The values of the placeholders, in order.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub args: Option<Vec<TextArg>>,
+    /// What a `<npcname>` in the worded line stands for.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub npcname: Option<Box<Text>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

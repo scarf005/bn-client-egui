@@ -797,6 +797,28 @@ mod tests {
     }
 
     #[test]
+    fn npcname_names_the_creature_after_the_values_are_filled() {
+        install(Some(catalogue(
+            "nplurals=1; plural=0;",
+            &[
+                (
+                    "<npcname> puts on their %s.",
+                    "<npcname>이(가) %s을(를) 입는다.",
+                ),
+                ("the %s", "%s"),
+                ("zombie", "좀비"),
+            ],
+        )));
+        let worn = message(
+            json!({"key": "<npcname> puts on their %s.", "args": ["cap"], "npcname": "Ana"}),
+        );
+        assert_eq!(render(&worn), "Ana이(가) cap을(를) 입는다.");
+        let stumbles = message(json!({"key": "<npcname> stumbles.",
+            "npcname": {"key": "the %s", "args": [{"key": "zombie"}]}}));
+        assert_eq!(render(&stumbles), "좀비 stumbles.");
+    }
+
+    #[test]
     fn the_catalogue_is_found_under_the_game_root_by_locale() {
         let root = std::env::temp_dir().join(format!("bn-localise-{}", std::process::id()));
         let dir = root.join("lang/mo/ko/LC_MESSAGES");
