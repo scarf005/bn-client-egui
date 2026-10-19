@@ -892,6 +892,42 @@ fn the_construction_screen_marks_unread_tabs_and_selects_the_row_the_focus_moves
     );
 }
 
+/// A click on a row moves the engine's cursor there, as an arrow key does, and runs nothing else.
+#[test]
+fn a_click_on_a_recipe_selects_it_without_crafting_it() {
+    let (mut h, script) = harness(recipe_screen(
+        "crafting:tabs",
+        "crafting:recipes",
+        "craft:select",
+    ));
+    h.get_by_label("Row b").click();
+    h.run_steps(3);
+    assert_eq!(
+        submits(&script),
+        [boundary_invoke("craft:select", json!({"row": "b"}))]
+    );
+}
+
+/// A double click on a row runs the list's `activate` on it, as Enter does.
+#[test]
+fn a_double_click_on_a_recipe_crafts_it() {
+    let (mut h, script) = harness(recipe_screen(
+        "crafting:tabs",
+        "crafting:recipes",
+        "craft:select",
+    ));
+    h.get_by_label("Row b").click();
+    h.run_steps(2);
+    h.get_by_label("Row b").click();
+    h.run_steps(3);
+    let sent = submits(&script);
+    assert_eq!(
+        sent.last(),
+        Some(&boundary_invoke("go", json!({"row": "b"}))),
+        "{sent:?}"
+    );
+}
+
 #[test]
 fn the_editmap_screen_draws_the_engines_cursor_parts_and_a_click_runs_its_edit_affordance() {
     let map = json!({"id": "editmap:map", "kind": "map", "affordances": ["target:move"],
