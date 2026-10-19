@@ -172,10 +172,8 @@ fn list_draws_header_rows_columns_values_and_a_rows_own_denial() {
         disabled(&h, "bn:set_count:list:npc"),
         "the row turns this one off"
     );
-    assert!(
-        disabled(&h, "bn:choose:list:npc"),
-        "the row lists only the other affordance"
-    );
+    // The rows run the list's choose, so it has no button.
+    assert!(h.query_by_label("bn:choose:list:npc").is_none());
 }
 
 #[test]

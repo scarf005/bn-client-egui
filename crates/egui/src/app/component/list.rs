@@ -131,6 +131,8 @@ impl<M: GameModel> App<M> {
             .affordances
             .iter()
             .filter_map(|a| find(screen, a))
+            // The rows run the list's `activate`, on a double click or Enter.
+            .filter(|a| list.activate.as_deref() != Some(a.id.as_str()))
             .collect::<Vec<_>>();
         let list_height = Self::list_height(ui, &rows, own.iter().any(|a| drawn_button(a)));
         self.screens
