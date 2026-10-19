@@ -130,6 +130,22 @@ pub fn source(tileset: &Tileset, sprite: u32) -> Option<SpriteSource> {
     })
 }
 
+/// An isometric sprite wider than its tile cut to the tile's columns when it draws nothing outside them, as the
+/// ground under a tree on a sheet of trees does: so its shape is told by what it draws, not by its sheet.
+fn narrowed(m: &Metrics, pages: &Pages, sprite: SpriteSource) -> SpriteSource {
+    let inside =
+        |cut: &SpriteSource| cut.offset.x > -0.5 && cut.offset.x + cut.size().x < m.tile.x + 0.5;
+    match pages.cropped(sprite) {
+        Some(cut) if sprite.size().x > m.tile.x + 0.5 && inside(&cut) => SpriteSource {
+            at: sprite.at - Vec2::new(sprite.offset.x / sprite.scale, 0.0),
+            src: Vec2::new(m.tile.x / sprite.scale, sprite.src.y),
+            offset: Vec2::new(0.0, sprite.offset.y),
+            ..sprite
+        },
+        _ => sprite,
+    }
+}
+
 pub fn metrics(tileset: &Tileset) -> Metrics {
     Metrics::new(tileset.tile, tileset.iso, tileset.zlevel_height)
 }
@@ -239,7 +255,7 @@ pub fn build(
                     // sprite, keeps it whole.
                     if let Some(pages) = pages {
                         sprite = match (m.iso, placed.turn) {
-                            (true, _) => pages.trimmed(sprite),
+                            (true, _) => pages.trimmed(narrowed(&m, pages, sprite)),
                             (false, Turn::None) => match pages.cropped(sprite) {
                                 None => continue,
                                 Some(cut) if shape(&m, &cut, kind) != Shape::Board => cut,
