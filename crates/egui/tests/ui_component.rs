@@ -1572,3 +1572,22 @@ fn a_grid_with_room_to_spare_draws_its_cells_larger() {
     assert!((b.left() - a.left() - 2.0 * a.width()).abs() < 1.0);
     assert!((b.top() - a.top() - a.height()).abs() < 1.0);
 }
+
+#[test]
+fn an_any_key_popup_says_its_message_once_and_asks_for_the_key_only_by_its_button() {
+    let mut form = example("menu.json", "key field of a keybinding prompt");
+    form["fields"][0]["label"] = json!("");
+    let message = json!({"id": "message", "kind": "text", "markup": "You have nothing to wear."});
+    let root = json!({"id": "split:root", "kind": "split", "relation": "peers", "children": [message, form]});
+    let fill = affordance(
+        "bn:fill:field",
+        &[],
+        json!({"text": {"field_id": "field:key"}}),
+    );
+    let any = json!({"id": "bn:any_key", "label": "Press any key", "keys": [], "enabled": true,
+        "role": "any_key", "expect": "screen"});
+    let (h, _) = harness(dialog(root, vec![fill, any]));
+    assert_eq!(h.get_all_by_label("You have nothing to wear.").count(), 1);
+    h.get_by_label("Press any key");
+    assert!(h.query_by_label("Press the new key").is_none());
+}
