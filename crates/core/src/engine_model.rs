@@ -219,11 +219,10 @@ impl EngineModel {
         }
     }
 
-    /// A published square in view coordinates; none on another level than the avatar's.
-    /// The world square of a fact on the avatar's level; the view places it when it draws it.
+    /// The world square of a fact on the shown level; the view places it when it draws it.
     fn level_square(&self, square: &Value) -> Option<Pos> {
         let at = |k: &str| square[k].as_i64().map(|v| v as i32);
-        (at("z")? == self.avatar_pos()?.z).then(|| Pos {
+        (at("z")? == self.shown_z()?).then(|| Pos {
             x: at("x").unwrap_or_default(),
             y: at("y").unwrap_or_default(),
         })
@@ -307,6 +306,12 @@ impl EngineModel {
         self.replica.avatar().map(|a| &a.at)
     }
 
+    /// The level the map shows: the engine's view's, which a look cursor moves up and down, else the avatar's.
+    fn shown_z(&self) -> Option<i32> {
+        let a = self.avatar_pos()?;
+        Some(self.replica.view().map_or(a.z, |v| v.min.z))
+    }
+
     fn abs(&self, at: Pos) -> Option<WorldPos> {
         let (ox, oy) = self.origin?;
         let a = self.avatar_pos()?;
@@ -314,7 +319,7 @@ impl EngineModel {
             dim: a.dim.clone(),
             x: ox + at.x,
             y: oy + at.y,
-            z: a.z,
+            z: self.shown_z()?,
         })
     }
 
