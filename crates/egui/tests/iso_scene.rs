@@ -660,3 +660,53 @@ fn a_tree_of_an_isometric_tileset_stands_on_its_ground_which_lies_in_its_square(
     let [x, y] = corner(&m, (4, 4));
     assert_eq!(ground[0].origin, [x, y, 0.0]);
 }
+
+#[test]
+fn what_covers_some_of_a_person_drawn_from_above_stands_that_share_of_a_person_on_its_ground() {
+    let mut shrub = cell(4, 4, 0, "t_shrub");
+    shrub["terrain"]["coverage"] = 40.into();
+    let mut flower = cell(5, 4, 0, "t_grass");
+    flower["furniture"] = look("furniture", "f_flower");
+    flower["furniture"]["coverage"] = 80.into();
+    let m = model(vec![shrub, flower]);
+    let scene = flat_scene_of(&m, "flat-standing");
+    let quads = at(&scene, &m, (4, 4));
+    // The grass under it lies; the shrub is its top, its bottom and the four sides of its outline.
+    let ground = quads
+        .iter()
+        .filter(|i| i.origin[2].abs() < 0.01 && i.b[2] == 0.0)
+        .count();
+    assert_eq!(quads.len(), 1 + 2 + 4, "{quads:?}");
+    assert_eq!(ground, 2, "the grass and the shrub's bottom: {quads:?}");
+    let top = quads.iter().map(|i| i.origin[2]).fold(f32::MIN, f32::max);
+    assert!((top - 0.4).abs() < 0.01, "{quads:?}");
+    assert!(
+        sides(&quads).iter().all(|i| (i.b[2] + 0.4).abs() < 0.01),
+        "{quads:?}"
+    );
+    let (x, y) = square(&m, (4, 4));
+    let solid = scene.column(x, y).unwrap().solid.unwrap();
+    assert!((solid.1 - 0.4).abs() < 0.01, "{solid:?}");
+    // Furniture stands by its own coverage.
+    let furniture = at(&scene, &m, (5, 4));
+    let top = furniture
+        .iter()
+        .map(|i| i.origin[2])
+        .fold(f32::MIN, f32::max);
+    assert!((top - 0.8).abs() < 0.01, "{furniture:?}");
+    assert!(
+        furniture.iter().all(|i| i.flags[0] & BOARD == 0),
+        "{furniture:?}"
+    );
+}
+
+#[test]
+fn what_covers_nothing_of_a_person_drawn_from_above_still_lies_on_the_ground() {
+    let mut shrub = cell(4, 4, 0, "t_shrub");
+    shrub["terrain"]["coverage"] = 0.into();
+    let m = model(vec![shrub]);
+    let scene = flat_scene_of(&m, "flat-covers-nothing");
+    let quads = at(&scene, &m, (4, 4));
+    assert_eq!(quads.len(), 2, "{quads:?}");
+    assert!(quads.iter().all(|i| i.origin[2].abs() < 0.01), "{quads:?}");
+}
