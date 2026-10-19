@@ -197,7 +197,13 @@ impl<M: GameModel> App<M> {
         let keys = super::input::frame_keys(ctx).into_iter().map(|k| k.token);
         // A text box has the typing; its keys are not the screen's, except Escape, which closes the screen.
         let typing = ctx.text_edit_focused();
-        let keys = keys.filter(|key| !typing || key == "ESC");
+        let keys = keys
+            .filter(|key| !typing || key == "ESC")
+            .collect::<Vec<_>>();
+        // Tab is the screen's like every other key: egui must not also walk its focus onto a widget.
+        if keys.iter().any(|k| k == "TAB" || k == "BACKTAB") {
+            ctx.memory_mut(|m| m.move_focus(egui::FocusDirection::None));
+        }
         for key in keys {
             let Some(top) = interaction::described(self.model.screens()) else {
                 return;
