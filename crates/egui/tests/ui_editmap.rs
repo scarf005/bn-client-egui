@@ -92,3 +92,33 @@ fn the_furniture_picker_takes_the_height_a_larger_window_has() {
         "{large} rows at 1920x1080, {small} at 1280x800"
     );
 }
+
+/// The engine's next stack, bottom first.
+fn restacked(stack: &[Value]) -> Value {
+    serde_json::json!({"jsonrpc": "2.0", "method": "bn.events", "params": {"epoch": "e7f3", "events": [{
+        "sequence": "41", "revision": "32", "type": "interaction.changed", "changes": {"interaction": {
+        "boundary_id": "b:41",
+        "readiness": {"phase": "playing", "game_ready": true, "accepts_interaction_commands": true,
+            "accepts_registered_actions": true},
+        "actions": [], "interaction": null, "stack": stack}}}]}})
+}
+
+#[test]
+fn closing_a_picker_does_not_move_the_cursor_to_the_pointer_left_where_it_was() {
+    let capture = editmap("terrain-picker");
+    let (mut h, script) = harness(&capture, egui::vec2(1280.0, 800.0));
+    let picker = h.get_by_label("Filter [f]").rect().center();
+    h.event(egui::Event::PointerMoved(picker));
+    h.run_steps(4);
+    let editor = capture["stack"].as_array().unwrap()[..2].to_vec();
+    script.push(restacked(&editor));
+    h.run_steps(8);
+    assert!(h.query_all_by_label("Map editor").count() > 0);
+    let moves = script
+        .sent()
+        .into_iter()
+        .map(|m| m["params"]["operation"].clone())
+        .filter(|op| op["kind"] == "set_target" || op["affordance_id"] == "target:move")
+        .collect::<Vec<_>>();
+    assert!(moves.is_empty(), "{moves:?}");
+}
