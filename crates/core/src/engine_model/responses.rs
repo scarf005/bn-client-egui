@@ -92,6 +92,7 @@ impl EngineModel {
             Pending::Describe => self.described(result),
             Pending::Choices => self.choices_page(result),
             Pending::Rows => self.rows_page(id, result),
+            Pending::Overmap => self.overmap_read(result),
         }
     }
 
@@ -196,6 +197,14 @@ impl EngineModel {
                 self.tiles_told = !self.tiles;
                 self.tiles_retry = self.clock.now() + RESIZE_DEBOUNCE;
             }
+        }
+    }
+
+    /// The map window's squares; a refused read keeps the last ones until the world changes.
+    fn overmap_read(&mut self, result: Result<Value, RpcError>) {
+        self.overmap.waiting = false;
+        if let Some(view) = result.ok().and_then(|v| serde_json::from_value(v).ok()) {
+            self.overmap.view = Some(view);
         }
     }
 

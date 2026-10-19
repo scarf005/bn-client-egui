@@ -15,7 +15,7 @@ use crate::localise::{self, Catalogue, Value as Arg, tr_format, tr_plural};
 use crate::markup::{self, Run};
 use crate::model::{
     ActionEntry, Cell, CommandStatus, Effect, Failure, FailureKind, GameModel, Glow, Health, Heard,
-    Layer, Loading, LogLine, Mutation, Pos, Rgb, Shape,
+    Layer, Loading, LogLine, Mutation, OvermapWatch, Pos, Rgb, Shape,
 };
 use crate::protocol::{
     self, Cell as WorldCell, Entity, InvokeArgs, Known, Look, ModTileset, Operation, Row, Screen,
@@ -57,6 +57,8 @@ enum Pending {
     Choices,
     /// The rows of a list of the top screen, past its first page; the list is in `row_requests`.
     Rows,
+    /// The squares of the client's map window.
+    Overmap,
 }
 
 /// The choices past the first page of the interaction with this boundary and schema.
@@ -169,6 +171,17 @@ pub struct EngineModel {
     at_main_menu: bool,
     /// The square whose description was asked for or received, the revision it is valid for and its lines.
     hovered: Option<Hover>,
+    overmap: Watched,
+}
+
+/// The client's map window: what it asks to see, what was last asked for it and the squares read.
+#[derive(Default)]
+struct Watched {
+    watch: Option<OvermapWatch>,
+    /// The watch, the revision and the centre square of the last read, which is not asked for again.
+    asked: Option<(OvermapWatch, String, WorldPos)>,
+    waiting: bool,
+    view: Option<protocol::OvermapWire>,
 }
 
 struct Hover {
@@ -418,6 +431,57 @@ impl EngineModel {
         self.call("bn.world.describe", params, Pending::Describe);
     }
 
+    /// Reads the squares the map window shows once the world or the window changed. The player's square is the
+    /// one the engine's last read gave, so a first read, or one after the player left the squares, is followed
+    /// by another around where the player is.
+    fn read_overmap(&mut self) {
+        let (Some(watch), false) = (self.overmap.watch, self.overmap.waiting) else {
+            return;
+        };
+        let (Some(now), Some(avatar)) = (self.replica.at(), self.avatar_pos()) else {
+            return;
+        };
+        let player = self.overmap.view.as_ref().map_or_else(
+            || WorldPos {
+                x: 0,
+                y: 0,
+                ..avatar.clone()
+            },
+            |v| WorldPos {
+                z: avatar.z,
+                ..v.player.clone()
+            },
+        );
+        let centre = WorldPos {
+            x: player.x + watch.pan.x,
+            y: player.y + watch.pan.y,
+            ..player
+        };
+        let asked = (watch, now.revision.clone(), centre.clone());
+        if self.overmap.asked.as_ref() == Some(&asked) {
+            return;
+        }
+        let min = WorldPos {
+            x: centre.x - watch.cols / 2,
+            y: centre.y - watch.rows / 2,
+            ..centre.clone()
+        };
+        let max = WorldPos {
+            x: min.x + watch.cols - 1,
+            y: min.y + watch.rows - 1,
+            ..centre
+        };
+        let params = serde_json::to_value(protocol::WorldCellsParams {
+            epoch: now.epoch.clone(),
+            min,
+            max,
+        })
+        .expect("overmap params serialize");
+        self.overmap.asked = Some(asked);
+        self.overmap.waiting = true;
+        self.call("bn.overmap.cells", params, Pending::Overmap);
+    }
+
     /// Asks again for the hovered square once its answer is older than the world, such as after the
     /// engine's window changed size, so a pointer that stays still keeps its description.
     fn refresh_hover(&mut self) {
@@ -638,6 +702,7 @@ impl GameModel for EngineModel {
         }
         self.at_main_menu = at_main_menu;
         self.send_resend();
+        self.read_overmap();
         self.send_viewport();
         self.send_tiles();
         self.refresh_view();
@@ -1008,6 +1073,17 @@ impl GameModel for EngineModel {
 
     fn colors(&self) -> &ColorMap {
         &self.colors
+    }
+
+    fn watch_overmap(&mut self, watch: Option<OvermapWatch>) {
+        if watch.is_none() {
+            self.overmap = Watched::default();
+        }
+        self.overmap.watch = watch;
+    }
+
+    fn watched_overmap(&self) -> Option<&protocol::OvermapWire> {
+        self.overmap.view.as_ref()
     }
 
     fn screens(&self) -> &[Screen] {

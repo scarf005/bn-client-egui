@@ -2874,3 +2874,61 @@ fn a_square_action_is_named_in_the_status_by_the_label_the_engine_described_it_w
     assert_eq!(status.label, fire.label.shown());
     assert_eq!(status.target.as_deref(), Some("fire"));
 }
+
+fn overmap_reads(h: &bn_client_core::transport::ScriptHandle) -> Vec<Value> {
+    h.sent()
+        .into_iter()
+        .filter(|m| m["method"] == "bn.overmap.cells")
+        .map(|m| m["params"].clone())
+        .collect()
+}
+
+#[test]
+fn the_map_window_reads_the_squares_around_the_player_the_engine_names_once_per_revision() {
+    let (t, h) = session();
+    let squares = |x: i32, y: i32| {
+        json!({"jsonrpc":"2.0","id":0,"result":{
+            "origin": {"dim": "", "x": x - 1, "y": y - 1, "z": 0}, "player": {"dim": "", "x": 50, "y": 60, "z": 0},
+            "cols": 3, "rows": 3, "cells": [], "legend": [], "cursor_description": "",
+            "notes": [], "path": []}})
+    };
+    let mut m = connected(
+        t.on("bn.overmap.cells", vec![squares(0, 0)])
+            .on("bn.overmap.cells", vec![squares(50, 60)])
+            .on("bn.overmap.cells", vec![squares(50, 60)]),
+    );
+    let watch = bn_client_core::OvermapWatch {
+        cols: 3,
+        rows: 3,
+        pan: Pos { x: 0, y: 0 },
+    };
+    m.watch_overmap(Some(watch));
+    m.poll();
+    m.poll();
+    let reads = overmap_reads(&h);
+    assert_eq!(
+        reads.len(),
+        2,
+        "a read around the player the first read names"
+    );
+    assert_eq!(
+        reads[1]["min"],
+        json!({"dim": "", "x": 49, "y": 59, "z": 0})
+    );
+    assert_eq!(
+        reads[1]["max"],
+        json!({"dim": "", "x": 51, "y": 61, "z": 0})
+    );
+    assert_eq!(m.watched_overmap().map(|v| v.player.x), Some(50));
+    m.poll();
+    assert_eq!(
+        overmap_reads(&h).len(),
+        2,
+        "an unchanged world asks nothing more"
+    );
+    h.push(change(41, json!({"route": [pos(4, 4)]})));
+    m.poll();
+    assert_eq!(overmap_reads(&h).len(), 3, "a new revision reads again");
+    m.watch_overmap(None);
+    assert!(m.watched_overmap().is_none());
+}

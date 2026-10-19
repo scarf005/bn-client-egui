@@ -134,6 +134,9 @@ pub struct App<M: GameModel> {
     palette: Option<String>,
     /// The client settings window is open.
     client_settings: bool,
+    /// The client's map window is open: how far it is panned off the player, in squares, and the part of a
+    /// square dragged past.
+    world_map: Option<(Pos, egui::Vec2)>,
     /// The message log's height once the user has dragged its edge.
     log_height: Option<f32>,
     /// Title of the menu that last took focus, so a menu is entered once, not on every frame.
@@ -207,6 +210,7 @@ impl<M: GameModel> App<M> {
             walk_key: None,
             palette: None,
             client_settings: false,
+            world_map: None,
             log_height: None,
             menu_title: None,
             focus_menu: false,
@@ -492,6 +496,7 @@ impl<M: GameModel> App<M> {
     fn windows(&mut self, ctx: &egui::Context) {
         self.palette(ctx);
         self.client_settings(ctx);
+        self.world_map(ctx);
         self.menu_or_screen(ctx);
     }
 

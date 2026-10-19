@@ -1014,3 +1014,60 @@ fn a_korean_connection_words_the_clients_own_status_and_buttons_in_korean() {
     h.get_by_label("지도");
     assert!(h.query_by_label("Ready").is_none());
 }
+
+#[test]
+fn the_map_key_opens_the_clients_map_window_and_the_game_keeps_taking_keys() {
+    let (t, script) = bn_client_egui::transport::ScriptedTransport::new();
+    let mut subscribed = fixture("subscribe_result");
+    subscribed["result"]["interaction"]["actions"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({"id": "map", "name": "Map", "keys": ["m"]}));
+    let reply = || {
+        [
+            subscribed.clone(),
+            fixture("snapshot_part_0"),
+            fixture("snapshot_part_1"),
+        ]
+        .to_vec()
+    };
+    let squares = json!({"jsonrpc": "2.0", "id": 0, "result": {
+        "origin": {"dim": "", "x": 0, "y": 0, "z": 0}, "player": {"dim": "", "x": 1, "y": 1, "z": 0},
+        "cols": 3, "rows": 3, "cells": [[[".", 2, 0], [".", 2, 0], [".", 2, 0]], [[".", 2, 0], [".", 2, 0], [".", 2, 0]], [[".", 2, 0], [".", 2, 0], [".", 2, 0]]], "legend": [],
+        "cursor_description": "", "notes": [], "path": []}});
+    let t = t
+        .on("bn.hello", vec![fixture("hello_result")])
+        .on("bn.subscribe", reply())
+        .on("bn.subscribe", reply())
+        .on("bn.overmap.cells", vec![squares.clone()])
+        .on("bn.overmap.cells", vec![squares])
+        .on("bn.command.submit", vec![fixture("submit_result")]);
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(1100.0, 800.0))
+        .build_ui_state(
+            |ui, app: &mut App<EngineModel>| app.show(ui),
+            App::new(EngineModel::new(Box::new(t))),
+        );
+    h.run_steps(3);
+    h.event(egui::Event::Text("m".into()));
+    h.run_steps(4);
+    h.get_by_label("Travel and notes");
+    assert!(
+        submits(&script).is_empty(),
+        "the map key runs no engine command"
+    );
+    assert!(
+        script
+            .sent_methods()
+            .iter()
+            .any(|m| m == "bn.overmap.cells")
+    );
+    h.event(egui::Event::Text("k".into()));
+    h.run_steps(2);
+    assert_eq!(
+        submits(&script)[0]["params"]["operation"],
+        json!({"kind":"action","action_id":"UP"}),
+        "the player moves with the map open"
+    );
+    h.get_by_label("Travel and notes");
+}

@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::app::{CELL, rgb};
+use bn_client_core::OvermapWatch;
 use bn_client_core::localise::tr;
 use bn_client_core::protocol::OvermapWindow;
 
@@ -309,6 +310,76 @@ impl<M: GameModel> App<M> {
             .chain(target)
             .chain([outline])
             .collect()
+    }
+
+    /// The client's own map window: the overmap squares around the player, read while the game goes on, so
+    /// the player keeps moving with it open. Dragging pans it; the engine's map screen, with travel and notes,
+    /// opens from it.
+    pub(in crate::app) fn world_map(&mut self, ctx: &egui::Context) {
+        let Some((mut pan, mut drag)) = self.world_map else {
+            return self.model.watch_overmap(None);
+        };
+        const KIND: Option<&str> = Some("world-map");
+        let spec = WindowSpec {
+            closable: true,
+            ..self.window_spec(ctx, KIND, &tr("Map"))
+        };
+        let cell = self.display.cell(CELL);
+        let mut screen = false;
+        let shown = windows::show(ctx, spec, |ui| {
+            ui.horizontal(|ui| {
+                if ui.button(tr("Centre")).clicked() {
+                    pan = Pos { x: 0, y: 0 };
+                }
+                let offered = self.model.actions().iter().any(|a| a.id == "map");
+                screen = ui
+                    .add_enabled(offered, egui::Button::new(tr("Travel and notes")))
+                    .clicked();
+            });
+            let room = ui.available_size().max(egui::vec2(12.0, 8.0) * cell);
+            // The engine reads at most 64 by 64 squares at once.
+            let fit = |space: f32| ((space / cell) as i32).clamp(1, 64);
+            self.model.watch_overmap(Some(OvermapWatch {
+                cols: fit(room.x),
+                rows: fit(room.y),
+                pan,
+            }));
+            let Some(om) = self.model.watched_overmap() else {
+                ui.allocate_space(room);
+                return;
+            };
+            let window = OvermapWindow {
+                left: 0,
+                top: 0,
+                cols: om.cols,
+                rows: om.rows,
+            };
+            let size = egui::vec2(om.cols as f32, om.rows as f32) * cell;
+            let (response, painter) = ui.allocate_painter(size, egui::Sense::drag());
+            painter.rect_filled(response.rect, 0.0, egui::Color32::BLACK);
+            let grid = OvermapGrid {
+                origin: response.rect.min,
+                cell,
+                window,
+            };
+            let paints = self.overmap_paints(om, &grid, &om.player, &painter);
+            self.screens.overmap.borrow_mut().extend(paints);
+            // Squares dragged past move the view; what is short of a square is kept for the next frame.
+            drag -= response.drag_delta() / cell;
+            let whole = egui::vec2(drag.x.trunc(), drag.y.trunc());
+            drag -= whole;
+            pan.x += whole.x as i32;
+            pan.y += whole.y as i32;
+        });
+        let closed = self.keep_window(ctx, KIND, &shown);
+        self.world_map = (!closed).then_some((pan, drag));
+        if closed {
+            self.model.watch_overmap(None);
+        }
+        if screen {
+            self.model.invoke_action("map");
+        }
+        self.paint_overmap(ctx);
     }
 
     /// Paints what the overmap collected, now that the window is drawn.

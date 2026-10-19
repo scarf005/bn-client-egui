@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: bn-client\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-18 13:23+0900\n"
+"POT-Creation-Date: 2026-10-20 01:21+0900\n"
 "PO-Revision-Date: 2026-10-18 09:30+0900\n"
 "Language-Team: Korean\n"
 "Language: ko\n"
@@ -14,12 +14,12 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
 
-#: crates/core/src/engine_model.rs:585
+#: crates/core/src/engine_model.rs:649
 msgid "The engine has not answered for %d second."
 msgid_plural "The engine has not answered for %d seconds."
 msgstr[0] "엔진이 %d초 동안 응답하지 않았습니다."
 
-#: crates/core/src/engine_model.rs:708
+#: crates/core/src/engine_model.rs:774
 msgid "The engine could not be restarted: %s"
 msgstr "엔진을 다시 시작하지 못했습니다: %s"
 
@@ -40,23 +40,23 @@ msgstr "취소"
 msgid "Command"
 msgstr "명령"
 
-#: crates/core/src/engine_model/responses.rs:141
+#: crates/core/src/engine_model/responses.rs:147
 msgid "Bad snapshot: %s"
 msgstr "잘못된 스냅샷: %s"
 
-#: crates/core/src/engine_model/session.rs:269
+#: crates/core/src/engine_model/session.rs:270
 msgid "Bad engine message: %s"
 msgstr "잘못된 엔진 메시지: %s"
 
-#: crates/core/src/engine_model/session.rs:277
+#: crates/core/src/engine_model/session.rs:278
 msgid "Engine connection closed."
 msgstr "엔진 연결이 끊겼습니다."
 
-#: crates/core/src/engine_model/session.rs:279
+#: crates/core/src/engine_model/session.rs:280
 msgid "The engine stopped (%s)."
 msgstr "엔진이 멈췄습니다(%s)."
 
-#: crates/core/src/engine_model/session.rs:280
+#: crates/core/src/engine_model/session.rs:281
 msgid "The engine stopped."
 msgstr "엔진이 멈췄습니다."
 
@@ -92,77 +92,77 @@ msgstr "먼저 창을 고르세요."
 msgid "Busy."
 msgstr "처리 중입니다."
 
-#: crates/core/src/launch.rs:112
+#: crates/core/src/launch.rs:115
 msgid "no Cataclysm: Bright Nights engine found. Searched:"
 msgstr "카타클리즘: 밝은 밤 엔진을 찾지 못했습니다. 찾아본 곳:"
 
-#: crates/core/src/launch.rs:117
+#: crates/core/src/launch.rs:121
 msgid ""
 "Set it once with `--engine /path/to/cataclysm-bn-tiles` (remembered "
 "afterwards), or export BN_ENGINE, or put the client next to the game."
 msgstr ""
-"`--engine /path/to/cataclysm-bn-tiles`로 한 번 지정하거나(이후 기억됨), BN_ENGINE을 "
-"export하거나, 클라이언트를 게임 옆에 두세요."
+"`--engine /path/to/cataclysm-bn-tiles`로 한 번 지정하거나(이후 기억됨), "
+"BN_ENGINE을 export하거나, 클라이언트를 게임 옆에 두세요."
 
-#: crates/core/src/launch.rs:132
+#: crates/core/src/launch.rs:136
 msgid "--engine / BN_ENGINE: not set"
 msgstr "--engine / BN_ENGINE: 지정 안 됨"
 
-#: crates/core/src/launch.rs:148
+#: crates/core/src/launch.rs:152
 msgid "%s: saved %s is missing"
 msgstr "%s: 저장된 %s이(가) 없음"
 
-#: crates/core/src/launch.rs:155
+#: crates/core/src/launch.rs:159
 msgid "%s: no saved engine"
 msgstr "%s: 저장된 엔진 없음"
 
-#: crates/core/src/launch.rs:168
+#: crates/core/src/launch.rs:172
 msgid "PATH for %s: %s"
 msgstr "PATH에서 %s: %s"
 
-#: crates/core/src/launch.rs:195
+#: crates/core/src/launch.rs:198
 msgid "cannot start engine %s: %s"
 msgstr "엔진 %s을(를) 시작할 수 없음: %s"
 
-#: crates/egui/src/app.rs:314 crates/tui/src/lib.rs:678
+#: crates/egui/src/app.rs:321 crates/tui/src/lib.rs:678
 msgid "Engine: %s"
 msgstr "엔진: %s"
 
-#: crates/egui/src/app.rs:319 crates/tui/src/lib.rs:684
+#: crates/egui/src/app.rs:326 crates/tui/src/lib.rs:684
 msgid "Last engine output:"
 msgstr "마지막 엔진 출력:"
 
-#: crates/egui/src/app.rs:326
+#: crates/egui/src/app.rs:333
 msgid "Restart"
 msgstr "다시 시작"
 
-#: crates/egui/src/app.rs:340
+#: crates/egui/src/app.rs:347
 msgid "%s: %s (%d of %d)"
 msgstr "%s: %s (%d/%d)"
 
-#: crates/egui/src/app.rs:356
+#: crates/egui/src/app.rs:363
 msgid "Loading image"
 msgstr "불러오기 그림"
 
-#: crates/egui/src/app.rs:475
+#: crates/egui/src/app.rs:482
 msgid "Resize sidebar"
 msgstr "사이드바 크기 조절"
 
-#: crates/egui/src/app.rs:502 crates/egui/src/app.rs:513
+#: crates/egui/src/app.rs:510 crates/egui/src/app.rs:521
 msgid "Client settings"
 msgstr "클라이언트 설정"
 
-#: crates/egui/src/app.rs:510 crates/egui/src/app/palette.rs:57
+#: crates/egui/src/app.rs:518 crates/egui/src/app/palette.rs:57
 #: crates/egui/src/app/palette.rs:103 crates/tui/src/lib.rs:858
 #: crates/tui/src/lib.rs:1027
 msgid "Actions"
 msgstr "행동"
 
-#: crates/egui/src/app.rs:528 crates/tui/src/lib.rs:647
+#: crates/egui/src/app.rs:536 crates/tui/src/lib.rs:647
 msgid "Ready"
 msgstr "준비"
 
-#: crates/egui/src/app.rs:556
+#: crates/egui/src/app.rs:574
 msgid "Interrupt"
 msgstr "중단"
 
@@ -174,24 +174,33 @@ msgstr "새 키를 누르세요"
 msgid "OK"
 msgstr "확인"
 
-#: crates/egui/src/app/component/overmap.rs:414 crates/egui/src/app/map.rs:204
+#: crates/egui/src/app/component/overmap.rs:325
+#: crates/egui/src/app/component/overmap.rs:487 crates/egui/src/app/map.rs:209
 #: crates/tui/src/lib.rs:734
 msgid "Map"
 msgstr "지도"
 
-#: crates/egui/src/app/map.rs:129 crates/tui/src/lib.rs:744
+#: crates/egui/src/app/component/overmap.rs:331
+msgid "Centre"
+msgstr "가운데로"
+
+#: crates/egui/src/app/component/overmap.rs:335
+msgid "Travel and notes"
+msgstr "이동과 메모"
+
+#: crates/egui/src/app/map.rs:134 crates/tui/src/lib.rs:744
 msgid "No map loaded"
 msgstr "불러온 지도가 없습니다"
 
-#: crates/egui/src/app/map.rs:277
+#: crates/egui/src/app/map.rs:282
 msgid "Player at (%d, %d). Cursor (%d, %d)."
 msgstr "플레이어 (%d, %d). 커서 (%d, %d)."
 
-#: crates/egui/src/app/map.rs:280
+#: crates/egui/src/app/map.rs:285
 msgid "Player at (%d, %d). Cursor (%d, %d): %s."
 msgstr "플레이어 (%d, %d). 커서 (%d, %d): %s."
 
-#: crates/egui/src/app/map.rs:507
+#: crates/egui/src/app/map.rs:582
 msgid "Map actions"
 msgstr "지도 행동"
 
@@ -239,7 +248,7 @@ msgstr "타일셋을 쓸 수 없습니다: %s"
 msgid "Reduced motion"
 msgstr "움직임 줄이기"
 
-#: crates/egui/src/main.rs:32 crates/egui/src/main.rs:99
+#: crates/egui/src/main.rs:32 crates/egui/src/main.rs:100
 msgid "Cataclysm: Bright Nights client"
 msgstr "카타클리즘: 밝은 밤 클라이언트"
 
