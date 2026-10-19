@@ -1381,3 +1381,30 @@ fn a_typed_digit_of_a_counting_list_runs_its_digit_and_the_digits_are_no_buttons
     h.run_steps(3);
     assert_eq!(submits(&script), [screen_invoke("inventory:digit:6")]);
 }
+
+#[test]
+fn a_list_with_no_descriptions_or_buttons_of_its_own_reaches_down_to_the_footer() {
+    let rows = (0..60)
+        .map(|i| {
+            json!({"id": format!("r:{i}"), "label": format!("Row {i}"), "description": "",
+            "denial": "", "enabled": true, "selectable": true, "selected": false, "columns": []})
+        })
+        .collect::<Vec<_>>();
+    let list = json!({"id": "parts", "kind": "list", "columns": [], "rows": rows,
+        "total": 60, "selection": "single"});
+    let leave = json!({"id": "RENAME", "label": "Leave", "keys": ["e"], "enabled": true,
+        "expect": "screen"});
+    let screen = json!({"screen_id": "screen:9", "role": "screen", "title": "Test", "root": list,
+        "affordances": [leave]});
+    let (h, _) = harness(screen);
+    let lowest = (0..60)
+        .filter_map(|i| h.query_by_label(&format!("Row {i}")).map(|n| n.rect()))
+        .map(|r| r.bottom())
+        .fold(f32::MIN, f32::max);
+    let footer = h.get_by_label_contains("Leave").rect().top();
+    let row = h.get_by_label("Row 0").rect().height();
+    assert!(
+        footer - lowest < 2.0 * row,
+        "rows end at {lowest}, the footer starts at {footer}"
+    );
+}
