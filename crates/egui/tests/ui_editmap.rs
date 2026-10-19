@@ -50,6 +50,20 @@ fn harness<'a>(capture: &Value, size: egui::Vec2) -> (H<'a>, ScriptHandle) {
     (harness, script)
 }
 
+/// The rows of the picker drawn now.
+fn rows_drawn(h: &H, capture: &Value) -> usize {
+    let labels = capture["stack"][2]["root"]["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|r| r["label"].as_str())
+        .collect::<Vec<_>>();
+    labels
+        .iter()
+        .filter(|l| h.query_by_label(l).is_some())
+        .count()
+}
+
 #[test]
 fn the_terrain_picker_opens_on_the_terrain_under_the_cursor_past_its_first_page() {
     let capture = editmap("terrain-picker");
@@ -64,5 +78,17 @@ fn the_terrain_picker_opens_on_the_terrain_under_the_cursor_past_its_first_page(
     assert_eq!(
         row.accesskit_node().toggled(),
         Some(egui::accesskit::Toggled::True)
+    );
+}
+
+#[test]
+fn the_furniture_picker_takes_the_height_a_larger_window_has() {
+    let capture = editmap("furniture-picker");
+    let (large, _script) = harness(&capture, egui::vec2(1920.0, 1080.0));
+    let (small, _script) = harness(&capture, egui::vec2(1280.0, 800.0));
+    let (large, small) = (rows_drawn(&large, &capture), rows_drawn(&small, &capture));
+    assert!(
+        large > small,
+        "{large} rows at 1920x1080, {small} at 1280x800"
     );
 }

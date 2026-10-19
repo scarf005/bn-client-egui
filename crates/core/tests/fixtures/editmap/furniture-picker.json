@@ -1,0 +1,2277 @@
+{
+  "stack": [
+    {
+      "screen_id": "screen:map:epoch:6038c43cfabd17dcbd9fba471ca2b6ef",
+      "role": "map",
+      "kind": "map",
+      "root": {
+        "id": "map:world",
+        "kind": "map",
+        "mode": "world",
+        "item_lists": [
+          {
+            "id": "avatar.ground",
+            "label": "Ground",
+            "verb": "Pick up"
+          },
+          {
+            "id": "avatar.inventory",
+            "label": "Inventory",
+            "verb": "Drop"
+          }
+        ]
+      },
+      "affordances": [],
+      "shortcuts": [
+        {
+          "affordance_id": "inventory",
+          "label": "Open Inventory",
+          "keys": [
+            "i"
+          ],
+          "icon": "inventory",
+          "enabled": false,
+          "glyph": "🎒"
+        },
+        {
+          "affordance_id": "player_data",
+          "label": "View Player Info",
+          "keys": [
+            "@"
+          ],
+          "icon": "character",
+          "enabled": false,
+          "glyph": "👤"
+        },
+        {
+          "affordance_id": "craft",
+          "label": "Craft Items",
+          "keys": [
+            "&"
+          ],
+          "icon": "crafting",
+          "enabled": false,
+          "glyph": "🔨"
+        },
+        {
+          "affordance_id": "construct",
+          "label": "Construct Terrain",
+          "keys": [
+            "*"
+          ],
+          "icon": "construction",
+          "enabled": false,
+          "glyph": "🏠"
+        },
+        {
+          "affordance_id": "map",
+          "label": "View Map",
+          "keys": [
+            "m"
+          ],
+          "icon": "map",
+          "enabled": false,
+          "glyph": "🗺"
+        },
+        {
+          "affordance_id": "look",
+          "label": "Look Around",
+          "keys": [
+            ";",
+            "x"
+          ],
+          "icon": "look",
+          "enabled": false,
+          "glyph": "🔍"
+        },
+        {
+          "affordance_id": "wait",
+          "label": "Wait for Several Minutes",
+          "keys": [
+            "|"
+          ],
+          "icon": "wait",
+          "enabled": false,
+          "glyph": "⌛"
+        },
+        {
+          "affordance_id": "sleep",
+          "label": "Sleep",
+          "keys": [
+            "$"
+          ],
+          "icon": "sleep",
+          "enabled": false,
+          "glyph": "💤"
+        },
+        {
+          "affordance_id": "pickup",
+          "label": "Pick up items from one nearby tile",
+          "keys": [
+            "g"
+          ],
+          "icon": "pickup",
+          "enabled": false,
+          "glyph": "✋"
+        },
+        {
+          "affordance_id": "wield",
+          "label": "Wield",
+          "keys": [
+            "w"
+          ],
+          "icon": "wield",
+          "enabled": false,
+          "glyph": "⚔"
+        },
+        {
+          "affordance_id": "wear",
+          "label": "Wear Item",
+          "keys": [
+            "W"
+          ],
+          "icon": "wear",
+          "enabled": false,
+          "glyph": "👕"
+        },
+        {
+          "affordance_id": "main_menu",
+          "label": "Main Menu",
+          "keys": [
+            "ESC"
+          ],
+          "icon": "menu",
+          "enabled": false,
+          "glyph": "☰"
+        },
+        {
+          "affordance_id": "open_options",
+          "label": "Options",
+          "keys": [],
+          "icon": "options",
+          "enabled": false,
+          "glyph": "⚙"
+        },
+        {
+          "affordance_id": "HELP_KEYBINDINGS",
+          "label": "Display keybindings menu",
+          "keys": [
+            "?"
+          ],
+          "icon": "help",
+          "enabled": false,
+          "glyph": "❓"
+        }
+      ]
+    },
+    {
+      "screen_id": "screen:15",
+      "role": "dialog",
+      "kind": "editmap",
+      "title": "Map editor",
+      "root": {
+        "id": "target",
+        "kind": "panel",
+        "title": "Map editor",
+        "stats": [
+          {
+            "key": "show_all",
+            "label": "Show all",
+            "value": "Off"
+          }
+        ],
+        "child": {
+          "id": "target:map",
+          "kind": "map",
+          "mode": "world",
+          "target": {
+            "source": {
+              "dim": "",
+              "x": 12064,
+              "y": 10311,
+              "z": 0
+            },
+            "current": {
+              "dim": "",
+              "x": 12072,
+              "y": 10307,
+              "z": 0
+            },
+            "minimum": {
+              "dim": "",
+              "x": 11976,
+              "y": 10224,
+              "z": -10
+            },
+            "maximum": {
+              "dim": "",
+              "x": 12155,
+              "y": 10403,
+              "z": 10
+            },
+            "range": 180,
+            "distance_metric": "square",
+            "distance": 8,
+            "status": "editmap",
+            "candidates": [],
+            "parts": [
+              {
+                "kind": "terrain",
+                "text": "elm tree",
+                "id": "t_tree_elm",
+                "values": {
+                  "move_cost": 0
+                }
+              }
+            ]
+          }
+        }
+      },
+      "affordances": [],
+      "context": "EDITMAP"
+    },
+    {
+      "screen_id": "screen:16",
+      "role": "dialog",
+      "kind": "uilist",
+      "root": {
+        "id": "list:choices",
+        "kind": "list",
+        "affordances": [
+          "FILTER",
+          "bn:choose:list:choices"
+        ],
+        "columns": [],
+        "rows": [
+          {
+            "id": "entry:0",
+            "label": "nothing (f_null)",
+            "description": "Move cost: 0\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": true,
+            "columns": []
+          },
+          {
+            "id": "entry:1",
+            "label": "mutated cactus (f_mutcactus_test)",
+            "description": "Move cost: 4\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:2",
+            "label": "cooling unit (f_air_conditioner)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:3",
+            "label": "portable nanofabricator unit (f_nanofab_portable)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:4",
+            "label": "central air filter (f_air_filter)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:5",
+            "label": "dishwasher (f_dishwasher)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:6",
+            "label": "dryer (f_dryer)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:7",
+            "label": "floor lamp (off) (f_floor_lamp_off)",
+            "description": "Move cost: 2\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:8",
+            "label": "floor lamp (no power) (f_floor_lamp)",
+            "description": "Move cost: 2\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:9",
+            "label": "floor lamp (on) (f_floor_lamp_on)",
+            "description": "Move cost: 2\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:10",
+            "label": "grid floodlight (off) (f_grid_floodlight_off)",
+            "description": "Move cost: 2\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:11",
+            "label": "grid floodlight (no power) (f_grid_floodlight)",
+            "description": "Move cost: 2\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:12",
+            "label": "grid floodlight (on) (f_grid_floodlight_on)",
+            "description": "Move cost: 2\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:13",
+            "label": "rewired street light (off) (f_street_light_rewired_off)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:14",
+            "label": "rewired street light (no power) (f_street_light_rewired)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:15",
+            "label": "rewired street light (on) (f_street_light_rewired_on)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:16",
+            "label": "glass door fridge (off) (f_glass_fridge_off)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:17",
+            "label": "glass door fridge (f_glass_fridge)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:18",
+            "label": "glass door fridge (on) (f_glass_fridge_on)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:19",
+            "label": "glass door freezer (off) (f_glass_freezer_off)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:20",
+            "label": "glass door freezer (f_glass_freezer)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:21",
+            "label": "glass freezer (on) (f_glass_freezer_on)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:22",
+            "label": "furnace (f_home_furnace)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:23",
+            "label": "washing machine (f_washer)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:24",
+            "label": "oven (f_oven)",
+            "description": "Move cost: 2\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:25",
+            "label": "multi cooker (f_multicooker)",
+            "description": "Move cost: 2\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:26",
+            "label": "improved multi cooker (f_multicooker_improved)",
+            "description": "Move cost: 2\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:27",
+            "label": "RV kitchen unit (f_rvoven)",
+            "description": "Move cost: 2\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:28",
+            "label": "blacksmith bellows (f_bellows)",
+            "description": "Move cost: 2\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:29",
+            "label": "blacksmith drop hammer (f_drophammer)",
+            "description": "Move cost: 2\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:30",
+            "label": "document shredder (f_shredder)",
+            "description": "Move cost: 5\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:31",
+            "label": "server stack (f_server)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:32",
+            "label": "large satellite dish (f_satellite)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:33",
+            "label": "mounted wind turbine (f_turbine_unit)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:34",
+            "label": "mounted wind turbine (f_xl_turbine_unit)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:35",
+            "label": "mounted water wheel (f_water_wheel_unit)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:36",
+            "label": "mounted large water wheel (f_xl_water_wheel_unit)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:37",
+            "label": "mounted solar panel (f_solar_unit)",
+            "description": "Move cost: 2\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:38",
+            "label": "mounted upgraded solar panel (f_solar_unit_v2)",
+            "description": "Move cost: 2\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:39",
+            "label": "mounted foldable solar panel (f_foldable_solar_unit)",
+            "description": "Move cost: 2\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:40",
+            "label": "mounted medium storage battery (f_battery)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:41",
+            "label": "mounted large storage battery (f_battery_large)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:42",
+            "label": "mounted very large storage battery (f_battery_huge)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:43",
+            "label": "mounted small storage battery (f_battery_small)",
+            "description": "Move cost: 2\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:44",
+            "label": "mounted car battery (f_battery_car)",
+            "description": "Move cost: 2\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:45",
+            "label": "mounted motorbike battery (f_battery_motorbike)",
+            "description": "Move cost: 2\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:46",
+            "label": "mounted small motorbike battery (f_battery_motorbike_small)",
+            "description": "Move cost: 2\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:47",
+            "label": "battery charger (f_charger)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:48",
+            "label": "grid recharging station (f_recharge_station)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:49",
+            "label": "jumper cable connector (f_cable_connector)",
+            "description": "Move cost: 2\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:50",
+            "label": "grid welder (f_gridwelder)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:51",
+            "label": "grid firearm repair kit (f_gridsmallgunkit)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:52",
+            "label": "grid gunsmith repair kit (f_gridgunkit)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:53",
+            "label": "grid concrete mixer (f_gridcon_mix)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:54",
+            "label": "grid welding rig (f_welderrig)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:55",
+            "label": "grid forge (f_gridforge)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:56",
+            "label": "grid forge rig (f_forgerig)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:57",
+            "label": "grid kiln (f_gridkiln)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:58",
+            "label": "grid food dehydrator (f_griddehydrator)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:59",
+            "label": "grid food processor (f_gridfood_processor)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:60",
+            "label": "grid coffeemaker (f_gridcoffeemaker)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:61",
+            "label": "soda machine (f_gridsoda_machine)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:62",
+            "label": "grid vacuum sealer (f_gridvac_sealer)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:63",
+            "label": "grid makeshift vacuum sealer (f_gridmakeshift_sealer)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:64",
+            "label": "grid FOODCO kitchen buddy (f_craftrig)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:65",
+            "label": "grid electrolysis kit (f_gridelectrolysis_kit)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:66",
+            "label": "grid chemistry set (f_chemistry_set)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:67",
+            "label": "grid chemistry lab (f_chemlab)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:68",
+            "label": "grid hotplate (f_gridhotplate)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:69",
+            "label": "grid soldering iron (f_gridsolderingiron)",
+            "description": "Move cost: 1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:70",
+            "label": "refrigerator (off) (f_fridge_off)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:71",
+            "label": "refrigerator (f_fridge)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:72",
+            "label": "refrigerator (on) (f_fridge_on)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:73",
+            "label": "freezer (off) (f_freezer_off)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:74",
+            "label": "freezer (f_freezer)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:75",
+            "label": "freezer (on) (f_freezer_on)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:76",
+            "label": "industrial freezer (f_freezer_industrial)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:77",
+            "label": "industrial freezer (off) (f_freezer_industrial_off)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:78",
+            "label": "industrial freezer (on) (f_freezer_industrial_on)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:79",
+            "label": "grid minifridge (off) (f_minifridge_off)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:80",
+            "label": "grid minifridge (f_minifridge)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:81",
+            "label": "grid minifridge (on) (f_minifridge_on)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:82",
+            "label": "minifreezer (off) (f_minifreezer_off)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:83",
+            "label": "minifreezer (f_minifreezer)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:84",
+            "label": "minifreezer (on) (f_minifreezer_on)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:85",
+            "label": "grid autoclave (f_gridautoclave)",
+            "description": "Move cost: 3\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:86",
+            "label": "air conditioner (no power) (f_grid_air_conditioner)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:87",
+            "label": "air conditioner (off) (f_grid_air_conditioner_off)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:88",
+            "label": "air conditioner (on) (f_grid_air_conditioner_on)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:89",
+            "label": "space heater (no power) (f_space_heater)",
+            "description": "Move cost: 2\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:90",
+            "label": "space heater (off) (f_space_heater_off)",
+            "description": "Move cost: 2\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:91",
+            "label": "space heater (on) (f_space_heater_on)",
+            "description": "Move cost: 2\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:92",
+            "label": "large space heater (no power) (f_space_heater_large)",
+            "description": "Move cost: 2\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:93",
+            "label": "large space heater (off) (f_space_heater_large_off)",
+            "description": "Move cost: 2\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:94",
+            "label": "large space heater (on) (f_space_heater_large_on)",
+            "description": "Move cost: 2\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:95",
+            "label": "grid plutonium generator (f_grid_plut_generator)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:96",
+            "label": "grid 3D printer (f_3d_printer)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:97",
+            "label": "grid 3D printer (advanced) (f_3d_printer_advanced)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:98",
+            "label": "grid reloading press (f_reloading_station)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:99",
+            "label": "overhead light (f_olight_base)",
+            "description": "Move cost: 0\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:100",
+            "label": "grid ceiling lamp (off) (f_olight_off)",
+            "description": "Move cost: 0\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:101",
+            "label": "grid ceiling lamp (on) (f_olight_on)",
+            "description": "Move cost: 0\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:102",
+            "label": "grid ceiling lamp (no power) (f_olight)",
+            "description": "Move cost: 0\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:103",
+            "label": "ceiling lamp (on) (f_olight_nogrid)",
+            "description": "Move cost: 0\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:104",
+            "label": "ceiling lamp (off) (f_olight_nogrid_off)",
+            "description": "Move cost: 0\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:105",
+            "label": "light switch (off) (f_light_switch)",
+            "description": "Move cost: 0\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:106",
+            "label": "light switch (on) (f_light_switch_on)",
+            "description": "Move cost: 0\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:107",
+            "label": "advanced butchering station (f_adv_butchery)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:108",
+            "label": "grid hydraulic press (f_hydraulic_press)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:109",
+            "label": "metal compactor (f_recycler)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:110",
+            "label": "cloning vat (f_cloning_vat)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:111",
+            "label": "active cloning vat (f_cloning_vat_active)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:112",
+            "label": "grid basic analysis kit (f_gridanalytical_set)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:113",
+            "label": "grid microcentrifuge (f_gridmicrocentrifuge)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:114",
+            "label": "grid genome workstation (f_griddna_editor)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:115",
+            "label": "road barricade (f_barricade_road)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:116",
+            "label": "simple wooden barricade (f_barricade_windbreak)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:117",
+            "label": "earthbag barricade (f_earthbag_half)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:118",
+            "label": "earthbag wall (f_earthbag_wall)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:119",
+            "label": "lane guard (f_lane)",
+            "description": "Move cost: 1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:120",
+            "label": "sandbag barricade (f_sandbag_half)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:121",
+            "label": "sandbag wall (f_sandbag_wall)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:122",
+            "label": "standing mirror (f_bigmirror)",
+            "description": "Move cost: 2\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:123",
+            "label": "broken standing mirror (f_bigmirror_b)",
+            "description": "Move cost: 2\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:124",
+            "label": "bitts (f_bitts)",
+            "description": "Move cost: 2\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:125",
+            "label": "cleat (f_cleat)",
+            "description": "Move cost: 2\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:126",
+            "label": "manacles (f_shackle)",
+            "description": "Move cost: 1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:127",
+            "label": "statue (f_statue)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:128",
+            "label": "mannequin (f_mannequin)",
+            "description": "Move cost: 2\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:129",
+            "label": "birdbath (f_birdbath)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:130",
+            "label": "rotary clothes dryer line (f_rotary_clothesline)",
+            "description": "Move cost: -2\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:131",
+            "label": "pine wreath (f_winter_wreath)",
+            "description": "Move cost: 0\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:132",
+            "label": "decorative tree (f_decorative_tree)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:133",
+            "label": "dimensional portal (t_dimensional_portal)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:134",
+            "label": "dimensional portal (active) (t_dimensional_portal_linked)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:135",
+            "label": "dimensional portal (closed) (t_dimensional_portal_closed)",
+            "description": "Move cost: 0\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:136",
+            "label": "power portal (f_power_portal)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:137",
+            "label": "power portal (active) (f_power_portal_linked)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:138",
+            "label": "power portal (paused) (f_power_portal_paused)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:139",
+            "label": "indoor plant (f_indoor_plant)",
+            "description": "Move cost: 2\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:140",
+            "label": "yellow indoor plant (f_indoor_plant_y)",
+            "description": "Move cost: 2\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:141",
+            "label": "harvestable plant (f_plant_harvest)",
+            "description": "Move cost: 0\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:142",
+            "label": "maturing plant (f_plant_mature)",
+            "description": "Move cost: 0\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:143",
+            "label": "seed (f_plant_seed)",
+            "description": "Move cost: 0\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:144",
+            "label": "seedling (f_plant_seedling)",
+            "description": "Move cost: 0\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:145",
+            "label": "planter (f_planter)",
+            "description": "Move cost: 1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:146",
+            "label": "planter with harvestable plant (f_planter_harvest)",
+            "description": "Move cost: 0\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:147",
+            "label": "planter with maturing plant (f_planter_mature)",
+            "description": "Move cost: 0\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:148",
+            "label": "planter with seed (f_planter_seed)",
+            "description": "Move cost: 1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:149",
+            "label": "planter with seedling (f_planter_seedling)",
+            "description": "Move cost: 1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:150",
+            "label": "mushroom rack (f_rack_mushroom)",
+            "description": "Move cost: 1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:151",
+            "label": "freshly-planted mushroom rack (f_rack_mushroom_seed)",
+            "description": "Move cost: 1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:152",
+            "label": "young mushroom rack (f_rack_mushroom_seedling)",
+            "description": "Move cost: 1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:153",
+            "label": "maturing mushroom rack (f_rack_mushroom_mature)",
+            "description": "Move cost: 1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:154",
+            "label": "harvestable mushroom rack (f_rack_mushroom_harvest)",
+            "description": "Move cost: 1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:155",
+            "label": "spider egg sack (f_egg_sackbw)",
+            "description": "Move cost: 3\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:156",
+            "label": "spider egg sack (f_egg_sackcs)",
+            "description": "Move cost: 3\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:157",
+            "label": "spider egg sack (f_egg_sackws)",
+            "description": "Move cost: 3\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:158",
+            "label": "ruptured egg sack (f_egg_sacke)",
+            "description": "Move cost: 3\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:159",
+            "label": "swamp gas (f_swamp_gas)",
+            "description": "Move cost: 1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:160",
+            "label": "fog (f_fog)",
+            "description": "Move cost: 2\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:161",
+            "label": "natural gas vent (f_hot_spring)",
+            "description": "Move cost: 6\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:162",
+            "label": "running ventilation shutters (f_metal_cold_vent)",
+            "description": "Move cost: -1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:163",
+            "label": "fake workbench hands (f_fake_bench_hands)",
+            "description": "Move cost: 2\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:164",
+            "label": "ground crafting spot (f_ground_crafting_spot)",
+            "description": "Move cost: 2\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:165",
+            "label": "seeing this is a bug (f_no_item)",
+            "description": "Move cost: 2\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:166",
+            "label": "fireplace (f_fireplace)",
+            "description": "Move cost: 2\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:167",
+            "label": "wood stove (f_woodstove)",
+            "description": "Move cost: 2\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:168",
+            "label": "brazier (f_brazier)",
+            "description": "Move cost: 2\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:169",
+            "label": "hobo stove (f_hobo_stove)",
+            "description": "Move cost: 2\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:170",
+            "label": "fire barrel (200L) (f_55gal_firebarrel)",
+            "description": "Move cost: 2\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:171",
+            "label": "fire barrel (100L) (f_30gal_firebarrel)",
+            "description": "Move cost: 2\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:172",
+            "label": "fire ring (f_firering)",
+            "description": "Move cost: 2\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:173",
+            "label": "mutated poppy flower (f_mutpoppy)",
+            "description": "Move cost: 0\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:174",
+            "label": "dandelion (f_dandelion)",
+            "description": "Move cost: 0\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:175",
+            "label": "burdock (f_burdock)",
+            "description": "Move cost: 0\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:176",
+            "label": "chamomile (f_chamomile)",
+            "description": "Move cost: 0\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:177",
+            "label": "tulip (f_flower_tulip)",
+            "description": "Move cost: 0\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:178",
+            "label": "spurge flower (f_flower_spurge)",
+            "description": "Move cost: 0\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:179",
+            "label": "cattails (f_cattails)",
+            "description": "Move cost: 1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:180",
+            "label": "harvested cattails (f_cattails_harvested)",
+            "description": "Move cost: 1\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          },
+          {
+            "id": "entry:181",
+            "label": "black eyed susan (f_black_eyed_susan)",
+            "description": "Move cost: 0\nRoof: No",
+            "denial": "",
+            "enabled": true,
+            "selectable": true,
+            "selected": false,
+            "columns": []
+          }
+        ],
+        "total": 516,
+        "selection": "single",
+        "activate": "bn:choose:list:choices",
+        "filterable": true
+      },
+      "affordances": [
+        {
+          "id": "bn:choose:list:choices",
+          "label": "Confirm Choice",
+          "keys": [],
+          "enabled": true,
+          "args": {
+            "row": {
+              "component_id": "list:choices"
+            }
+          },
+          "expect": "boundary"
+        },
+        {
+          "id": "bn:cancel",
+          "label": "Exit screen",
+          "keys": [],
+          "enabled": true,
+          "role": "cancel",
+          "expect": "screen"
+        },
+        {
+          "id": "UP",
+          "label": "Pan up",
+          "keys": [
+            "k",
+            "8",
+            "UP",
+            "NUMPAD_8"
+          ],
+          "enabled": true,
+          "role": "navigate",
+          "expect": "screen"
+        },
+        {
+          "id": "DOWN",
+          "label": "Pan down",
+          "keys": [
+            "j",
+            "DOWN",
+            "2",
+            "NUMPAD_2"
+          ],
+          "enabled": true,
+          "role": "navigate",
+          "expect": "screen"
+        },
+        {
+          "id": "PAGE_UP",
+          "label": "Fast scroll up",
+          "keys": [
+            "PPAGE"
+          ],
+          "enabled": true,
+          "role": "navigate",
+          "expect": "screen"
+        },
+        {
+          "id": "PAGE_DOWN",
+          "label": "Fast scroll down",
+          "keys": [
+            "NPAGE"
+          ],
+          "enabled": true,
+          "role": "navigate",
+          "expect": "screen"
+        },
+        {
+          "id": "HOME",
+          "label": "Go to first entry",
+          "keys": [],
+          "enabled": true,
+          "role": "navigate",
+          "expect": "screen"
+        },
+        {
+          "id": "END",
+          "label": "Go to last entry",
+          "keys": [],
+          "enabled": true,
+          "role": "navigate",
+          "expect": "screen"
+        },
+        {
+          "id": "SCROLL_UP",
+          "label": "Scroll up",
+          "keys": [],
+          "enabled": true,
+          "role": "navigate",
+          "expect": "screen"
+        },
+        {
+          "id": "SCROLL_DOWN",
+          "label": "Scroll down",
+          "keys": [],
+          "enabled": true,
+          "role": "navigate",
+          "expect": "screen"
+        },
+        {
+          "id": "QUIT",
+          "label": "Exit screen",
+          "keys": [
+            "ESC",
+            "q",
+            "Q",
+            "SPACE"
+          ],
+          "enabled": true,
+          "expect": "screen"
+        },
+        {
+          "id": "SELECT",
+          "label": "Select",
+          "keys": [],
+          "enabled": true,
+          "expect": "screen"
+        },
+        {
+          "id": "CONFIRM",
+          "label": "Confirm Choice",
+          "keys": [
+            "RETURN"
+          ],
+          "enabled": true,
+          "role": "confirm",
+          "expect": "screen"
+        },
+        {
+          "id": "FILTER",
+          "label": "Filter",
+          "keys": [
+            "f",
+            "F",
+            "/"
+          ],
+          "enabled": true,
+          "expect": "screen"
+        },
+        {
+          "id": "HELP_KEYBINDINGS",
+          "label": "Display keybindings menu",
+          "keys": [
+            "?"
+          ],
+          "enabled": true,
+          "role": "help",
+          "expect": "screen"
+        },
+        {
+          "id": "CONFIRM_QUIT",
+          "label": "Confirm & quit",
+          "keys": [
+            "e",
+            "u",
+            "t"
+          ],
+          "enabled": true,
+          "expect": "screen"
+        },
+        {
+          "id": "EDITMAP_SHOW_ALL",
+          "label": "Show all",
+          "keys": [
+            "v"
+          ],
+          "enabled": true,
+          "expect": "screen"
+        },
+        {
+          "id": "EDITMAP_TAB",
+          "label": "Switch to move point / confirm",
+          "keys": [
+            "TAB"
+          ],
+          "enabled": true,
+          "expect": "screen"
+        },
+        {
+          "id": "EDITMAP_MOVE",
+          "label": "Move shape",
+          "keys": [
+            "m"
+          ],
+          "enabled": true,
+          "expect": "screen"
+        },
+        {
+          "id": "HELP_KEYBINDINGS",
+          "label": "Display keybindings menu",
+          "keys": [
+            "?"
+          ],
+          "enabled": true,
+          "role": "help",
+          "expect": "screen"
+        }
+      ],
+      "focus": {
+        "component_id": "list:choices",
+        "row_id": "entry:0"
+      },
+      "context": "EDITMAP_FEATURE"
+    }
+  ]
+}
