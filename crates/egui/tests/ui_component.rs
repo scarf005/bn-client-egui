@@ -1492,3 +1492,21 @@ fn a_pane_is_as_wide_as_its_heading_and_its_rows_beside_their_scroll_bar() {
         );
     }
 }
+
+#[test]
+fn a_grid_with_room_to_spare_draws_its_cells_larger() {
+    let grid = json!({"id": "grid", "kind": "grid", "cols": 3, "rows": 2, "cells": [
+        {"x": 0, "y": 0, "glyph": "A", "enabled": true},
+        {"x": 2, "y": 1, "glyph": "B", "enabled": true}]});
+    let parts = rows_list(&["frame", "roof"]);
+    let root =
+        json!({"id": "vehicle", "kind": "split", "relation": "peers", "children": [grid, parts]});
+    let screen = json!({"screen_id": "screen:9", "role": "screen", "title": "Test", "root": root,
+        "affordances": []});
+    let (h, _) = harness(screen);
+    let a = h.get_by_label("A").rect();
+    let b = h.get_by_label("B").rect();
+    assert!(a.width() > 40.0, "a cell {} wide", a.width());
+    assert!((b.left() - a.left() - 2.0 * a.width()).abs() < 1.0);
+    assert!((b.top() - a.top() - a.height()).abs() < 1.0);
+}
