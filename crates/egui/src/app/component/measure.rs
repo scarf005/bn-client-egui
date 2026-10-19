@@ -181,7 +181,14 @@ impl<M: GameModel> App<M> {
                     },
                 }
             }
-            Component::Grid(grid) => fixed(drawn_span(grid).0.len() as f32 * (GRID_CELL + gap)),
+            Component::Grid(grid) => {
+                let cols = drawn_span(grid).0.len() as f32;
+                Extent {
+                    min: cols * (GRID_CELL + gap),
+                    natural: cols * (GRID_MAX_CELL + gap),
+                    grows: false,
+                }
+            }
             Component::Map(_) => Extent {
                 min: 160.0,
                 natural: room.min(480.0),

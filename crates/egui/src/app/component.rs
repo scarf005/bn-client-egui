@@ -38,6 +38,8 @@ use std::collections::{HashMap, HashSet};
 const PANE_MARGIN: i8 = 2;
 /// Side of a grid cell in points.
 const GRID_CELL: f32 = 26.0;
+/// The largest a grid's cell grows to when the room allows.
+const GRID_MAX_CELL: f32 = 2.0 * GRID_CELL;
 const GOOD: egui::Color32 = egui::Color32::from_rgb(110, 210, 110);
 const BAD: egui::Color32 = egui::Color32::from_rgb(235, 95, 95);
 
@@ -618,8 +620,13 @@ impl<M: GameModel> App<M> {
     }
 
     fn grid(&self, ui: &mut egui::Ui, grid: &Grid, out: &mut Vec<Intent>) {
-        let size = egui::vec2(GRID_CELL, GRID_CELL);
         let (xs, ys) = drawn_span(grid);
+        // The cells grow with the room the grid has, up to twice their size, their glyphs with them.
+        let fit = (ui.available_width() / xs.len().max(1) as f32)
+            .min(ui.available_height() / ys.len().max(1) as f32);
+        let cell = fit.clamp(GRID_CELL, GRID_MAX_CELL);
+        let size = egui::vec2(cell, cell);
+        let glyph_size = egui::TextStyle::Monospace.resolve(ui.style()).size * cell / GRID_CELL;
         ui.scope(|ui| {
             ui.spacing_mut().item_spacing = egui::Vec2::ZERO;
             for y in ys {
@@ -636,7 +643,7 @@ impl<M: GameModel> App<M> {
                             .cursor
                             .is_some_and(|c| (c.x, c.y) == (x as i32, y as i32));
                         let actionable = cell.id.is_some() && cell.affordance.is_some();
-                        let mut shown = egui::RichText::new(&glyph).monospace();
+                        let mut shown = egui::RichText::new(&glyph).monospace().size(glyph_size);
                         if let Some(color) = color {
                             shown = shown.color(color);
                         }
