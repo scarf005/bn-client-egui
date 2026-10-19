@@ -47,11 +47,20 @@ fn right_aligned(ui: &mut egui::Ui, size: [f32; 2], text: impl Into<egui::Widget
 }
 
 impl<M: GameModel> App<M> {
-    /// The room a list has here: what the window has left, less its description and the buttons under it.
-    fn list_height(ui: &egui::Ui) -> f32 {
+    /// The room a list has here: what the window has left, less the description, the refusal and the buttons
+    /// it draws under itself. Room is kept only for what some row or the list has, so a list with none of
+    /// them reaches the bottom.
+    fn list_height(ui: &egui::Ui, rows: &[&Row], buttons: bool) -> f32 {
         let spacing = ui.spacing();
-        let buttons = 2.0 * (spacing.interact_size.y + spacing.item_spacing.y);
-        (ui.available_height() - DESCRIPTION_HEIGHT - buttons).max(DESCRIPTION_HEIGHT)
+        let line = spacing.interact_size.y + spacing.item_spacing.y;
+        let described = rows.iter().any(|r| !r.description.shown().is_empty());
+        let refused = rows
+            .iter()
+            .any(|r| !r.enabled && !r.denial.shown().is_empty());
+        let below = f32::from(u8::from(described)) * DESCRIPTION_HEIGHT
+            + f32::from(u8::from(refused)) * line
+            + f32::from(u8::from(buttons)) * 2.0 * line;
+        (ui.available_height() - below).max(DESCRIPTION_HEIGHT)
     }
 
     /// The row's text with its marks: the picking mark, the engine's mark, the key, the name in its colour. The
@@ -117,7 +126,13 @@ impl<M: GameModel> App<M> {
         if !list.columns.is_empty() {
             list_header(ui, list, icon, &layout);
         }
-        let list_height = Self::list_height(ui);
+        let own = list
+            .head
+            .affordances
+            .iter()
+            .filter_map(|a| find(screen, a))
+            .collect::<Vec<_>>();
+        let list_height = Self::list_height(ui, &rows, !own.is_empty());
         self.screens
             .list_heights
             .borrow_mut()
@@ -143,12 +158,6 @@ impl<M: GameModel> App<M> {
         if let Some(row) = shown {
             self.row_description(ui, id, row);
         }
-        let own = list
-            .head
-            .affordances
-            .iter()
-            .filter_map(|a| find(screen, a))
-            .collect::<Vec<_>>();
         self.affordance_buttons(ui, &own, shown.copied(), out);
     }
 
