@@ -46,11 +46,13 @@ pub enum Place {
     Fill(egui::Rect),
     /// The middle of `rect`, as large as its content and no larger than `rect`.
     Center(egui::Rect),
-    /// `pivot` of the window at `pos`, as large as its content and no larger than `max`.
+    /// `pivot` of the window at `pos`, as large as its content and no larger than `max`; moved, it stays in
+    /// `within`.
     Side {
         pivot: egui::Align2,
         pos: egui::Pos2,
         max: egui::Vec2,
+        within: egui::Rect,
     },
 }
 
@@ -134,6 +136,25 @@ fn room(place: Place) -> egui::Vec2 {
     }
 }
 
+/// Where a window `place` puts may lie once the player moves it.
+fn bounds(place: Place) -> egui::Rect {
+    match place {
+        Place::Fill(rect) | Place::Center(rect) => rect,
+        Place::Side { within, .. } => within,
+    }
+}
+
+/// The top left corner of `kept` moved so that the window, no larger than `place` lets it be, lies wholly in
+/// `place`'s bounds.
+fn kept_inside(kept: WindowState, place: Place) -> egui::Pos2 {
+    let bounds = bounds(place);
+    let far = bounds.max - egui::Vec2::from(kept.size).min(room(place));
+    egui::pos2(
+        kept.pos[0].clamp(bounds.min.x, far.x.max(bounds.min.x)),
+        kept.pos[1].clamp(bounds.min.y, far.y.max(bounds.min.y)),
+    )
+}
+
 /// `window` where `place` first puts it, moved and resized by the player after that.
 fn first_placed(window: egui::Window<'_>, place: Place, width: Option<f32>) -> egui::Window<'_> {
     let (pivot, pos) = match place {
@@ -195,14 +216,23 @@ pub fn show<R>(
                 rect.center() - ctx.content_rect().center(),
             )
             .max_size(rect.size()),
-        (Some(Place::Side { pivot, pos, max }), _) => widened(window, spec.width)
+        (
+            Some(Place::Side {
+                pivot, pos, max, ..
+            }),
+            _,
+        ) => widened(window, spec.width)
             .collapsible(false)
             .pivot(pivot)
             .fixed_pos(pos)
             .max_size(max),
         (None, Some(s)) => window
             .pivot(egui::Align2::LEFT_TOP)
-            .default_pos(s.pos)
+            .default_pos(
+                spec.place
+                    .filter(|_| spec.movable)
+                    .map_or(s.pos.into(), |place| kept_inside(s, place)),
+            )
             .default_size(s.size)
             .default_open(!s.collapsed),
         (None, None) => {

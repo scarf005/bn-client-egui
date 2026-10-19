@@ -284,6 +284,16 @@ fn inventory_window_as<'a>(
     (h, script)
 }
 
+/// Drags the inventory window's bottom and right edges 100 points in, so that it can move inside its room.
+fn shrink_inventory(h: &mut H) {
+    let (window, _) = inventory_frame(h);
+    let bottom = egui::pos2(window.center().x, window.bottom() + 2.0);
+    drag(h, bottom, bottom - egui::vec2(0.0, 100.0));
+    let (window, _) = inventory_frame(h);
+    let right = egui::pos2(window.right() + 2.0, window.center().y);
+    drag(h, right, right - egui::vec2(100.0, 0.0));
+}
+
 /// The inventory window, and a point on its title bar left of the close button.
 fn inventory_frame(h: &H) -> (egui::Rect, egui::Pos2) {
     titled_frame(h, "Multidrop")
@@ -314,9 +324,9 @@ fn a_screen_window_closed_by_its_close_button_runs_the_screens_cancel() {
 fn a_screen_window_is_moved_by_its_title_bar_and_found_there_after_a_restart() {
     let file = settings("windows-screen-move");
     let (mut h, _) = inventory_window(&file);
+    shrink_inventory(&mut h);
     let (before, title) = inventory_frame(&h);
-    // The window is as tall as the room, so it moves along it; it never leaves the screen.
-    let by = egui::vec2(60.0, -10.0);
+    let by = egui::vec2(60.0, 10.0);
     drag(&mut h, title, title + by);
     let (moved, _) = inventory_frame(&h);
     assert!(
@@ -371,8 +381,9 @@ fn a_screen_window_kept_wider_than_the_screen_opens_no_wider_than_its_room() {
 fn a_screen_window_is_found_where_it_was_left_when_it_opens_under_another_title() {
     let file = settings("windows-screen-retitled");
     let (mut h, _) = inventory_window(&file);
+    shrink_inventory(&mut h);
     let (before, title) = inventory_frame(&h);
-    let by = egui::vec2(60.0, -10.0);
+    let by = egui::vec2(60.0, 10.0);
     drag(&mut h, title, title + by);
     let (moved, _) = inventory_frame(&h);
     assert!(

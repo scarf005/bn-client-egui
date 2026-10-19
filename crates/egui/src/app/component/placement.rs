@@ -34,6 +34,7 @@ pub(super) fn placement(
             inner.right_top()
         },
         max,
+        within: inner,
     };
     let beside = |left: bool| {
         let (x0, x1) = if left {
@@ -64,6 +65,7 @@ pub(super) fn placement(
                 pivot: egui::Align2::LEFT_TOP,
                 pos: egui::pos2(rect.left(), inner.top()),
                 max: egui::vec2(rect.width(), inner.height()),
+                within: inner.union(rect),
             },
             None => side(true),
         },
