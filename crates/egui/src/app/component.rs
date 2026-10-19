@@ -49,8 +49,8 @@ pub(super) struct Screens {
     interaction: bn_client_core::interaction::Interaction,
     /// Why the last refused affordance is off, in the engine's words.
     denial: Option<String>,
-    /// The list the keys just moved the focus in, to be scrolled to it.
-    reveal: Option<String>,
+    /// How far each list is scrolled and the focus it last scrolled into sight, by component id.
+    list_scroll: RefCell<HashMap<String, ListScroll>>,
     /// The height each list had in the last frame, by component id, for the rows a page key moves in it.
     list_heights: RefCell<HashMap<String, f32>>,
     /// The squares of this frame's list rows left for their item's sprite, painted once the window is drawn.
@@ -58,6 +58,13 @@ pub(super) struct Screens {
     /// What this frame's overmap draws, painted once the window is drawn, so that a tileset's sprites come
     /// before the marks over them.
     overmap: RefCell<Vec<OvermapPaint>>,
+}
+
+/// A list's scroll offset in the last frame, and the screen and row of the focus it last brought into sight.
+#[derive(Default)]
+struct ListScroll {
+    top: f32,
+    shown: Option<(String, String)>,
 }
 
 fn tone_color(tone: Tone) -> egui::Color32 {
@@ -164,7 +171,6 @@ impl<M: GameModel> App<M> {
         {
             out.push(Intent::Run(cancel));
         }
-        self.screens.reveal = None;
         let season = self.model.season();
         for icon in self.screens.icons.take() {
             let display = &mut self.display;
@@ -215,9 +221,6 @@ impl<M: GameModel> App<M> {
     fn settle(&mut self, out: interaction::Outcome) {
         self.keys_consumed |= out.consumed;
         self.screens.denial = out.note();
-        if out.revealed.is_some() {
-            self.screens.reveal = out.revealed;
-        }
         if let Some((id, args)) = out.invoke
             && let Err(InvokeError::Disabled(denial)) = self.model.invoke_affordance(&id, args)
         {

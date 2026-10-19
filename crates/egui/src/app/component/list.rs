@@ -137,15 +137,28 @@ impl<M: GameModel> App<M> {
             .list_heights
             .borrow_mut()
             .insert(id.clone(), list_height);
+        let at = cursor.and_then(|c| rows.iter().position(|r| r.id == c));
+        // The engine may put its cursor on a row past the pages held: they are asked for until it is among them.
+        if cursor.is_some() && at.is_none() {
+            out.push(Intent::More(id.clone()));
+        }
         let mut area = egui::ScrollArea::vertical()
             .id_salt(("list", id))
             .auto_shrink([false, true])
             .max_height(list_height);
-        if self.screens.reveal.as_deref() == Some(id.as_str()) {
-            let step = height + ui.spacing().item_spacing.y;
-            area = area.vertical_scroll_offset(interaction.scroll(id) as f32 * step);
+        // A focus new to the list scrolls it the least that shows the focused row.
+        let step = height + ui.spacing().item_spacing.y;
+        let focus = cursor.map(|c| (screen.screen_id.clone(), c.to_string()));
+        if let Some(i) = at {
+            let mut scrolls = self.screens.list_scroll.borrow_mut();
+            let scroll = scrolls.entry(id.clone()).or_default();
+            if scroll.shown != focus {
+                let y = i as f32 * step;
+                area = area.vertical_scroll_offset(scroll.top.min(y).max(y + step - list_height));
+                scroll.shown = focus;
+            }
         }
-        area.show_rows(ui, height, rows.len(), |ui, range| {
+        let scrolled = area.show_rows(ui, height, rows.len(), |ui, range| {
             crate::app::menu::list_row_style(ui);
             for row in &rows[range.clone()] {
                 ui.horizontal(|ui| self.list_row(ui, list, row, cursor, &layout, out));
@@ -154,6 +167,9 @@ impl<M: GameModel> App<M> {
                 out.push(Intent::More(id.clone()));
             }
         });
+        let mut scrolls = self.screens.list_scroll.borrow_mut();
+        scrolls.entry(id.clone()).or_default().top = scrolled.state.offset.y;
+        drop(scrolls);
         let shown = cursor.and_then(|c| rows.iter().find(|r| r.id == c));
         if let Some(row) = shown {
             self.row_description(ui, id, row);
