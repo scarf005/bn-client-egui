@@ -339,9 +339,13 @@ impl<M: GameModel> App<M> {
             y: view.y + origin.y,
         };
         let cell_at = |p: egui::Pos2| canvas.square_at(p, scene);
-        // Only a moving pointer moves the cursor, so it cannot undo keyboard navigation.
+        // Only a moving pointer moves the cursor, so it cannot undo keyboard navigation, nor take the cursor
+        // to where it rests when a window over the map closes.
         let hover = response.hover_pos();
-        if let Some(p) = hover.filter(|p| self.last_hover != Some(*p)) {
+        let pointer = ui.input(|i| i.pointer.latest_pos());
+        let moved = pointer != self.last_pointer;
+        self.last_pointer = pointer;
+        if let Some(p) = hover.filter(|_| moved) {
             cursor = cell_at(p);
             // The engine's own cursor follows the mouse while it is looking or aiming; otherwise the
             // native mouse view describes the square.
