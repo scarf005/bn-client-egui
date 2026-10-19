@@ -1426,3 +1426,32 @@ fn a_grid_takes_the_room_of_its_cells_and_cursor_not_of_its_empty_edges() {
         window.width()
     );
 }
+
+#[test]
+fn peer_panes_too_wide_for_one_line_go_on_to_the_next_instead_of_scrolling_sideways() {
+    // The construction screen as the engine sent it, on a stage whose facts do not fit one line.
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../core/tests/fixtures/construction-stage.json"
+    );
+    let screen = serde_json::from_str::<Value>(&std::fs::read_to_string(path).unwrap()).unwrap();
+    let (mut h, _) = harness(screen);
+    // In the client's own fonts, whose words are as wide as a player sees them.
+    bn_client_egui::theme::apply(&h.ctx);
+    bn_client_egui::fonts::install_bundled(&h.ctx);
+    common::settle_windows(&mut h);
+    let window = h.get_by_role(egui::accesskit::Role::Window).rect();
+    let last = h.get_by_label_contains("sand (20)").rect();
+    assert!(
+        last.right() <= window.right(),
+        "the last pane ends at {} past the window's {}",
+        last.right(),
+        window.right()
+    );
+    let fabrication = h.get_by_label_contains("Fabrication").rect();
+    let one_line = h.get_by_label_contains("10 adobe bricks").rect().height();
+    assert!(
+        fabrication.height() <= one_line + 0.5,
+        "a word broke across lines"
+    );
+}

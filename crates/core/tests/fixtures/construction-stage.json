@@ -1,0 +1,2658 @@
+{
+  "affordances": [
+    {
+      "args": {
+        "row": {
+          "component_id": "construction:groups"
+        }
+      },
+      "enabled": true,
+      "expect": "boundary",
+      "id": "construct:select",
+      "keys": [],
+      "label": "Select",
+      "role": "select"
+    },
+    {
+      "args": {
+        "row": {
+          "component_id": "construction:groups"
+        }
+      },
+      "enabled": true,
+      "expect": "boundary",
+      "id": "construct:construct",
+      "keys": [],
+      "label": "Construct"
+    },
+    {
+      "args": {
+        "row": {
+          "component_id": "construction:groups"
+        }
+      },
+      "enabled": true,
+      "expect": "boundary",
+      "id": "construct:favorite",
+      "keys": [],
+      "label": "Favorite"
+    },
+    {
+      "args": {
+        "text": {}
+      },
+      "enabled": true,
+      "expect": "boundary",
+      "id": "construct:search",
+      "keys": [],
+      "label": "Search:"
+    },
+    {
+      "args": {
+        "row": {
+          "component_id": "construction:tabs"
+        }
+      },
+      "enabled": true,
+      "expect": "boundary",
+      "id": "construct:tab",
+      "keys": [],
+      "label": "Category"
+    },
+    {
+      "enabled": true,
+      "expect": "screen",
+      "id": "UP",
+      "keys": [
+        "k",
+        "8",
+        "UP",
+        "NUMPAD_8"
+      ],
+      "label": "Move cursor up",
+      "role": "navigate"
+    },
+    {
+      "enabled": true,
+      "expect": "screen",
+      "id": "DOWN",
+      "keys": [
+        "j",
+        "DOWN",
+        "2",
+        "NUMPAD_2"
+      ],
+      "label": "Move cursor down",
+      "role": "navigate"
+    },
+    {
+      "enabled": true,
+      "expect": "screen",
+      "id": "RIGHT",
+      "keys": [
+        "l",
+        "RIGHT",
+        "6",
+        "NUMPAD_6"
+      ],
+      "label": "Move tab right",
+      "role": "navigate"
+    },
+    {
+      "enabled": true,
+      "expect": "screen",
+      "id": "LEFT",
+      "keys": [
+        "h",
+        "LEFT",
+        "4",
+        "NUMPAD_4"
+      ],
+      "label": "Move tab left",
+      "role": "navigate"
+    },
+    {
+      "enabled": true,
+      "expect": "screen",
+      "id": "TAB",
+      "keys": [],
+      "label": "Move tab right"
+    },
+    {
+      "enabled": true,
+      "expect": "screen",
+      "id": "BACKTAB",
+      "keys": [],
+      "label": "Move tab left"
+    },
+    {
+      "enabled": true,
+      "expect": "screen",
+      "id": "PAGE_UP",
+      "keys": [
+        "PPAGE"
+      ],
+      "label": "Page up",
+      "role": "navigate"
+    },
+    {
+      "enabled": true,
+      "expect": "screen",
+      "id": "PAGE_DOWN",
+      "keys": [
+        "NPAGE"
+      ],
+      "label": "Page down",
+      "role": "navigate"
+    },
+    {
+      "enabled": true,
+      "expect": "screen",
+      "id": "CONFIRM",
+      "keys": [
+        "RETURN"
+      ],
+      "label": "Confirm Choice",
+      "role": "confirm"
+    },
+    {
+      "enabled": true,
+      "expect": "screen",
+      "id": "TOGGLE_UNAVAILABLE_CONSTRUCTIONS",
+      "keys": [
+        ";"
+      ],
+      "label": "Toggle unavailable constructions"
+    },
+    {
+      "enabled": true,
+      "expect": "screen",
+      "id": "QUIT",
+      "keys": [
+        "ESC",
+        "q",
+        "Q",
+        "SPACE"
+      ],
+      "label": "Exit screen",
+      "role": "cancel"
+    },
+    {
+      "enabled": true,
+      "expect": "screen",
+      "id": "TOGGLE_FAVORITE",
+      "keys": [
+        "*"
+      ],
+      "label": "Toggle construction as favorite"
+    },
+    {
+      "enabled": true,
+      "expect": "screen",
+      "id": "HELP_KEYBINDINGS",
+      "keys": [
+        "?"
+      ],
+      "label": "Display keybindings menu",
+      "role": "help"
+    },
+    {
+      "enabled": true,
+      "expect": "screen",
+      "id": "FILTER",
+      "keys": [
+        "f",
+        "F",
+        "/"
+      ],
+      "label": "Filter"
+    },
+    {
+      "enabled": true,
+      "expect": "screen",
+      "id": "RESET_FILTER",
+      "keys": [
+        "r",
+        "R"
+      ],
+      "label": "Reset filter"
+    }
+  ],
+  "context": "CONSTRUCTION",
+  "focus": {
+    "component_id": "construction:groups",
+    "row_id": "build_adobe_floor"
+  },
+  "kind": "construction",
+  "role": "screen",
+  "root": {
+    "affordances": [
+      "construct:tab"
+    ],
+    "child": {
+      "active": "construction:groups",
+      "children": [
+        {
+          "activate": "construct:construct",
+          "affordances": [
+            "construct:construct",
+            "construct:favorite",
+            "construct:search"
+          ],
+          "columns": [],
+          "filterable": true,
+          "id": "construction:groups",
+          "kind": "list",
+          "rows": [
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_adobe_floor",
+              "label": "Build Adobe Floor",
+              "look": {
+                "color": "c_brown",
+                "glyph": ".",
+                "id": "t_adobe_brick_floor_noroof",
+                "kind": "terrain",
+                "looks_like": [
+                  "t_thconc_floor"
+                ],
+                "name": "adobe floor",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": true
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_barbed_wire_fence",
+              "label": "Build Barbed Wire Fence",
+              "look": {
+                "color": "c_blue",
+                "glyph": "$",
+                "id": "t_fence_barbed",
+                "kind": "terrain",
+                "name": "barbed wire fence",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_bar_door",
+              "label": "Build Bar Door",
+              "look": {
+                "color": "c_cyan",
+                "glyph": "+",
+                "id": "t_door_bar_c",
+                "kind": "terrain",
+                "looks_like": [
+                  "t_door_metal_c",
+                  "t_door_c"
+                ],
+                "name": "closed bar door",
+                "subtile": "center",
+                "wall": true
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_beaded_curtain",
+              "label": "Build Beaded Curtain",
+              "look": {
+                "color": "c_pink",
+                "glyph": "+",
+                "id": "f_beaded_door",
+                "kind": "furniture",
+                "looks_like": [
+                  "f_canvas_door",
+                  "f_canvas_door",
+                  "f_canvas_door",
+                  "f_canvas_door",
+                  "f_canvas_door",
+                  "f_canvas_door",
+                  "f_canvas_door",
+                  "f_canvas_door",
+                  "f_canvas_door",
+                  "f_canvas_door"
+                ],
+                "name": "beaded curtain",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_brick_wall",
+              "label": "Build Brick Wall",
+              "look": {
+                "color": "c_brown",
+                "glyph": "─",
+                "id": "t_brick_wall",
+                "kind": "terrain",
+                "name": "brick wall",
+                "subtile": "center",
+                "wall": true
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_brick_wall_from_adobe",
+              "label": "Build Brick Wall from Adobe",
+              "look": {
+                "color": "c_brown",
+                "glyph": "─",
+                "id": "t_adobe_brick_wall",
+                "kind": "terrain",
+                "looks_like": [
+                  "t_brick_wall"
+                ],
+                "name": "adobe wall",
+                "subtile": "center",
+                "wall": true
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_canvas_door",
+              "label": "Build canvas door",
+              "look": {
+                "color": "c_blue",
+                "glyph": "+",
+                "id": "f_canvas_door",
+                "kind": "furniture",
+                "looks_like": [
+                  "f_canvas_door",
+                  "f_canvas_door",
+                  "f_canvas_door",
+                  "f_canvas_door",
+                  "f_canvas_door",
+                  "f_canvas_door",
+                  "f_canvas_door",
+                  "f_canvas_door",
+                  "f_canvas_door",
+                  "f_canvas_door"
+                ],
+                "name": "canvas flap",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_canvas_floor",
+              "label": "Build canvas flooring",
+              "look": {
+                "color": "c_white",
+                "glyph": "#",
+                "id": "f_canvas_floor",
+                "kind": "furniture",
+                "name": "canvas floor",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_canvas_wall",
+              "label": "Build canvas wall",
+              "look": {
+                "color": "c_blue",
+                "glyph": "#",
+                "id": "f_canvas_wall",
+                "kind": "furniture",
+                "name": "canvas wall",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_cardboard_fort",
+              "label": "Build Cardboard Fort",
+              "look": {
+                "color": "c_brown",
+                "glyph": "^",
+                "id": "f_cardboard_fort",
+                "kind": "furniture",
+                "name": "cardboard fort",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_chainlink_fence",
+              "label": "Build Chainlink Fence",
+              "look": {
+                "color": "c_cyan",
+                "glyph": "─",
+                "id": "t_chainfence",
+                "kind": "terrain",
+                "name": "chain link fence",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_chainlink_gate",
+              "label": "Build Chainlink Gate",
+              "look": {
+                "color": "c_cyan",
+                "glyph": "+",
+                "id": "t_chaingate_c",
+                "kind": "terrain",
+                "name": "closed wire gate",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_chickenwire_fence",
+              "label": "Build Chickenwire Fence",
+              "look": {
+                "color": "c_brown",
+                "glyph": "─",
+                "id": "t_chickenwire_fence",
+                "kind": "terrain",
+                "looks_like": [
+                  "t_chainfence"
+                ],
+                "name": "chickenwire fence",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_chickenwire_gate",
+              "label": "Build Chickenwire Gate",
+              "look": {
+                "color": "c_brown",
+                "glyph": "+",
+                "id": "t_chickenwire_gate_c",
+                "kind": "terrain",
+                "looks_like": [
+                  "t_chaingate_c"
+                ],
+                "name": "closed chickenwire gate",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_concrete_column",
+              "label": "Build Concrete Column",
+              "look": {
+                "color": "c_light_gray",
+                "glyph": "1",
+                "id": "t_column",
+                "kind": "terrain",
+                "name": "column",
+                "subtile": "center",
+                "wall": true
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_concrete_floor",
+              "label": "Build Concrete Floor",
+              "look": {
+                "color": "c_light_gray",
+                "glyph": ".",
+                "id": "t_concrete",
+                "kind": "terrain",
+                "looks_like": [
+                  "t_pavement"
+                ],
+                "name": "concrete",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "constr_wall_paintable_standard",
+              "label": "Build Dark Plastered Wooden Wall",
+              "look": {
+                "color": "c_green",
+                "glyph": "─",
+                "id": "t_wall_paintable",
+                "kind": "terrain",
+                "looks_like": [
+                  "t_wall"
+                ],
+                "name": "dark plastered wooden wall",
+                "subtile": "center",
+                "wall": true
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_deep_river_dock",
+              "label": "Build Deep River Dock",
+              "look": {
+                "color": "c_brown",
+                "glyph": "8",
+                "id": "t_dock_deep",
+                "kind": "terrain",
+                "looks_like": [
+                  "t_riverbridge_dp",
+                  "t_pontoon"
+                ],
+                "name": "deep dock",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_diagonal_small_railroad_track",
+              "label": "Build Diagonal Small Railroad Track",
+              "look": {
+                "color": "c_cyan",
+                "glyph": "=",
+                "id": "t_railroad_track_small_d",
+                "kind": "terrain",
+                "looks_like": [
+                  "t_railroad_track_d"
+                ],
+                "name": "small railroad track",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_door",
+              "label": "Build Door",
+              "look": {
+                "color": "c_brown",
+                "glyph": "+",
+                "id": "t_door_c",
+                "kind": "terrain",
+                "name": "closed wood door",
+                "subtile": "center",
+                "wall": true
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_door_curtain",
+              "label": "Build Door Curtain",
+              "look": {
+                "color": "c_dark_gray",
+                "glyph": "+",
+                "id": "t_door_curtain_c",
+                "kind": "terrain",
+                "looks_like": [
+                  "t_curtains",
+                  "t_window"
+                ],
+                "name": "closed door curtain",
+                "subtile": "center",
+                "wall": true
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_door_frame",
+              "label": "Build Door Frame",
+              "look": {
+                "color": "c_brown",
+                "glyph": ".",
+                "id": "t_door_frame",
+                "kind": "terrain",
+                "looks_like": [
+                  "t_floor"
+                ],
+                "name": "empty door frame",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_dry_stone_wall",
+              "label": "Build Dry Stone Wall",
+              "look": {
+                "color": "c_light_gray",
+                "glyph": "─",
+                "id": "t_drystone_wall",
+                "kind": "terrain",
+                "name": "field stone wall",
+                "subtile": "center",
+                "wall": true
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_earthbag_wall",
+              "label": "Build Earthbag Wall",
+              "look": {
+                "color": "i_brown",
+                "glyph": "#",
+                "id": "f_earthbag_half",
+                "kind": "furniture",
+                "looks_like": [
+                  "f_sandbag_half"
+                ],
+                "name": "earthbag barricade",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_fence",
+              "label": "Build Fence",
+              "look": {
+                "color": "c_brown",
+                "glyph": "─",
+                "id": "t_fence",
+                "kind": "terrain",
+                "name": "picket fence",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_fence_gate",
+              "label": "Build Fence Gate",
+              "look": {
+                "color": "c_brown",
+                "glyph": "+",
+                "id": "t_fencegate_c",
+                "kind": "terrain",
+                "name": "closed wooden gate",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_fence_posts",
+              "label": "Build Fence Posts",
+              "look": {
+                "color": "c_brown",
+                "glyph": "#",
+                "id": "t_fence_post",
+                "kind": "terrain",
+                "name": "fence post",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_improvised_shelter",
+              "label": "Build Improvised Shelter",
+              "look": {
+                "color": "c_brown_green",
+                "glyph": "#",
+                "id": "t_improvised_shelter",
+                "kind": "terrain",
+                "looks_like": [
+                  "t_leanto"
+                ],
+                "name": "improvised shelter",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_junk_metal_barrier",
+              "label": "Build Junk Metal Barrier",
+              "look": {
+                "color": "c_dark_gray",
+                "glyph": "─",
+                "id": "t_junk_palisade",
+                "kind": "terrain",
+                "looks_like": [
+                  "t_scrap_wall_halfway"
+                ],
+                "name": "junk metal barrier",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_junk_metal_door",
+              "label": "Build Junk Metal Door",
+              "look": {
+                "color": "c_dark_gray",
+                "glyph": "+",
+                "id": "t_junk_door_c",
+                "kind": "terrain",
+                "looks_like": [
+                  "t_gate_metal_c",
+                  "t_fencegate_c"
+                ],
+                "name": "closed junk metal door",
+                "subtile": "center",
+                "wall": true
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_junk_metal_floor_noroof",
+              "label": "Build Junk Metal Floor",
+              "look": {
+                "color": "c_dark_gray",
+                "glyph": "`",
+                "id": "t_junk_floor_noroof",
+                "kind": "terrain",
+                "looks_like": [
+                  "t_junk_floor",
+                  "t_scrap_floor"
+                ],
+                "name": "junk metal floor",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_junk_metal_floor",
+              "label": "Build Junk Metal Roof Over Floor",
+              "look": {
+                "color": "c_dark_gray",
+                "glyph": "`",
+                "id": "t_junk_floor",
+                "kind": "terrain",
+                "looks_like": [
+                  "t_scrap_floor"
+                ],
+                "name": "junk metal floor",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_large_metal_support",
+              "label": "Build Large Metal Support",
+              "look": {
+                "color": "c_light_gray",
+                "glyph": "T",
+                "id": "t_support_l",
+                "kind": "terrain",
+                "name": "large metal support",
+                "subtile": "center",
+                "wall": true
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_tarp_lean_to_leather",
+              "label": "Build Leather Tarp Lean-To",
+              "look": {
+                "color": "c_brown",
+                "glyph": ";",
+                "id": "f_tarptent_leather",
+                "kind": "furniture",
+                "looks_like": [
+                  "f_skin_door"
+                ],
+                "name": "leather tarp lean-to",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_log_wall",
+              "label": "Build Log Wall",
+              "look": {
+                "color": "c_brown",
+                "glyph": "─",
+                "id": "t_wall_log",
+                "kind": "terrain",
+                "name": "log wall",
+                "subtile": "center",
+                "wall": true
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_makeshift_door",
+              "label": "Build Makeshift Door",
+              "look": {
+                "color": "c_brown",
+                "glyph": "+",
+                "id": "t_door_makeshift_c",
+                "kind": "terrain",
+                "looks_like": [
+                  "t_door_c"
+                ],
+                "name": "closed makeshift door",
+                "subtile": "center",
+                "wall": true
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_mechanical_winch",
+              "label": "Build mechanical winch",
+              "look": {
+                "color": "c_cyan_red",
+                "glyph": "6",
+                "id": "t_gates_mech_control",
+                "kind": "terrain",
+                "name": "mechanical winch",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_metal_bars",
+              "label": "Build Metal Bars",
+              "look": {
+                "color": "c_light_gray",
+                "glyph": "\"",
+                "id": "t_bars",
+                "kind": "terrain",
+                "name": "metal bars",
+                "subtile": "center",
+                "wall": true
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_metal_door",
+              "label": "Build Metal Door",
+              "look": {
+                "color": "c_cyan",
+                "glyph": "+",
+                "id": "t_door_metal_c",
+                "kind": "terrain",
+                "looks_like": [
+                  "t_door_c"
+                ],
+                "name": "closed metal door",
+                "subtile": "center",
+                "wall": true
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_metal_garage_gate",
+              "label": "Build metal garage gate",
+              "look": {
+                "color": "c_cyan",
+                "glyph": "+",
+                "id": "t_door_metal_locked",
+                "kind": "terrain",
+                "looks_like": [
+                  "t_door_metal_c",
+                  "t_door_c"
+                ],
+                "name": "closed metal door",
+                "subtile": "center",
+                "wall": true
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_metal_wall",
+              "label": "Build Metal Wall",
+              "look": {
+                "color": "c_dark_gray",
+                "glyph": "─",
+                "id": "t_scrap_wall",
+                "kind": "terrain",
+                "name": "simple metal wall",
+                "subtile": "center",
+                "wall": true
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_palisade_gate",
+              "label": "Build Palisade Gate",
+              "look": {
+                "color": "c_light_red",
+                "glyph": "+",
+                "id": "t_palisade_gate",
+                "kind": "terrain",
+                "name": "palisade gate",
+                "subtile": "center",
+                "wall": true
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_palisade_wall",
+              "label": "Build Palisade Wall",
+              "look": {
+                "color": "c_brown",
+                "glyph": "#",
+                "id": "t_palisade",
+                "kind": "terrain",
+                "name": "palisade wall",
+                "subtile": "center",
+                "wall": true
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_pillow_fort",
+              "label": "Build Pillow Fort",
+              "look": {
+                "color": "c_white",
+                "glyph": "^",
+                "id": "f_pillow_fort",
+                "kind": "furniture",
+                "name": "pillow fort",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_pine_lean_to",
+              "label": "Build Pine Lean-To",
+              "look": {
+                "color": "c_brown",
+                "glyph": ";",
+                "id": "t_leanto",
+                "kind": "terrain",
+                "name": "pine lean-to",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "constr_wall_standard",
+              "label": "Build Plastered Wooden Wall",
+              "look": {
+                "color": "c_light_gray",
+                "glyph": "─",
+                "id": "t_wall",
+                "kind": "terrain",
+                "name": "plastered wooden wall",
+                "subtile": "center",
+                "wall": true
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_pontoon_bridge",
+              "label": "Build Pontoon Bridge",
+              "look": {
+                "color": "c_brown",
+                "glyph": "8",
+                "id": "t_pontoon_dp",
+                "kind": "terrain",
+                "looks_like": [
+                  "t_pontoon"
+                ],
+                "name": "pontoon bridge",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_pony_wall",
+              "label": "Build Pony Wall",
+              "look": {
+                "color": "c_light_gray",
+                "glyph": "─",
+                "id": "t_ponywall",
+                "kind": "terrain",
+                "looks_like": [
+                  "f_counter"
+                ],
+                "name": "pony wall",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_privacy_fence",
+              "label": "Build Privacy Fence",
+              "look": {
+                "color": "c_brown",
+                "glyph": "─",
+                "id": "t_privacy_fence",
+                "kind": "terrain",
+                "looks_like": [
+                  "t_fence"
+                ],
+                "name": "wooden privacy fence",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_privacy_fence_gate",
+              "label": "Build Privacy Fence Gate",
+              "look": {
+                "color": "c_brown",
+                "glyph": "+",
+                "id": "t_privacy_fencegate_c",
+                "kind": "terrain",
+                "looks_like": [
+                  "t_fencegate_c"
+                ],
+                "name": "closed wooden split rail gate",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_rain_collector",
+              "label": "Build Rain Collector",
+              "look": {
+                "color": "c_light_blue",
+                "glyph": "U",
+                "id": "f_rain_collector_plumbed",
+                "kind": "furniture",
+                "looks_like": [
+                  "tr_metal_funnel"
+                ],
+                "name": "rain collector (plumbed)",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_rammed_earth_wall",
+              "label": "Build Rammed Earth Wall",
+              "look": {
+                "color": "c_brown",
+                "glyph": "─",
+                "id": "t_wall_rammed_earth",
+                "kind": "terrain",
+                "name": "rammed earth wall",
+                "subtile": "center",
+                "wall": true
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_reinforced_concrete_wall",
+              "label": "Build Reinforced Concrete Wall",
+              "look": {
+                "color": "c_dark_gray",
+                "glyph": "#",
+                "id": "t_reb_cage",
+                "kind": "terrain",
+                "name": "rebar cage",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_river_bridge",
+              "label": "Build River Bridge",
+              "look": {
+                "color": "c_brown",
+                "glyph": "8",
+                "id": "t_riverbridge_dp",
+                "kind": "terrain",
+                "looks_like": [
+                  "t_pontoon"
+                ],
+                "name": "river bridge",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_river_dock_shallow_bridge",
+              "label": "Build River Dock/Shallow Bridge",
+              "look": {
+                "color": "c_brown",
+                "glyph": "8",
+                "id": "t_dock",
+                "kind": "terrain",
+                "looks_like": [
+                  "t_floor"
+                ],
+                "name": "dock",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_road_barricade",
+              "label": "Build Road Barricade",
+              "look": {
+                "color": "i_yellow",
+                "glyph": "#",
+                "id": "f_barricade_road",
+                "kind": "furniture",
+                "name": "road barricade",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_adobe_roof",
+              "label": "Build Roof Over Adobe Floor",
+              "look": {
+                "color": "c_brown",
+                "glyph": ".",
+                "id": "t_adobe_brick_floor",
+                "kind": "terrain",
+                "looks_like": [
+                  "t_thconc_floor"
+                ],
+                "name": "adobe floor",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_concrete_roof",
+              "label": "Build Roof Over Concrete Floor",
+              "look": {
+                "color": "c_cyan",
+                "glyph": ".",
+                "id": "t_thconc_floor",
+                "kind": "terrain",
+                "name": "concrete floor",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_roof_over_dirt_floor",
+              "label": "Build Roof Over Dirt Floor",
+              "look": {
+                "color": "c_brown",
+                "glyph": ".",
+                "id": "t_dirtfloor",
+                "kind": "terrain",
+                "name": "dirt floor",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_log_sod_roof",
+              "label": "Build Roof Over Primitive Floor",
+              "look": {
+                "color": "c_brown",
+                "glyph": ".",
+                "id": "t_floor_primitive",
+                "kind": "terrain",
+                "name": "primitive floor",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_reinforced_concrete_roof",
+              "label": "Build Roof Over Reinforced Concrete Floor",
+              "look": {
+                "color": "c_dark_gray",
+                "glyph": ".",
+                "id": "t_ov_reb_cage",
+                "kind": "terrain",
+                "name": "rebar roof cage",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_metal_roof",
+              "label": "Build Roof Over Simple Metal Floor",
+              "look": {
+                "color": "c_cyan",
+                "glyph": ".",
+                "id": "t_scrap_floor",
+                "kind": "terrain",
+                "name": "simple metal floor",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_roof",
+              "label": "Build Roof Over Wooden Floor",
+              "look": {
+                "color": "c_cyan",
+                "glyph": ".",
+                "id": "t_floor",
+                "kind": "terrain",
+                "name": "wooden floor",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_root_cellar",
+              "label": "Build Root Cellar",
+              "look": {
+                "color": "c_green",
+                "glyph": "=",
+                "id": "t_rootcellar",
+                "kind": "terrain",
+                "looks_like": [
+                  "t_pit"
+                ],
+                "name": "root cellar",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_rope_fence",
+              "label": "Build Rope Fence",
+              "look": {
+                "color": "c_brown",
+                "glyph": "$",
+                "id": "t_fence_rope",
+                "kind": "terrain",
+                "name": "rope fence",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_rope_pulley_system",
+              "label": "Build Rope & Pulley System",
+              "look": {
+                "color": "c_brown",
+                "glyph": "|",
+                "id": "t_palisade_pulley",
+                "kind": "terrain",
+                "name": "rope and pulley",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_sandbag_wall",
+              "label": "Build Sandbag Wall",
+              "look": {
+                "color": "i_brown",
+                "glyph": "#",
+                "id": "f_sandbag_half",
+                "kind": "furniture",
+                "name": "sandbag barricade",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_screen_door",
+              "label": "Build Screen Door",
+              "look": {
+                "color": "c_brown",
+                "glyph": "+",
+                "id": "t_screen_door_c",
+                "kind": "terrain",
+                "looks_like": [
+                  "t_chickenwire_gate_c",
+                  "t_chaingate_c"
+                ],
+                "name": "closed screen door",
+                "subtile": "center",
+                "wall": true
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_screen_mesh_wall",
+              "label": "Build Screen Mesh Wall",
+              "look": {
+                "color": "c_brown",
+                "glyph": "─",
+                "id": "t_screened_porch_wall",
+                "kind": "terrain",
+                "looks_like": [
+                  "t_chickenwire_fence",
+                  "t_chainfence"
+                ],
+                "name": "screen mesh wall",
+                "subtile": "center",
+                "wall": true
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_shallow_temporary_bridge",
+              "label": "Build Shallow Temporary Bridge",
+              "look": {
+                "color": "c_brown",
+                "glyph": "8",
+                "id": "t_sh_bridge",
+                "kind": "terrain",
+                "looks_like": [
+                  "t_dock",
+                  "t_floor"
+                ],
+                "name": "shallow bridge",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "",
+              "description": "",
+              "enabled": true,
+              "id": "build_sign",
+              "label": "Build Sign",
+              "look": {
+                "color": "c_brown",
+                "glyph": "P",
+                "id": "f_sign",
+                "kind": "furniture",
+                "name": "sign",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_simple_concrete_wall",
+              "label": "Build Simple Concrete Wall",
+              "look": {
+                "color": "c_light_gray",
+                "glyph": "─",
+                "id": "t_sconc_wall",
+                "kind": "terrain",
+                "name": "simple concrete wall",
+                "subtile": "center",
+                "wall": true
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_small_metal_support",
+              "label": "Build Small Metal Support",
+              "look": {
+                "color": "c_light_gray",
+                "glyph": "l",
+                "id": "t_support_s",
+                "kind": "terrain",
+                "name": "small metal support",
+                "subtile": "center",
+                "wall": true
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_split_rail_fence",
+              "label": "Build Split Rail Fence",
+              "look": {
+                "color": "c_brown",
+                "glyph": "─",
+                "id": "t_splitrail_fence",
+                "kind": "terrain",
+                "looks_like": [
+                  "t_fence"
+                ],
+                "name": "split rail fence",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_split_rail_fence_gate",
+              "label": "Build Split Rail Fence Gate",
+              "look": {
+                "color": "c_brown",
+                "glyph": "+",
+                "id": "t_splitrail_fencegate_c",
+                "kind": "terrain",
+                "looks_like": [
+                  "t_fencegate_c"
+                ],
+                "name": "closed wooden split rail gate",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_stone_wall",
+              "label": "Build Stone Wall",
+              "look": {
+                "color": "c_light_gray",
+                "glyph": "─",
+                "id": "t_rock_wall",
+                "kind": "terrain",
+                "name": "stone wall",
+                "subtile": "center",
+                "wall": true
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_straight_small_railroad_track",
+              "label": "Build Straight Small Railroad Track",
+              "look": {
+                "color": "c_cyan",
+                "glyph": "=",
+                "id": "t_railroad_track_small",
+                "kind": "terrain",
+                "looks_like": [
+                  "t_railroad_track"
+                ],
+                "name": "small railroad track",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_tarp_lean_to",
+              "label": "Build Tarp Lean-To",
+              "look": {
+                "color": "c_brown",
+                "glyph": ";",
+                "id": "f_tarptent_leather",
+                "kind": "furniture",
+                "looks_like": [
+                  "f_skin_door"
+                ],
+                "name": "leather tarp lean-to",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_thatched_roof",
+              "label": "Build Thatched Roof Over Dirt Floor",
+              "look": {
+                "color": "c_brown",
+                "glyph": ".",
+                "id": "t_dirtfloor_thatchroof",
+                "kind": "terrain",
+                "name": "dirt floor",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_water_well",
+              "label": "Build Water Well",
+              "look": {
+                "color": "c_dark_gray",
+                "glyph": "#",
+                "id": "t_covered_well",
+                "kind": "terrain",
+                "name": "covered well",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_wattle_and_daub_wall",
+              "label": "Build Wattle-and-Daub Wall",
+              "look": {
+                "color": "c_light_red",
+                "glyph": "─",
+                "id": "t_wall_wattle",
+                "kind": "terrain",
+                "name": "wattle-and-daub wall",
+                "subtile": "center",
+                "wall": true
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_door_window",
+              "label": "Build Windowed Door",
+              "look": {
+                "color": "c_brown",
+                "glyph": "+",
+                "id": "t_door_window_c",
+                "kind": "terrain",
+                "name": "closed wood windowed door",
+                "subtile": "center",
+                "wall": true
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_wire_fence",
+              "label": "Build Wire Fence",
+              "look": {
+                "color": "c_blue",
+                "glyph": "$",
+                "id": "t_fence_wire",
+                "kind": "terrain",
+                "name": "wire fence",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_wooden_floor",
+              "label": "Build Wooden Floor",
+              "look": {
+                "color": "c_brown",
+                "glyph": ".",
+                "id": "t_floor_noroof",
+                "kind": "terrain",
+                "looks_like": [
+                  "t_floor"
+                ],
+                "name": "wooden floor",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_wooden_railing",
+              "label": "Build Wooden Railing",
+              "look": {
+                "color": "c_yellow",
+                "glyph": "─",
+                "id": "t_railing",
+                "kind": "terrain",
+                "name": "railing",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_wooden_staircase",
+              "label": "Build Wooden Staircase",
+              "look": {
+                "color": "c_light_red",
+                "glyph": "<",
+                "id": "t_wood_stairs_up",
+                "kind": "terrain",
+                "name": "wooden stairs",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "build_wood_wall",
+              "label": "Build Wood Wall",
+              "look": {
+                "color": "c_light_red",
+                "glyph": "#",
+                "id": "t_wall_half",
+                "kind": "terrain",
+                "name": "half-built wooden wall",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "cover_manhole",
+              "label": "Cover Manhole",
+              "look": {
+                "color": "c_dark_gray",
+                "glyph": "0",
+                "id": "t_manhole_cover",
+                "kind": "terrain",
+                "name": "manhole cover",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "extrude_resin_door",
+              "label": "Extrude Resin Door",
+              "look": {
+                "color": "c_light_gray",
+                "glyph": "Y",
+                "id": "t_resin_hole_c",
+                "kind": "terrain",
+                "name": "closed resin portal",
+                "subtile": "center",
+                "wall": true
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "extrude_resin_floor_and_roof",
+              "label": "Extrude Resin Floor and Roof",
+              "look": {
+                "color": "c_dark_gray",
+                "glyph": "~",
+                "id": "t_floor_resin",
+                "kind": "terrain",
+                "name": "resin floor",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "extrude_resin_floor_no_roof",
+              "label": "Extrude Resin Floor (no roof)",
+              "look": {
+                "color": "c_light_gray",
+                "glyph": "~",
+                "id": "t_platform_resin",
+                "kind": "terrain",
+                "looks_like": [
+                  "t_floor_resin"
+                ],
+                "name": "resin floor",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "extrude_resin_lattice",
+              "label": "Extrude Resin Lattice",
+              "look": {
+                "color": "c_dark_gray",
+                "glyph": "#",
+                "id": "t_wall_resin_cage",
+                "kind": "terrain",
+                "name": "resin cage",
+                "subtile": "center",
+                "wall": true
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "extrude_resin_wall",
+              "label": "Extrude Resin Wall",
+              "look": {
+                "color": "c_dark_gray",
+                "glyph": "─",
+                "id": "t_wall_resin",
+                "kind": "terrain",
+                "name": "resin wall",
+                "subtile": "center",
+                "wall": true
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "fill_pit_with_dirt",
+              "label": "Fill Pit With Dirt",
+              "look": {
+                "color": "c_brown",
+                "glyph": ".",
+                "id": "t_dirt",
+                "kind": "terrain",
+                "name": "dirt",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "salt_water_fill_pit",
+              "label": "Fill Pit With Salt Water",
+              "look": {
+                "color": "c_blue",
+                "glyph": "~",
+                "id": "t_swater_dp",
+                "kind": "terrain",
+                "looks_like": [
+                  "t_water_dp",
+                  "t_water_sh"
+                ],
+                "name": "deep water",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "fill_salt_water_with_dirt",
+              "label": "Fill Salt Water With Dirt",
+              "look": {
+                "color": "c_brown",
+                "glyph": ".",
+                "id": "t_dirt",
+                "kind": "terrain",
+                "name": "dirt",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "fill_shallow_water_with_dirt",
+              "label": "Fill Shallow Water With Dirt",
+              "look": {
+                "color": "c_brown",
+                "glyph": ".",
+                "id": "t_dirt",
+                "kind": "terrain",
+                "name": "dirt",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "hang_hanging_meathook",
+              "label": "Hang Hanging Meathook",
+              "look": {
+                "color": "c_light_gray",
+                "glyph": "g",
+                "id": "f_hanging_meathook",
+                "kind": "furniture",
+                "name": "hanging meathook",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "make_gravel_floor",
+              "label": "Make Gravel Floor",
+              "look": {
+                "color": "c_light_gray",
+                "glyph": ",",
+                "id": "t_railroad_rubble",
+                "kind": "terrain",
+                "name": "gravel",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "make_trash_island",
+              "label": "Make Trash Island",
+              "look": {
+                "color": "c_light_gray",
+                "glyph": "#",
+                "id": "t_floating_plastic",
+                "kind": "terrain",
+                "looks_like": [
+                  "t_window_taped",
+                  "t_window"
+                ],
+                "name": "trash island",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "make_woodchip_floor",
+              "label": "Make Woodchip Floor",
+              "look": {
+                "color": "c_brown",
+                "glyph": ".",
+                "id": "t_woodchips",
+                "kind": "terrain",
+                "looks_like": [
+                  "t_dirt"
+                ],
+                "name": "woodchips",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            },
+            {
+              "columns": [],
+              "denial": "You can't build that!",
+              "description": "",
+              "enabled": false,
+              "id": "place_water_mill",
+              "label": "Place Water Mill",
+              "look": {
+                "color": "c_red_red",
+                "glyph": "*",
+                "id": "f_water_mill",
+                "kind": "furniture",
+                "name": "water mill",
+                "subtile": "center"
+              },
+              "selectable": true,
+              "selected": false
+            }
+          ],
+          "selection": "single",
+          "total": 123
+        },
+        {
+          "child": {
+            "children": [
+              {
+                "child": {
+                  "children": [
+                    {
+                      "id": "construction:stage:constr_adobe_brick_floor_noroof:result",
+                      "kind": "text",
+                      "label": "Result:",
+                      "markup": "Adobe bricks and mortar smoothed out to make a clean fireproof floor."
+                    },
+                    {
+                      "columns": [
+                        {
+                          "key": "required",
+                          "label": "Required"
+                        },
+                        {
+                          "key": "level",
+                          "label": "Level"
+                        }
+                      ],
+                      "id": "construction:stage:constr_adobe_brick_floor_noroof:skills",
+                      "kind": "list",
+                      "label": "Required skills:",
+                      "rows": [
+                        {
+                          "columns": [
+                            {
+                              "key": "required",
+                              "label": "Required",
+                              "value": "3"
+                            },
+                            {
+                              "color": "c_red",
+                              "key": "level",
+                              "label": "Level",
+                              "value": "0"
+                            }
+                          ],
+                          "denial": "",
+                          "description": "",
+                          "enabled": false,
+                          "id": "fabrication",
+                          "label": "Fabrication",
+                          "selectable": false,
+                          "selected": false
+                        }
+                      ],
+                      "selection": "none",
+                      "total": 1
+                    },
+                    {
+                      "columns": [
+                        {
+                          "key": "required",
+                          "label": "Required"
+                        }
+                      ],
+                      "id": "construction:stage:constr_adobe_brick_floor_noroof:tools",
+                      "kind": "list",
+                      "label": "Tools required:",
+                      "rows": [
+                        {
+                          "columns": [
+                            {
+                              "key": "required",
+                              "label": "Required",
+                              "value": "1"
+                            }
+                          ],
+                          "denial": "",
+                          "description": "",
+                          "enabled": false,
+                          "id": "quality:0:SMOOTH",
+                          "label": "1 tool with smoothing of 1 or more.",
+                          "selectable": false,
+                          "selected": false
+                        },
+                        {
+                          "columns": [
+                            {
+                              "key": "required",
+                              "label": "Required",
+                              "value": "1"
+                            }
+                          ],
+                          "denial": "",
+                          "description": "",
+                          "enabled": false,
+                          "id": "quality:1:DIG",
+                          "label": "1 tool with digging of 1 or more.",
+                          "selectable": false,
+                          "selected": false
+                        }
+                      ],
+                      "selection": "none",
+                      "total": 2
+                    },
+                    {
+                      "columns": [
+                        {
+                          "key": "required",
+                          "label": "Required"
+                        },
+                        {
+                          "key": "available",
+                          "label": "Available"
+                        }
+                      ],
+                      "id": "construction:stage:constr_adobe_brick_floor_noroof:components",
+                      "kind": "list",
+                      "label": "Components required:",
+                      "rows": [
+                        {
+                          "columns": [
+                            {
+                              "key": "required",
+                              "label": "Required",
+                              "value": "10"
+                            },
+                            {
+                              "key": "available",
+                              "label": "Available",
+                              "value": "0"
+                            }
+                          ],
+                          "denial": "",
+                          "description": "",
+                          "enabled": false,
+                          "id": "component:0:adobe_brick",
+                          "label": "10 adobe bricks",
+                          "selectable": false,
+                          "selected": false
+                        },
+                        {
+                          "columns": [
+                            {
+                              "key": "required",
+                              "label": "Required",
+                              "value": "1"
+                            },
+                            {
+                              "key": "available",
+                              "label": "Available",
+                              "value": "0"
+                            }
+                          ],
+                          "denial": "",
+                          "description": "",
+                          "enabled": false,
+                          "id": "component:1:mortar_adobe",
+                          "label": "1 adobe mortar",
+                          "selectable": false,
+                          "selected": false
+                        },
+                        {
+                          "columns": [],
+                          "denial": "",
+                          "description": "",
+                          "enabled": false,
+                          "id": "component:2",
+                          "label": "water (1) OR clean water (1)",
+                          "selectable": false,
+                          "selected": false
+                        },
+                        {
+                          "columns": [
+                            {
+                              "key": "required",
+                              "label": "Required",
+                              "value": "1"
+                            },
+                            {
+                              "key": "available",
+                              "label": "Available",
+                              "value": "0"
+                            }
+                          ],
+                          "denial": "",
+                          "description": "",
+                          "enabled": false,
+                          "id": "component:2:water",
+                          "label": "water (1)",
+                          "parent_id": "component:2",
+                          "selectable": false,
+                          "selected": false
+                        },
+                        {
+                          "columns": [
+                            {
+                              "key": "required",
+                              "label": "Required",
+                              "value": "1"
+                            },
+                            {
+                              "key": "available",
+                              "label": "Available",
+                              "value": "0"
+                            }
+                          ],
+                          "denial": "",
+                          "description": "",
+                          "enabled": false,
+                          "id": "component:2:water_clean",
+                          "label": "clean water (1)",
+                          "parent_id": "component:2",
+                          "selectable": false,
+                          "selected": false
+                        },
+                        {
+                          "columns": [
+                            {
+                              "key": "required",
+                              "label": "Required",
+                              "value": "20"
+                            },
+                            {
+                              "key": "available",
+                              "label": "Available",
+                              "value": "0"
+                            }
+                          ],
+                          "denial": "",
+                          "description": "",
+                          "enabled": false,
+                          "id": "component:3:material_sand",
+                          "label": "sand (20)",
+                          "selectable": false,
+                          "selected": false
+                        }
+                      ],
+                      "selection": "none",
+                      "total": 6
+                    }
+                  ],
+                  "id": "construction:stage:constr_adobe_brick_floor_noroof:facts",
+                  "kind": "split",
+                  "relation": "peers"
+                },
+                "id": "construction:stage:constr_adobe_brick_floor_noroof",
+                "kind": "panel",
+                "stats": [
+                  {
+                    "key": "move_cost",
+                    "label": "Move cost:",
+                    "value": "2"
+                  },
+                  {
+                    "key": "bash",
+                    "label": "Bash str:",
+                    "value": "90 - 400"
+                  },
+                  {
+                    "key": "time",
+                    "label": "Time to complete:",
+                    "value": "30 minutes"
+                  },
+                  {
+                    "key": "terrain_needs",
+                    "label": "Terrain needs:",
+                    "value": "FLAT"
+                  }
+                ],
+                "subtitle": "Stage/Variant #1:",
+                "title": "adobe floor"
+              }
+            ],
+            "id": "construction:stages",
+            "kind": "split",
+            "relation": "peers"
+          },
+          "id": "construction:detail",
+          "kind": "panel",
+          "stats": [
+            {
+              "key": "origin",
+              "label": "Origin:",
+              "value": "'Bright Nights'"
+            },
+            {
+              "key": "category",
+              "label": "Category:",
+              "value": "Constructions"
+            }
+          ],
+          "title": "Build Adobe Floor"
+        }
+      ],
+      "id": "construction:body",
+      "kind": "split",
+      "relation": "detail"
+    },
+    "id": "construction:tabs",
+    "kind": "tabs",
+    "select": "construct:tab",
+    "tabs": [
+      {
+        "enabled": true,
+        "id": "FAVORITE",
+        "label": "Favorite",
+        "selected": false
+      },
+      {
+        "enabled": true,
+        "id": "ALL",
+        "label": "All",
+        "selected": false
+      },
+      {
+        "enabled": true,
+        "id": "CONSTRUCT",
+        "label": "Constructions",
+        "selected": true
+      },
+      {
+        "enabled": true,
+        "id": "WORKSHOP",
+        "label": "Workshop",
+        "selected": false
+      },
+      {
+        "enabled": true,
+        "id": "FURN",
+        "label": "Furniture",
+        "selected": false
+      },
+      {
+        "enabled": true,
+        "id": "DIG",
+        "label": "Digging and Mining",
+        "selected": false
+      },
+      {
+        "enabled": true,
+        "id": "REPAIR",
+        "label": "Repairing",
+        "selected": false
+      },
+      {
+        "enabled": true,
+        "id": "REINFORCE",
+        "label": "Reinforcing",
+        "selected": false
+      },
+      {
+        "enabled": true,
+        "id": "DECORATE",
+        "label": "Decorative",
+        "selected": false
+      },
+      {
+        "enabled": true,
+        "id": "FARM_WOOD",
+        "label": "Farming and Woodcutting",
+        "selected": false
+      },
+      {
+        "enabled": true,
+        "id": "WINDOWS",
+        "label": "Windows",
+        "selected": false
+      },
+      {
+        "enabled": true,
+        "id": "RECREATION",
+        "label": "Place Recreational Furniture",
+        "selected": false
+      },
+      {
+        "enabled": true,
+        "id": "OTHER",
+        "label": "Others",
+        "selected": false
+      }
+    ]
+  },
+  "screen_id": "screen:2",
+  "title": "Construction"
+}
