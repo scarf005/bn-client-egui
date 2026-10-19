@@ -41,6 +41,28 @@ pub fn split_widths(parts: &[Extent], room: f32, gap: f32) -> Vec<f32> {
         .collect()
 }
 
+/// The panes cut into lines when their minimums do not fit one: a line takes panes while their natural widths
+/// fit `room`, and a pane wider than the room has a line of its own. Panes that fit stay on one line.
+pub fn wrap_lines(parts: &[Extent], room: f32, gap: f32) -> Vec<std::ops::Range<usize>> {
+    let mins = parts.iter().map(|p| p.min).collect::<Vec<_>>();
+    if !overflows(&mins, room, gap) {
+        return vec![0..parts.len()];
+    }
+    let mut lines = Vec::new();
+    let (mut start, mut used) = (0, 0.0);
+    for (i, part) in parts.iter().enumerate() {
+        let need = part.natural.min(room);
+        if i > start && used + gap + need > room {
+            lines.push(start..i);
+            (start, used) = (i, need);
+        } else {
+            used += if i > start { gap } else { 0.0 } + need;
+        }
+    }
+    lines.push(start..parts.len());
+    lines
+}
+
 /// The room `count` panes' gaps take.
 pub fn gaps(count: usize, gap: f32) -> f32 {
     count.saturating_sub(1) as f32 * gap

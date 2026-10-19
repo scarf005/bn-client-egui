@@ -110,8 +110,15 @@ impl<M: GameModel> App<M> {
                     .iter()
                     .map(|c| with_margin(self.extent(ui, c, room)))
                     .collect::<Vec<_>>();
+                // Peers wrap onto further lines, so they need only the room of their widest.
+                let min = match split.relation {
+                    Relation::Peers => parts.iter().map(|p| p.min).fold(0.0, f32::max),
+                    Relation::Detail => {
+                        parts.iter().map(|p| p.min).sum::<f32>() + layout::gaps(parts.len(), gap)
+                    }
+                };
                 Extent {
-                    min: parts.iter().map(|p| p.min).sum::<f32>() + layout::gaps(parts.len(), gap),
+                    min,
                     natural: parts.iter().map(|p| p.natural).sum::<f32>()
                         + layout::gaps(parts.len(), gap),
                     grows: parts.iter().any(|p| p.grows),

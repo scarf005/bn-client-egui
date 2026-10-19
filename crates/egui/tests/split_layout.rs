@@ -1,5 +1,5 @@
 //! The width rule of split panes: content-sized, never below the minimum, the rest to the panes that grow.
-use bn_client_egui::layout::{Extent, gaps, overflows, split_widths};
+use bn_client_egui::layout::{Extent, gaps, overflows, split_widths, wrap_lines};
 
 const GAP: f32 = 8.0;
 
@@ -68,4 +68,22 @@ fn gaps_count_between_panes_only() {
     assert_eq!(gaps(0, GAP), 0.0);
     assert_eq!(gaps(1, GAP), 0.0);
     assert_eq!(gaps(3, GAP), 2.0 * GAP);
+}
+
+#[test]
+fn panes_whose_minimums_fit_stay_on_one_line_and_the_rest_wrap_by_natural_width() {
+    let parts = [
+        pane(100.0, 300.0, false),
+        pane(100.0, 300.0, false),
+        pane(100.0, 300.0, false),
+    ];
+    assert_eq!(wrap_lines(&parts, 320.0, GAP), vec![0..3]);
+    assert_eq!(wrap_lines(&parts, 300.0, GAP), vec![0..1, 1..2, 2..3]);
+    assert_eq!(wrap_lines(&parts, 300.0 * 2.0 + GAP, GAP), vec![0..3]);
+    let wide = [
+        pane(250.0, 600.0, false),
+        pane(80.0, 100.0, false),
+        pane(80.0, 100.0, false),
+    ];
+    assert_eq!(wrap_lines(&wide, 300.0, GAP), vec![0..1, 1..3]);
 }

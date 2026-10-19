@@ -19,8 +19,8 @@ use bn_client_core::interaction::{self, ArgKind, InvokeError};
 use bn_client_core::protocol::{
     Affordance, AffordanceRole, CanvasComponent, Component, Editor, EditorValue, FieldKind, Form,
     FormField, Grid, InvokeArgs, List, MapComponent, MapMode, OvermapTile, OvermapWire, PanelStat,
-    Row, Screen, ScreenDock, ScreenRole, Selection, SidebarSide, Text, TextBlock, TextRole, Tone,
-    WorldPos,
+    Relation, Row, Screen, ScreenDock, ScreenRole, Selection, SidebarSide, Split, Text, TextBlock,
+    TextRole, Tone, WorldPos,
 };
 use bn_client_core::{Cell, GameModel, Pos, Rgb, markup};
 use eframe::egui::{self, WidgetInfo, WidgetType};
@@ -414,14 +414,7 @@ impl<M: GameModel> App<M> {
                 for banner in banners {
                     self.component(ui, screen, banner, out);
                 }
-                self.split(
-                    ui,
-                    screen,
-                    &split.head.id,
-                    &parts,
-                    split.active.as_deref(),
-                    out,
-                );
+                self.split(ui, screen, split, &parts, out);
             }
             Component::Panel(panel) => {
                 egui::Frame::group(ui.style()).show(ui, |ui| {
@@ -455,15 +448,15 @@ impl<M: GameModel> App<M> {
         }
     }
 
-    /// The panes side by side, each as wide as its content needs (`layout::split_widths`); when even the
-    /// minimums do not fit, the split scrolls sideways instead of breaking words.
+    /// The panes side by side, each as wide as its content needs (`layout::split_widths`). Peers whose minimums
+    /// do not fit go on to further lines (`layout::wrap_lines`); a line whose minimums still do not fit, and a
+    /// list beside its detail, scroll sideways instead of breaking words.
     fn split(
         &self,
         ui: &mut egui::Ui,
         screen: &Screen,
-        id: &str,
+        split: &Split,
         parts: &[&Component],
-        active: Option<&str>,
         out: &mut Vec<Intent>,
     ) {
         let gap = ui.spacing().item_spacing.x;
@@ -472,37 +465,43 @@ impl<M: GameModel> App<M> {
             .iter()
             .map(|c| with_margin(self.extent(ui, c, room)))
             .collect::<Vec<_>>();
-        let widths = layout::split_widths(&extents, room, gap);
-        let mut panes = |ui: &mut egui::Ui| {
-            ui.horizontal_top(|ui| {
-                for (child, width) in parts.iter().zip(&widths) {
-                    let stroke = if active == Some(child.id()) {
-                        ui.visuals().selection.stroke
-                    } else {
-                        egui::Stroke::NONE
-                    };
-                    let size = egui::vec2(*width, ui.available_height());
-                    let down = egui::Layout::top_down(egui::Align::Min);
-                    // The active pane's stroke is inside its width too, or each frame it widens the
-                    // window that the next frame's room comes from.
-                    let frame = egui::Frame::NONE.stroke(stroke).inner_margin(PANE_MARGIN);
-                    ui.allocate_ui_with_layout(size, down, |ui| {
-                        frame.show(ui, |ui| {
-                            ui.set_width(width - frame.total_margin().sum().x);
-                            self.component(ui, screen, child, out)
-                        });
-                    });
-                }
-            });
+        let lines = match split.relation {
+            Relation::Peers => layout::wrap_lines(&extents, room, gap),
+            Relation::Detail => vec![0..parts.len()],
         };
-        match layout::overflows(&widths, room, gap) {
-            true => {
-                egui::ScrollArea::horizontal()
-                    .id_salt(("split", id))
-                    .auto_shrink([false, true])
-                    .show(ui, panes);
+        for (n, line) in lines.into_iter().enumerate() {
+            let widths = layout::split_widths(&extents[line.clone()], room, gap);
+            let mut panes = |ui: &mut egui::Ui| {
+                ui.horizontal_top(|ui| {
+                    for (child, width) in parts[line.clone()].iter().zip(&widths) {
+                        let stroke = if split.active.as_deref() == Some(child.id()) {
+                            ui.visuals().selection.stroke
+                        } else {
+                            egui::Stroke::NONE
+                        };
+                        let size = egui::vec2(*width, ui.available_height());
+                        let down = egui::Layout::top_down(egui::Align::Min);
+                        // The active pane's stroke is inside its width too, or each frame it widens the
+                        // window that the next frame's room comes from.
+                        let frame = egui::Frame::NONE.stroke(stroke).inner_margin(PANE_MARGIN);
+                        ui.allocate_ui_with_layout(size, down, |ui| {
+                            frame.show(ui, |ui| {
+                                ui.set_width(width - frame.total_margin().sum().x);
+                                self.component(ui, screen, child, out)
+                            });
+                        });
+                    }
+                });
+            };
+            match layout::overflows(&widths, room, gap) {
+                true => {
+                    egui::ScrollArea::horizontal()
+                        .id_salt(("split", &split.head.id, n))
+                        .auto_shrink([false, true])
+                        .show(ui, panes);
+                }
+                false => panes(ui),
             }
-            false => panes(ui),
         }
     }
 
