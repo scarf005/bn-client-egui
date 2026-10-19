@@ -278,6 +278,29 @@ fn a_click_on_a_stat_row_moves_the_engines_cursor_to_it_by_the_rows_id() {
 }
 
 #[test]
+fn the_sheet_draws_no_button_for_a_lists_row_activation() {
+    let screen = example("character sheet");
+    let activate = &find(&screen["root"], "character:stats:rows").unwrap()["activate"];
+    let affordances = screen["affordances"].as_array().unwrap();
+    let label = affordances.iter().find(|a| a["id"] == *activate).unwrap()["label"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let (mut h, _) = open(screen.clone());
+    // Each list's `activate` runs from its rows, on a double click or Enter.
+    assert_eq!(h.query_all_by_label(&label).count(), 0, "{label}");
+    if h.query_by_label("⋯").is_some() {
+        h.get_by_label("⋯").click();
+        h.run_steps(3);
+        assert_eq!(
+            h.query_all_by_label(&label).count(),
+            0,
+            "{label} in the menu"
+        );
+    }
+}
+
+#[test]
 fn the_sheets_own_controls_are_the_engines_affordances_run_by_id() {
     let screen = example("character sheet");
     let (mut h, script) = open(screen);
