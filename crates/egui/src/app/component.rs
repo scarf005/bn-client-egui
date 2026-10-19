@@ -620,11 +620,12 @@ impl<M: GameModel> App<M> {
 
     fn grid(&self, ui: &mut egui::Ui, grid: &Grid, out: &mut Vec<Intent>) {
         let size = egui::vec2(GRID_CELL, GRID_CELL);
+        let (xs, ys) = drawn_span(grid);
         ui.scope(|ui| {
             ui.spacing_mut().item_spacing = egui::Vec2::ZERO;
-            for y in 0..grid.rows {
+            for y in ys {
                 ui.horizontal(|ui| {
-                    for x in 0..grid.cols {
+                    for x in xs.clone() {
                         let Some(cell) = grid.cells.iter().find(|c| (c.x, c.y) == (x, y)) else {
                             ui.allocate_space(size);
                             continue;
@@ -680,4 +681,22 @@ impl<M: GameModel> App<M> {
             }
         });
     }
+}
+
+/// The columns and rows of `grid` from its first to its last cell or cursor: the empty edges around them draw
+/// nothing, so they take no room.
+pub(super) fn drawn_span(grid: &Grid) -> (std::ops::Range<u32>, std::ops::Range<u32>) {
+    let cursor = grid
+        .cursor
+        .and_then(|c| Some((u32::try_from(c.x).ok()?, u32::try_from(c.y).ok()?)));
+    let at = grid.cells.iter().map(|c| (c.x, c.y)).chain(cursor);
+    let span = |pick: fn((u32, u32)) -> u32, end: u32| {
+        let (lo, hi) = at
+            .clone()
+            .map(pick)
+            .filter(|&v| v < end)
+            .fold((end, 0), |(lo, hi), v| (lo.min(v), hi.max(v + 1)));
+        lo.min(hi)..hi
+    };
+    (span(|p| p.0, grid.cols), span(|p| p.1, grid.rows))
 }
