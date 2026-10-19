@@ -644,3 +644,19 @@ fn a_vehicle_part_beside_a_wall_hides_its_side_there_and_the_taller_wall_keeps_i
         "the wall's: {between:?}"
     );
 }
+
+#[test]
+fn a_tree_of_an_isometric_tileset_stands_on_its_ground_which_lies_in_its_square() {
+    let m = model(vec![cell(4, 4, 0, "t_tree")]);
+    let tileset = Tileset::load(&iso_root("iso-tree").join("gfx/iso")).unwrap();
+    let pages = decoded(&tileset);
+    let scene = scene::build(&m, &tileset, Some(&pages), None, 1);
+    let (boards, ground): (Vec<_>, Vec<_>) = at(&scene, &m, (4, 4))
+        .into_iter()
+        .partition(|i| i.flags[0] & BOARD != 0);
+    // The ground is a sprite as wide as the tree's, but it draws only in its tile's columns.
+    assert_eq!(boards.len(), 1, "the tree stands: {boards:?}");
+    assert_eq!(ground.len(), 1, "its ground lies: {ground:?}");
+    let [x, y] = corner(&m, (4, 4));
+    assert_eq!(ground[0].origin, [x, y, 0.0]);
+}
