@@ -291,6 +291,8 @@ pub struct Player {
     music: Option<Music>,
     /// When an effect asked not to stack may play again, by its id and variant.
     busy_until: HashMap<(String, String), Instant>,
+    /// When the last effect with a wait played.
+    paced_at: Option<Instant>,
     random: RandomState,
     draws: u64,
 }
@@ -319,6 +321,7 @@ impl Player {
             channels: HashMap::new(),
             music: None,
             busy_until: HashMap::new(),
+            paced_at: None,
             random: RandomState::new(),
             draws: 0,
         }
@@ -347,6 +350,13 @@ impl Player {
     }
 
     fn effect(&mut self, cue: EffectCue, out: &mut impl Output, now: Instant) {
+        if let Some(wait) = cue.wait_ms {
+            let wait = Duration::from_millis(wait);
+            if self.paced_at.is_some_and(|at| now < at + wait) {
+                return;
+            }
+            self.paced_at = Some(now);
+        }
         let key = (cue.id.clone(), cue.variant.clone());
         if !cue.stacks && self.busy_until.get(&key).is_some_and(|until| now < *until) {
             return;
