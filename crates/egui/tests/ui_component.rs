@@ -1408,3 +1408,21 @@ fn a_list_with_no_descriptions_or_buttons_of_its_own_reaches_down_to_the_footer(
         "rows end at {lowest}, the footer starts at {footer}"
     );
 }
+
+#[test]
+fn a_grid_takes_the_room_of_its_cells_and_cursor_not_of_its_empty_edges() {
+    let grid = json!({"id": "grid", "kind": "grid", "cols": 17, "rows": 9, "cursor": {"x": 6, "y": 4},
+        "cells": [
+            {"x": 5, "y": 4, "glyph": "A", "enabled": true},
+            {"x": 7, "y": 5, "glyph": "B", "enabled": true}]});
+    let (h, _) = harness(dialog(grid, vec![]));
+    let a = h.get_by_label("A").rect();
+    let b = h.get_by_label("B").rect();
+    assert!((b.left() - a.left() - 2.0 * a.width()).abs() < 1.0);
+    let window = h.get_by_role(egui::accesskit::Role::Window).rect();
+    assert!(
+        window.width() < 6.0 * a.width(),
+        "a grid of 3 drawn columns makes a window {} wide",
+        window.width()
+    );
+}
