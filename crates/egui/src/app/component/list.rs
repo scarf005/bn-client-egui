@@ -180,7 +180,7 @@ impl<M: GameModel> App<M> {
     }
 
     /// One row: its item's square, its text as a button, its count editor and its column values. A click
-    /// focuses the row and marks it (a picking list) or runs the list's `activate`.
+    /// focuses the row and marks it in a picking list; a double click runs the list's `activate`, as Enter does.
     fn list_row(
         &self,
         ui: &mut egui::Ui,
@@ -255,12 +255,12 @@ impl<M: GameModel> App<M> {
                 component: id.clone(),
                 row: row.id.clone(),
             });
-            match (list.selection, &list.activate) {
-                (Selection::Multi | Selection::Count, _) => out.push(Intent::Mark {
+            match (list.selection, &list.activate, button.double_clicked()) {
+                (Selection::Multi | Selection::Count, _, _) => out.push(Intent::Mark {
                     component: id.clone(),
                     row: row.id.clone(),
                 }),
-                (_, Some(activate)) => out.push(Intent::Run(activate.clone())),
+                (_, Some(activate), true) => out.push(Intent::Run(activate.clone())),
                 _ => {}
             }
         }

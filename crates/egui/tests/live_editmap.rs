@@ -3,6 +3,7 @@
 //! `BN_ENGINE=<engine> SHOT_DIR=<dir> cargo test --release -p bn-client-egui --test live_editmap -- --ignored
 //! --nocapture`; `BN_ROOT` names the game root when it is not beside the engine, `SCREEN_DIR` keeps the
 //! stack of each state as JSON.
+mod common;
 use bn_client_egui::interaction::InvokeError;
 use bn_client_egui::protocol::{Component, InvokeArgs};
 use bn_client_egui::transport::{StdioTransport, game_root};
@@ -259,7 +260,9 @@ fn the_map_editor_its_pickers_shape_and_mapgen() {
             act(&mut h, "QUIT");
             save(&mut h, "terrain-after-shape");
             let next = after_focus(&h);
-            h.get_by_label(&next).click();
+            // A list row runs on a double click.
+            let at = h.get_by_label(&next).rect().center();
+            common::double_click(&mut h, at);
             run_until(&mut h, "the terrain", 60, |h| !h.state().model.busy());
             settle(&mut h);
             save(&mut h, "terrain-applied");
@@ -286,7 +289,11 @@ fn the_map_editor_its_pickers_shape_and_mapgen() {
     h.key_press(egui::Key::Escape);
     settle(&mut h);
     save(&mut h, "mapgen-back");
-    h.get_by_label_contains("airport_runway_west_north").click();
+    let at = h
+        .get_by_label_contains("airport_runway_west_north")
+        .rect()
+        .center();
+    common::double_click(&mut h, at);
     run_until(&mut h, "the preview", 120, |h| {
         !h.state().model.busy() && top_kind(h).as_deref() == Some("uilist")
     });

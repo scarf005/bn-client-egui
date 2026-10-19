@@ -167,3 +167,44 @@ fn a_short_dialog_is_as_tall_as_its_content() {
         "{window:?} runs past its last row at {last:?}"
     );
 }
+
+/// The crafting screen the engine published for a new character's weapon recipes: the recipe list beside the
+/// detail of the one under the cursor, whose description is empty.
+fn crafting_weapons() -> Value {
+    let path = format!(
+        "{}/../core/tests/fixtures/crafting-weapons.json",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
+}
+
+/// The panes of a split fill the window's room, so a pane that drew wider than its share widened the window,
+/// and with it the next frame's room, every frame.
+#[test]
+fn a_window_left_narrower_than_its_room_keeps_its_width_frame_after_frame() {
+    for (screen, kept) in [(3000.0, 2000.0), (1920.0, 1200.0)] {
+        let dir =
+            std::env::temp_dir().join(format!("bn-client-kept-{}-{kept}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let settings = dir.join("settings.json");
+        let windows =
+            json!({"screen:crafting": {"pos": [60, 60], "size": [kept, 600], "collapsed": false}});
+        std::fs::write(
+            &settings,
+            json!({"tiles": true, "windows": windows}).to_string(),
+        )
+        .unwrap();
+        let size = egui::vec2(screen, 1000.0);
+        let (mut h, _) = playing_with(size, Some(crafting_weapons()), Some(&settings));
+        // In the client's own look, whose scroll bars take room.
+        bn_client_egui::theme::apply(&h.ctx);
+        bn_client_egui::fonts::install_bundled(&h.ctx);
+        let widths = (0..40)
+            .map(|_| {
+                h.run_steps(1);
+                window_of(&h, "crafting").width()
+            })
+            .collect::<Vec<_>>();
+        assert!(widths.iter().all(|w| (w - kept).abs() < 0.5), "{widths:?}");
+    }
+}

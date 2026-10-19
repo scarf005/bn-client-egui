@@ -70,7 +70,6 @@ fn first<'a>(h: &'a H<'a>, text: &'a str) -> egui_kittest::Node<'a> {
         .next()
         .unwrap_or_else(|| panic!("nothing shows {text}"))
 }
-
 /// The component of `id` in the tree under `node`.
 fn find<'a>(node: &'a Value, id: &str) -> Option<&'a Value> {
     if node["id"] == id {
@@ -107,7 +106,7 @@ fn the_character_creation_draws_every_tab_and_a_click_on_one_runs_the_tab_afford
 }
 
 #[test]
-fn a_click_on_a_trait_picks_it_by_the_traits_identity() {
+fn a_double_click_on_a_trait_picks_it_by_the_traits_identity() {
     let screen = example("character creation on the traits page");
     let (mut h, script) = open(screen.clone());
     let list = find(&screen["root"], "newchar:traits:advantage:rows").unwrap();
@@ -120,7 +119,8 @@ fn a_click_on_a_trait_picks_it_by_the_traits_identity() {
         .nth(1)
         .unwrap();
     assert!(row["id"].as_str().unwrap().starts_with("trait:"));
-    first(&h, row["label"].as_str().unwrap()).click();
+    let at = first(&h, row["label"].as_str().unwrap()).rect().center();
+    common::double_click(&mut h, at);
     h.run_steps(3);
     let last = last_invoke(&script);
     assert_eq!(last["affordance_id"], list["activate"]);
@@ -128,14 +128,15 @@ fn a_click_on_a_trait_picks_it_by_the_traits_identity() {
 }
 
 #[test]
-fn the_profession_list_draws_its_rows_and_a_click_picks_one_by_identity() {
+fn the_profession_list_draws_its_rows_and_a_double_click_picks_one_by_identity() {
     let screen = example("character creation on the profession page");
     let (mut h, script) = open(screen.clone());
     let list = find(&screen["root"], "newchar:profession:list:rows").unwrap();
     // Not the row under the cursor: its name shows again in the cost line.
     let row = &list["rows"][1];
     assert!(row["id"].as_str().unwrap().starts_with("profession:"));
-    first(&h, row["label"].as_str().unwrap()).click();
+    let at = first(&h, row["label"].as_str().unwrap()).rect().center();
+    common::double_click(&mut h, at);
     h.run_steps(3);
     let last = last_invoke(&script);
     assert_eq!(last["affordance_id"], "bn:activate:newchar:profession:pick");

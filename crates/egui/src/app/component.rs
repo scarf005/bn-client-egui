@@ -117,6 +117,8 @@ fn claimed(root: &Component) -> HashSet<&str> {
             let extra = match c {
                 Component::Tabs(t) => t.select.as_deref(),
                 Component::Form(f) => f.submit.as_deref(),
+                // Its rows run it on a double click or Enter, so it is no button.
+                Component::List(l) => l.activate.as_deref(),
                 _ => None,
             };
             c.head().affordances.iter().map(String::as_str).chain(extra)
@@ -505,16 +507,24 @@ impl<M: GameModel> App<M> {
                             egui::Stroke::NONE
                         };
                         let size = egui::vec2(*width, height.min(ui.available_height()));
+                        let rect = egui::Rect::from_min_size(ui.cursor().min, size);
                         let down = egui::Layout::top_down(egui::Align::Min);
-                        // The active pane's stroke is inside its width too, or each frame it widens the
-                        // window that the next frame's room comes from.
+                        let mut pane =
+                            ui.new_child(egui::UiBuilder::new().max_rect(rect).layout(down));
+                        pane.shrink_clip_rect(egui::Rect::from_x_y_ranges(
+                            rect.x_range(),
+                            ui.clip_rect().y_range(),
+                        ));
+                        // The active pane's stroke is inside its width too.
                         let frame = egui::Frame::NONE.stroke(stroke).inner_margin(PANE_MARGIN);
-                        ui.allocate_ui_with_layout(size, down, |ui| {
-                            frame.show(ui, |ui| {
-                                ui.set_width(width - frame.total_margin().sum().x);
-                                self.component(ui, screen, child, out)
-                            });
+                        frame.show(&mut pane, |ui| {
+                            ui.set_width(width - frame.total_margin().sum().x);
+                            self.component(ui, screen, child, out)
                         });
+                        // The pane takes its width and no more, whatever its content draws: wider, it would
+                        // widen the window that the next frame's room comes from, every frame.
+                        let drawn = egui::vec2(*width, pane.min_rect().height());
+                        ui.allocate_exact_size(drawn, egui::Sense::hover());
                     }
                 });
             };

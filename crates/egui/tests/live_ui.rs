@@ -1,5 +1,6 @@
 //! Needs a real engine build: `BN_ENGINE=/path/to/cataclysm-bn-tiles cargo test -p bn-client-egui --test live_ui -- --ignored --nocapture`
 //! Set `BN_CLIENT_TRACE=<file>` to log the JSON-RPC traffic.
+mod common;
 use bn_client_egui::transport::StdioTransport;
 use bn_client_egui::watchdog::Watchdog;
 use bn_client_egui::{App, EngineModel, GameModel, MenuModel};
@@ -34,7 +35,9 @@ fn click_settled(h: &mut H, label: &str) {
         seen = Some(h.get_by_label(label).rect());
         h.run_steps(2);
     }
-    h.get_by_label(label).click();
+    // A list row runs on a double click.
+    let at = h.get_by_label(label).rect().center();
+    common::double_click(h, at);
 }
 
 #[test]

@@ -203,9 +203,10 @@ fn list_with_more_rows_than_held_asks_for_the_next_page_of_its_component() {
 }
 
 #[test]
-fn clicking_the_row_of_a_single_list_runs_its_activate_affordance_with_the_row() {
+fn double_clicking_the_row_of_a_single_list_runs_its_activate_affordance_with_the_row() {
     let (mut h, script) = harness(pick_list(vec![]));
-    h.get_by_label("b").click();
+    let at = h.get_by_label("b").rect().center();
+    common::double_click(&mut h, at);
     h.run_steps(3);
     assert_eq!(
         submits(&script),
@@ -326,13 +327,14 @@ fn pickup_screen() -> Value {
 }
 
 #[test]
-fn a_pickup_list_draws_its_stats_and_rows_and_a_click_runs_the_toggle_with_the_row() {
+fn a_pickup_list_draws_its_stats_and_rows_and_a_double_click_runs_the_toggle_with_the_row() {
     let (mut h, script) = harness(pickup_screen());
     h.get_by_label("Pick up");
     h.get_by_label("Weight");
     h.get_by_label("2.0/45.0 kg");
     h.get_by_label("3 rocks");
-    h.get_by_label("stick").click();
+    let at = h.get_by_label("stick").rect().center();
+    common::double_click(&mut h, at);
     h.run_steps(3);
     assert_eq!(
         submits(&script),
@@ -892,6 +894,41 @@ fn the_construction_screen_marks_unread_tabs_and_selects_the_row_the_focus_moves
     );
 }
 
+/// A click on a row moves the engine's cursor there, as an arrow key does, and runs nothing else.
+#[test]
+fn a_click_on_a_recipe_selects_it_without_crafting_it() {
+    let (mut h, script) = harness(recipe_screen(
+        "crafting:tabs",
+        "crafting:recipes",
+        "craft:select",
+    ));
+    h.get_by_label("Row b").click();
+    h.run_steps(3);
+    assert_eq!(
+        submits(&script),
+        [boundary_invoke("craft:select", json!({"row": "b"}))]
+    );
+}
+
+/// A double click on a row runs the list's `activate` on it, as Enter does.
+#[test]
+fn a_double_click_on_a_recipe_crafts_it() {
+    let (mut h, script) = harness(recipe_screen(
+        "crafting:tabs",
+        "crafting:recipes",
+        "craft:select",
+    ));
+    let at = h.get_by_label("Row b").rect().center();
+    common::double_click(&mut h, at);
+    h.run_steps(3);
+    let sent = submits(&script);
+    assert_eq!(
+        sent.last(),
+        Some(&boundary_invoke("go", json!({"row": "b"}))),
+        "{sent:?}"
+    );
+}
+
 #[test]
 fn the_editmap_screen_draws_the_engines_cursor_parts_and_a_click_runs_its_edit_affordance() {
     let map = json!({"id": "editmap:map", "kind": "map", "affordances": ["target:move"],
@@ -917,7 +954,8 @@ fn an_option_row_runs_the_options_activate_with_the_option_as_its_row() {
         "options screen with the editor of an integer option",
     );
     let (mut h, script) = harness(screen);
-    h.get_by_label("Dangerous pickups").click();
+    let at = h.get_by_label("Dangerous pickups").rect().center();
+    common::double_click(&mut h, at);
     h.run_steps(3);
     assert_eq!(
         submits(&script),
@@ -965,7 +1003,8 @@ fn a_keybinding_row_runs_the_pick_with_its_action_and_the_screen_says_its_mode()
     let (mut h, script) = harness(screen);
     h.get_by_label("Mode");
     h.get_all_by_label("Remove bindings").next().unwrap();
-    h.get_by_label("Move East").click();
+    let at = h.get_by_label("Move East").rect().center();
+    common::double_click(&mut h, at);
     h.run_steps(3);
     assert_eq!(
         submits(&script),
@@ -980,7 +1019,8 @@ fn a_keybinding_row_runs_the_pick_with_its_action_and_the_screen_says_its_mode()
 fn a_distraction_row_runs_the_toggle_with_the_distraction_as_its_row() {
     let screen = example("distractions.json", "distraction manager");
     let (mut h, script) = harness(screen);
-    h.get_by_label("Pain").click();
+    let at = h.get_by_label("Pain").rect().center();
+    common::double_click(&mut h, at);
     h.run_steps(3);
     assert_eq!(
         submits(&script),
@@ -1007,7 +1047,8 @@ fn a_colour_column_tab_runs_the_column_affordance_by_its_token() {
 fn a_colour_row_runs_the_activate_affordance_with_the_colour_as_its_row() {
     let screen = example("colors.json", "colour manager");
     let (mut h, script) = harness(screen);
-    h.get_by_label("c_black_cyan").click();
+    let at = h.get_by_label("c_black_cyan").rect().center();
+    common::double_click(&mut h, at);
     h.run_steps(3);
     assert_eq!(
         submits(&script),
@@ -1036,7 +1077,8 @@ fn an_auto_notes_row_runs_the_toggle_with_the_map_extra_id_as_its_row() {
         "auto notes manager with three discovered map extras",
     );
     let (mut h, script) = harness(screen);
-    h.get_by_label("Lost Campers").click();
+    let at = h.get_by_label("Lost Campers").rect().center();
+    common::double_click(&mut h, at);
     h.run_steps(3);
     assert_eq!(
         submits(&script),
@@ -1051,7 +1093,8 @@ fn an_auto_notes_row_runs_the_toggle_with_the_map_extra_id_as_its_row() {
 fn an_auto_pickup_row_runs_the_edit_with_the_rule_serial_as_its_row() {
     let screen = example("autopickup.json", "auto pickup manager with two rules");
     let (mut h, script) = harness(screen);
-    h.get_by_label("*axe*").click();
+    let at = h.get_by_label("*axe*").rect().center();
+    common::double_click(&mut h, at);
     h.run_steps(3);
     assert_eq!(
         submits(&script),
@@ -1078,7 +1121,8 @@ fn an_auto_pickup_tab_runs_the_tab_affordance_by_its_token() {
 fn a_safe_mode_row_runs_the_edit_with_the_rule_serial_as_its_row() {
     let screen = example("safemode.json", "safe mode manager with a rule");
     let (mut h, script) = harness(screen);
-    h.get_by_label("zombie").click();
+    let at = h.get_by_label("zombie").rect().center();
+    common::double_click(&mut h, at);
     h.run_steps(3);
     assert_eq!(
         submits(&script),
@@ -1104,7 +1148,13 @@ fn a_worn_item_runs_the_armor_screens_pick_with_its_identity() {
     let jeans = item_row_id(&screen, "jeans");
     assert!(jeans.starts_with("item:"), "no row of jeans in the fixture");
     let (mut h, script) = harness(screen);
-    h.get_all_by_label("||\u{a0}jeans").next().unwrap().click();
+    let at = h
+        .get_all_by_label("||\u{a0}jeans")
+        .next()
+        .unwrap()
+        .rect()
+        .center();
+    common::double_click(&mut h, at);
     h.run_steps(3);
     assert_eq!(
         submits(&script),
@@ -1129,7 +1179,8 @@ fn a_body_part_tab_runs_the_armor_screens_part_pick_with_its_id() {
 #[test]
 fn an_action_of_the_item_examine_menu_runs_the_menus_run_with_the_action_id() {
     let (mut h, script) = harness(example("armor.json", "item examine menu"));
-    h.get_by_label("Wield").click();
+    let at = h.get_by_label("Wield").rect().center();
+    common::double_click(&mut h, at);
     h.run_steps(3);
     assert_eq!(
         submits(&script),
@@ -1140,7 +1191,8 @@ fn an_action_of_the_item_examine_menu_runs_the_menus_run_with_the_action_id() {
 #[test]
 fn a_response_runs_the_talk_screens_respond_with_its_data_name() {
     let (mut h, script) = harness(example("npctalk.json", "NPC talk screen"));
-    h.get_by_label("Who are you?").click();
+    let at = h.get_by_label("Who are you?").rect().center();
+    common::double_click(&mut h, at);
     h.run_steps(3);
     assert_eq!(
         submits(&script),
@@ -1154,7 +1206,8 @@ fn a_response_runs_the_talk_screens_respond_with_its_data_name() {
 #[test]
 fn a_special_key_runs_the_talk_screens_special_with_its_fixed_name() {
     let (mut h, script) = harness(example("npctalk.json", "NPC talk screen"));
-    h.get_by_label("Yell").click();
+    let at = h.get_by_label("Yell").rect().center();
+    common::double_click(&mut h, at);
     h.run_steps(3);
     assert_eq!(
         submits(&script),
@@ -1172,7 +1225,8 @@ fn a_diary_page_runs_the_diaries_page_with_its_serial_id() {
         .get_all_by_label("Year 1, Spring, day 1 12:05:00PM")
         .next()
         .expect("a page row");
-    first.click();
+    let at = first.rect().center();
+    common::double_click(&mut h, at);
     h.run_steps(3);
     assert_eq!(
         submits(&script),

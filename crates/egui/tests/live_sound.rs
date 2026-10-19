@@ -2,6 +2,7 @@
 //! `BN_ENGINE=<engine> BN_SOUND_LOG=<file> cargo test -p bn-client-egui --test live_sound -- --ignored --nocapture`.
 //! `BN_SOUND_PROFILE=<dir>` runs the engine on `<dir>/user` and `<dir>/config` (a sound pack in `<dir>/user/sound`)
 //! instead of a throwaway profile.
+mod common;
 use bn_client_core::audio::SoundPack;
 use bn_client_egui::transport::{Profile, StdioTransport};
 use bn_client_egui::watchdog::Watchdog;
@@ -38,7 +39,9 @@ fn click_settled(h: &mut H, label: &str) {
         seen = Some(h.get_by_label(label).rect());
         h.run_steps(2);
     }
-    h.get_by_label(label).click();
+    // A list row runs on a double click.
+    let at = h.get_by_label(label).rect().center();
+    common::double_click(h, at);
 }
 
 /// Whether the log names one of the files the pack has for an effect.

@@ -20,6 +20,7 @@ fn query<'a>(id: &'a str) -> Query<'a> {
         creature: false,
         seed: 0,
         season: None,
+        frame: None,
     }
 }
 
@@ -160,6 +161,60 @@ fn weighted_variants_are_chosen_by_seed_in_proportion_to_their_weights() {
     assert_eq!(pick(77), pick(77), "a square keeps its sprite");
     let heavy = (0..4000).filter(|&seed| pick(seed) == 6).count();
     assert!((2800..3200).contains(&heavy), "3 of 4 squares: {heavy}");
+}
+
+#[test]
+fn an_animated_tile_shows_each_variant_for_its_weight_in_frames_from_its_squares_offset() {
+    let set = load("animated");
+    let at = |seed, frame| {
+        let q = Query {
+            seed,
+            frame: Some(frame),
+            ..query("fd_fire")
+        };
+        fg(&set, &q).unwrap().0
+    };
+    // Weights 2 and 3: sprite 1 for two frames, sprite 2 for three. The game adds the square's mix to the
+    // frame, and mix(1) is 1 past a whole loop of 5.
+    let loop_of = |seed| (0..6).map(|frame| at(seed, frame)).collect::<Vec<_>>();
+    assert_eq!(loop_of(0), [1, 1, 2, 2, 2, 1]);
+    assert_eq!(loop_of(1), [1, 2, 2, 2, 1, 1]);
+    assert!(
+        set.choose(&Query {
+            frame: Some(0),
+            ..query("fd_fire")
+        })
+        .unwrap()
+        .animated
+    );
+}
+
+#[test]
+fn with_animations_off_an_animated_tile_shows_its_first_variant_whatever_its_square() {
+    let set = load("animated-off");
+    for seed in 0..50 {
+        let q = Query {
+            seed,
+            ..query("fd_fire")
+        };
+        assert_eq!(fg(&set, &q).unwrap().0, 1, "seed {seed}");
+        assert!(!set.choose(&q).unwrap().animated);
+    }
+}
+
+#[test]
+fn a_still_tile_keeps_its_seeded_variant_whatever_the_frame() {
+    let set = load("still");
+    for seed in 0..50 {
+        let at = |frame| Query {
+            seed,
+            frame,
+            ..query("grass")
+        };
+        let first = fg(&set, &at(None));
+        assert!((0..8).all(|frame| fg(&set, &at(Some(frame))) == first));
+        assert!(!set.choose(&at(Some(3))).unwrap().animated);
+    }
 }
 
 #[test]

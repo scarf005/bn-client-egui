@@ -1,4 +1,5 @@
 //! Needs a real engine build: `BN_ENGINE=/path/to/cataclysm-bn-tiles cargo test -p bn-client-egui --test live_input -- --ignored --nocapture`
+mod common;
 use bn_client_egui::transport::StdioTransport;
 use bn_client_egui::watchdog::Watchdog;
 use bn_client_egui::{App, EngineModel, GameModel, MenuModel};
@@ -22,12 +23,18 @@ fn run_until(h: &mut H, what: &str, secs: u64, mut done: impl FnMut(&mut H) -> b
     }
 }
 
-fn click_settled(h: &mut H, label: &str) {
+/// Where the widget labelled `label` is once it stopped moving.
+fn settled(h: &mut H, label: &str) -> egui::Rect {
     let mut seen = None;
     while seen != Some(h.get_by_label(label).rect()) {
         seen = Some(h.get_by_label(label).rect());
         h.run_steps(2);
     }
+    h.get_by_label(label).rect()
+}
+
+fn click_settled(h: &mut H, label: &str) {
+    settled(h, label);
     h.get_by_label(label).click();
 }
 
@@ -54,7 +61,9 @@ fn world_screen(h: &mut H) {
     run_until(h, "Custom Character", 60, |h| {
         h.query_by_label("Custom Character").is_some()
     });
-    click_settled(h, "Custom Character");
+    // A list row runs on a double click.
+    let at = settled(h, "Custom Character").center();
+    common::double_click(h, at);
     run_until(h, "the world's mods", 60, |h| {
         h.state()
             .model

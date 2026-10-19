@@ -73,6 +73,8 @@ pub fn game_root(tag: &str) -> std::path::PathBuf {
                 {"id": "lighting_lowlight_dark", "fg": 2},
                 {"id": "lighting_lowlight_light", "fg": 3},
                 {"id": "grass", "fg": [{"weight": 1, "sprite": 5}, {"weight": 3, "sprite": 6}]},
+                {"id": "fd_fire", "animated": true,
+                    "fg": [{"weight": 2, "sprite": 1}, {"weight": 3, "sprite": 2}]},
                 {"id": ["mon_a", "mon_b", "mon_zombie"], "fg": 7}
             ]},
             {"file": "b.png", "sprite_offset_x": 1, "sprite_offset_y": -2, "tiles": [
@@ -336,6 +338,22 @@ pub fn open_client_settings<S>(h: &mut egui_kittest::Harness<'_, S>) {
     if h.query_by_label("Reduced motion").is_none() {
         h.get_by_label("Client settings").click();
         h.run_steps(3);
+    }
+}
+
+/// A double click at `at` for the next frame: both clicks in that one frame, where kittest's `click` takes a
+/// frame for each event and two of them are further apart than egui's double-click delay.
+pub fn double_click<S>(h: &mut egui_kittest::Harness<'_, S>, at: eframe::egui::Pos2) {
+    use eframe::egui::{Event, Modifiers, PointerButton};
+    let events = &mut h.input_mut().events;
+    events.push(Event::PointerMoved(at));
+    for pressed in [true, false, true, false] {
+        events.push(Event::PointerButton {
+            pos: at,
+            button: PointerButton::Primary,
+            pressed,
+            modifiers: Modifiers::NONE,
+        });
     }
 }
 
