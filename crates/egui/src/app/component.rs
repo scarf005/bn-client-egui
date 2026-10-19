@@ -471,8 +471,11 @@ impl<M: GameModel> App<M> {
             Relation::Peers => layout::wrap_lines(&extents, room, gap),
             Relation::Detail => vec![0..parts.len()],
         };
+        let count = lines.len();
         for (n, line) in lines.into_iter().enumerate() {
             let widths = layout::split_widths(&extents[line.clone()], room, gap);
+            // Each line gets its share of the height left, so a list in one does not push the next out.
+            let height = ui.available_height() / (count - n) as f32;
             let mut panes = |ui: &mut egui::Ui| {
                 ui.horizontal_top(|ui| {
                     for (child, width) in parts[line.clone()].iter().zip(&widths) {
@@ -481,7 +484,7 @@ impl<M: GameModel> App<M> {
                         } else {
                             egui::Stroke::NONE
                         };
-                        let size = egui::vec2(*width, ui.available_height());
+                        let size = egui::vec2(*width, height.min(ui.available_height()));
                         let down = egui::Layout::top_down(egui::Align::Min);
                         // The active pane's stroke is inside its width too, or each frame it widens the
                         // window that the next frame's room comes from.
