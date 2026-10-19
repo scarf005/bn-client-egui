@@ -122,3 +122,18 @@ fn closing_a_picker_does_not_move_the_cursor_to_the_pointer_left_where_it_was() 
         .collect::<Vec<_>>();
     assert!(moves.is_empty(), "{moves:?}");
 }
+
+#[test]
+fn the_terrain_picker_shows_the_rows_after_the_terrain_under_the_cursor() {
+    let capture = editmap("terrain-picker");
+    let (mut h, _script) = harness(&capture, egui::vec2(1280.0, 800.0));
+    for _ in 0..10 {
+        h.run_steps(2);
+    }
+    let next = h.get_by_label("blue wall (t_wall_b)").rect();
+    let description = h.get_by_label_contains("Move cost: 0").rect();
+    assert!(
+        next.bottom() <= description.top(),
+        "{next:?} over {description:?}"
+    );
+}
