@@ -146,17 +146,19 @@ impl<M: GameModel> App<M> {
             .id_salt(("list", id))
             .auto_shrink([false, true])
             .max_height(list_height);
-        // A focus new to the list scrolls it the least that shows the focused row.
+        // A focus new to the list and out of its sight scrolls the focused row to the middle, with the rows
+        // around it in view.
         let step = height + ui.spacing().item_spacing.y;
         let focus = cursor.map(|c| (screen.screen_id.clone(), c.to_string()));
         if let Some(i) = at {
             let mut scrolls = self.screens.list_scroll.borrow_mut();
             let scroll = scrolls.entry(id.clone()).or_default();
-            if scroll.shown != focus {
-                let y = i as f32 * step;
-                area = area.vertical_scroll_offset(scroll.top.min(y).max(y + step - list_height));
-                scroll.shown = focus;
+            let y = i as f32 * step;
+            let seen = y >= scroll.top && y + step <= scroll.top + list_height;
+            if scroll.shown != focus && !seen {
+                area = area.vertical_scroll_offset((y - (list_height - step) / 2.0).max(0.0));
             }
+            scroll.shown = focus;
         }
         let scrolled = area.show_rows(ui, height, rows.len(), |ui, range| {
             crate::app::menu::list_row_style(ui);
