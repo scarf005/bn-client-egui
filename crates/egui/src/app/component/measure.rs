@@ -79,11 +79,14 @@ impl<M: GameModel> App<M> {
         let inside = |child: &Option<Box<Component>>| {
             child.as_ref().map(|child| self.extent(ui, child, room))
         };
-        match c {
+        let own = match c {
             Component::List(list) => {
                 let rows = self.model.rows(list);
                 let widths = self.list_widths(ui, list, &rows);
-                let natural = widths.label + widths.columns.iter().map(|w| w + gap).sum::<f32>();
+                // The rows sit beside their scroll bar.
+                let natural = widths.label
+                    + widths.columns.iter().map(|w| w + gap).sum::<f32>()
+                    + ui.spacing().scroll.allocated_width();
                 Extent {
                     min: natural.min(room / 2.0),
                     natural,
@@ -192,6 +195,14 @@ impl<M: GameModel> App<M> {
                     ..fixed(canvas.cols as f32 * cell)
                 }
             }
+        };
+        // Every part but a panel draws its heading over itself, on one line.
+        match (&c.head().label, c) {
+            (_, Component::Panel(_)) | (None, _) => own,
+            (Some(label), _) => stacked(
+                own,
+                fixed(text_width(ui, &markup::plain(&label.shown()), &font)),
+            ),
         }
     }
 
