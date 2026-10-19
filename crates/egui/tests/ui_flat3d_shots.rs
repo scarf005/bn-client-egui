@@ -26,11 +26,17 @@ fn cells() -> Vec<Value> {
             let mut cell = json!({"at": {"dim": "", "x": x, "y": y, "z": 0}, "known": "visible",
                 "terrain": look("terrain", "t_grass")});
             match (x, y) {
-                (2..=12, 1) => cell["terrain"] = json!({"kind": "terrain", "id": "t_wall", "glyph": "#",
-                    "color": "white", "wall": true}),
+                (2..=12, 1) => {
+                    cell["terrain"] = json!({"kind": "terrain", "id": "t_wall", "glyph": "#",
+                    "color": "white", "wall": true})
+                }
                 (6..=12, 4) => cell["terrain"] = look("terrain", "t_shrub"),
                 (6..=12, 6) => {
-                    let flower = if x % 2 == 0 { "f_bluebell" } else { "f_dandelion" };
+                    let flower = if x % 2 == 0 {
+                        "f_bluebell"
+                    } else {
+                        "f_dandelion"
+                    };
                     cell["furniture"] = look("furniture", flower);
                 }
                 (5, 8) => cell["terrain"] = look("terrain", "t_tree"),
@@ -89,7 +95,11 @@ fn settle(h: &mut H) {
         h.run_steps(2);
         h.render().expect("renders");
         let draws = h.state().iso_stats().draws.load(Ordering::Relaxed);
-        same = if draws > 0 && draws == last { same + 1 } else { 0 };
+        same = if draws > 0 && draws == last {
+            same + 1
+        } else {
+            0
+        };
         last = draws;
         if same == 50 {
             return;

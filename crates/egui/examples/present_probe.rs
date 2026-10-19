@@ -94,7 +94,11 @@ impl Probe {
                 let (now, origin) = (square, *from);
                 match *sent {
                     None => {
-                        self.inject = Some(if self.step.is_multiple_of(2) { "l" } else { "h" });
+                        self.inject = Some(if self.step.is_multiple_of(2) {
+                            "l"
+                        } else {
+                            "h"
+                        });
                         *sent = Some(Instant::now());
                     }
                     Some(at) if now != origin => {

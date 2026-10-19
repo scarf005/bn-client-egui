@@ -1041,7 +1041,6 @@ pub fn tiles_wanted(root: Option<&Path>, path: Option<&Path>) -> bool {
     settings.tiles.unwrap_or(true) && root.is_some_and(|r| !tileset::available(r).is_empty())
 }
 
-/// One sprite at its place in the cell, turned as the tileset asks; false when its sheet is not loaded.
 /// How a sprite is laid on what is under it.
 #[derive(Clone, Copy)]
 enum Tone {
@@ -1060,6 +1059,7 @@ pub fn light(glow: Glow) -> Color32 {
     Color32::from_rgba_premultiplied(add(r), add(g), add(b), 0)
 }
 
+/// One sprite at its place in the cell, turned as the tileset asks; false when its sheet is not loaded.
 fn draw_sprite(
     painter: &egui::Painter,
     atlas: &Atlas,
