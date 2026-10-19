@@ -117,6 +117,8 @@ fn claimed(root: &Component) -> HashSet<&str> {
             let extra = match c {
                 Component::Tabs(t) => t.select.as_deref(),
                 Component::Form(f) => f.submit.as_deref(),
+                // Its rows run it on a double click or Enter, so it is no button.
+                Component::List(l) => l.activate.as_deref(),
                 _ => None,
             };
             c.head().affordances.iter().map(String::as_str).chain(extra)
