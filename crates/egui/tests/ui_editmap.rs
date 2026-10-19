@@ -137,3 +137,20 @@ fn the_terrain_picker_shows_the_rows_after_the_terrain_under_the_cursor() {
         "{next:?} over {description:?}"
     );
 }
+
+#[test]
+fn tab_in_the_terrain_picker_is_the_engines_and_leaves_the_toolbar_unfocused() {
+    let capture = editmap("terrain-picker");
+    let (mut h, script) = harness(&capture, egui::vec2(1280.0, 800.0));
+    // Nothing has the keyboard, as after a menu of the client closed.
+    h.ctx
+        .memory_mut(|m| m.focused().map(|id| m.surrender_focus(id)));
+    h.key_press(egui::Key::Tab);
+    h.run_steps(4);
+    let invoked = script
+        .sent()
+        .into_iter()
+        .any(|m| m["params"]["operation"]["affordance_id"] == "EDITMAP_TAB");
+    assert!(invoked);
+    assert!(!h.get_by_label("Actions").accesskit_node().is_focused());
+}
