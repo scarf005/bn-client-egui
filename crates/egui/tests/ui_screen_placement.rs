@@ -154,3 +154,16 @@ fn a_window_restored_where_a_last_run_left_it_lies_wholly_inside_the_map_room() 
         "{window:?} over {toolbar:?}"
     );
 }
+
+#[test]
+fn a_short_dialog_is_as_tall_as_its_content() {
+    let size = egui::vec2(1920.0, 1080.0);
+    let (mut h, _) = playing(size, Some(example("generic", "query popup screen")));
+    common::settle_windows(&mut h);
+    let window = window_of(&h, "popup");
+    let last = h.get_by_label("No [N]").rect();
+    assert!(
+        window.bottom() - last.bottom() < 40.0,
+        "{window:?} runs past its last row at {last:?}"
+    );
+}
