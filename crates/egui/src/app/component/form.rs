@@ -96,9 +96,16 @@ impl<M: GameModel> App<M> {
             }
             let committed = match field.kind {
                 // The key itself is taken with the screen's keys (`key_fill`).
+                // The screen's message says what the key is for, and its any-key button asks for one.
                 FieldKind::Key => {
-                    ui.label(&label);
-                    if on {
+                    if !label.is_empty() {
+                        ui.label(&label);
+                    }
+                    let asked = screen
+                        .affordances
+                        .iter()
+                        .any(|a| a.role == Some(AffordanceRole::AnyKey));
+                    if on && !asked {
                         editor::key_wait(ui);
                     }
                     None
