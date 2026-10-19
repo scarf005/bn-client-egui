@@ -146,6 +146,8 @@ fn first_placed(window: egui::Window<'_>, place: Place, width: Option<f32>) -> e
         Place::Center(rect) => (egui::Align2::CENTER_CENTER, rect.center()),
         Place::Side { pivot, pos, .. } => (pivot, pos),
     };
+    // A window may first grow as tall as its room: egui's default height would cut a long list short.
+    let window = window.default_height(room(place).y);
     // egui holds the pivot only while it first sizes the window, so with its width known the window starts
     // from its left edge, as a window the player never moved does.
     match width {
