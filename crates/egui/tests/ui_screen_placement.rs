@@ -30,11 +30,24 @@ fn example(file: &str, name: &str) -> Value {
 
 /// A game in progress in a window of `size`, with `screen` on top of the map.
 fn playing<'a>(size: egui::Vec2, screen: Option<Value>) -> (H<'a>, ScriptHandle) {
+    playing_with(size, screen, None)
+}
+
+/// `playing` with the client's settings kept in `settings`.
+fn playing_with<'a>(
+    size: egui::Vec2,
+    screen: Option<Value>,
+    settings: Option<&std::path::Path>,
+) -> (H<'a>, ScriptHandle) {
     let (t, script) = session();
-    let mut h = Harness::builder().with_size(size).build_ui_state(
-        |ui, app: &mut App<EngineModel>| app.show(ui),
-        App::new(EngineModel::new(Box::new(t))),
-    );
+    let app = App::new(EngineModel::new(Box::new(t)));
+    let app = match settings {
+        Some(path) => app.with_settings(path.into()),
+        None => app,
+    };
+    let mut h = Harness::builder()
+        .with_size(size)
+        .build_ui_state(|ui, app: &mut App<EngineModel>| app.show(ui), app);
     h.run_steps(3);
     script.push(fixture("events_41_walk"));
     h.run_steps(4);
@@ -120,5 +133,24 @@ fn a_wide_dialog_is_as_wide_as_its_content_and_stays_inside_the_map_room() {
     assert!(
         (window.center().x - map.center().x).abs() < 40.0,
         "{window:?}"
+    );
+}
+
+#[test]
+fn a_window_restored_where_a_last_run_left_it_lies_wholly_inside_the_map_room() {
+    let size = egui::vec2(1920.0, 1080.0);
+    let file = common::game_root("placement-restored").join("settings.json");
+    let windows = json!({"windows": {"screen:uilist": {"pos": [460.0, 0.0], "size": [361.0, 1019.0],
+        "collapsed": false}}});
+    std::fs::write(&file, windows.to_string()).unwrap();
+    let screen = example("generic", "filterable list screen");
+    let (h, _) = playing_with(size, Some(screen), Some(&file));
+    let window = window_of(&h, "uilist");
+    let map = h.get_by_label("Map").rect();
+    assert!(map.contains_rect(window), "{window:?} outside {map:?}");
+    let toolbar = h.get_by_label("Client settings").rect();
+    assert!(
+        window.top() >= toolbar.bottom(),
+        "{window:?} over {toolbar:?}"
     );
 }
