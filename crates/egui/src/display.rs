@@ -37,7 +37,7 @@ pub struct Settings {
     pub tiles: Option<bool>,
     /// The `TILES` name of the tileset; the game's default when absent.
     pub tileset: Option<String>,
-    /// Play no shot, explosion or floating-text overlays on the map.
+    /// Play no shot, explosion or floating-text overlays on the map, and keep animated tiles on their first frame.
     #[serde(default)]
     pub reduced_motion: bool,
     /// Draw the map as a 3D scene a camera can turn, or flat; an isometric tileset is drawn in 3D unless this says
@@ -459,6 +459,8 @@ pub struct Display {
     hidden: usize,
     /// Squares of the last map paint drawn as a lowlight overlay instead of their terrain.
     dimmed: usize,
+    /// The idle animation frame sprites are drawn at; none with reduced motion.
+    frame: Option<u32>,
 }
 
 impl Display {
@@ -484,6 +486,7 @@ impl Display {
             drawn: 0,
             hidden: 0,
             dimmed: 0,
+            frame: None,
         };
         display.open();
         display
@@ -722,6 +725,8 @@ impl Display {
     /// Uploads a sheet that finished decoding; a finished thread wakes the UI, so nothing polls.
     pub fn update(&mut self, ctx: &egui::Context) {
         profiling::scope!("Display::update");
+        let frame = ctx.input(|i| i.time) / tileset::FRAME.as_secs_f64();
+        self.frame = (!self.settings.reduced_motion).then_some(frame as u32);
         if let Some(atlas) = &mut self.atlas
             && atlas.upload(ctx)
         {
@@ -761,8 +766,10 @@ impl Display {
             creature: false,
             seed: 0,
             season: None,
+            frame: self.frame,
         };
         let chosen = atlas.tileset.choose(&query);
+        animate(painter, chosen.as_ref());
         let mut drawn = false;
         for placed in chosen.iter().flat_map(|c| [c.bg, c.fg]).flatten() {
             drawn |= draw_sprite(
@@ -795,7 +802,11 @@ impl Display {
             rect.width() / atlas.tileset.tile.0 as f32,
             rect.height() / atlas.tileset.tile.1 as f32,
         );
-        let chosen = atlas.tileset.choose(&query(layer, None));
+        let chosen = atlas.tileset.choose(&Query {
+            frame: self.frame,
+            ..query(layer, None)
+        });
+        animate(painter, chosen.as_ref());
         let sprites = chosen.iter().flat_map(|c| [c.bg, c.fg]).flatten();
         let mut any = false;
         for placed in sprites {
@@ -862,8 +873,10 @@ impl Display {
                 creature: false,
                 seed: cell.square,
                 season,
+                frame: self.frame,
             };
             let sprites = atlas.tileset.choose(&hidden);
+            animate(painter, sprites.as_ref());
             for placed in sprites.iter().flat_map(|c| [c.bg, c.fg]).flatten() {
                 backdrop |= draw_sprite(
                     painter,
@@ -896,8 +909,10 @@ impl Display {
                 creature: false,
                 seed: cell.square,
                 season,
+                frame: self.frame,
             };
             let sprites = atlas.tileset.choose(&query);
+            animate(painter, sprites.as_ref());
             let mut any = false;
             for placed in sprites.iter().flat_map(|c| [c.bg, c.fg]).flatten() {
                 any |= draw_sprite(
@@ -923,7 +938,11 @@ impl Display {
         for layer in &cell.layers {
             let (layer, paints) = resolve_layer(&atlas.tileset, layer);
             let layer = layer.as_ref();
-            let chosen = atlas.tileset.choose(&query(layer, season));
+            let chosen = atlas.tileset.choose(&Query {
+                frame: self.frame,
+                ..query(layer, season)
+            });
+            animate(painter, chosen.as_ref());
             let sprites = chosen.iter().flat_map(|c| {
                 [(c.bg, paints.0), (c.fg, paints.1)]
                     .into_iter()
@@ -1000,6 +1019,14 @@ pub fn query<'a>(layer: &'a Layer, season: Option<&'a str>) -> Query<'a> {
         creature: layer.creature,
         seed: layer.seed,
         season,
+        frame: None,
+    }
+}
+
+/// Asks for a paint of the next animation frame when `chosen` changes with it.
+fn animate(painter: &egui::Painter, chosen: Option<&tileset::Chosen>) {
+    if chosen.is_some_and(|c| c.animated) {
+        painter.ctx().request_repaint_after(tileset::FRAME);
     }
 }
 

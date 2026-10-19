@@ -112,6 +112,9 @@ struct TileDef {
     #[serde(default)]
     multitile: bool,
     rotates: Option<bool>,
+    /// The variants are the frames of an idle animation.
+    #[serde(default)]
+    animated: bool,
     #[serde(default)]
     additional_tiles: Vec<SubDef>,
     #[serde(default)]
@@ -123,6 +126,8 @@ struct SubDef {
     id: String,
     fg: Option<Sprites>,
     bg: Option<Sprites>,
+    #[serde(default)]
+    animated: bool,
     #[serde(default)]
     masks: Vec<MaskDef>,
 }
@@ -246,7 +251,7 @@ impl Variants {
 
     /// The number of the variant `random` selects, like the game's weighted list.
     fn pick(&self, random: u32) -> Option<usize> {
-        let total = self.0.iter().map(|(w, _)| *w).sum::<u32>();
+        let total = self.weight();
         if total == 0 {
             return None;
         }
@@ -259,6 +264,11 @@ impl Variants {
             seen += weight;
             seen >= target
         })
+    }
+
+    /// The sum of the variants' weights.
+    fn weight(&self) -> u32 {
+        self.0.iter().map(|(w, _)| *w).sum()
     }
 
     /// The sprite of variant `variant` for a rotation: the only one, or the rotation's own.
@@ -280,6 +290,8 @@ struct Tile {
     bg_mask: Variants,
     rotates: bool,
     multitile: bool,
+    /// The variants are animation frames, each shown for its weight in frames.
+    animated: bool,
     /// Multitile keys this tile defines (`center`, `edge`, ...).
     subtiles: Vec<String>,
     /// Whether this is a part of a multitile, which turns its background by itself.
@@ -327,6 +339,9 @@ pub struct Query<'a> {
     pub creature: bool,
     pub seed: u32,
     pub season: Option<&'a str>,
+    /// The idle animation frame, 17 ms each as the game counts them; none while animations are off, which shows
+    /// an animated tile's first frame.
+    pub frame: Option<u32>,
 }
 
 /// How a sprite is turned when drawn.
@@ -356,7 +371,12 @@ pub struct Chosen {
     pub fg: Option<Placed>,
     /// The tile has parts for how it joins its neighbours, as walls do.
     pub joined: bool,
+    /// What the tile shows changes with the animation frame.
+    pub animated: bool,
 }
+
+/// How long the game shows one frame of an idle animation (cata_tiles.cpp `idle_animation_manager`).
+pub const FRAME: std::time::Duration = std::time::Duration::from_millis(17);
 
 /// The game's mix of a seed into the integer that picks a weighted variant.
 pub fn mix(seed: u32) -> u32 {
@@ -641,7 +661,7 @@ impl Tileset {
                     self.tiles.insert(
                         format!("{id}_{}", sub.id),
                         Tile::new(&sub.fg, &sub.bg, &sub.masks, offset)
-                            .with(|t| (t.rotates, t.part) = (true, part)),
+                            .with(|t| (t.rotates, t.part, t.animated) = (true, part, sub.animated)),
                     );
                 }
             }
@@ -650,6 +670,7 @@ impl Tileset {
                 Tile::new(&entry.fg, &entry.bg, &entry.masks, offset).with(|t| {
                     t.rotates = entry.rotates.unwrap_or(entry.multitile);
                     t.multitile = entry.multitile;
+                    t.animated = entry.animated;
                     t.subtiles = if entry.multitile { subtiles } else { vec![] };
                 }),
             );
@@ -688,7 +709,19 @@ impl Tileset {
             (false, _) => u8::from(tile.rotates) * q.rotation,
         };
         let varied = tile.fg.0.len() > 1 || tile.bg.0.len() > 1;
-        let random = if varied { mix(q.seed) } else { 0 };
+        // An animated tile shows each variant for its weight in frames, offset by its square so that the
+        // squares do not all change at once (cata_tiles.cpp draw_from_id_string).
+        let random = match (varied, tile.animated, q.frame) {
+            (false, _, _) | (true, true, None) => 0,
+            (true, false, _) => mix(q.seed),
+            (true, true, Some(frame)) => {
+                let frames = match tile.fg.weight() {
+                    1 => tile.bg.weight(),
+                    n => n,
+                };
+                frame.wrapping_add(mix(q.seed)) % frames.max(1)
+            }
+        };
         let place = |variants: &Variants, masks: &Variants, foreground: bool| {
             let variant = variants.pick(random)?;
             let sprite = variants.sprite(variant, rotation)?;
@@ -705,6 +738,7 @@ impl Tileset {
             bg: place(&tile.bg, &tile.bg_mask, false),
             fg: place(&tile.fg, &tile.fg_mask, true),
             joined,
+            animated: tile.animated && varied && q.frame.is_some(),
         })
     }
 
