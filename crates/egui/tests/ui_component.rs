@@ -1455,3 +1455,40 @@ fn peer_panes_too_wide_for_one_line_go_on_to_the_next_instead_of_scrolling_sidew
         "a word broke across lines"
     );
 }
+
+#[test]
+fn a_pane_is_as_wide_as_its_heading_and_its_rows_beside_their_scroll_bar() {
+    // The construction screen as the engine sent it, on a stage that needs no tools.
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../core/tests/fixtures/construction-stage.json"
+    );
+    let mut screen =
+        serde_json::from_str::<Value>(&std::fs::read_to_string(path).unwrap()).unwrap();
+    fn tools(value: &mut Value) -> Option<&mut Value> {
+        let own = value["id"]
+            .as_str()
+            .is_some_and(|id| id.ends_with(":tools"));
+        match value {
+            _ if own => Some(value),
+            Value::Object(map) => map.values_mut().find_map(tools),
+            Value::Array(list) => list.iter_mut().find_map(tools),
+            _ => None,
+        }
+    }
+    let tools = tools(&mut screen).unwrap();
+    tools["rows"] = json!([]);
+    tools["total"] = json!(0);
+    let (mut h, _) = harness(screen);
+    bn_client_egui::theme::apply(&h.ctx);
+    bn_client_egui::fonts::install_bundled(&h.ctx);
+    common::settle_windows(&mut h);
+    let one_line = h.get_by_label_contains("10 adobe bricks").rect().height();
+    for label in ["Tools required:", "Fabrication"] {
+        let rect = h.get_by_label_contains(label).rect();
+        assert!(
+            rect.height() <= one_line + 0.5,
+            "{label} broke across lines: {rect:?}"
+        );
+    }
+}
