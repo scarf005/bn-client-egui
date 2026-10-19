@@ -37,8 +37,11 @@ xvfb_start() {
 }
 
 # Runs a command in the background on the private display.
+# The client keeps its own settings under XDG_CONFIG_HOME, which `--fresh-profile` (the engine's) does not
+# cover: a private one keeps the player's window placement and tileset out of reach.
 xvfb_launch() {
-  "$@" >"$XVFB_SCRATCH/client-$$.log" 2>&1 &
+  mkdir -p "$XVFB_SCRATCH/config-$$"
+  XDG_CONFIG_HOME="$XVFB_SCRATCH/config-$$" "$@" >"$XVFB_SCRATCH/client-$$.log" 2>&1 &
   XVFB_PIDS+=($!)
 }
 
