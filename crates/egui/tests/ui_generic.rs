@@ -254,3 +254,16 @@ fn hovering_a_refused_row_gives_the_engines_reason_and_clicking_it_sends_nothing
     h.run_steps(3);
     assert!(operations(&script).is_empty());
 }
+
+#[test]
+fn tab_on_a_screen_that_takes_no_tab_moves_the_focus_to_a_button() {
+    let (mut h, _) = harness(example("query popup screen"));
+    h.ctx
+        .memory_mut(|m| m.focused().map(|id| m.surrender_focus(id)));
+    h.key_press(egui::Key::Tab);
+    h.run_steps(4);
+    let focused = h
+        .get_all_by_role(egui::accesskit::Role::Button)
+        .any(|b| b.accesskit_node().is_focused());
+    assert!(focused);
+}
