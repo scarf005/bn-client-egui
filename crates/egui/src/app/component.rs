@@ -200,8 +200,19 @@ impl<M: GameModel> App<M> {
         let keys = keys
             .filter(|key| !typing || key == "ESC")
             .collect::<Vec<_>>();
-        // Tab is the screen's like every other key: egui must not also walk its focus onto a widget.
-        if keys.iter().any(|k| k == "TAB" || k == "BACKTAB") {
+        // A Tab the screen takes is its own: egui must not also walk its focus onto a widget. Any other Tab
+        // walks egui's focus over the buttons.
+        let takes = |key: &String| {
+            interaction::described(self.model.screens()).is_some_and(|top| {
+                top.affordances
+                    .iter()
+                    .any(|a| a.enabled && a.keys.contains(key))
+            })
+        };
+        if keys
+            .iter()
+            .any(|k| (k == "TAB" || k == "BACKTAB") && takes(k))
+        {
             ctx.memory_mut(|m| m.move_focus(egui::FocusDirection::None));
         }
         for key in keys {
