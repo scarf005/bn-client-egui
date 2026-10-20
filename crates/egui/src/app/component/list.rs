@@ -98,6 +98,7 @@ impl<M: GameModel> App<M> {
         out: &mut Vec<Intent>,
     ) {
         let id = &list.head.id;
+        let slot = (screen.screen_id.clone(), id.clone());
         let interaction = &self.screens.interaction;
         let rows = self.known_rows(list);
         let focus = interaction.focus();
@@ -138,7 +139,7 @@ impl<M: GameModel> App<M> {
         self.screens
             .list_heights
             .borrow_mut()
-            .insert(id.clone(), list_height);
+            .insert(slot.clone(), list_height);
         let at = cursor.and_then(|c| rows.iter().position(|r| r.id == c));
         // The engine may put its cursor on a row past the pages held: they are asked for until it is among them.
         if cursor.is_some() && at.is_none() {
@@ -151,10 +152,10 @@ impl<M: GameModel> App<M> {
         // A focus new to the list and out of its sight scrolls the focused row to the middle, with the rows
         // around it in view.
         let step = height + ui.spacing().item_spacing.y;
-        let focus = cursor.map(|c| (screen.screen_id.clone(), c.to_string()));
+        let focus = cursor.map(str::to_string);
         if let Some(i) = at {
             let mut scrolls = self.screens.list_scroll.borrow_mut();
-            let scroll = scrolls.entry(id.clone()).or_default();
+            let scroll = scrolls.entry(slot.clone()).or_default();
             let y = i as f32 * step;
             let seen = y >= scroll.top && y + step <= scroll.top + list_height;
             if scroll.shown != focus && !seen {
@@ -172,7 +173,7 @@ impl<M: GameModel> App<M> {
             }
         });
         let mut scrolls = self.screens.list_scroll.borrow_mut();
-        scrolls.entry(id.clone()).or_default().top = scrolled.state.offset.y;
+        scrolls.entry(slot).or_default().top = scrolled.state.offset.y;
         drop(scrolls);
         let shown = cursor.and_then(|c| rows.iter().find(|r| r.id == c));
         if let Some(row) = shown {

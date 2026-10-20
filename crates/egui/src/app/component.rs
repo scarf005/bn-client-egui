@@ -51,10 +51,12 @@ pub(super) struct Screens {
     interaction: bn_client_core::interaction::Interaction,
     /// Why the last refused affordance is off, in the engine's words.
     denial: Option<String>,
-    /// How far each list is scrolled and the focus it last scrolled into sight, by component id.
-    list_scroll: RefCell<HashMap<String, ListScroll>>,
-    /// The height each list had in the last frame, by component id, for the rows a page key moves in it.
-    list_heights: RefCell<HashMap<String, f32>>,
+    /// How far each list is scrolled and the focus it last scrolled into sight, by screen and component id: a
+    /// panel window and the engine's own screen may hold lists of the same id.
+    list_scroll: RefCell<HashMap<(String, String), ListScroll>>,
+    /// The height each list had in the last frame, by screen and component id, for the rows a page key moves in
+    /// it.
+    list_heights: RefCell<HashMap<(String, String), f32>>,
     /// The squares of this frame's list rows left for their item's sprite, painted once the window is drawn.
     icons: RefCell<Vec<RowIcon>>,
     /// What this frame's overmap draws, painted once the window is drawn, so that a tileset's sprites come
@@ -64,11 +66,11 @@ pub(super) struct Screens {
     pub(super) passive: bool,
 }
 
-/// A list's scroll offset in the last frame, and the screen and row of the focus it last brought into sight.
+/// A list's scroll offset in the last frame, and the row of the focus it last brought into sight.
 #[derive(Default)]
 struct ListScroll {
     top: f32,
-    shown: Option<(String, String)>,
+    shown: Option<String>,
 }
 
 fn tone_color(tone: Tone) -> egui::Color32 {
@@ -208,7 +210,6 @@ impl<M: GameModel> App<M> {
         let spacing = &ctx.global_style().spacing;
         let row = spacing.interact_size.y + spacing.item_spacing.y;
         let heights = self.screens.list_heights.borrow().clone();
-        let page = |id: &str| heights.get(id).map_or(1, |h| ((h / row) as usize).max(1));
         let keys = super::input::frame_keys(ctx).into_iter().map(|k| k.token);
         // A text box has the typing; its keys are not the screen's, except Escape, which closes the screen.
         let typing = ctx.text_edit_focused();
@@ -240,6 +241,10 @@ impl<M: GameModel> App<M> {
                 self.keys_consumed = true;
                 return self.apply(fill);
             }
+            let page = |id: &str| {
+                let at = (top.screen_id.clone(), id.to_string());
+                heights.get(&at).map_or(1, |h| ((h / row) as usize).max(1))
+            };
             let model = &self.model;
             let out = self
                 .screens
