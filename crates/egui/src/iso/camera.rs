@@ -108,10 +108,11 @@ impl Viewport {
         proj * look
     }
 
-    /// Where a world point lies in the view, in points from its top left corner; none behind the eye.
+    /// Where a world point lies in the view, in points from its top left corner; none nearer the eye than what it
+    /// draws.
     pub fn project(&self, world: Vec3) -> Option<Vec2> {
         let clip = self.view_proj() * world.extend(1.0);
-        (clip.w > f32::EPSILON).then(|| {
+        (clip.w >= NEAR).then(|| {
             let ndc = clip.truncate() / clip.w;
             Vec2::new((ndc.x + 1.0) * 0.5, (1.0 - ndc.y) * 0.5) * self.size
         })
@@ -291,5 +292,8 @@ mod tests {
             );
         }
         assert_eq!(v.project(v.target + Vec3::new(-3.0, 3.0, 0.0)), None);
+        // Nor is what lies nearer than the near plane, which the view does not draw.
+        let close = v.target + Vec3::Z * EYE_HEIGHT + Vec3::new(0.1, -0.1, 0.0);
+        assert_eq!(v.project(close), None);
     }
 }
