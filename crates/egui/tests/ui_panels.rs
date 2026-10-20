@@ -164,6 +164,33 @@ fn a_click_on_a_sheet_row_sends_no_command_and_reads_the_sheet_again_with_the_ro
 }
 
 #[test]
+fn a_second_click_before_the_sheet_is_read_again_is_the_row_the_sheet_is_read_with() {
+    let (mut h, script) = open();
+    let mut answered = 0;
+    key(&mut h, "@");
+    serve(&mut h, &script, &mut answered);
+    h.get_by_label("Dexterity:").click();
+    h.run_steps(4);
+    let first = panel_reads(&script).pop().unwrap();
+    assert_eq!(first["params"]["row"], "stat:dex");
+    h.get_by_label("Intelligence:").click();
+    h.run_steps(4);
+    // The answer to the first click comes after the second, with the engine's cursor on the first row.
+    let mut view = panel_view("character");
+    view["focus"] = json!({"component_id": "character:stats:rows", "row_id": "stat:dex"});
+    script.push(json!({"jsonrpc": "2.0", "id": first["id"], "result": view}));
+    answered = panel_reads(&script).len();
+    let before = answered;
+    h.run_steps(4);
+    serve(&mut h, &script, &mut answered);
+    let rows = panel_reads(&script)[before..]
+        .iter()
+        .map(|r| r["params"]["row"].clone())
+        .collect::<Vec<_>>();
+    assert_eq!(rows, [json!("stat:int")]);
+}
+
+#[test]
 fn a_click_on_a_sheet_tab_reads_the_sheet_again_with_the_tab() {
     let (mut h, script) = open();
     let mut answered = 0;
