@@ -210,7 +210,8 @@ impl EngineModel {
     }
 
     /// A panel window's screen, when it answers the read the window awaits; a refused read keeps the last
-    /// screen until the world changes.
+    /// screen until the world changes. An answer for a row the window's focus has since left is not kept: its
+    /// cursor would take the focus back from the row clicked last, which is read next.
     fn panel_read(&mut self, id: u64, panel: protocol::PanelKind, result: Result<Value, RpcError>) {
         let Some(p) = self
             .panels
@@ -220,7 +221,15 @@ impl EngineModel {
             return;
         };
         p.waiting = None;
-        if let Some(screen) = result.ok().and_then(|v| serde_json::from_value(v).ok()) {
+        let current = p
+            .asked
+            .as_ref()
+            .is_some_and(|(watch, ..)| *watch == p.watch);
+        if let Some(screen) = result
+            .ok()
+            .filter(|_| current)
+            .and_then(|v| serde_json::from_value(v).ok())
+        {
             p.view = Some(screen);
         }
     }
