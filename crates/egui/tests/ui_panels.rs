@@ -75,6 +75,11 @@ fn key(h: &mut H, text: &str) {
     h.run_steps(2);
 }
 
+/// The window titled `title` is shown.
+fn window(h: &H, title: &str) {
+    h.get_by_role_and_label(egui::accesskit::Role::Window, title);
+}
+
 fn operations(script: &ScriptHandle) -> Vec<Value> {
     script
         .sent()
@@ -90,10 +95,10 @@ fn the_sheet_inventory_and_map_keys_open_their_windows_together_and_the_player_s
     let mut answered = 0;
     key(&mut h, "@");
     serve(&mut h, &script, &mut answered);
-    h.get_by_label("John Smith | Male");
+    window(&h, "John Smith | Male");
     key(&mut h, "i");
     serve(&mut h, &script, &mut answered);
-    h.get_by_label("Multidrop");
+    window(&h, "Inventory");
     key(&mut h, "m");
     serve(&mut h, &script, &mut answered);
     let panels = panel_reads(&script)
@@ -112,16 +117,17 @@ fn the_sheet_inventory_and_map_keys_open_their_windows_together_and_the_player_s
         [json!({"kind": "action", "action_id": "UP"})],
         "the player moves with the windows open"
     );
-    for open in ["John Smith | Male", "Multidrop", "Travel and notes"] {
-        h.get_by_label(open);
-    }
+    window(&h, "John Smith | Male");
+    window(&h, "Inventory");
+    h.get_by_label("Travel and notes");
     key(&mut h, "@");
     serve(&mut h, &script, &mut answered);
     assert!(
-        h.query_by_label("John Smith | Male").is_none(),
+        h.query_by_role_and_label(egui::accesskit::Role::Window, "John Smith | Male")
+            .is_none(),
         "the key closes the window again"
     );
-    h.get_by_label("Multidrop");
+    window(&h, "Inventory");
 }
 
 #[test]
