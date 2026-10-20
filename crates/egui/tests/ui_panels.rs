@@ -222,6 +222,19 @@ fn crowded(mut screen: Value, tag: &str, focus: usize) -> Value {
     screen
 }
 
+/// The game moves on to offer `actions` under the screens of `stack`.
+fn interaction_changed(h: &mut H, script: &ScriptHandle, actions: Value, stack: Value) {
+    script.push(fixture("events_41_walk"));
+    h.run_steps(4);
+    script.push(json!({"jsonrpc": "2.0", "method": "bn.events", "params": {"epoch": "e7f3", "events": [{
+        "sequence": "42", "revision": "33", "type": "interaction.changed", "changes": {"interaction": {
+        "boundary_id": "b:60",
+        "readiness": {"phase": "playing", "game_ready": true, "accepts_interaction_commands": true,
+            "accepts_registered_actions": true},
+        "actions": actions, "interaction": null, "stack": stack}}}]}}));
+    h.run_steps(6);
+}
+
 /// The inventory window open on sixty items with its focus on the sixth, under the engine's drop screen on the
 /// same items with its cursor on the fifty-first, which offers no action of the game.
 fn inventory_under_the_drop_screen<'a>() -> (H<'a>, ScriptHandle) {
@@ -243,16 +256,8 @@ fn inventory_under_the_drop_screen<'a>() -> (H<'a>, ScriptHandle) {
         .unwrap()["value"]
         .clone();
     let drop = crowded(drop, "screen", 50);
-    script.push(fixture("events_41_walk"));
-    h.run_steps(4);
     let map = json!({"screen_id": "screen:map", "role": "map", "root": null, "affordances": []});
-    script.push(json!({"jsonrpc": "2.0", "method": "bn.events", "params": {"epoch": "e7f3", "events": [{
-        "sequence": "42", "revision": "33", "type": "interaction.changed", "changes": {"interaction": {
-        "boundary_id": "b:60",
-        "readiness": {"phase": "playing", "game_ready": true, "accepts_interaction_commands": true,
-            "accepts_registered_actions": true},
-        "actions": [], "interaction": null, "stack": [map, drop]}}}]}}));
-    h.run_steps(6);
+    interaction_changed(&mut h, &script, json!([]), json!([map, drop]));
     serve_with(&mut h, &script, &mut answered, &view);
     (h, script)
 }
@@ -269,17 +274,10 @@ fn wheel(h: &mut H, at: egui::Pos2, dy: f32) {
     h.run_steps(6);
 }
 
-fn shown(h: &H, label: &str) -> bool {
-    h.query_by_label(label).is_some()
-}
-
-#[test]
-fn the_inventory_window_and_the_engines_inventory_screen_each_keep_their_own_scroll() {
-    let (mut h, _script) = inventory_under_the_drop_screen();
-    assert!(shown(&h, "panel row 5") && shown(&h, "screen row 50"));
-    // The window comes in front of the screen it overlaps.
+/// Clicks the title bar of the window titled `title`, which brings it in front of the windows it overlaps.
+fn to_front(h: &mut H, title: &str) {
     let window = h
-        .get_by_role_and_label(egui::accesskit::Role::Window, "Inventory")
+        .get_by_role_and_label(egui::accesskit::Role::Window, title)
         .rect();
     let title = egui::pos2(window.center().x as f32, window.min.y as f32 + 4.0);
     h.hover_at(title);
@@ -293,6 +291,17 @@ fn the_inventory_window_and_the_engines_inventory_screen_each_keep_their_own_scr
         });
     }
     h.run_steps(2);
+}
+
+fn shown(h: &H, label: &str) -> bool {
+    h.query_by_label(label).is_some()
+}
+
+#[test]
+fn the_inventory_window_and_the_engines_inventory_screen_each_keep_their_own_scroll() {
+    let (mut h, _script) = inventory_under_the_drop_screen();
+    assert!(shown(&h, "panel row 5") && shown(&h, "screen row 50"));
+    to_front(&mut h, "Inventory");
     let at = h.get_by_label("panel row 5").rect().center();
     wheel(&mut h, egui::pos2(at.x as f32, at.y as f32), -4000.0);
     assert!(
@@ -307,6 +316,34 @@ fn the_inventory_window_and_the_engines_inventory_screen_each_keep_their_own_scr
         "the screen scrolled off its cursor"
     );
     assert!(!shown(&h, "panel row 5"), "the window kept its scroll");
+}
+
+#[test]
+fn a_double_click_on_an_inventory_row_opens_nothing_while_the_game_offers_no_inventory() {
+    let (mut h, script) = open();
+    let mut answered = 0;
+    key(&mut h, "i");
+    serve(&mut h, &script, &mut answered);
+    // An action bound to no key is not offered off the map's affordances.
+    let inventory = json!({"id": "inventory", "name": "Open Inventory", "keys": []});
+    let map = json!({"screen_id": "screen:map", "role": "map", "root": null, "affordances": []});
+    interaction_changed(&mut h, &script, json!([inventory]), json!([map]));
+    serve(&mut h, &script, &mut answered);
+    assert!(h.query_by_label("Open Inventory").is_none());
+    let at = h.get_by_label("rock (1)").rect().center();
+    common::double_click(&mut h, egui::pos2(at.x as f32, at.y as f32));
+    h.run_steps(2);
+    assert_eq!(operations(&script), Vec::<Value>::new());
+}
+
+#[test]
+fn a_double_click_on_an_inventory_row_opens_nothing_under_another_screen() {
+    let (mut h, script) = inventory_under_the_drop_screen();
+    to_front(&mut h, "Inventory");
+    let at = h.get_by_label("panel row 5").rect().center();
+    common::double_click(&mut h, egui::pos2(at.x as f32, at.y as f32));
+    h.run_steps(2);
+    assert_eq!(operations(&script), Vec::<Value>::new());
 }
 
 /// Writes a PNG of the sheet, the inventory and the map open together to `$SHOT_DIR`. Needs a Vulkan adapter:
