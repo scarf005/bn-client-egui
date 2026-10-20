@@ -1032,7 +1032,7 @@ mod tests {
         } else {
             Vec3::from(i.origin) + Vec3::from(i.a) * u + Vec3::from(i.b) * v
         };
-        view.project(world)
+        view.project(world).unwrap()
     }
 
     /// The translation that takes the page's pixels to the screen: equal at every corner of a quad drawn as the

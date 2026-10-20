@@ -32,10 +32,10 @@ impl Canvas {
     /// A square on the screen: its rectangle on the flat map, the diamond of its ground in the 3D one.
     fn rect(&self, p: Pos) -> egui::Rect {
         match &self.view {
-            Some(v) => egui::Rect::from_center_size(
-                ground_point(v, self.rect, p, (0.5, 0.5), 0.5),
-                egui::Vec2::splat(self.cell_px),
-            ),
+            Some(v) => ground_point(v, self.rect, p, (0.5, 0.5), 0.5)
+                .map_or(egui::Rect::NOTHING, |at| {
+                    egui::Rect::from_center_size(at, egui::Vec2::splat(self.cell_px))
+                }),
             None => self.flat_rect(p),
         }
     }
@@ -48,20 +48,24 @@ impl Canvas {
         )
     }
 
-    fn corners(&self, v: &Viewport, p: Pos) -> Vec<egui::Pos2> {
+    /// The corners of a square's ground; none when one lies behind the eye.
+    fn corners(&self, v: &Viewport, p: Pos) -> Option<Vec<egui::Pos2>> {
         [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]
+            .into_iter()
             .map(|(dx, dy)| ground_point(v, self.rect, p, (dx, dy), 0.0))
-            .to_vec()
+            .collect()
     }
 
     fn fill(&self, painter: &egui::Painter, p: Pos, color: egui::Color32) {
         match &self.view {
             Some(v) => {
-                painter.add(egui::Shape::convex_polygon(
-                    self.corners(v, p),
-                    color,
-                    egui::Stroke::NONE,
-                ));
+                if let Some(corners) = self.corners(v, p) {
+                    painter.add(egui::Shape::convex_polygon(
+                        corners,
+                        color,
+                        egui::Stroke::NONE,
+                    ));
+                }
             }
             None => {
                 painter.rect_filled(self.rect(p), 0.0, color);
@@ -72,7 +76,9 @@ impl Canvas {
     fn outline(&self, painter: &egui::Painter, p: Pos, stroke: egui::Stroke) {
         match &self.view {
             Some(v) => {
-                painter.add(egui::Shape::closed_line(self.corners(v, p), stroke));
+                if let Some(corners) = self.corners(v, p) {
+                    painter.add(egui::Shape::closed_line(corners, stroke));
+                }
             }
             None => {
                 painter.rect_stroke(self.rect(p), 0.0, stroke, egui::StrokeKind::Inside);
@@ -708,8 +714,14 @@ impl<M: GameModel> App<M> {
 }
 
 /// Where the point `at` (across and down the square, 0 to 1) of square `p`, `z` over its ground, lies on the
-/// screen of a 3D map drawn into `rect`.
-fn ground_point(v: &Viewport, rect: egui::Rect, p: Pos, at: (f32, f32), z: f32) -> egui::Pos2 {
-    let on = v.project(glam::Vec3::new(p.x as f32 + at.0, p.y as f32 + at.1, z));
-    rect.min + egui::vec2(on.x, on.y)
+/// screen of a 3D map drawn into `rect`; none behind the eye.
+fn ground_point(
+    v: &Viewport,
+    rect: egui::Rect,
+    p: Pos,
+    at: (f32, f32),
+    z: f32,
+) -> Option<egui::Pos2> {
+    let on = v.project(glam::Vec3::new(p.x as f32 + at.0, p.y as f32 + at.1, z))?;
+    Some(rect.min + egui::vec2(on.x, on.y))
 }

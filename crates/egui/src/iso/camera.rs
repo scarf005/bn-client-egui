@@ -108,10 +108,13 @@ impl Viewport {
         proj * look
     }
 
-    /// Where a world point lies in the view, in points from its top left corner.
-    pub fn project(&self, world: Vec3) -> Vec2 {
+    /// Where a world point lies in the view, in points from its top left corner; none behind the eye.
+    pub fn project(&self, world: Vec3) -> Option<Vec2> {
         let clip = self.view_proj() * world.extend(1.0);
-        Vec2::new((clip.x + 1.0) * 0.5, (1.0 - clip.y) * 0.5) * self.size
+        (clip.w > f32::EPSILON).then(|| {
+            let ndc = clip.truncate() / clip.w;
+            Vec2::new((ndc.x + 1.0) * 0.5, (1.0 - ndc.y) * 0.5) * self.size
+        })
     }
 
     /// The ray under the view point `at` (points from the top left corner): its start at the near plane, and the
@@ -143,6 +146,12 @@ impl Viewport {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    impl Viewport {
+        fn project_seen(&self, world: Vec3) -> Vec2 {
+            self.project(world).expect("in front of the eye")
+        }
+    }
 
     fn view(yaw_deg: f32, pitch_deg: f32) -> Viewport {
         Viewport {
@@ -179,7 +188,7 @@ mod tests {
     fn the_target_is_the_middle_of_the_view() {
         for (yaw, pitch) in [(45.0, 35.264), (135.0, 35.264), (300.0, 60.0), (10.0, 20.0)] {
             let v = view(yaw, pitch);
-            let at = v.project(v.target);
+            let at = v.project_seen(v.target);
             assert!((at - v.size / 2.0).length() < 1e-2, "{yaw} {pitch}: {at}");
         }
     }
@@ -187,9 +196,9 @@ mod tests {
     #[test]
     fn at_the_default_yaw_east_is_up_right_and_south_is_down_right_as_the_game_draws_it() {
         let v = view(135.0, 35.264);
-        let origin = v.project(v.target);
-        let east = v.project(v.target + Vec3::X) - origin;
-        let south = v.project(v.target + Vec3::Y) - origin;
+        let origin = v.project_seen(v.target);
+        let east = v.project_seen(v.target + Vec3::X) - origin;
+        let south = v.project_seen(v.target + Vec3::Y) - origin;
         assert!(east.x > 0.0 && east.y < 0.0, "{east}");
         assert!(south.x > 0.0 && south.y > 0.0, "{south}");
         // A tile is a 2:1-ish diamond: width is wider than height by 1/sin(pitch).
@@ -198,7 +207,7 @@ mod tests {
             "{east}"
         );
         assert!(
-            v.project(v.target + Vec3::Z).y < origin.y,
+            v.project_seen(v.target + Vec3::Z).y < origin.y,
             "up is up the screen"
         );
     }
@@ -210,7 +219,7 @@ mod tests {
                 let v = view(yaw, pitch);
                 for (x, y) in [(10, 7), (12, 5), (7, 11), (14, 9)] {
                     let centre = Vec3::new(x as f32 + 0.5, y as f32 + 0.5, 0.0);
-                    let hit = v.pick(v.project(centre), 0.0).unwrap();
+                    let hit = v.pick(v.project_seen(centre), 0.0).unwrap();
                     assert_eq!(
                         (hit.x.floor() as i32, hit.y.floor() as i32),
                         (x, y),
@@ -232,10 +241,10 @@ mod tests {
     fn a_pick_on_a_raised_plane_lands_where_that_plane_is_drawn() {
         let v = view(45.0, 35.264);
         let on_wall_top = Vec3::new(11.5, 7.5, 3.0);
-        let hit = v.pick(v.project(on_wall_top), 3.0).unwrap();
+        let hit = v.pick(v.project_seen(on_wall_top), 3.0).unwrap();
         assert!((hit - Vec2::new(11.5, 7.5)).length() < 1e-3);
         // The same screen point on the ground is a square further back.
-        let ground = v.pick(v.project(on_wall_top), 0.0).unwrap();
+        let ground = v.pick(v.project_seen(on_wall_top), 0.0).unwrap();
         assert_ne!(ground.floor(), hit.floor());
     }
 
@@ -243,7 +252,7 @@ mod tests {
     fn right_points_right_on_the_screen_at_any_yaw() {
         for yaw in [0.0, 45.0, 90.0, 180.0, 270.0] {
             let v = view(yaw, 35.264);
-            let there = v.project(v.target + v.right());
+            let there = v.project_seen(v.target + v.right());
             assert!(there.x > v.size.x / 2.0, "yaw {yaw}");
             assert!((there.y - v.size.y / 2.0).abs() < 1e-2, "yaw {yaw}");
         }
@@ -266,5 +275,21 @@ mod tests {
         // The ground under the avatar's feet is nearer than the near plane and outside the view.
         let feet = clip(v.target);
         assert!(!(feet.w > 0.0 && (feet.y / feet.w).abs() <= 1.0 && feet.z / feet.w >= 0.0));
+    }
+
+    #[test]
+    fn a_square_the_first_person_eye_sees_is_drawn_where_a_click_picks_it_and_one_behind_is_not_drawn()
+     {
+        let mut v = view(135.0, 35.264);
+        v.camera.first_person = true;
+        for (dx, dy) in [(3.0, -3.0), (6.0, -2.0), (2.0, -7.0)] {
+            let square = v.target + Vec3::new(dx, dy, 0.0);
+            let hit = v.pick(v.project_seen(square), 0.0).unwrap();
+            assert!(
+                (hit - square.truncate()).length() < 1e-2,
+                "{dx} {dy}: {hit}"
+            );
+        }
+        assert_eq!(v.project(v.target + Vec3::new(-3.0, 3.0, 0.0)), None);
     }
 }

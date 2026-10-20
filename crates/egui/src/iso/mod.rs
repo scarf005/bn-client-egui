@@ -167,23 +167,33 @@ pub fn paint_glyphs(
 ) {
     let origin = rect.min;
     let at = |x: f32, y: f32, z: f32| {
-        let p = view.project(Vec3::new(x, y, z));
-        origin + egui::vec2(p.x, p.y)
+        view.project(Vec3::new(x, y, z))
+            .map(|p| origin + egui::vec2(p.x, p.y))
+    };
+    // What has a point behind the eye is not drawn.
+    let square = |x: f32, y: f32, z: f32| {
+        [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]
+            .into_iter()
+            .map(|(dx, dy)| at(x + dx, y + dy, z))
+            .collect::<Option<Vec<_>>>()
     };
     for mark in &scene.glyphs {
         let (x, y) = (mark.square.0 as f32, mark.square.1 as f32);
+        let (Some(corners), Some(middle)) =
+            (square(x, y, mark.floor), at(x + 0.5, y + 0.5, mark.floor))
+        else {
+            continue;
+        };
         let tint = mark.filter.stand_in();
         if let Some(bg) = mark.layer.bg {
-            let corners = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]
-                .map(|(dx, dy)| at(x + dx, y + dy, mark.floor));
             painter.add(egui::Shape::convex_polygon(
-                corners.to_vec(),
+                corners,
                 glyph_color(bg, tint),
                 egui::Stroke::NONE,
             ));
         }
         painter.text(
-            at(x + 0.5, y + 0.5, mark.floor),
+            middle,
             egui::Align2::CENTER_CENTER,
             mark.layer.glyph,
             egui::FontId::monospace(cell_px / 2.0),
@@ -193,11 +203,12 @@ pub fn paint_glyphs(
     // Under the creature, along the lowest corner of its square on the screen, a square wide.
     for hurt in &scene.hurt {
         let (x, y) = (hurt.square.0 as f32, hurt.square.1 as f32);
-        let foot = at(x + 0.5, y + 0.5, hurt.floor);
-        let bottom = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]
-            .map(|(dx, dy)| at(x + dx, y + dy, hurt.floor).y)
-            .into_iter()
-            .fold(foot.y, f32::max);
+        let (Some(corners), Some(foot)) =
+            (square(x, y, hurt.floor), at(x + 0.5, y + 0.5, hurt.floor))
+        else {
+            continue;
+        };
+        let bottom = corners.iter().map(|c| c.y).fold(foot.y, f32::max);
         let track = egui::Rect::from_min_max(
             egui::pos2(foot.x - cell_px / 2.0, bottom - 2.0),
             egui::pos2(foot.x + cell_px / 2.0, bottom),

@@ -143,7 +143,9 @@ fn screen_of(h: &mut H, at: Pos) -> egui::Pos2 {
         scale: world_scale(tileset, app.display().cell(CELL) * app.display().zoom()),
         size: glam::Vec2::new(rect.width(), rect.height()),
     };
-    let on = view.project(glam::Vec3::new(at.x as f32 + 0.5, at.y as f32 + 0.5, 0.0));
+    let on = view
+        .project(glam::Vec3::new(at.x as f32 + 0.5, at.y as f32 + 0.5, 0.0))
+        .unwrap();
     rect.min + egui::vec2(on.x, on.y)
 }
 

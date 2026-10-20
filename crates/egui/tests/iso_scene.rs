@@ -263,11 +263,13 @@ fn a_click_on_a_wall_picks_that_wall_on_its_lid_and_on_its_faces_not_the_square_
         ("south face", glam::Vec3::new(x + 0.5, y + 1.0, top / 2.0)),
         ("east face", glam::Vec3::new(x + 1.0, y + 0.5, top / 2.0)),
     ] {
-        let on = v.project(point);
+        let on = v.project(point).unwrap();
         assert_eq!(scene.pick(&v, on), Some(wall), "{what}");
     }
     // The ground plane alone would have named a square behind the wall for the south face.
-    let on_face = v.project(glam::Vec3::new(x + 0.5, y + 1.0, top / 2.0));
+    let on_face = v
+        .project(glam::Vec3::new(x + 0.5, y + 1.0, top / 2.0))
+        .unwrap();
     let plane = v.pick(on_face, 0.0).unwrap();
     assert_ne!(
         (plane.x.floor() as i32, plane.y.floor() as i32),
@@ -283,7 +285,9 @@ fn a_click_on_the_ground_picks_the_square_whose_ground_it_is() {
     let v = view(&m);
     for abs in [(3, 5), (7, 6), (6, 6), (2, 7)] {
         let at = square(&m, abs);
-        let on = v.project(glam::Vec3::new(at.0 as f32 + 0.5, at.1 as f32 + 0.5, 0.0));
+        let on = v
+            .project(glam::Vec3::new(at.0 as f32 + 0.5, at.1 as f32 + 0.5, 0.0))
+            .unwrap();
         assert_eq!(scene.pick(&v, on), Some(at), "{abs:?}");
     }
     // Outside everything the scene draws there is nothing to pick.
@@ -310,11 +314,13 @@ fn a_square_seen_through_open_air_is_picked_where_its_lowered_ground_is_drawn() 
     let lowered = square(&m, (6, 4));
     let ground = scene.column(lowered.0, lowered.1).unwrap().ground;
     assert!(ground < -1.0, "{ground}");
-    let on = v.project(glam::Vec3::new(
-        lowered.0 as f32 + 0.5,
-        lowered.1 as f32 + 0.5,
-        ground,
-    ));
+    let on = v
+        .project(glam::Vec3::new(
+            lowered.0 as f32 + 0.5,
+            lowered.1 as f32 + 0.5,
+            ground,
+        ))
+        .unwrap();
     assert_eq!(scene.pick(&v, on), Some(lowered));
 }
 

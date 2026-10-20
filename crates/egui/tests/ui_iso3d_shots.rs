@@ -105,11 +105,13 @@ fn pixel(h: &mut H, image: &egui::ColorImage, world: (f32, f32, f32)) -> egui::C
         scale: world_scale(tileset, app.display().cell(CELL) * app.display().zoom()),
         size: glam::Vec2::new(rect.width(), rect.height()),
     };
-    let on = view.project(glam::Vec3::new(
-        me.x as f32 + world.0,
-        me.y as f32 + world.1,
-        world.2,
-    ));
+    let on = view
+        .project(glam::Vec3::new(
+            me.x as f32 + world.0,
+            me.y as f32 + world.1,
+            world.2,
+        ))
+        .unwrap();
     let at = rect.min + egui::vec2(on.x, on.y);
     image[(at.x.round() as usize, at.y.round() as usize)]
 }
