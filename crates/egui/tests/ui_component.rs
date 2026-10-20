@@ -172,10 +172,8 @@ fn list_draws_header_rows_columns_values_and_a_rows_own_denial() {
         disabled(&h, "bn:set_count:list:npc"),
         "the row turns this one off"
     );
-    assert!(
-        disabled(&h, "bn:choose:list:npc"),
-        "the row lists only the other affordance"
-    );
+    // The rows run the list's choose, so it has no button.
+    assert!(h.query_by_label("bn:choose:list:npc").is_none());
 }
 
 #[test]
@@ -1622,6 +1620,20 @@ fn a_grid_with_room_to_spare_draws_its_cells_larger() {
     assert!(a.width() > 40.0, "a cell {} wide", a.width());
     assert!((b.left() - a.left() - 2.0 * a.width()).abs() < 1.0);
     assert!((b.top() - a.top() - a.height()).abs() < 1.0);
+}
+
+#[test]
+fn a_query_popup_draws_its_confirm_once_and_its_rows_run_the_choose() {
+    let (h, _) = harness(example("generic.json", "query popup screen"));
+    // The list's choose runs from its rows; the registered confirm is the one button that does the same.
+    assert_eq!(h.query_all_by_label("Confirm Choice").count(), 0);
+    assert_eq!(h.query_all_by_label("Confirm Choice [RETURN]").count(), 1);
+}
+
+#[test]
+fn the_look_screen_draws_no_button_for_the_move_its_map_clicks_make() {
+    let (h, _) = harness(example("look.json", "look-around screen"));
+    assert_eq!(h.query_all_by_label("Select").count(), 0);
 }
 
 #[test]

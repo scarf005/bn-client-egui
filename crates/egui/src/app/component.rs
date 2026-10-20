@@ -126,9 +126,11 @@ fn claimed(root: &Component) -> HashSet<&str> {
         .collect()
 }
 
-/// Whether a component's own widgets run the affordance, so it needs no button.
+/// Whether a component's own widgets run the affordance, so it needs no button; a click on the map moves
+/// its cursor.
 fn driven(component: &Component, affordance: &Affordance) -> bool {
     match component {
+        Component::Map(_) => affordance.args.as_ref().is_some_and(|a| a.pos.is_some()),
         Component::Tabs(t) => t.select.as_deref() == Some(affordance.id.as_str()),
         Component::Form(_) => affordance.args.as_ref().is_some_and(|a| a.text.is_some()),
         Component::Grid(g) => g
