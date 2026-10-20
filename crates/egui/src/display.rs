@@ -44,6 +44,9 @@ pub struct Settings {
     /// otherwise.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub three_d: Option<bool>,
+    /// The 3D map is seen through the avatar's eyes.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub first_person: bool,
     /// The map zoom in steps from the tileset's own size, which the zoom keys and the wheel move.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub zoom: i8,
@@ -581,6 +584,11 @@ impl Display {
             .is_some_and(|a| self.settings.three_d.unwrap_or(a.tileset.iso))
     }
 
+    /// The 3D map is seen through the avatar's eyes.
+    pub fn first_person(&self) -> bool {
+        self.three_d() && self.settings.first_person
+    }
+
     /// The ids of the tints the tileset in use has; none without one.
     pub fn tint_ids(&self) -> &[String] {
         &self.tint_ids
@@ -678,12 +686,16 @@ impl Display {
                     }
                 }
                 ui.add_enabled_ui(self.wants_tiles(), |ui| {
-                    for (three_d, label) in [(false, "2D"), (true, "3D")] {
-                        if ui
-                            .selectable_label(self.three_d() == three_d, label)
-                            .clicked()
-                        {
+                    let first = tr("First person");
+                    for (three_d, first_person, label) in [
+                        (false, false, "2D"),
+                        (true, false, "3D"),
+                        (true, true, first.as_str()),
+                    ] {
+                        let on = self.three_d() == three_d && self.first_person() == first_person;
+                        if ui.selectable_label(on, label).clicked() {
                             self.settings.three_d = Some(three_d);
+                            self.settings.first_person = first_person;
                         }
                     }
                 });

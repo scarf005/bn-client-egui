@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: bn-client\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-20 01:21+0900\n"
+"POT-Creation-Date: 2026-10-20 08:56+0900\n"
 "PO-Revision-Date: 2026-10-18 09:30+0900\n"
 "Language-Team: Korean\n"
 "Language: ko\n"
@@ -14,12 +14,12 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
 
-#: crates/core/src/engine_model.rs:649
+#: crates/core/src/engine_model.rs:654
 msgid "The engine has not answered for %d second."
 msgid_plural "The engine has not answered for %d seconds."
 msgstr[0] "엔진이 %d초 동안 응답하지 않았습니다."
 
-#: crates/core/src/engine_model.rs:774
+#: crates/core/src/engine_model.rs:779
 msgid "The engine could not be restarted: %s"
 msgstr "엔진을 다시 시작하지 못했습니다: %s"
 
@@ -32,7 +32,7 @@ msgid "Right click"
 msgstr "오른쪽 클릭"
 
 #: crates/core/src/engine_model/commands.rs:141
-#: crates/egui/src/app/component/form.rs:168 crates/egui/src/app/menu.rs:73
+#: crates/egui/src/app/component/form.rs:175 crates/egui/src/app/menu.rs:73
 msgid "Cancel"
 msgstr "취소"
 
@@ -166,16 +166,16 @@ msgstr "준비"
 msgid "Interrupt"
 msgstr "중단"
 
-#: crates/egui/src/app/component/form.rs:143 crates/egui/src/editor.rs:99
+#: crates/egui/src/app/component/form.rs:150 crates/egui/src/editor.rs:99
 msgid "Press the new key"
 msgstr "새 키를 누르세요"
 
-#: crates/egui/src/app/component/form.rs:165
+#: crates/egui/src/app/component/form.rs:172
 msgid "OK"
 msgstr "확인"
 
 #: crates/egui/src/app/component/overmap.rs:325
-#: crates/egui/src/app/component/overmap.rs:487 crates/egui/src/app/map.rs:209
+#: crates/egui/src/app/component/overmap.rs:489 crates/egui/src/app/map.rs:211
 #: crates/tui/src/lib.rs:734
 msgid "Map"
 msgstr "지도"
@@ -184,7 +184,7 @@ msgstr "지도"
 msgid "Centre"
 msgstr "가운데로"
 
-#: crates/egui/src/app/component/overmap.rs:335
+#: crates/egui/src/app/component/overmap.rs:336
 msgid "Travel and notes"
 msgstr "이동과 메모"
 
@@ -192,15 +192,15 @@ msgstr "이동과 메모"
 msgid "No map loaded"
 msgstr "불러온 지도가 없습니다"
 
-#: crates/egui/src/app/map.rs:282
+#: crates/egui/src/app/map.rs:284
 msgid "Player at (%d, %d). Cursor (%d, %d)."
 msgstr "플레이어 (%d, %d). 커서 (%d, %d)."
 
-#: crates/egui/src/app/map.rs:285
+#: crates/egui/src/app/map.rs:287
 msgid "Player at (%d, %d). Cursor (%d, %d): %s."
 msgstr "플레이어 (%d, %d). 커서 (%d, %d): %s."
 
-#: crates/egui/src/app/map.rs:582
+#: crates/egui/src/app/map.rs:584
 msgid "Map actions"
 msgstr "지도 행동"
 
@@ -224,27 +224,31 @@ msgstr "행동 찾기"
 msgid "Resize message log"
 msgstr "메시지 기록 크기 조절"
 
-#: crates/egui/src/display.rs:515
+#: crates/egui/src/display.rs:521
 msgid "No tileset found in the game's gfx folder."
 msgstr "게임의 gfx 폴더에 타일셋이 없습니다."
 
-#: crates/egui/src/display.rs:669
+#: crates/egui/src/display.rs:680
 msgid "Tiles"
 msgstr "타일"
 
-#: crates/egui/src/display.rs:688
+#: crates/egui/src/display.rs:689
+msgid "First person"
+msgstr "1인칭"
+
+#: crates/egui/src/display.rs:703
 msgid "none"
 msgstr "없음"
 
-#: crates/egui/src/display.rs:691
+#: crates/egui/src/display.rs:706
 msgid "Tileset"
 msgstr "타일셋"
 
-#: crates/egui/src/display.rs:707
+#: crates/egui/src/display.rs:722
 msgid "Tileset unavailable: %s"
 msgstr "타일셋을 쓸 수 없습니다: %s"
 
-#: crates/egui/src/display.rs:711
+#: crates/egui/src/display.rs:726
 msgid "Reduced motion"
 msgstr "움직임 줄이기"
 

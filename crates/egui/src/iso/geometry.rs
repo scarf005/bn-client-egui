@@ -1011,6 +1011,7 @@ mod tests {
             camera: Camera {
                 yaw: YAW_ISO,
                 pitch: tilt,
+                first_person: false,
             },
             target: Vec3::ZERO,
             scale: m.tile.x / std::f32::consts::SQRT_2,

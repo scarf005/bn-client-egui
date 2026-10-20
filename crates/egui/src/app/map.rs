@@ -183,7 +183,9 @@ impl<M: GameModel> App<M> {
                 .display
                 .tileset()
                 .map_or(cell_px, |(t, _)| iso::scene::world_scale(t, cell_px));
-            self.iso.viewport(player, scale, response.rect.size())
+            let first = self.display.first_person();
+            self.iso
+                .viewport(player, scale, response.rect.size(), first)
         });
         let canvas = Canvas {
             rect: response.rect,

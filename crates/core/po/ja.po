@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: bn-client\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-20 01:21+0900\n"
+"POT-Creation-Date: 2026-10-20 08:56+0900\n"
 "PO-Revision-Date: 2026-10-18 09:30+0900\n"
 "Language-Team: Japanese\n"
 "Language: ja\n"
@@ -14,12 +14,12 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
 
-#: crates/core/src/engine_model.rs:649
+#: crates/core/src/engine_model.rs:654
 msgid "The engine has not answered for %d second."
 msgid_plural "The engine has not answered for %d seconds."
 msgstr[0] "エンジンが%d秒間応答していません。"
 
-#: crates/core/src/engine_model.rs:774
+#: crates/core/src/engine_model.rs:779
 msgid "The engine could not be restarted: %s"
 msgstr "エンジンを再起動できませんでした: %s"
 
@@ -32,7 +32,7 @@ msgid "Right click"
 msgstr "右クリック"
 
 #: crates/core/src/engine_model/commands.rs:141
-#: crates/egui/src/app/component/form.rs:168 crates/egui/src/app/menu.rs:73
+#: crates/egui/src/app/component/form.rs:175 crates/egui/src/app/menu.rs:73
 msgid "Cancel"
 msgstr "取消"
 
@@ -166,16 +166,16 @@ msgstr "待機中"
 msgid "Interrupt"
 msgstr "中断"
 
-#: crates/egui/src/app/component/form.rs:143 crates/egui/src/editor.rs:99
+#: crates/egui/src/app/component/form.rs:150 crates/egui/src/editor.rs:99
 msgid "Press the new key"
 msgstr "新しいキーを押してください"
 
-#: crates/egui/src/app/component/form.rs:165
+#: crates/egui/src/app/component/form.rs:172
 msgid "OK"
 msgstr "OK"
 
 #: crates/egui/src/app/component/overmap.rs:325
-#: crates/egui/src/app/component/overmap.rs:487 crates/egui/src/app/map.rs:209
+#: crates/egui/src/app/component/overmap.rs:489 crates/egui/src/app/map.rs:211
 #: crates/tui/src/lib.rs:734
 msgid "Map"
 msgstr "地図"
@@ -184,7 +184,7 @@ msgstr "地図"
 msgid "Centre"
 msgstr "中央へ"
 
-#: crates/egui/src/app/component/overmap.rs:335
+#: crates/egui/src/app/component/overmap.rs:336
 msgid "Travel and notes"
 msgstr "移動とメモ"
 
@@ -192,15 +192,15 @@ msgstr "移動とメモ"
 msgid "No map loaded"
 msgstr "地図が読み込まれていません"
 
-#: crates/egui/src/app/map.rs:282
+#: crates/egui/src/app/map.rs:284
 msgid "Player at (%d, %d). Cursor (%d, %d)."
 msgstr "プレイヤー (%d, %d)。カーソル (%d, %d)。"
 
-#: crates/egui/src/app/map.rs:285
+#: crates/egui/src/app/map.rs:287
 msgid "Player at (%d, %d). Cursor (%d, %d): %s."
 msgstr "プレイヤー (%d, %d)。カーソル (%d, %d): %s。"
 
-#: crates/egui/src/app/map.rs:582
+#: crates/egui/src/app/map.rs:584
 msgid "Map actions"
 msgstr "地図の行動"
 
@@ -224,27 +224,31 @@ msgstr "行動を検索"
 msgid "Resize message log"
 msgstr "メッセージログのサイズ変更"
 
-#: crates/egui/src/display.rs:515
+#: crates/egui/src/display.rs:521
 msgid "No tileset found in the game's gfx folder."
 msgstr "ゲームのgfxフォルダにタイルセットがありません。"
 
-#: crates/egui/src/display.rs:669
+#: crates/egui/src/display.rs:680
 msgid "Tiles"
 msgstr "タイル"
 
-#: crates/egui/src/display.rs:688
+#: crates/egui/src/display.rs:689
+msgid "First person"
+msgstr "一人称"
+
+#: crates/egui/src/display.rs:703
 msgid "none"
 msgstr "なし"
 
-#: crates/egui/src/display.rs:691
+#: crates/egui/src/display.rs:706
 msgid "Tileset"
 msgstr "タイルセット"
 
-#: crates/egui/src/display.rs:707
+#: crates/egui/src/display.rs:722
 msgid "Tileset unavailable: %s"
 msgstr "タイルセットを使えません: %s"
 
-#: crates/egui/src/display.rs:711
+#: crates/egui/src/display.rs:726
 msgid "Reduced motion"
 msgstr "動きを減らす"
 

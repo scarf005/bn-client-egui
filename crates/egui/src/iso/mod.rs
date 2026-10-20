@@ -58,10 +58,20 @@ impl View3d {
         self.camera.orbit(delta.x * DRAG.0, -delta.y * DRAG.1);
     }
 
-    /// The camera looking at the avatar's square, in `size` points; `scale` is points per world unit.
-    pub fn viewport(&self, avatar: bn_client_core::Pos, scale: f32, size: egui::Vec2) -> Viewport {
+    /// The camera looking at the avatar's square, or out of its eyes, in `size` points; `scale` is points per
+    /// world unit.
+    pub fn viewport(
+        &self,
+        avatar: bn_client_core::Pos,
+        scale: f32,
+        size: egui::Vec2,
+        first_person: bool,
+    ) -> Viewport {
         Viewport {
-            camera: self.camera,
+            camera: Camera {
+                first_person,
+                ..self.camera
+            },
             target: Vec3::new(avatar.x as f32 + 0.5, avatar.y as f32 + 0.5, 0.0),
             scale,
             size: Vec2::new(size.x, size.y),

@@ -329,6 +329,12 @@ fn the_town_in_3d_from_every_side_and_what_a_frame_costs() {
     save(&mut h, "town-pitch-high.png");
     drag(&mut h, egui::vec2(0.0, 900.0));
     save(&mut h, "town-pitch-low.png");
+    // Through the avatar's eyes, turned as the orbit turns.
+    choose(&mut h, "First person");
+    save(&mut h, "town-first-person.png");
+    turn(&mut h, 12);
+    save(&mut h, "town-first-person-turned.png");
+    choose(&mut h, "3D");
 
     // Frame cost: the UI pass of a frame, and the whole frame with its GPU work, turning the camera.
     drag(&mut h, egui::vec2(0.0, -150.0));
