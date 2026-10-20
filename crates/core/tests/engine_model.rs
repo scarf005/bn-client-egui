@@ -2972,3 +2972,38 @@ fn the_map_window_reads_the_squares_around_the_player_the_engine_names_once_per_
     m.watch_overmap(None);
     assert!(m.watched_overmap().is_none());
 }
+
+/// Every `dim` in `v` set to `dim`.
+fn in_dimension(v: &mut Value, dim: &str) {
+    match v {
+        Value::Object(map) => map.iter_mut().for_each(|(key, value)| match key.as_str() {
+            "dim" => *value = json!(dim),
+            _ => in_dimension(value, dim),
+        }),
+        Value::Array(items) => items.iter_mut().for_each(|item| in_dimension(item, dim)),
+        _ => {}
+    }
+}
+
+#[test]
+fn the_map_window_reads_overmap_squares_without_a_dimension_in_a_pocket_dimension() {
+    let mut replies = common::subscribe_reply();
+    replies.iter_mut().for_each(|r| in_dimension(r, "pocket"));
+    let (t, h) = ScriptedTransport::new();
+    let mut m = connected(
+        t.on("bn.hello", vec![fixture("hello_result")])
+            .on("bn.subscribe", replies),
+    );
+    m.watch_overmap(Some(bn_client_core::OvermapWatch {
+        cols: 3,
+        rows: 3,
+        pan: Pos { x: 0, y: 0 },
+    }));
+    m.poll();
+    let reads = overmap_reads(&h);
+    assert_eq!(reads.len(), 1);
+    assert_eq!(
+        (&reads[0]["min"]["dim"], &reads[0]["max"]["dim"]),
+        (&json!(""), &json!(""))
+    );
+}
