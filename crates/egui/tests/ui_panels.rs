@@ -12,7 +12,8 @@ use serde_json::{Value, json};
 
 type H<'a> = Harness<'a, App<EngineModel>>;
 
-/// A game whose actions include the character sheet (`@`), the inventory (`i`) and the map (`m`).
+/// A game whose actions include the character sheet (`@`), the inventory (`i`), the map (`m`) and picking up
+/// (Enter).
 fn game() -> (App<EngineModel>, ScriptHandle) {
     let mut subscribed = fixture("subscribe_result");
     subscribed["result"]["interaction"]["actions"]
@@ -22,6 +23,7 @@ fn game() -> (App<EngineModel>, ScriptHandle) {
             json!({"id": "player_data", "name": "View Player Info", "keys": ["@"]}),
             json!({"id": "inventory", "name": "Open Inventory", "keys": ["i"]}),
             json!({"id": "map", "name": "View Map", "keys": ["m"]}),
+            json!({"id": "pickup", "name": "Pick Up", "keys": ["RETURN"]}),
         ]);
     let reply = vec![
         subscribed,
@@ -216,6 +218,37 @@ fn the_sheets_button_opens_the_engines_own_screen() {
     assert_eq!(
         operations(&script),
         [json!({"kind": "action", "action_id": "player_data"})]
+    );
+}
+
+#[test]
+fn enter_after_a_click_in_the_sheet_is_the_games_alone() {
+    let (mut h, script) = open();
+    let mut answered = 0;
+    key(&mut h, "@");
+    serve(&mut h, &script, &mut answered);
+    // A row, a tab and the button clicked leave the keyboard with the map.
+    h.get_by_label("Dexterity:").click();
+    h.run_steps(2);
+    assert!(h.get_by_label("Map").is_focused(), "after the row");
+    h.get_by_role_and_label(egui::accesskit::Role::Tab, "SKILLS")
+        .click();
+    h.run_steps(2);
+    assert!(h.get_by_label("Map").is_focused(), "after the tab");
+    h.get_by_label("View Player Info").click();
+    h.run_steps(2);
+    assert!(h.get_by_label("Map").is_focused(), "after the button");
+    script.push(fixture("events_41_walk"));
+    script.push(fixture("command_completed"));
+    h.run_steps(2);
+    h.key_press(egui::Key::Enter);
+    h.run_steps(2);
+    assert_eq!(
+        operations(&script),
+        [
+            json!({"kind": "action", "action_id": "player_data"}),
+            json!({"kind": "action", "action_id": "pickup"}),
+        ]
     );
 }
 
