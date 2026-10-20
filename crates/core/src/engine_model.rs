@@ -15,11 +15,11 @@ use crate::localise::{self, Catalogue, Value as Arg, tr_format, tr_plural};
 use crate::markup::{self, Run};
 use crate::model::{
     ActionEntry, Cell, CommandStatus, Effect, Failure, FailureKind, GameModel, Glow, Health, Heard,
-    Layer, Loading, LogLine, Mutation, OvermapWatch, Pos, Rgb, Shape,
+    Layer, Loading, LogLine, Mutation, OvermapWatch, PanelWatch, Pos, Rgb, Shape,
 };
 use crate::protocol::{
-    self, Cell as WorldCell, Entity, InvokeArgs, Known, Look, ModTileset, Operation, Row, Screen,
-    Traits, WorldPos,
+    self, Cell as WorldCell, Entity, InvokeArgs, Known, Look, ModTileset, Operation, PanelKind,
+    Row, Screen, Traits, WorldPos,
 };
 use crate::replica::Replica;
 use crate::transport::Transport;
@@ -59,6 +59,8 @@ enum Pending {
     Rows,
     /// The squares of the client's map window.
     Overmap,
+    /// The screen of a panel window.
+    Panel(PanelKind),
 }
 
 /// The choices past the first page of the interaction with this boundary and schema.
@@ -172,6 +174,8 @@ pub struct EngineModel {
     /// The square whose description was asked for or received, the revision it is valid for and its lines.
     hovered: Option<Hover>,
     overmap: Watched,
+    /// The panel windows open.
+    panels: HashMap<PanelKind, WatchedPanel>,
 }
 
 /// The client's map window: what it asks to see, what was last asked for it and the squares read.
@@ -182,6 +186,17 @@ struct Watched {
     asked: Option<(OvermapWatch, String, WorldPos)>,
     waiting: bool,
     view: Option<protocol::OvermapWire>,
+}
+
+/// A panel window: the row its focus is on, the read last asked for it and the screen read.
+#[derive(Default)]
+struct WatchedPanel {
+    watch: PanelWatch,
+    /// The watch, the epoch and the revision of the last read, which is not asked for again.
+    asked: Option<(PanelWatch, String, String)>,
+    /// The request whose answer is awaited; any other answer is stale.
+    waiting: Option<u64>,
+    view: Option<Screen>,
 }
 
 struct Hover {
@@ -489,6 +504,33 @@ impl EngineModel {
         self.call("bn.overmap.cells", params, Pending::Overmap);
     }
 
+    /// Reads the screen of each panel window once the world or the window's focus changed.
+    fn read_panels(&mut self) {
+        let Some(now) = self.replica.at() else {
+            return;
+        };
+        let due = self
+            .panels
+            .iter()
+            .filter_map(|(panel, p)| {
+                let asked = (p.watch.clone(), now.epoch.clone(), now.revision.clone());
+                (p.waiting.is_none() && p.asked.as_ref() != Some(&asked)).then_some((*panel, asked))
+            })
+            .collect::<Vec<_>>();
+        for (panel, asked) in due {
+            let params = serde_json::to_value(protocol::PanelParams {
+                epoch: asked.1.clone(),
+                panel,
+                row: asked.0.row.clone(),
+            })
+            .expect("panel params serialize");
+            let id = self.call("bn.panel.view", params, Pending::Panel(panel));
+            let p = self.panels.get_mut(&panel).expect("an open panel");
+            p.asked = Some(asked);
+            p.waiting = Some(id);
+        }
+    }
+
     /// Asks again for the hovered square once its answer is older than the world, such as after the
     /// engine's window changed size, so a pointer that stays still keeps its description.
     fn refresh_hover(&mut self) {
@@ -710,6 +752,7 @@ impl GameModel for EngineModel {
         self.at_main_menu = at_main_menu;
         self.send_resend();
         self.read_overmap();
+        self.read_panels();
         self.send_viewport();
         self.send_tiles();
         self.refresh_view();
@@ -1091,6 +1134,19 @@ impl GameModel for EngineModel {
 
     fn watched_overmap(&self) -> Option<&protocol::OvermapWire> {
         self.overmap.view.as_ref()
+    }
+
+    fn watch_panel(&mut self, panel: PanelKind, watch: Option<PanelWatch>) {
+        match watch {
+            Some(watch) => self.panels.entry(panel).or_default().watch = watch,
+            None => {
+                self.panels.remove(&panel);
+            }
+        }
+    }
+
+    fn watched_panel(&self, panel: PanelKind) -> Option<&Screen> {
+        self.panels.get(&panel)?.view.as_ref()
     }
 
     fn screens(&self) -> &[Screen] {

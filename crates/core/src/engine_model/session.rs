@@ -124,6 +124,7 @@ impl EngineModel {
             at_main_menu: false,
             hovered: None,
             overmap: Default::default(),
+            panels: HashMap::new(),
         };
         m.hello();
         m

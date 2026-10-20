@@ -93,6 +93,7 @@ impl EngineModel {
             Pending::Choices => self.choices_page(result),
             Pending::Rows => self.rows_page(id, result),
             Pending::Overmap => self.overmap_read(result),
+            Pending::Panel(panel) => self.panel_read(id, panel, result),
         }
     }
 
@@ -205,6 +206,22 @@ impl EngineModel {
         self.overmap.waiting = false;
         if let Some(view) = result.ok().and_then(|v| serde_json::from_value(v).ok()) {
             self.overmap.view = Some(view);
+        }
+    }
+
+    /// A panel window's screen, when it answers the read the window awaits; a refused read keeps the last
+    /// screen until the world changes.
+    fn panel_read(&mut self, id: u64, panel: protocol::PanelKind, result: Result<Value, RpcError>) {
+        let Some(p) = self
+            .panels
+            .get_mut(&panel)
+            .filter(|p| p.waiting == Some(id))
+        else {
+            return;
+        };
+        p.waiting = None;
+        if let Some(screen) = result.ok().and_then(|v| serde_json::from_value(v).ok()) {
+            p.view = Some(screen);
         }
     }
 
