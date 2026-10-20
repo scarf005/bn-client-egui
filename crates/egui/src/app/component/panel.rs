@@ -93,7 +93,7 @@ impl<M: GameModel> App<M> {
         for intent in out {
             match intent {
                 Intent::Focus { component, row } => focus.focus_row(&component, &row),
-                Intent::Open => full = true,
+                Intent::Open => full |= offered.is_some(),
                 _ => {}
             }
         }
