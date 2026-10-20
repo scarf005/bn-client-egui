@@ -571,6 +571,11 @@ impl Display {
         self.atlas.is_some()
     }
 
+    /// The idle animation frame sprites are drawn at; none with reduced motion.
+    pub fn frame(&self) -> Option<u32> {
+        self.frame
+    }
+
     /// The tileset in use, and a number that changes whenever another one is opened.
     pub fn tileset(&self) -> Option<(&Tileset, u32)> {
         Some((&self.atlas.as_ref()?.tileset, self.epoch))

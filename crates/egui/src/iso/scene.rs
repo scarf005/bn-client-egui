@@ -5,7 +5,7 @@ use super::geometry::{
 };
 use super::pages::Pages;
 use crate::display::{Fx, STRIP, light, query, resolve_layer};
-use crate::tileset::{Tileset, Turn};
+use crate::tileset::{Query, Tileset, Turn};
 use bn_client_core::{GameModel, Health, Layer, Pos};
 use glam::Vec2;
 use std::collections::BTreeMap;
@@ -33,6 +33,8 @@ pub struct Scene {
     pub glyphs: Vec<Mark>,
     /// The hurt creatures, whose health bars lie along the bottom of their squares.
     pub hurt: Vec<Hurt>,
+    /// Whether a sprite of it changes with the animation frame.
+    pub animated: bool,
 }
 
 /// A hurt creature standing on a square.
@@ -160,14 +162,15 @@ pub fn world_scale(tileset: &Tileset, cell_px: f32) -> f32 {
     }
 }
 
-/// The scene of the squares the model shows. A square seen through open air stands lower, by the levels it lies
-/// down; the levels above the avatar's are never part of the model's view, so they are cut away.
+/// The scene of the squares the model shows at animation `frame`. A square seen through open air stands lower, by
+/// the levels it lies down; the levels above the avatar's are never part of the model's view, so they are cut away.
 pub fn build(
     model: &(impl GameModel + ?Sized),
     tileset: &Tileset,
     pages: Option<&Pages>,
     season: Option<&str>,
     version: u64,
+    frame: Option<u32>,
 ) -> Scene {
     let m = metrics(tileset);
     let size = model.size();
@@ -177,6 +180,7 @@ pub fn build(
     let mut glyphs = vec![];
     let mut hurt = vec![];
     let mut squares = 0;
+    let mut animated = false;
     for y in 0..height {
         for x in 0..width {
             let cell = model.cell(Pos { x, y });
@@ -217,7 +221,11 @@ pub fn build(
             for layer in &cell.layers {
                 let (layer, paints) = resolve_layer(tileset, layer);
                 let drawn = items.len();
-                let chosen = tileset.choose(&query(&layer, season));
+                let chosen = tileset.choose(&Query {
+                    frame,
+                    ..query(&layer, season)
+                });
+                animated |= chosen.as_ref().is_some_and(|c| c.animated);
                 let kind = match (layer.terrain, chosen.as_ref().is_some_and(|c| c.joined)) {
                     (false, _) if layer.creature => Kind::Creature,
                     (false, _) if layer.vehicle => Kind::Vehicle,
@@ -356,5 +364,6 @@ pub fn build(
         columns,
         glyphs,
         hurt,
+        animated,
     }
 }

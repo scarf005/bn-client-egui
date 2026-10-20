@@ -46,7 +46,7 @@ fn model(cells: Vec<Value>) -> EngineModel {
 
 fn scene_of(m: &EngineModel, tag: &str) -> Scene {
     let tileset = Tileset::load(&iso_root(tag).join("gfx/iso")).unwrap();
-    scene::build(m, &tileset, None, None, 1)
+    scene::build(m, &tileset, None, None, 1, None)
 }
 
 fn all(scene: &Scene) -> Vec<Instance> {
@@ -418,7 +418,7 @@ fn decoded(tileset: &Tileset) -> std::sync::Arc<Pages> {
 fn flat_scene_of(m: &EngineModel, tag: &str) -> Scene {
     let tileset = Tileset::load(&flat_root(tag).join("gfx/flat")).unwrap();
     let pages = decoded(&tileset);
-    scene::build(m, &tileset, Some(&pages), None, 1)
+    scene::build(m, &tileset, Some(&pages), None, 1, None)
 }
 
 #[test]
@@ -650,7 +650,7 @@ fn a_tree_of_an_isometric_tileset_stands_on_its_ground_which_lies_in_its_square(
     let m = model(vec![cell(4, 4, 0, "t_tree")]);
     let tileset = Tileset::load(&iso_root("iso-tree").join("gfx/iso")).unwrap();
     let pages = decoded(&tileset);
-    let scene = scene::build(&m, &tileset, Some(&pages), None, 1);
+    let scene = scene::build(&m, &tileset, Some(&pages), None, 1, None);
     let (boards, ground): (Vec<_>, Vec<_>) = at(&scene, &m, (4, 4))
         .into_iter()
         .partition(|i| i.flags[0] & BOARD != 0);
@@ -771,4 +771,20 @@ fn a_window_of_an_isometric_tileset_is_its_walls_box() {
     let m = model(vec![window(5, 4, "t_wall")]);
     let wall = planes(&scene_of(&m, "scene-window-box"));
     assert_eq!(wall.len(), 5, "a lid and four faces");
+}
+
+#[test]
+fn a_fire_in_the_3d_scene_shows_the_sprite_of_its_animation_frame() {
+    let m = model(vec![cell(4, 4, 0, "fd_fire")]);
+    let tileset = Tileset::load(&common::game_root("iso-fire").join("gfx/test")).unwrap();
+    let at_frame = |frame| scene::build(&m, &tileset, None, None, 1, frame);
+    let frames = (0..5).map(|f| all(&at_frame(Some(f)))).collect::<Vec<_>>();
+    assert!(at_frame(Some(0)).animated);
+    assert!(
+        frames.iter().any(|f| *f != frames[0]),
+        "the fire changes over a loop"
+    );
+    assert!(!at_frame(None).animated, "still with reduced motion");
+    let grass = model(vec![cell(4, 4, 0, "grass")]);
+    assert!(!scene::build(&grass, &tileset, None, None, 1, Some(0)).animated);
 }
