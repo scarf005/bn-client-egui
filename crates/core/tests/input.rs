@@ -47,11 +47,11 @@ fn the(screen: &Screen, id: &str) -> Affordance {
         .clone()
 }
 
-fn refused(reason: Reason, denial: Option<&str>) -> Result<(), Refusal> {
-    Err(Refusal {
+fn refused(reason: Reason, denial: Option<&str>) -> Result<(), Box<Refusal>> {
+    Err(Box::new(Refusal {
         reason,
         denial: denial.map(|d| Text::Plain(d.into())),
-    })
+    }))
 }
 
 #[test]

@@ -198,7 +198,7 @@ impl Interaction {
         let (picked, _) = self.collect(affordance);
         if let Err(refusal) = gate(screen, affordance, &picked) {
             self.ask = None;
-            return Outcome::refused(refusal);
+            return Outcome::refused(*refusal);
         }
         match self.ask.as_ref().is_some_and(|ask| ask.asking.is_some()) {
             true => Outcome::handled(),
@@ -238,7 +238,7 @@ impl Interaction {
                 invoke: Some((affordance.id.clone(), args)),
                 ..Outcome::handled()
             },
-            Err(refusal) => Outcome::refused(refusal),
+            Err(refusal) => Outcome::refused(*refusal),
         }
     }
 
@@ -270,7 +270,7 @@ impl Interaction {
         };
         if let Err(refusal) = gate(screen, affordance, &args) {
             self.ask = None;
-            return Outcome::refused(refusal);
+            return Outcome::refused(*refusal);
         }
         let args = self.finish(affordance).unwrap_or(args);
         Outcome {

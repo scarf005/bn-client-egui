@@ -216,7 +216,11 @@ fn available_on(
 }
 
 /// Whether `affordance` may be invoked with `args` on `screen`: it is on, and so is every row it acts on.
-pub fn gate(screen: &Screen, affordance: &Affordance, args: &InvokeArgs) -> Result<(), Refusal> {
+pub fn gate(
+    screen: &Screen,
+    affordance: &Affordance,
+    args: &InvokeArgs,
+) -> Result<(), Box<Refusal>> {
     let shape = affordance.args.as_ref();
     let one = shape
         .and_then(|shape| shape.row.as_ref())
@@ -239,10 +243,10 @@ pub fn gate(screen: &Screen, affordance: &Affordance, args: &InvokeArgs) -> Resu
         )
         .find(|check| !check.enabled)
         .map_or(Ok(()), |check| {
-            Err(Refusal {
+            Err(Box::new(Refusal {
                 reason: check.reason.unwrap_or(Reason::Disabled),
                 denial: check.denial,
-            })
+            }))
         })
 }
 
