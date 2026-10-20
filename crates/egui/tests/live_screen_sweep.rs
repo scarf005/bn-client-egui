@@ -1,5 +1,5 @@
-//! Against a real engine: every toolbar button's screen opens, keeps its window size while it stays open, and
-//! closes back to the map.
+//! Against a real engine: every toolbar button's screen and every manager of the main menu opens, keeps its
+//! window size while it stays open, and closes back to the map.
 //!
 //! `BN_ENGINE=<engine> SHOT_DIR=<dir> cargo test --release -p bn-client-egui --test live_screen_sweep --
 //! --ignored --nocapture`
@@ -107,9 +107,49 @@ fn windows(h: &H) -> Vec<egui::Rect> {
         .collect()
 }
 
+/// Lets the window `name` opened settle, checks that it keeps its size, saves a picture of it and closes it.
+fn measure(h: &mut H, name: &str, faults: &mut Vec<String>) {
+    let opened = run_until(h, name, 60, |h| !on_map(h) && !h.state().model.busy());
+    if !opened {
+        eprintln!("{name}: no window");
+        return;
+    }
+    h.run_steps(20);
+    let first = windows(h);
+    h.run_steps(120);
+    let later = windows(h);
+    let kind = h
+        .state()
+        .model
+        .screens()
+        .last()
+        .and_then(|s| s.kind.clone())
+        .unwrap_or_default();
+    if let Some(dir) = std::env::var_os("SHOT_DIR") {
+        std::fs::create_dir_all(&dir).unwrap();
+        let image = h.render().expect("renders");
+        image
+            .save(std::path::Path::new(&dir).join(format!("{}.png", name.replace(' ', "_"))))
+            .unwrap();
+    }
+    let grew = first
+        .iter()
+        .zip(&later)
+        .any(|(a, b)| (a.width() - b.width()).abs() > 1.0 || (a.height() - b.height()).abs() > 1.0);
+    eprintln!("{name} ({kind}): {first:?} -> {later:?}");
+    if grew || first.len() != later.len() {
+        faults.push(format!(
+            "{name} ({kind}) changed size: {first:?} -> {later:?}"
+        ));
+    }
+    if !back_to_map(h) {
+        faults.push(format!("{name} ({kind}) did not close to the map"));
+    }
+}
+
 #[test]
 #[ignore = "needs BN_ENGINE"]
-fn every_toolbar_screen_keeps_its_size_and_closes_to_the_map() {
+fn every_toolbar_and_manager_screen_keeps_its_size_and_closes_to_the_map() {
     let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
     let root = game_root(engine.as_ref(), None).expect("game root");
     let dir = std::env::temp_dir().join(format!("bn-sweep-{}", std::process::id()));
@@ -143,41 +183,38 @@ fn every_toolbar_screen_keeps_its_size_and_closes_to_the_map() {
     for id in shortcuts {
         assert!(back_to_map(&mut h), "back on the map before {id}");
         h.state_mut().model.invoke_action(&id);
-        let opened = run_until(&mut h, &id, 60, |h| !on_map(h) && !h.state().model.busy());
-        if !opened {
-            eprintln!("{id}: no window");
-            continue;
-        }
-        h.run_steps(20);
-        let first = windows(&h);
-        h.run_steps(120);
-        let later = windows(&h);
-        let kind = h
+        measure(&mut h, &id, &mut faults);
+    }
+    // The main menu's managers, which have no button of their own.
+    for entry in [
+        "View Help",
+        "Display keybindings menu",
+        "Autopickup manager",
+        "Autonotes manager",
+        "Safe Mode manager",
+        "Distractions manager",
+        "Color manager",
+        "Active World Mods",
+        "Action Menu",
+    ] {
+        assert!(back_to_map(&mut h), "back on the map before {entry}");
+        h.state_mut().model.invoke_action("main_menu");
+        assert!(run_until(&mut h, "the main menu", 60, |h| {
+            h.state().model.menu().is_some() && !h.state().model.busy()
+        }));
+        let row = h
             .state()
             .model
-            .screens()
-            .last()
-            .and_then(|s| s.kind.clone())
-            .unwrap_or_default();
-        if let Some(dir) = std::env::var_os("SHOT_DIR") {
-            std::fs::create_dir_all(&dir).unwrap();
-            let image = h.render().expect("renders");
-            image
-                .save(std::path::Path::new(&dir).join(format!("{id}.png")))
-                .unwrap();
-        }
-        let grew = first.iter().zip(&later).any(|(a, b)| {
-            (a.width() - b.width()).abs() > 1.0 || (a.height() - b.height()).abs() > 1.0
-        });
-        eprintln!("{id} ({kind}): {first:?} -> {later:?}");
-        if grew || first.len() != later.len() {
-            faults.push(format!(
-                "{id} ({kind}) changed size: {first:?} -> {later:?}"
-            ));
-        }
-        if !back_to_map(&mut h) {
-            faults.push(format!("{id} ({kind}) did not close to the map"));
-        }
+            .menu()
+            .and_then(|m| m.choices.into_iter().find(|c| c.label == entry))
+            .map(|c| c.id);
+        let Some(row) = row else {
+            faults.push(format!("the main menu has no {entry}"));
+            continue;
+        };
+        h.state_mut().model.choose(&row);
+        run_until(&mut h, entry, 60, |h| !h.state().model.busy());
+        measure(&mut h, entry, &mut faults);
     }
     assert!(faults.is_empty(), "{faults:#?}");
 }
