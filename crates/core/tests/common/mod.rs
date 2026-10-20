@@ -15,6 +15,46 @@ pub fn fixture(name: &str) -> Value {
     serde_json::from_str::<Value>(&text).unwrap()[name].clone()
 }
 
+/// The screen `bn.panel.view` answers for `panel` (`character` or `inventory`): the engine's example of the
+/// native screen, as `screen_id` `panel:<panel>`, with no affordance, tab select or list activate.
+pub fn panel_view(panel: &str) -> Value {
+    fn passive(v: &mut Value) {
+        match v {
+            Value::Object(map) => {
+                map.remove("select");
+                map.remove("activate");
+                if let Some(affordances) = map.get_mut("affordances") {
+                    *affordances = Value::Array(vec![]);
+                }
+                map.values_mut().for_each(passive);
+            }
+            Value::Array(items) => items.iter_mut().for_each(passive),
+            _ => {}
+        }
+    }
+    let (file, name, kind) = match panel {
+        "character" => ("character", "character sheet", "character_sheet"),
+        _ => ("inventory", "drop selector screen", "inventory"),
+    };
+    let path = format!(
+        "{}/tests/fixtures/0.2.examples/{file}.json",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    let all = serde_json::from_str::<Value>(&std::fs::read_to_string(path).unwrap()).unwrap();
+    let mut screen = all["valid"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["name"] == name)
+        .unwrap()["value"]
+        .clone();
+    passive(&mut screen);
+    screen["screen_id"] = format!("panel:{panel}").into();
+    screen["kind"] = kind.into();
+    screen["role"] = "screen".into();
+    screen
+}
+
 pub fn subscribe_reply() -> Vec<Value> {
     ["subscribe_result", "snapshot_part_0", "snapshot_part_1"]
         .map(fixture)

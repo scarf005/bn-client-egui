@@ -1436,6 +1436,23 @@ pub struct WorldCellsParams {
     pub max: WorldPos,
 }
 
+/// A native screen the client shows in a window of its own while the game goes on.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PanelKind {
+    Character,
+    Inventory,
+}
+
+/// `bn.panel.view`: the screen of `panel` with its cursor on `row`, else where the native screen opens it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PanelParams {
+    pub epoch: String,
+    pub panel: PanelKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub row: Option<String>,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct WorldCellsResult {
     pub at: At,

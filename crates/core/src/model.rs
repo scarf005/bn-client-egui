@@ -3,8 +3,8 @@ use crate::interaction::InvokeError;
 use crate::markup::{self, Run};
 
 use crate::protocol::{
-    Column, Component, Editor, InvokeArgs, ItemList, List, Look, Mark, ModTileset, Row, Screen,
-    ScreenRole, Shortcut, TileAction,
+    Column, Component, Editor, InvokeArgs, ItemList, List, Look, Mark, ModTileset, PanelKind, Row,
+    Screen, ScreenRole, Shortcut, TileAction,
 };
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Pos {
@@ -513,6 +513,12 @@ pub struct OvermapWatch {
     pub pan: Pos,
 }
 
+/// A panel window the client shows: the row its focus is on, which the engine shows as the screen's cursor.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct PanelWatch {
+    pub row: Option<String>,
+}
+
 /// What the UI needs from the game: `FakeModel` (feature `fake`) in tests, `EngineModel` against a real engine.
 pub trait GameModel: MenuModel {
     /// Called once per frame: drain engine messages. No-op for synchronous models.
@@ -675,6 +681,12 @@ pub trait GameModel: MenuModel {
     fn watch_overmap(&mut self, _watch: Option<OvermapWatch>) {}
     /// The squares last read for the map window.
     fn watched_overmap(&self) -> Option<&crate::protocol::OvermapWire> {
+        None
+    }
+    /// What a panel window shows, read from the engine while the game goes on; none when it is closed.
+    fn watch_panel(&mut self, _panel: PanelKind, _watch: Option<PanelWatch>) {}
+    /// The screen last read for a panel window.
+    fn watched_panel(&self, _panel: PanelKind) -> Option<&Screen> {
         None
     }
     /// Runs an affordance of the top screen by id, with the arguments its shape asks for.

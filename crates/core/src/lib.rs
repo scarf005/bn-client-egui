@@ -23,5 +23,5 @@ pub use model::FakeModel;
 pub use model::{
     ActionEntry, Cell, CommandStatus, Effect, Failure, FailureKind, GameModel, Glow, Health, Heard,
     Layer, Loading, LogLine, Menu, MenuChoice, MenuModel, MenuPane, Mutation, OvermapWatch,
-    PaneTotals, Pos, Rgb, Shape, action_hint,
+    PaneTotals, PanelWatch, Pos, Rgb, Shape, action_hint,
 };
