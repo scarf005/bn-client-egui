@@ -46,7 +46,7 @@ fn model(cells: Vec<Value>) -> EngineModel {
 
 fn scene_of(m: &EngineModel, tag: &str) -> Scene {
     let tileset = Tileset::load(&iso_root(tag).join("gfx/iso")).unwrap();
-    scene::build(m, &tileset, None, None, 1)
+    scene::build(m, &tileset, None, None, 1, None)
 }
 
 fn all(scene: &Scene) -> Vec<Instance> {
@@ -418,7 +418,7 @@ fn decoded(tileset: &Tileset) -> std::sync::Arc<Pages> {
 fn flat_scene_of(m: &EngineModel, tag: &str) -> Scene {
     let tileset = Tileset::load(&flat_root(tag).join("gfx/flat")).unwrap();
     let pages = decoded(&tileset);
-    scene::build(m, &tileset, Some(&pages), None, 1)
+    scene::build(m, &tileset, Some(&pages), None, 1, None)
 }
 
 #[test]
@@ -643,4 +643,148 @@ fn a_vehicle_part_beside_a_wall_hides_its_side_there_and_the_taller_wall_keeps_i
         (between[0].b[2] + 3.0).abs() < 1e-4,
         "the wall's: {between:?}"
     );
+}
+
+#[test]
+fn a_tree_of_an_isometric_tileset_stands_on_its_ground_which_lies_in_its_square() {
+    let m = model(vec![cell(4, 4, 0, "t_tree")]);
+    let tileset = Tileset::load(&iso_root("iso-tree").join("gfx/iso")).unwrap();
+    let pages = decoded(&tileset);
+    let scene = scene::build(&m, &tileset, Some(&pages), None, 1, None);
+    let (boards, ground): (Vec<_>, Vec<_>) = at(&scene, &m, (4, 4))
+        .into_iter()
+        .partition(|i| i.flags[0] & BOARD != 0);
+    // The ground is a sprite as wide as the tree's, but it draws only in its tile's columns.
+    assert_eq!(boards.len(), 1, "the tree stands: {boards:?}");
+    assert_eq!(ground.len(), 1, "its ground lies: {ground:?}");
+    let [x, y] = corner(&m, (4, 4));
+    assert_eq!(ground[0].origin, [x, y, 0.0]);
+}
+
+#[test]
+fn what_covers_some_of_a_person_drawn_from_above_stands_that_share_of_a_person_on_its_ground() {
+    let mut shrub = cell(4, 4, 0, "t_shrub");
+    shrub["terrain"]["coverage"] = 40.into();
+    let mut flower = cell(5, 4, 0, "t_grass");
+    flower["furniture"] = look("furniture", "f_flower");
+    flower["furniture"]["coverage"] = 80.into();
+    let m = model(vec![shrub, flower]);
+    let scene = flat_scene_of(&m, "flat-standing");
+    let quads = at(&scene, &m, (4, 4));
+    // The grass under it lies; the shrub is its top, its bottom and the four sides of its outline.
+    let ground = quads
+        .iter()
+        .filter(|i| i.origin[2].abs() < 0.01 && i.b[2] == 0.0)
+        .count();
+    assert_eq!(quads.len(), 1 + 2 + 4, "{quads:?}");
+    assert_eq!(ground, 2, "the grass and the shrub's bottom: {quads:?}");
+    let top = quads.iter().map(|i| i.origin[2]).fold(f32::MIN, f32::max);
+    assert!((top - 0.4).abs() < 0.01, "{quads:?}");
+    assert!(
+        sides(&quads).iter().all(|i| (i.b[2] + 0.4).abs() < 0.01),
+        "{quads:?}"
+    );
+    let (x, y) = square(&m, (4, 4));
+    let solid = scene.column(x, y).unwrap().solid.unwrap();
+    assert!((solid.1 - 0.4).abs() < 0.01, "{solid:?}");
+    // Furniture stands by its own coverage.
+    let furniture = at(&scene, &m, (5, 4));
+    let top = furniture
+        .iter()
+        .map(|i| i.origin[2])
+        .fold(f32::MIN, f32::max);
+    assert!((top - 0.8).abs() < 0.01, "{furniture:?}");
+    assert!(
+        furniture.iter().all(|i| i.flags[0] & BOARD == 0),
+        "{furniture:?}"
+    );
+}
+
+#[test]
+fn what_covers_nothing_of_a_person_drawn_from_above_still_lies_on_the_ground() {
+    let mut shrub = cell(4, 4, 0, "t_shrub");
+    shrub["terrain"]["coverage"] = 0.into();
+    let m = model(vec![shrub]);
+    let scene = flat_scene_of(&m, "flat-covers-nothing");
+    let quads = at(&scene, &m, (4, 4));
+    assert_eq!(quads.len(), 2, "{quads:?}");
+    assert!(quads.iter().all(|i| i.origin[2].abs() < 0.01), "{quads:?}");
+}
+
+/// A square of terrain `id` the engine calls a window in a wall's line.
+fn window(x: i32, y: i32, id: &str) -> Value {
+    let mut glazed = wall(x, y, id);
+    glazed["terrain"]["window"] = true.into();
+    glazed
+}
+
+#[test]
+fn a_window_drawn_from_above_is_a_sill_and_a_lintel_of_its_wall_with_the_opening_between() {
+    let m = model(vec![window(4, 4, "t_wall")]);
+    let scene = flat_scene_of(&m, "flat-window");
+    let quads = planes(&scene);
+    // Each of the sill and the lintel: a top, a bottom and four sides.
+    assert_eq!(quads.len(), 2 * 6, "{quads:?}");
+    let mut lids = quads
+        .iter()
+        .filter(|i| i.b[2] == 0.0)
+        .map(|i| i.origin[2])
+        .collect::<Vec<_>>();
+    lids.sort_by(f32::total_cmp);
+    let expected = [0.0, 0.9, 2.4, 3.0];
+    assert!(
+        lids.iter().zip(expected).all(|(a, b)| (a - b).abs() < 0.01),
+        "{lids:?}"
+    );
+    // Nothing is drawn in the opening.
+    assert!(
+        quads.iter().all(|i| {
+            let (high, low) = (i.origin[2], i.origin[2] + i.b[2].min(0.0));
+            high <= 0.9 + 0.01 || low >= 2.4 - 0.01
+        }),
+        "{quads:?}"
+    );
+    let (x, y) = square(&m, (4, 4));
+    assert_eq!(scene.column(x, y).unwrap().solid, Some((0.0, 3.0)));
+}
+
+#[test]
+fn a_wall_beside_a_window_keeps_the_face_seen_through_its_opening_and_hides_the_windows() {
+    let m = model(vec![window(4, 4, "t_wall"), wall(5, 4, "t_wall")]);
+    let scene = flat_scene_of(&m, "flat-window-wall");
+    // The wall's six faces; the sill and the lintel without their east sides against it.
+    assert_eq!(planes(&scene).len(), 6 + 2 * 5);
+    let (x, _) = square(&m, (5, 4));
+    let between = sides(&planes(&scene))
+        .into_iter()
+        .filter(|i| i.a[0] == 0.0 && i.origin[0] == x as f32)
+        .collect::<Vec<_>>();
+    assert_eq!(between.len(), 1, "{between:?}");
+    assert!(
+        (between[0].b[2] + 3.0).abs() < 1e-4,
+        "the wall's: {between:?}"
+    );
+}
+
+#[test]
+fn a_window_of_an_isometric_tileset_is_its_walls_box() {
+    let m = model(vec![window(5, 4, "t_wall")]);
+    let wall = planes(&scene_of(&m, "scene-window-box"));
+    assert_eq!(wall.len(), 5, "a lid and four faces");
+}
+
+#[test]
+fn a_fire_in_the_3d_scene_shows_the_sprite_of_its_animation_frame() {
+    let m = model(vec![cell(4, 4, 0, "fd_fire")]);
+    let tileset = Tileset::load(&common::game_root("iso-fire").join("gfx/test")).unwrap();
+    let at_frame = |frame| scene::build(&m, &tileset, None, None, 1, frame);
+    let frames = (0..5).map(|f| all(&at_frame(Some(f)))).collect::<Vec<_>>();
+    assert!(at_frame(Some(0)).animated);
+    assert!(
+        frames.iter().any(|f| *f != frames[0]),
+        "the fire changes over a loop"
+    );
+    assert!(!at_frame(None).animated, "still with reduced motion");
+    let grass = model(vec![cell(4, 4, 0, "grass")]);
+    assert!(!scene::build(&grass, &tileset, None, None, 1, Some(0)).animated);
 }

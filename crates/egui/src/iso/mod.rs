@@ -45,6 +45,7 @@ struct Key {
     season: Option<String>,
     /// The sheets are decoded, so what is painted can be.
     decoded: bool,
+    frame: Option<u32>,
 }
 
 impl View3d {
@@ -58,18 +59,28 @@ impl View3d {
         self.camera.orbit(delta.x * DRAG.0, -delta.y * DRAG.1);
     }
 
-    /// The camera looking at the avatar's square, in `size` points; `scale` is points per world unit.
-    pub fn viewport(&self, avatar: bn_client_core::Pos, scale: f32, size: egui::Vec2) -> Viewport {
+    /// The camera looking at the avatar's square, or out of its eyes, in `size` points; `scale` is points per
+    /// world unit.
+    pub fn viewport(
+        &self,
+        avatar: bn_client_core::Pos,
+        scale: f32,
+        size: egui::Vec2,
+        first_person: bool,
+    ) -> Viewport {
         Viewport {
-            camera: self.camera,
+            camera: Camera {
+                first_person,
+                ..self.camera
+            },
             target: Vec3::new(avatar.x as f32 + 0.5, avatar.y as f32 + 0.5, 0.0),
             scale,
             size: Vec2::new(size.x, size.y),
         }
     }
 
-    /// The scene of what the model shows now, rebuilt only when the model's map or the tileset changed, and the
-    /// pages it samples; none without a tileset.
+    /// The scene of what the model shows now, rebuilt only when the model's map or the tileset changed or an animated
+    /// sprite in it reached another frame, and the pages it samples; none without a tileset.
     pub fn scene(
         &mut self,
         ctx: &egui::Context,
@@ -92,6 +103,12 @@ impl View3d {
             size: (model.size().x, model.size().y),
             season: season.map(str::to_owned),
             decoded: !pages.loading(),
+            // A scene with an animated sprite is built again for each frame.
+            frame: self
+                .scene
+                .as_ref()
+                .filter(|(_, s)| s.animated)
+                .and(display.frame()),
         };
         let stale = self
             .scene
@@ -99,10 +116,20 @@ impl View3d {
             .is_none_or(|(k, _)| key.map.is_none() || *k != key);
         if stale {
             self.built += 1;
-            let scene = scene::build(model, tileset, Some(&pages), season, self.built);
+            let scene = scene::build(
+                model,
+                tileset,
+                Some(&pages),
+                season,
+                self.built,
+                display.frame(),
+            );
             self.scene = Some((key, Arc::new(scene)));
         }
         let scene = self.scene.as_ref().map(|(_, s)| s.clone())?;
+        if scene.animated {
+            ctx.request_repaint_after(crate::tileset::FRAME);
+        }
         Some((scene, pages))
     }
 }

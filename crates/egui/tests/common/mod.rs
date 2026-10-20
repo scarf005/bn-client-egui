@@ -157,10 +157,11 @@ pub fn with_tiles(mut event: Value) -> Value {
 
 /// A game root holding one isometric tileset `iso` (sprites 0 and 1 are the ground, 2 the wall, 3 the person and
 /// 4 the table; `t_mound` is a tall sprite that is not joined to its neighbours), drawn like Ultica_iso's sheets: 48 x 24 tiles, ground in
-/// 48 x 36 sprites, walls in 48 x 120 sprites, creatures and furniture in 48 x 72 sprites. `flat.png` has a
-/// light and a dark ground (the light with a red mark at its north corner), `tall.png` a wall with a white top,
-/// red left face and blue right face, and `upright.png` a yellow creature and a brown table. The root is new
-/// for every call.
+/// 48 x 36 sprites, walls in 48 x 120 sprites, creatures and furniture in 48 x 72 sprites, trees in 200 x 240
+/// sprites. `flat.png` has a light and a dark ground (the light with a red mark at its north corner), `tall.png` a
+/// wall with a white top, red left face and blue right face, `upright.png` a yellow creature and a brown table, and
+/// `giant.png` a tree (5) and its ground (6), a dark diamond in the tile's columns of the bottom rows. The root is
+/// new for every call.
 pub fn iso_root(tag: &str) -> std::path::PathBuf {
     let root = std::env::temp_dir().join(format!("bn-client-iso-{}-{tag}", std::process::id()));
     let dir = root.join("gfx/iso");
@@ -225,6 +226,21 @@ pub fn iso_root(tag: &str) -> std::path::PathBuf {
         }
     }
     upright.save(dir.join("upright.png")).unwrap();
+    let mut giant = image::RgbaImage::new(400, 240);
+    for (x, y, px) in giant.enumerate_pixels_mut() {
+        let (sprite, x) = (x / 200, x % 200);
+        let tree = ((96..104).contains(&x) && (150..228).contains(&y))
+            || ((40..160).contains(&x) && (30..150).contains(&y));
+        let ground = (76..124).contains(&x) && on_diamond(x - 76, y, 240);
+        if (sprite == 0 && tree) || (sprite == 1 && ground) {
+            *px = if sprite == 0 {
+                image::Rgba([40, 120, 40, 255])
+            } else {
+                image::Rgba([60, 90, 40, 255])
+            };
+        }
+    }
+    giant.save(dir.join("giant.png")).unwrap();
     let config = serde_json::json!({
         "tile_info": [{"width": 48, "height": 24, "iso": true, "zlevel_height": 108, "pixelscale": 1}],
         "tiles-new": [
@@ -241,7 +257,9 @@ pub fn iso_root(tag: &str) -> std::path::PathBuf {
             {"file": "upright.png", "sprite_width": 48, "sprite_height": 72, "sprite_offset_y": -48, "tiles": [
                 {"id": ["mon_a", "mon_zombie"], "fg": 3},
                 {"id": "f_table", "fg": 4}
-            ]}
+            ]},
+            {"file": "giant.png", "sprite_width": 200, "sprite_height": 240, "sprite_offset_x": -76,
+                "sprite_offset_y": -216, "tiles": [{"id": "t_tree", "fg": 5, "bg": 6}]}
         ]
     });
     std::fs::write(dir.join("tile_config.json"), config.to_string()).unwrap();

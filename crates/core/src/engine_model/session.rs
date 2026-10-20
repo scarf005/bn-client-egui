@@ -123,6 +123,7 @@ impl EngineModel {
             status: None,
             at_main_menu: false,
             hovered: None,
+            overmap: Default::default(),
         };
         m.hello();
         m

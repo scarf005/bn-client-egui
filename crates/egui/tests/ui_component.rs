@@ -1156,10 +1156,7 @@ fn a_worn_item_runs_the_armor_screens_pick_with_its_identity() {
     h.run_steps(3);
     assert_eq!(
         submits(&script),
-        [boundary_invoke(
-            "bn:activate:armor:pick",
-            json!({"row": jeans})
-        )]
+        [boundary_invoke("armor:pick", json!({"row": jeans}))]
     );
 }
 
@@ -1637,4 +1634,23 @@ fn a_query_popup_draws_its_confirm_once_and_its_rows_run_the_choose() {
 fn the_look_screen_draws_no_button_for_the_move_its_map_clicks_make() {
     let (h, _) = harness(example("look.json", "look-around screen"));
     assert_eq!(h.query_all_by_label("Select").count(), 0);
+}
+
+#[test]
+fn an_any_key_popup_says_its_message_once_and_asks_for_the_key_only_by_its_button() {
+    let mut form = example("menu.json", "key field of a keybinding prompt");
+    form["fields"][0]["label"] = json!("");
+    let message = json!({"id": "message", "kind": "text", "markup": "You have nothing to wear."});
+    let root = json!({"id": "split:root", "kind": "split", "relation": "peers", "children": [message, form]});
+    let fill = affordance(
+        "bn:fill:field",
+        &[],
+        json!({"text": {"field_id": "field:key"}}),
+    );
+    let any = json!({"id": "bn:any_key", "label": "Press any key", "keys": [], "enabled": true,
+        "role": "any_key", "expect": "screen"});
+    let (h, _) = harness(dialog(root, vec![fill, any]));
+    assert_eq!(h.get_all_by_label("You have nothing to wear.").count(), 1);
+    h.get_by_label("Press any key");
+    assert!(h.query_by_label("Press the new key").is_none());
 }

@@ -736,6 +736,46 @@ fn cell_event(sequence: u64, cell: Value) -> Value {
         "type": "cells.seen", "changes": { "cells": [cell] }}]}})
 }
 
+/// The engine's view centred on the avatar at (3, 4), as large as the shown map, on level `z`.
+fn level_event(sequence: u64, z: i32) -> Value {
+    let at = |x: i32, y: i32| json!({"dim": "", "x": x, "y": y, "z": z});
+    json!({"jsonrpc":"2.0","method":"bn.events","params":{"epoch":"e7f3","events":[{
+        "sequence": sequence.to_string(), "revision": (sequence - 9).to_string(),
+        "type": "cells.seen", "changes": { "view": {"min": at(-17, -8), "max": at(22, 16)}}}]}})
+}
+
+#[test]
+fn the_map_shows_the_level_the_engines_view_looks_at_and_hovers_there() {
+    let (t, h) = session();
+    let reply = json!({"jsonrpc":"2.0","id":0,"result":{"parts":[],"actions":[]}});
+    let mut m = connected(t.on("bn.world.describe", vec![reply]));
+    let rock = json!({"kind":"terrain","id":"t_rock_floor","name":"rock floor","glyph":".","color":"white"});
+    h.push(cell_event(
+        41,
+        json!({"at": {"dim":"","x":5,"y":4,"z":-1}, "known": "visible", "terrain": rock}),
+    ));
+    m.poll();
+    let square = Pos { x: 22, y: 12 };
+    assert_ne!(m.cell(square).id, "t_rock_floor", "the avatar's level");
+    // A look cursor moved a level down: the engine's view is there.
+    h.push(level_event(42, -1));
+    m.poll();
+    assert_eq!(m.origin(), Pos { x: -17, y: -8 }, "the view stays put");
+    assert_eq!(m.cell(square).id, "t_rock_floor");
+    assert_eq!(m.cell(square).desc, "rock floor");
+    m.hover(square);
+    let asked = h
+        .sent()
+        .into_iter()
+        .find(|s| s["method"] == "bn.world.describe")
+        .expect("the hovered square is described");
+    assert_eq!(asked["params"]["pos"], json!({"dim":"","x":5,"y":4,"z":-1}));
+    // Back on the avatar's level.
+    h.push(level_event(43, 0));
+    m.poll();
+    assert_ne!(m.cell(square).id, "t_rock_floor");
+}
+
 #[test]
 fn remembered_furniture_stays_drawn_from_its_memory_overlay() {
     let (t, h) = session();
@@ -2873,4 +2913,62 @@ fn a_square_action_is_named_in_the_status_by_the_label_the_engine_described_it_w
     let status = m.command().unwrap();
     assert_eq!(status.label, fire.label.shown());
     assert_eq!(status.target.as_deref(), Some("fire"));
+}
+
+fn overmap_reads(h: &bn_client_core::transport::ScriptHandle) -> Vec<Value> {
+    h.sent()
+        .into_iter()
+        .filter(|m| m["method"] == "bn.overmap.cells")
+        .map(|m| m["params"].clone())
+        .collect()
+}
+
+#[test]
+fn the_map_window_reads_the_squares_around_the_player_the_engine_names_once_per_revision() {
+    let (t, h) = session();
+    let squares = |x: i32, y: i32| {
+        json!({"jsonrpc":"2.0","id":0,"result":{
+            "origin": {"dim": "", "x": x - 1, "y": y - 1, "z": 0}, "player": {"dim": "", "x": 50, "y": 60, "z": 0},
+            "cols": 3, "rows": 3, "cells": [], "legend": [], "cursor_description": "",
+            "notes": [], "path": []}})
+    };
+    let mut m = connected(
+        t.on("bn.overmap.cells", vec![squares(0, 0)])
+            .on("bn.overmap.cells", vec![squares(50, 60)])
+            .on("bn.overmap.cells", vec![squares(50, 60)]),
+    );
+    let watch = bn_client_core::OvermapWatch {
+        cols: 3,
+        rows: 3,
+        pan: Pos { x: 0, y: 0 },
+    };
+    m.watch_overmap(Some(watch));
+    m.poll();
+    m.poll();
+    let reads = overmap_reads(&h);
+    assert_eq!(
+        reads.len(),
+        2,
+        "a read around the player the first read names"
+    );
+    assert_eq!(
+        reads[1]["min"],
+        json!({"dim": "", "x": 49, "y": 59, "z": 0})
+    );
+    assert_eq!(
+        reads[1]["max"],
+        json!({"dim": "", "x": 51, "y": 61, "z": 0})
+    );
+    assert_eq!(m.watched_overmap().map(|v| v.player.x), Some(50));
+    m.poll();
+    assert_eq!(
+        overmap_reads(&h).len(),
+        2,
+        "an unchanged world asks nothing more"
+    );
+    h.push(change(41, json!({"route": [pos(4, 4)]})));
+    m.poll();
+    assert_eq!(overmap_reads(&h).len(), 3, "a new revision reads again");
+    m.watch_overmap(None);
+    assert!(m.watched_overmap().is_none());
 }

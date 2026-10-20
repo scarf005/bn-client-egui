@@ -57,6 +57,12 @@ const LEVEL: f32 = 3.0;
 const LAYER_BIAS: f32 = 0.002;
 /// A vehicle part of a tileset drawn from above stands this many squares tall: a person in it shows from the chest.
 const VEHICLE: f32 = 0.5;
+/// A person of a tileset drawn from above stands as an upright board as tall as the tile: one square. What covers
+/// some of a person stands that share of it.
+const PERSON: f32 = 1.0;
+/// The sill and the lintel of a window of a tileset drawn from above, as shares of the level its wall rises.
+const SILL: f32 = 0.3;
+const LINTEL: f32 = 0.2;
 
 impl Metrics {
     pub fn new(tile: (u32, u32), iso: bool, zlevel_height: Option<f32>) -> Self {
@@ -93,6 +99,8 @@ pub enum Shape {
     /// The sprite of a tileset drawn from above pushed up from the ground to a height, as a block game makes an item
     /// of its sprite: the sprite on top and at the bottom, and its edge pixels drawn down the sides of its outline.
     Extrude { top: f32 },
+    /// A window: its sprite pushed up from the ground to its sill, and again from under its lintel to its top.
+    Window { sill: f32, lintel: f32, top: f32 },
     /// An upright board that faces the eye.
     Board,
 }
@@ -102,7 +110,7 @@ impl Shape {
     pub fn solid(&self) -> Option<(f32, f32)> {
         match *self {
             Shape::Box { top, bottom } => Some((bottom, top)),
-            Shape::Extrude { top } => Some((0.0, top)),
+            Shape::Extrude { top } | Shape::Window { top, .. } => Some((0.0, top)),
             Shape::Floor { .. } | Shape::Board => None,
         }
     }
@@ -187,13 +195,19 @@ pub enum Kind {
     Joined,
     /// Terrain the engine says is a wall, and whether it joined it to its neighbours.
     Wall { joined: bool },
+    /// Terrain the engine says is a window, as a tileset drawn from above shows it.
+    Window,
+    /// Terrain that is not a wall, or anything else that is not a creature or a vehicle part, as a tileset drawn from
+    /// above shows it, covering the given percent of a person.
+    Standing { coverage: u8 },
 }
 
 /// What `sprite` is drawn as. Terrain whose sprite is as wide as the tile is the ground when it hardly rises over
 /// its diamond; joined terrain that rises is a box, as a wall; anything else, a shrub or a mound as well, stands
 /// upright. A tileset drawn from above draws what stays inside its square from above too, so that lies on the
-/// ground, but for a creature, and a wall or a vehicle part is pushed up from it; what reaches out of its square, a
-/// tree, was drawn standing. An isometric tileset draws a wall's height itself: only the joins tell.
+/// ground, but for a creature, and a wall, a vehicle part or what covers some of a person is pushed up from it, a
+/// window with its opening left out; what reaches out of its square, a tree, was drawn standing. An isometric tileset
+/// draws a wall's height itself: only the joins tell.
 pub fn shape(m: &Metrics, sprite: &SpriteSource, kind: Kind) -> Shape {
     let size = sprite.size();
     if !m.iso {
@@ -202,7 +216,15 @@ pub fn shape(m: &Metrics, sprite: &SpriteSource, kind: Kind) -> Shape {
         return match (kind, inside) {
             (Kind::Creature, _) | (_, false) => Shape::Board,
             (Kind::Wall { .. }, true) => Shape::Extrude { top: m.level },
+            (Kind::Window, true) => Shape::Window {
+                sill: SILL * m.level,
+                lintel: (1.0 - LINTEL) * m.level,
+                top: m.level,
+            },
             (Kind::Vehicle, true) => Shape::Extrude { top: VEHICLE },
+            (Kind::Standing { coverage }, true) => Shape::Extrude {
+                top: PERSON * f32::from(coverage.min(100)) / 100.0,
+            },
             _ => Shape::Floor { z: 0.0 },
         };
     }
@@ -409,7 +431,8 @@ pub fn borders(m: &Metrics, p: &Placement) -> [bool; 4] {
             }
             length.map(|l| l > 1.0 - m.across.max(m.up))
         }
-        Shape::Floor { .. } | Shape::Board => [false; 4],
+        // What is seen through the opening of a window is not hidden by it.
+        Shape::Floor { .. } | Shape::Window { .. } | Shape::Board => [false; 4],
     }
 }
 
@@ -444,6 +467,31 @@ pub fn place(m: &Metrics, p: &Placement) -> Vec<Instance> {
             flags,
         )
     };
+    // The sprite pushed up from `low` to `high` over the ground: the top first, where it covers what is under it
+    // that colour is not written again.
+    let pushed = |low: f32, high: f32| -> Vec<Instance> {
+        let (bottom, height) = (p.floor + LAYER_BIAS * p.order as f32 + low, high - low);
+        let square = Vec2::new(x, y);
+        let seen = sides(m, p)
+            .into_iter()
+            .filter(|side| border(m, square, side).is_none_or(|n| !p.covered[n]))
+            .map(|side| {
+                let (e, run) = (side.edge, side.to - side.from);
+                // The pixels inside the edge, drawn all the way down.
+                let uv = [s.at + e.from + e.inward / 2.0, e.to - e.from, Vec2::ZERO];
+                let edges = ([run.x, run.y, 0.0], [0.0, 0.0, -height]);
+                instance(
+                    [side.from.x, side.from.y, bottom + height],
+                    edges,
+                    uv,
+                    flags,
+                )
+            });
+        std::iter::once(lying(bottom + height))
+            .chain(seen)
+            .chain(std::iter::once(lying(bottom)))
+            .collect()
+    };
     match shape(m, s, p.kind) {
         Shape::Floor { z } => {
             let z = p.floor + z;
@@ -463,24 +511,11 @@ pub fn place(m: &Metrics, p: &Placement) -> Vec<Instance> {
                 false => vec![lying(z + LAYER_BIAS * p.order as f32)],
             }
         }
-        Shape::Extrude { top } => {
-            // The top first: where it covers what is under it, that colour is not written again.
-            let bottom = p.floor + LAYER_BIAS * p.order as f32;
-            let square = Vec2::new(x, y);
-            let seen = sides(m, p)
-                .into_iter()
-                .filter(|side| border(m, square, side).is_none_or(|n| !p.covered[n]))
-                .map(|side| {
-                    let (e, run) = (side.edge, side.to - side.from);
-                    // The pixels inside the edge, drawn all the way down.
-                    let uv = [s.at + e.from + e.inward / 2.0, e.to - e.from, Vec2::ZERO];
-                    let edges = ([run.x, run.y, 0.0], [0.0, 0.0, -top]);
-                    instance([side.from.x, side.from.y, bottom + top], edges, uv, flags)
-                });
-            std::iter::once(lying(bottom + top))
-                .chain(seen)
-                .chain(std::iter::once(lying(bottom)))
-                .collect()
+        Shape::Extrude { top } => pushed(0.0, top),
+        Shape::Window { sill, lintel, top } => {
+            let mut quads = pushed(0.0, sill);
+            quads.extend(pushed(lintel, top));
+            quads
         }
         Shape::Box { top, bottom } => {
             let (w, h, t) = (size.x, size.y, m.diamond);
@@ -976,6 +1011,7 @@ mod tests {
             camera: Camera {
                 yaw: YAW_ISO,
                 pitch: tilt,
+                first_person: false,
             },
             target: Vec3::ZERO,
             scale: m.tile.x / std::f32::consts::SQRT_2,

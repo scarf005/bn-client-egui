@@ -127,11 +127,24 @@ impl<M: GameModel> App<M> {
             };
             (turning && mods.alt && !self.model.key_bound(&format!("ALT+{name}"))).then_some(way)
         };
+        // The engine's map key opens the client's map window, which leaves the game taking keys.
+        let map = |k: &FrameKey| {
+            k.key.is_none()
+                && actions
+                    .iter()
+                    .any(|a| a.id == "map" && a.keys.contains(&k.token))
+        };
+        if keys.iter().any(map) {
+            self.world_map = match self.world_map {
+                Some(_) => None,
+                None => Some((bn_client_core::Pos { x: 0, y: 0 }, egui::Vec2::ZERO)),
+            };
+        }
         let zooms = keys.iter().filter_map(zoom).sum();
         let turns = keys.iter().filter_map(turn).sum::<f32>();
         let rest = keys
             .into_iter()
-            .filter(|k| zoom(k).is_none() && turn(k).is_none())
+            .filter(|k| zoom(k).is_none() && turn(k).is_none() && !map(k))
             .collect();
         self.display.zoom_by(zooms);
         self.iso.camera.orbit(turns * iso::TURN, 0.0);

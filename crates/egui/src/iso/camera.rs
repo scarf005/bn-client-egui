@@ -12,6 +12,15 @@ pub const PITCH_ISO: f32 = 0.615_479_7;
 pub const YAW_ISO: f32 = 3.0 * std::f32::consts::FRAC_PI_4;
 /// How far the eye sits from the target; orthographic, so it only has to clear the scene.
 const EYE_DISTANCE: f32 = 200.0;
+/// How high the eye of the first-person view sits over the avatar's floor, in squares of a metre.
+pub const EYE_HEIGHT: f32 = 1.6;
+/// The vertical field of view of the first-person view.
+const FOV: f32 = 70.0 * std::f32::consts::PI / 180.0;
+/// The part of the orbit's tilt the first-person eye looks down by, so tilting the camera tilts the look too.
+const LOOK_DOWN: f32 = 0.3;
+/// Nearer than this the first-person view draws nothing: the avatar's own sprite stands around the eye.
+const NEAR: f32 = 0.3;
+
 /// The way toward the light the map's shadows are cast from: high in the north-west, so that shadows fall to the
 /// south-east whatever the time, as Factorio draws them.
 pub const LIGHT: Vec3 = Vec3::new(-0.6, -0.4, 1.0);
@@ -38,6 +47,9 @@ pub struct Camera {
     pub yaw: f32,
     /// Elevation of the eye above the ground, within `PITCH_MIN..=PITCH_MAX`.
     pub pitch: f32,
+    /// The eye is the avatar's: a perspective view from its square, looking away from where the orbit's eye
+    /// would be.
+    pub first_person: bool,
 }
 
 impl Default for Camera {
@@ -45,6 +57,7 @@ impl Default for Camera {
         Self {
             yaw: YAW_ISO,
             pitch: PITCH_ISO,
+            first_person: false,
         }
     }
 }
@@ -79,6 +92,14 @@ impl Viewport {
     }
 
     pub fn view_proj(&self) -> Mat4 {
+        if self.camera.first_person {
+            let eye = self.target + Vec3::Z * EYE_HEIGHT;
+            let (sin, cos) = (self.camera.pitch * LOOK_DOWN).sin_cos();
+            let ahead = -self.toward() * cos - Vec3::Z * sin;
+            let look = view::look_at_mat4(eye, eye + ahead, Vec3::Z);
+            let aspect = self.size.x / self.size.y.max(1.0);
+            return directx::perspective(FOV, aspect, NEAR, 2.0 * EYE_DISTANCE) * look;
+        }
         let (sin, cos) = self.camera.pitch.sin_cos();
         let eye = self.target + (self.toward() * cos + Vec3::Z * sin) * EYE_DISTANCE;
         let look = view::look_at_mat4(eye, self.target, Vec3::Z);
@@ -128,6 +149,7 @@ mod tests {
             camera: Camera {
                 yaw: yaw_deg.to_radians(),
                 pitch: pitch_deg.to_radians(),
+                first_person: false,
             },
             target: Vec3::new(10.5, 7.5, 0.0),
             scale: 34.0,
@@ -225,5 +247,24 @@ mod tests {
             assert!(there.x > v.size.x / 2.0, "yaw {yaw}");
             assert!((there.y - v.size.y / 2.0).abs() < 1e-2, "yaw {yaw}");
         }
+    }
+
+    #[test]
+    fn the_first_person_eye_sees_ahead_of_the_avatar_and_not_behind_it() {
+        let mut v = view(135.0, 35.264);
+        v.camera.first_person = true;
+        // The orbit's eye is south-west of the target, so the avatar looks north-east.
+        let ahead = v.target + Vec3::new(3.0, -3.0, 0.0);
+        let behind = v.target + Vec3::new(-3.0, 3.0, 0.0);
+        let clip = |p: Vec3| v.view_proj() * p.extend(1.0);
+        let seen = clip(ahead);
+        assert!(seen.w > 0.0 && (seen.x / seen.w).abs() < 1.0 && (seen.y / seen.w).abs() < 1.0);
+        assert!(clip(behind).w < 0.0, "behind the eye");
+        // Farther along the same line lies nearer the horizon: a perspective, not an orthographic, view.
+        let far = clip(v.target + Vec3::new(9.0, -9.0, 0.0));
+        assert!(far.y / far.w > seen.y / seen.w);
+        // The ground under the avatar's feet is nearer than the near plane and outside the view.
+        let feet = clip(v.target);
+        assert!(!(feet.w > 0.0 && (feet.y / feet.w).abs() <= 1.0 && feet.z / feet.w >= 0.0));
     }
 }

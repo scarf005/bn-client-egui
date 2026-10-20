@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: bn-client\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-18 13:23+0900\n"
+"POT-Creation-Date: 2026-10-20 08:56+0900\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -18,13 +18,13 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
 
-#: crates/core/src/engine_model.rs:585
+#: crates/core/src/engine_model.rs:654
 msgid "The engine has not answered for %d second."
 msgid_plural "The engine has not answered for %d seconds."
 msgstr[0] ""
 msgstr[1] ""
 
-#: crates/core/src/engine_model.rs:708
+#: crates/core/src/engine_model.rs:779
 msgid "The engine could not be restarted: %s"
 msgstr ""
 
@@ -37,7 +37,7 @@ msgid "Right click"
 msgstr ""
 
 #: crates/core/src/engine_model/commands.rs:141
-#: crates/egui/src/app/component/form.rs:168 crates/egui/src/app/menu.rs:73
+#: crates/egui/src/app/component/form.rs:175 crates/egui/src/app/menu.rs:73
 msgid "Cancel"
 msgstr ""
 
@@ -45,23 +45,23 @@ msgstr ""
 msgid "Command"
 msgstr ""
 
-#: crates/core/src/engine_model/responses.rs:141
+#: crates/core/src/engine_model/responses.rs:147
 msgid "Bad snapshot: %s"
 msgstr ""
 
-#: crates/core/src/engine_model/session.rs:269
+#: crates/core/src/engine_model/session.rs:270
 msgid "Bad engine message: %s"
 msgstr ""
 
-#: crates/core/src/engine_model/session.rs:277
+#: crates/core/src/engine_model/session.rs:278
 msgid "Engine connection closed."
 msgstr ""
 
-#: crates/core/src/engine_model/session.rs:279
+#: crates/core/src/engine_model/session.rs:280
 msgid "The engine stopped (%s)."
 msgstr ""
 
-#: crates/core/src/engine_model/session.rs:280
+#: crates/core/src/engine_model/session.rs:281
 msgid "The engine stopped."
 msgstr ""
 
@@ -97,104 +97,113 @@ msgstr ""
 msgid "Busy."
 msgstr ""
 
-#: crates/core/src/launch.rs:112
+#: crates/core/src/launch.rs:115
 msgid "no Cataclysm: Bright Nights engine found. Searched:"
 msgstr ""
 
-#: crates/core/src/launch.rs:117
+#: crates/core/src/launch.rs:121
 msgid ""
 "Set it once with `--engine /path/to/cataclysm-bn-tiles` (remembered "
 "afterwards), or export BN_ENGINE, or put the client next to the game."
 msgstr ""
 
-#: crates/core/src/launch.rs:132
+#: crates/core/src/launch.rs:136
 msgid "--engine / BN_ENGINE: not set"
 msgstr ""
 
-#: crates/core/src/launch.rs:148
+#: crates/core/src/launch.rs:152
 msgid "%s: saved %s is missing"
 msgstr ""
 
-#: crates/core/src/launch.rs:155
+#: crates/core/src/launch.rs:159
 msgid "%s: no saved engine"
 msgstr ""
 
-#: crates/core/src/launch.rs:168
+#: crates/core/src/launch.rs:172
 msgid "PATH for %s: %s"
 msgstr ""
 
-#: crates/core/src/launch.rs:195
+#: crates/core/src/launch.rs:198
 msgid "cannot start engine %s: %s"
 msgstr ""
 
-#: crates/egui/src/app.rs:314 crates/tui/src/lib.rs:678
+#: crates/egui/src/app.rs:321 crates/tui/src/lib.rs:678
 msgid "Engine: %s"
 msgstr ""
 
-#: crates/egui/src/app.rs:319 crates/tui/src/lib.rs:684
+#: crates/egui/src/app.rs:326 crates/tui/src/lib.rs:684
 msgid "Last engine output:"
 msgstr ""
 
-#: crates/egui/src/app.rs:326
+#: crates/egui/src/app.rs:333
 msgid "Restart"
 msgstr ""
 
-#: crates/egui/src/app.rs:340
+#: crates/egui/src/app.rs:347
 msgid "%s: %s (%d of %d)"
 msgstr ""
 
-#: crates/egui/src/app.rs:356
+#: crates/egui/src/app.rs:363
 msgid "Loading image"
 msgstr ""
 
-#: crates/egui/src/app.rs:475
+#: crates/egui/src/app.rs:482
 msgid "Resize sidebar"
 msgstr ""
 
-#: crates/egui/src/app.rs:502 crates/egui/src/app.rs:513
+#: crates/egui/src/app.rs:510 crates/egui/src/app.rs:521
 msgid "Client settings"
 msgstr ""
 
-#: crates/egui/src/app.rs:510 crates/egui/src/app/palette.rs:57
+#: crates/egui/src/app.rs:518 crates/egui/src/app/palette.rs:57
 #: crates/egui/src/app/palette.rs:103 crates/tui/src/lib.rs:858
 #: crates/tui/src/lib.rs:1027
 msgid "Actions"
 msgstr ""
 
-#: crates/egui/src/app.rs:528 crates/tui/src/lib.rs:647
+#: crates/egui/src/app.rs:536 crates/tui/src/lib.rs:647
 msgid "Ready"
 msgstr ""
 
-#: crates/egui/src/app.rs:556
+#: crates/egui/src/app.rs:574
 msgid "Interrupt"
 msgstr ""
 
-#: crates/egui/src/app/component/form.rs:143 crates/egui/src/editor.rs:99
+#: crates/egui/src/app/component/form.rs:150 crates/egui/src/editor.rs:99
 msgid "Press the new key"
 msgstr ""
 
-#: crates/egui/src/app/component/form.rs:165
+#: crates/egui/src/app/component/form.rs:172
 msgid "OK"
 msgstr ""
 
-#: crates/egui/src/app/component/overmap.rs:414 crates/egui/src/app/map.rs:204
+#: crates/egui/src/app/component/overmap.rs:325
+#: crates/egui/src/app/component/overmap.rs:489 crates/egui/src/app/map.rs:211
 #: crates/tui/src/lib.rs:734
 msgid "Map"
 msgstr ""
 
-#: crates/egui/src/app/map.rs:129 crates/tui/src/lib.rs:744
+#: crates/egui/src/app/component/overmap.rs:331
+msgid "Centre"
+msgstr ""
+
+#: crates/egui/src/app/component/overmap.rs:336
+msgid "Travel and notes"
+msgstr ""
+
+#: crates/egui/src/app/map.rs:134 crates/tui/src/lib.rs:744
 msgid "No map loaded"
 msgstr ""
 
-#: crates/egui/src/app/map.rs:277
+#: crates/egui/src/app/map.rs:284
 msgid "Player at (%d, %d). Cursor (%d, %d)."
 msgstr ""
 
-#: crates/egui/src/app/map.rs:280
+#: crates/egui/src/app/map.rs:287
 msgid "Player at (%d, %d). Cursor (%d, %d): %s."
 msgstr ""
 
-#: crates/egui/src/app/map.rs:507
+#: crates/egui/src/app/map.rs:584
 msgid "Map actions"
 msgstr ""
 
@@ -218,31 +227,35 @@ msgstr ""
 msgid "Resize message log"
 msgstr ""
 
-#: crates/egui/src/display.rs:515
+#: crates/egui/src/display.rs:521
 msgid "No tileset found in the game's gfx folder."
 msgstr ""
 
-#: crates/egui/src/display.rs:669
+#: crates/egui/src/display.rs:680
 msgid "Tiles"
 msgstr ""
 
-#: crates/egui/src/display.rs:688
+#: crates/egui/src/display.rs:689
+msgid "First person"
+msgstr ""
+
+#: crates/egui/src/display.rs:703
 msgid "none"
 msgstr ""
 
-#: crates/egui/src/display.rs:691
+#: crates/egui/src/display.rs:706
 msgid "Tileset"
 msgstr ""
 
-#: crates/egui/src/display.rs:707
+#: crates/egui/src/display.rs:722
 msgid "Tileset unavailable: %s"
 msgstr ""
 
-#: crates/egui/src/display.rs:711
+#: crates/egui/src/display.rs:726
 msgid "Reduced motion"
 msgstr ""
 
-#: crates/egui/src/main.rs:32 crates/egui/src/main.rs:99
+#: crates/egui/src/main.rs:32 crates/egui/src/main.rs:100
 msgid "Cataclysm: Bright Nights client"
 msgstr ""
 

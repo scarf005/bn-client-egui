@@ -5,7 +5,7 @@ use super::geometry::{
 };
 use super::pages::Pages;
 use crate::display::{Fx, STRIP, light, query, resolve_layer};
-use crate::tileset::{Tileset, Turn};
+use crate::tileset::{Query, Tileset, Turn};
 use bn_client_core::{GameModel, Health, Layer, Pos};
 use glam::Vec2;
 use std::collections::BTreeMap;
@@ -33,6 +33,8 @@ pub struct Scene {
     pub glyphs: Vec<Mark>,
     /// The hurt creatures, whose health bars lie along the bottom of their squares.
     pub hurt: Vec<Hurt>,
+    /// Whether a sprite of it changes with the animation frame.
+    pub animated: bool,
 }
 
 /// A hurt creature standing on a square.
@@ -130,6 +132,22 @@ pub fn source(tileset: &Tileset, sprite: u32) -> Option<SpriteSource> {
     })
 }
 
+/// An isometric sprite wider than its tile cut to the tile's columns when it draws nothing outside them, as the
+/// ground under a tree on a sheet of trees does: so its shape is told by what it draws, not by its sheet.
+fn narrowed(m: &Metrics, pages: &Pages, sprite: SpriteSource) -> SpriteSource {
+    let inside =
+        |cut: &SpriteSource| cut.offset.x > -0.5 && cut.offset.x + cut.size().x < m.tile.x + 0.5;
+    match pages.cropped(sprite) {
+        Some(cut) if sprite.size().x > m.tile.x + 0.5 && inside(&cut) => SpriteSource {
+            at: sprite.at - Vec2::new(sprite.offset.x / sprite.scale, 0.0),
+            src: Vec2::new(m.tile.x / sprite.scale, sprite.src.y),
+            offset: Vec2::new(0.0, sprite.offset.y),
+            ..sprite
+        },
+        _ => sprite,
+    }
+}
+
 pub fn metrics(tileset: &Tileset) -> Metrics {
     Metrics::new(tileset.tile, tileset.iso, tileset.zlevel_height)
 }
@@ -144,14 +162,15 @@ pub fn world_scale(tileset: &Tileset, cell_px: f32) -> f32 {
     }
 }
 
-/// The scene of the squares the model shows. A square seen through open air stands lower, by the levels it lies
-/// down; the levels above the avatar's are never part of the model's view, so they are cut away.
+/// The scene of the squares the model shows at animation `frame`. A square seen through open air stands lower, by
+/// the levels it lies down; the levels above the avatar's are never part of the model's view, so they are cut away.
 pub fn build(
     model: &(impl GameModel + ?Sized),
     tileset: &Tileset,
     pages: Option<&Pages>,
     season: Option<&str>,
     version: u64,
+    frame: Option<u32>,
 ) -> Scene {
     let m = metrics(tileset);
     let size = model.size();
@@ -161,6 +180,7 @@ pub fn build(
     let mut glyphs = vec![];
     let mut hurt = vec![];
     let mut squares = 0;
+    let mut animated = false;
     for y in 0..height {
         for x in 0..width {
             let cell = model.cell(Pos { x, y });
@@ -201,12 +221,21 @@ pub fn build(
             for layer in &cell.layers {
                 let (layer, paints) = resolve_layer(tileset, layer);
                 let drawn = items.len();
-                let chosen = tileset.choose(&query(&layer, season));
+                let chosen = tileset.choose(&Query {
+                    frame,
+                    ..query(&layer, season)
+                });
+                animated |= chosen.as_ref().is_some_and(|c| c.animated);
                 let kind = match (layer.terrain, chosen.as_ref().is_some_and(|c| c.joined)) {
                     (false, _) if layer.creature => Kind::Creature,
                     (false, _) if layer.vehicle => Kind::Vehicle,
-                    (false, _) => Kind::Thing,
+                    (true, _) if layer.window && !m.iso => Kind::Window,
                     (true, joined) if layer.wall => Kind::Wall { joined },
+                    // A tileset drawn from above shows what covers some of a person as tall as that.
+                    _ if layer.coverage > 0 && !m.iso => Kind::Standing {
+                        coverage: layer.coverage,
+                    },
+                    (false, _) => Kind::Thing,
                     (true, false) => Kind::Terrain,
                     (true, true) => Kind::Joined,
                 };
@@ -217,10 +246,11 @@ pub fn build(
                     let Some(placed) = placed else {
                         continue;
                     };
-                    // The background under a wall or a vehicle part is its ground.
+                    // The background under a wall, a window, a vehicle part or what stands is its ground.
                     let kind = match (kind, under) {
-                        (Kind::Wall { .. }, true) => Kind::Terrain,
-                        (Kind::Vehicle, true) => Kind::Thing,
+                        (Kind::Wall { .. } | Kind::Window, true) => Kind::Terrain,
+                        (Kind::Standing { .. }, true) if layer.terrain => Kind::Terrain,
+                        (Kind::Vehicle | Kind::Standing { .. }, true) => Kind::Thing,
                         (kind, _) => kind,
                     };
                     let Some(mut sprite) = source(tileset, placed.sprite) else {
@@ -239,7 +269,7 @@ pub fn build(
                     // sprite, keeps it whole.
                     if let Some(pages) = pages {
                         sprite = match (m.iso, placed.turn) {
-                            (true, _) => pages.trimmed(sprite),
+                            (true, _) => pages.trimmed(narrowed(&m, pages, sprite)),
                             (false, Turn::None) => match pages.cropped(sprite) {
                                 None => continue,
                                 Some(cut) if shape(&m, &cut, kind) != Shape::Board => cut,
@@ -253,7 +283,9 @@ pub fn build(
                         column.solid = Some((floor + low, floor + high));
                     }
                     let outline = match form {
-                        Shape::Extrude { .. } => pages.and_then(|p| p.outline(&sprite)),
+                        Shape::Extrude { .. } | Shape::Window { .. } => {
+                            pages.and_then(|p| p.outline(&sprite))
+                        }
                         _ => None,
                     };
                     items.push(Item {
@@ -332,5 +364,6 @@ pub fn build(
         columns,
         glyphs,
         hurt,
+        animated,
     }
 }

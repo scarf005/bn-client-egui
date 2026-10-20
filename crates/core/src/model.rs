@@ -50,6 +50,10 @@ pub struct Layer {
     pub terrain: bool,
     /// Terrain that stands as a wall (a wall, a closed door or a window), which a 3D view raises.
     pub wall: bool,
+    /// Terrain that is a window, which a 3D view opens between a sill and a lintel.
+    pub window: bool,
+    /// How much of a person the thing covers, in percent, which a 3D view raises it by; 0 when it lies flat.
+    pub coverage: u8,
     /// Whether the thing is a part of a vehicle.
     pub vehicle: bool,
     /// Picks between the weighted variants of a sprite, like the game's per-tile seed.
@@ -500,6 +504,15 @@ pub trait MenuModel {
     fn set_count(&mut self, _choice_id: &str, _count: u64) {}
 }
 
+/// The overmap squares the client's own map window shows: `cols` by `rows`, centred `pan` squares off the
+/// player's square.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct OvermapWatch {
+    pub cols: i32,
+    pub rows: i32,
+    pub pan: Pos,
+}
+
 /// What the UI needs from the game: `FakeModel` (feature `fake`) in tests, `EngineModel` against a real engine.
 pub trait GameModel: MenuModel {
     /// Called once per frame: drain engine messages. No-op for synchronous models.
@@ -657,6 +670,12 @@ pub trait GameModel: MenuModel {
     /// The open screens of the interaction stack, outermost first; empty while the boundary has only the `interaction`.
     fn screens(&self) -> &[Screen] {
         &[]
+    }
+    /// What the client's map window shows, read from the engine while the game goes on; none when it is closed.
+    fn watch_overmap(&mut self, _watch: Option<OvermapWatch>) {}
+    /// The squares last read for the map window.
+    fn watched_overmap(&self) -> Option<&crate::protocol::OvermapWire> {
+        None
     }
     /// Runs an affordance of the top screen by id, with the arguments its shape asks for.
     fn invoke_affordance(&mut self, _id: &str, _args: InvokeArgs) -> Result<(), InvokeError> {
