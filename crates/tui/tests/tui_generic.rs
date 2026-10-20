@@ -159,7 +159,7 @@ fn escape_in_the_prompt_is_the_screens_own_key() {
     press(&mut app, KeyCode::Esc);
     assert_eq!(
         operations(&h),
-        [json!({"kind": "invoke", "affordance_id": "TEXT.QUIT", "args": {}})]
+        [json!({"kind": "invoke", "affordance_id": "bn:cancel", "args": {}})]
     );
 }
 
@@ -197,6 +197,6 @@ fn a_key_prompt_submits_the_next_key_by_its_engine_name_and_leaves_escape_to_the
     press(&mut app, KeyCode::Esc);
     assert_eq!(
         operations(&h),
-        [json!({"kind": "invoke", "affordance_id": "TEXT.QUIT", "args": {}})]
+        [json!({"kind": "invoke", "affordance_id": "bn:cancel", "args": {}})]
     );
 }

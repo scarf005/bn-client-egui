@@ -232,7 +232,7 @@ fn escape_in_the_prompt_cancels_it() {
     h.run_steps(3);
     assert_eq!(
         operations(&script),
-        [json!({"kind": "invoke", "affordance_id": "TEXT.QUIT", "args": {}})]
+        [json!({"kind": "invoke", "affordance_id": "bn:cancel", "args": {}})]
     );
 }
 
