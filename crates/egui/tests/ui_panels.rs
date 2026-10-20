@@ -7,13 +7,13 @@ use bn_client_egui::{App, Clock, EngineModel};
 use common::{fixture, panel_view};
 use eframe::egui;
 use egui_kittest::Harness;
-use egui_kittest::kittest::{NodeT, Queryable};
+use egui_kittest::kittest::Queryable;
 use serde_json::{Value, json};
 
 type H<'a> = Harness<'a, App<EngineModel>>;
 
 /// A game whose actions include the character sheet (`@`), the inventory (`i`) and the map (`m`).
-fn open<'a>() -> (H<'a>, ScriptHandle) {
+fn game() -> (App<EngineModel>, ScriptHandle) {
     let mut subscribed = fixture("subscribe_result");
     subscribed["result"]["interaction"]["actions"]
         .as_array_mut()
@@ -36,12 +36,14 @@ fn open<'a>() -> (H<'a>, ScriptHandle) {
         .on("bn.command.submit", vec![fixture("submit_result")]);
     let clock = Clock::manual();
     let model = EngineModel::new(Box::new(t)).with_clock(clock.clone());
+    (App::new(model).with_clock(clock), script)
+}
+
+fn open<'a>() -> (H<'a>, ScriptHandle) {
+    let (app, script) = game();
     let mut h = Harness::builder()
         .with_size(egui::vec2(1600.0, 1000.0))
-        .build_ui_state(
-            |ui, app: &mut App<EngineModel>| app.show(ui),
-            App::new(model).with_clock(clock),
-        );
+        .build_ui_state(|ui, app: &mut App<EngineModel>| app.show(ui), app);
     h.run_steps(3);
     (h, script)
 }
@@ -151,7 +153,8 @@ fn a_click_on_a_sheet_tab_reads_the_sheet_again_with_the_tab() {
     let mut answered = 0;
     key(&mut h, "@");
     serve(&mut h, &script, &mut answered);
-    h.get_by_label("SKILLS").click();
+    h.get_by_role_and_label(egui::accesskit::Role::Tab, "SKILLS")
+        .click();
     h.run_steps(2);
     serve(&mut h, &script, &mut answered);
     let last = panel_reads(&script).pop().unwrap();
@@ -186,4 +189,26 @@ fn a_double_click_on_an_inventory_row_opens_the_engines_own_inventory() {
         operations(&script),
         [json!({"kind": "action", "action_id": "inventory"})]
     );
+}
+
+/// Writes a PNG of the sheet, the inventory and the map open together to `$SHOT_DIR`. Needs a Vulkan adapter:
+/// `cargo test --test ui_panels -- --ignored`.
+#[test]
+#[ignore = "needs a Vulkan adapter"]
+fn writes_the_sheet_inventory_and_map_windows_open_together() {
+    let (app, script) = game();
+    let mut h = common::shot_harness(egui::vec2(1600.0, 1000.0), app);
+    h.run_steps(3);
+    let mut answered = 0;
+    for window in ["@", "i", "m"] {
+        key(&mut h, window);
+        serve(&mut h, &script, &mut answered);
+    }
+    let image = h.render().expect("renders");
+    if let Some(dir) = std::env::var_os("SHOT_DIR") {
+        std::fs::create_dir_all(&dir).unwrap();
+        image
+            .save(std::path::Path::new(&dir).join("panels.png"))
+            .unwrap();
+    }
 }

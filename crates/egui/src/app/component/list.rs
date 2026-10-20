@@ -99,7 +99,7 @@ impl<M: GameModel> App<M> {
     ) {
         let id = &list.head.id;
         let interaction = &self.screens.interaction;
-        let rows = self.model.rows(list);
+        let rows = self.known_rows(list);
         let focus = interaction.focus();
         let cursor = focus
             .row_id
@@ -263,6 +263,7 @@ impl<M: GameModel> App<M> {
                     row: row.id.clone(),
                 }),
                 (_, Some(activate), true) => out.push(Intent::Run(activate.clone())),
+                (_, None, true) => out.push(Intent::Open),
                 _ => {}
             }
         }
@@ -285,6 +286,15 @@ impl<M: GameModel> App<M> {
                 .map(|c| tagged(c.color.as_deref(), &c.value.shown()))
                 .unwrap_or_default();
             right_aligned(ui, [*column_w, layout.height], self.line(ui, &value));
+        }
+    }
+
+    /// The rows of `list` that are known: a panel's lists hold all of theirs, the top screen's have their first
+    /// page and the pages fetched.
+    pub(super) fn known_rows<'a>(&'a self, list: &'a List) -> Vec<&'a Row> {
+        match self.screens.passive {
+            true => list.rows.iter().collect(),
+            false => self.model.rows(list),
         }
     }
 

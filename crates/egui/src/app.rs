@@ -5,7 +5,7 @@ use crate::iso::{self, View3d};
 use crate::text;
 use crate::windows::{self, Origin, Shown, WindowSpec};
 use bn_client_core::localise::{Value as Arg, tr, tr_format};
-use bn_client_core::protocol::SidebarSide;
+use bn_client_core::protocol::{PanelKind, SidebarSide};
 use bn_client_core::{CommandStatus, Failure, GameModel, Loading, Pos, interaction};
 use eframe::egui::{self, accesskit};
 
@@ -137,6 +137,8 @@ pub struct App<M: GameModel> {
     /// The client's map window is open: how far it is panned off the player, in squares, and the part of a
     /// square dragged past.
     world_map: Option<(Pos, egui::Vec2)>,
+    /// The panel windows open, each with its own focus.
+    panels: std::collections::HashMap<PanelKind, interaction::Interaction>,
     /// The message log's height once the user has dragged its edge.
     log_height: Option<f32>,
     /// Title of the menu that last took focus, so a menu is entered once, not on every frame.
@@ -211,6 +213,7 @@ impl<M: GameModel> App<M> {
             palette: None,
             client_settings: false,
             world_map: None,
+            panels: Default::default(),
             log_height: None,
             menu_title: None,
             focus_menu: false,
@@ -497,6 +500,7 @@ impl<M: GameModel> App<M> {
         self.palette(ctx);
         self.client_settings(ctx);
         self.world_map(ctx);
+        self.panel_windows(ctx);
         self.menu_or_screen(ctx);
     }
 
@@ -605,7 +609,8 @@ impl<M: GameModel> App<M> {
                 .model
                 .command()
                 .is_some_and(|s| !s.finished && s.target.as_deref() == Some(id));
-        let usable = enabled && !(settled && self.model.busy());
+        // A panel window's controls run nothing, so they never wait for the engine.
+        let usable = enabled && (self.screens.passive || !(settled && self.model.busy()));
         let button = ui.add_enabled(
             usable,
             egui::Button::new(text).selected(pending || highlighted),

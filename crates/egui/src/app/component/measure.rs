@@ -81,7 +81,7 @@ impl<M: GameModel> App<M> {
         };
         let own = match c {
             Component::List(list) => {
-                let rows = self.model.rows(list);
+                let rows = self.known_rows(list);
                 let widths = self.list_widths(ui, list, &rows);
                 // The rows sit beside their scroll bar.
                 let natural = widths.label

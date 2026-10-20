@@ -1,6 +1,7 @@
 //! The keyboard of a frame: the keys the client keeps for its own view and focus, the keys that go to the engine,
 //! and the held walk.
 
+use super::component::PANELS;
 use super::{App, menu_forwards_keys, tab_is_engines};
 use crate::iso;
 use bn_client_core::{GameModel, Menu, interaction, keys};
@@ -127,25 +128,35 @@ impl<M: GameModel> App<M> {
             };
             (turning && mods.alt && !self.model.key_bound(&format!("ALT+{name}"))).then_some(way)
         };
-        // The engine's map key opens the client's map window, which leaves the game taking keys.
-        let map = |k: &FrameKey| {
-            k.key.is_none()
-                && actions
-                    .iter()
-                    .any(|a| a.id == "map" && a.keys.contains(&k.token))
-        };
-        if keys.iter().any(map) {
-            self.world_map = match self.world_map {
-                Some(_) => None,
-                None => Some((bn_client_core::Pos { x: 0, y: 0 }, egui::Vec2::ZERO)),
+        // The engine's map, character sheet and inventory keys open the client's own windows, which leave the game
+        // taking keys.
+        let window = |k: &FrameKey| {
+            let bound = |id: &&str| {
+                k.key.is_none()
+                    && actions
+                        .iter()
+                        .any(|a| a.id == *id && a.keys.contains(&k.token))
             };
-        }
+            ["map"]
+                .into_iter()
+                .chain(PANELS.map(|(_, id)| id))
+                .find(bound)
+        };
+        let opened = keys.iter().filter_map(window).collect::<Vec<_>>();
         let zooms = keys.iter().filter_map(zoom).sum();
         let turns = keys.iter().filter_map(turn).sum::<f32>();
         let rest = keys
             .into_iter()
-            .filter(|k| zoom(k).is_none() && turn(k).is_none() && !map(k))
+            .filter(|k| zoom(k).is_none() && turn(k).is_none() && window(k).is_none())
             .collect();
+        for id in opened {
+            if !self.toggle_panel(id) {
+                self.world_map = match self.world_map {
+                    Some(_) => None,
+                    None => Some((bn_client_core::Pos { x: 0, y: 0 }, egui::Vec2::ZERO)),
+                };
+            }
+        }
         self.display.zoom_by(zooms);
         self.iso.camera.orbit(turns * iso::TURN, 0.0);
         rest

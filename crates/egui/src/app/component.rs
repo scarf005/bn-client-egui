@@ -9,6 +9,7 @@ mod form;
 mod list;
 mod measure;
 mod overmap;
+mod panel;
 mod placement;
 
 use super::{App, sidebar};
@@ -30,6 +31,7 @@ use list::*;
 pub(super) use measure::text_width;
 use measure::*;
 use overmap::*;
+pub(super) use panel::PANELS;
 use placement::*;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
@@ -58,6 +60,8 @@ pub(super) struct Screens {
     /// What this frame's overmap draws, painted once the window is drawn, so that a tileset's sprites come
     /// before the marks over them.
     overmap: RefCell<Vec<OvermapPaint>>,
+    /// A panel window is being drawn: its screen takes no command, so its tabs and rows only move its focus.
+    pub(super) passive: bool,
 }
 
 /// A list's scroll offset in the last frame, and the screen and row of the focus it last brought into sight.
@@ -99,6 +103,8 @@ enum Intent {
         value: String,
     },
     More(String),
+    /// A row of a list that runs nothing was double-clicked.
+    Open,
     Text(String),
     Pane(String),
     Confirm,
@@ -175,6 +181,13 @@ impl<M: GameModel> App<M> {
         {
             out.push(Intent::Run(cancel));
         }
+        self.paint_icons();
+        self.paint_overmap(ctx);
+        out.into_iter().for_each(|intent| self.apply(intent));
+    }
+
+    /// Paints the items of the list rows drawn, now that their window is drawn.
+    fn paint_icons(&mut self) {
         let season = self.model.season();
         for icon in self.screens.icons.take() {
             let display = &mut self.display;
@@ -186,8 +199,6 @@ impl<M: GameModel> App<M> {
                 season.as_deref(),
             );
         }
-        self.paint_overmap(ctx);
-        out.into_iter().for_each(|intent| self.apply(intent));
     }
 
     /// The keys pressed this frame go to the interaction core, which decides what each one does.
@@ -266,6 +277,7 @@ impl<M: GameModel> App<M> {
             } => return interaction.set_pick_count(&component, &row, Some(count)),
             Intent::Text(typed) => return interaction.answer_text(&typed),
             Intent::Cancel => return interaction.cancel(),
+            Intent::Open => return,
             Intent::Run(id) => interaction.activate(top, &id),
             Intent::Move { affordance, at } => {
                 let args = InvokeArgs {
@@ -404,7 +416,7 @@ impl<M: GameModel> App<M> {
                 let select = tabs.select.as_deref().and_then(|id| find(screen, id));
                 ui.horizontal_wrapped(|ui| {
                     for tab in &tabs.tabs {
-                        let on = tab.enabled && select.is_some_and(|a| a.enabled);
+                        let on = tab.enabled && select.map_or(self.screens.passive, |a| a.enabled);
                         let marked = format!(
                             "{}{}",
                             tab.label.shown(),
@@ -419,12 +431,12 @@ impl<M: GameModel> App<M> {
                             _ => button,
                         };
                         a11y::tab(ui.ctx(), button.id, tab.selected);
-                        if let (true, Some(a)) = (button.clicked(), select) {
+                        if button.clicked() {
                             out.push(Intent::Focus {
                                 component: tabs.head.id.clone(),
                                 row: tab.id.clone(),
                             });
-                            out.push(Intent::Run(a.id.clone()));
+                            out.extend(select.map(|a| Intent::Run(a.id.clone())));
                         }
                     }
                 });

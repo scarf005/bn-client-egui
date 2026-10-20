@@ -6,7 +6,7 @@ use super::*;
 pub(super) const KEEP_CLEAR: f32 = 1.0;
 
 /// The share of the map region a window beside the cursor, or docked to a side, takes in width.
-const SIDE_SHARE: f32 = 0.4;
+pub(super) const SIDE_SHARE: f32 = 0.4;
 
 /// The space kept between a window and the edge of the map region.
 const REGION_MARGIN: f32 = 8.0;
