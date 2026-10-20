@@ -5,6 +5,8 @@
 //! --test live_iso3d -- --ignored --nocapture`. `BN_ISO_GPU=1` draws on the machine's discrete GPU, else on the
 //! software rasteriser the snapshot tests use.
 use bn_client_egui::interaction::InvokeError;
+use bn_client_egui::iso::pages::Pages;
+use bn_client_egui::iso::scene;
 use bn_client_egui::protocol::InvokeArgs;
 use bn_client_egui::transport::{StdioTransport, game_root};
 use bn_client_egui::watchdog::Watchdog;
@@ -362,6 +364,33 @@ fn the_town_in_3d_from_every_side_and_what_a_frame_costs() {
         percentile(&mut whole.clone(), 0.5),
         percentile(&mut whole.clone(), 0.95),
         percentile(&mut whole, 1.0),
+    );
+    // What a frame of an animated sprite in view adds: the scene built again from the pages the view decoded.
+    let (tileset, _) = h.state().display().tileset().expect("a tileset");
+    let pages = Pages::start(tileset.sheets.clone(), egui::Context::default());
+    let mut decoding = Watchdog::new(Duration::from_secs(120), Duration::from_secs(120));
+    while pages.loading() {
+        assert!(!decoding.expired(0), "the sheets are decoded");
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let builds = (0..20)
+        .map(|frame| {
+            let start = Instant::now();
+            scene::build(
+                &h.state().model,
+                tileset,
+                Some(&pages),
+                None,
+                0,
+                Some(frame),
+            );
+            start.elapsed().as_secs_f64() * 1e3
+        })
+        .collect::<Vec<_>>();
+    println!(
+        "LIVE scene build ms: p50={:.2} max={:.2}",
+        percentile(&mut builds.clone(), 0.5),
+        percentile(&mut builds.clone(), 1.0)
     );
     let stats = h.state().iso_stats();
     println!(
