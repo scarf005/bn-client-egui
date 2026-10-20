@@ -262,7 +262,13 @@ fn inventory_window_as<'a>(
         env!("CARGO_MANIFEST_DIR")
     );
     let all = serde_json::from_str::<Value>(&std::fs::read_to_string(path).unwrap()).unwrap();
-    let mut screen = all["valid"][0]["value"].clone();
+    let mut screen = all["valid"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["name"] == "drop selector screen")
+        .unwrap()["value"]
+        .clone();
     edit(&mut screen);
     let (t, script) = session();
     let app = App::new(EngineModel::new(Box::new(t))).with_settings(settings.into());
