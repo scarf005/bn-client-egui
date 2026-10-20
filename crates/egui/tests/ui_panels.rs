@@ -58,11 +58,21 @@ fn panel_reads(script: &ScriptHandle) -> Vec<Value> {
 
 /// Answers every panel read from the `answered`th on with the panel it asked for.
 fn serve(h: &mut H, script: &ScriptHandle, answered: &mut usize) {
+    serve_with(h, script, answered, &panel_view);
+}
+
+/// `serve`, with `view` giving the screen of each panel.
+fn serve_with(
+    h: &mut H,
+    script: &ScriptHandle,
+    answered: &mut usize,
+    view: &dyn Fn(&str) -> Value,
+) {
     for _ in 0..4 {
         let reads = panel_reads(script);
         for read in &reads[*answered..] {
             let panel = read["params"]["panel"].as_str().unwrap();
-            script.push(json!({"jsonrpc": "2.0", "id": read["id"], "result": panel_view(panel)}));
+            script.push(json!({"jsonrpc": "2.0", "id": read["id"], "result": view(panel)}));
         }
         *answered = reads.len();
         h.run_steps(2);
@@ -195,6 +205,108 @@ fn a_double_click_on_an_inventory_row_opens_the_engines_own_inventory() {
         operations(&script),
         [json!({"kind": "action", "action_id": "inventory"})]
     );
+}
+
+/// Sixty items in the inventory's `list:worn`, labelled `{tag} row {n}`, with the focus on `item:{focus}`.
+fn crowded(mut screen: Value, tag: &str, focus: usize) -> Value {
+    let rows = (0..60)
+        .map(|n| {
+            json!({"id": format!("item:{n}"), "label": format!("{tag} row {n}"), "description": "",
+                "denial": "", "enabled": true, "selectable": true, "selected": false, "columns": []})
+        })
+        .collect::<Vec<_>>();
+    let list = &mut screen["root"]["child"]["children"][0]["child"];
+    list["rows"] = json!(rows);
+    list["total"] = json!(60);
+    screen["focus"] = json!({"component_id": "list:worn", "row_id": format!("item:{focus}")});
+    screen
+}
+
+/// The inventory window open on sixty items with its focus on the sixth, under the engine's drop screen on the
+/// same items with its cursor on the fifty-first, which offers no action of the game.
+fn inventory_under_the_drop_screen<'a>() -> (H<'a>, ScriptHandle) {
+    let (mut h, script) = open();
+    let mut answered = 0;
+    let view = |panel: &str| crowded(panel_view(panel), "panel", 5);
+    key(&mut h, "i");
+    serve_with(&mut h, &script, &mut answered, &view);
+    let path = format!(
+        "{}/../core/tests/fixtures/0.2.examples/inventory.json",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    let all = serde_json::from_str::<Value>(&std::fs::read_to_string(path).unwrap()).unwrap();
+    let drop = all["valid"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["name"] == "drop selector screen")
+        .unwrap()["value"]
+        .clone();
+    let drop = crowded(drop, "screen", 50);
+    script.push(fixture("events_41_walk"));
+    h.run_steps(4);
+    let map = json!({"screen_id": "screen:map", "role": "map", "root": null, "affordances": []});
+    script.push(json!({"jsonrpc": "2.0", "method": "bn.events", "params": {"epoch": "e7f3", "events": [{
+        "sequence": "42", "revision": "33", "type": "interaction.changed", "changes": {"interaction": {
+        "boundary_id": "b:60",
+        "readiness": {"phase": "playing", "game_ready": true, "accepts_interaction_commands": true,
+            "accepts_registered_actions": true},
+        "actions": [], "interaction": null, "stack": [map, drop]}}}]}}));
+    h.run_steps(6);
+    serve_with(&mut h, &script, &mut answered, &view);
+    (h, script)
+}
+
+fn wheel(h: &mut H, at: egui::Pos2, dy: f32) {
+    h.hover_at(at);
+    h.run_steps(2);
+    h.event(egui::Event::MouseWheel {
+        unit: egui::MouseWheelUnit::Point,
+        delta: egui::vec2(0.0, dy),
+        phase: egui::TouchPhase::Move,
+        modifiers: egui::Modifiers::NONE,
+    });
+    h.run_steps(6);
+}
+
+fn shown(h: &H, label: &str) -> bool {
+    h.query_by_label(label).is_some()
+}
+
+#[test]
+fn the_inventory_window_and_the_engines_inventory_screen_each_keep_their_own_scroll() {
+    let (mut h, _script) = inventory_under_the_drop_screen();
+    assert!(shown(&h, "panel row 5") && shown(&h, "screen row 50"));
+    // The window comes in front of the screen it overlaps.
+    let window = h
+        .get_by_role_and_label(egui::accesskit::Role::Window, "Inventory")
+        .rect();
+    let title = egui::pos2(window.center().x as f32, window.min.y as f32 + 4.0);
+    h.hover_at(title);
+    h.run_steps(2);
+    for pressed in [true, false] {
+        h.event(egui::Event::PointerButton {
+            pos: title,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        });
+    }
+    h.run_steps(2);
+    let at = h.get_by_label("panel row 5").rect().center();
+    wheel(&mut h, egui::pos2(at.x as f32, at.y as f32), -4000.0);
+    assert!(
+        !shown(&h, "panel row 5"),
+        "the window scrolled off its focus"
+    );
+    assert!(shown(&h, "screen row 50"), "the screen kept its scroll");
+    let at = h.get_by_label("screen row 50").rect().center();
+    wheel(&mut h, egui::pos2(200.0, at.y as f32), 4000.0);
+    assert!(
+        !shown(&h, "screen row 50"),
+        "the screen scrolled off its cursor"
+    );
+    assert!(!shown(&h, "panel row 5"), "the window kept its scroll");
 }
 
 /// Writes a PNG of the sheet, the inventory and the map open together to `$SHOT_DIR`. Needs a Vulkan adapter:
