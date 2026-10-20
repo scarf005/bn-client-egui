@@ -446,11 +446,13 @@ impl EngineModel {
         let (Some(now), Some(avatar)) = (self.replica.at(), self.avatar_pos()) else {
             return;
         };
+        // Overmap squares name no dimension: they are the ones of the avatar's.
         let player = self.overmap.view.as_ref().map_or_else(
             || WorldPos {
+                dim: String::new(),
                 x: 0,
                 y: 0,
-                ..avatar.clone()
+                z: avatar.z,
             },
             |v| WorldPos {
                 z: avatar.z,
