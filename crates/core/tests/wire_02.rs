@@ -52,6 +52,7 @@ fn by_def(def: &str, v: &Value) -> Result<Value, String> {
         "choices_params" => round_trip::<ChoicesParams>(v),
         "choices_result" => round_trip::<ChoicesReply>(v),
         "world_cells_params" => round_trip::<WorldCellsParams>(v),
+        "panel_params" => round_trip::<PanelParams>(v),
         "world_cells_result" => round_trip::<WorldCellsResult>(v),
         "describe_params" => round_trip::<DescribeParams>(v),
         "describe_result" => round_trip::<DescribeResult>(v),
