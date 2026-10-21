@@ -786,7 +786,7 @@ fn the_npc_talk_screen_draws_its_history_beside_its_responses_and_special_keys()
     for shown in [
         "Dialogue:",
         "Your response:",
-        "Who are you?",
+        "What are you doing here?",
         "Size up stats",
     ] {
         assert!(text.contains(shown), "{shown:?} in {text}");
