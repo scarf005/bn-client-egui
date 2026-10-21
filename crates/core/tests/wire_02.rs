@@ -76,6 +76,7 @@ fn by_def(def: &str, v: &Value) -> Result<Value, String> {
         "overmap" => round_trip::<OvermapWire>(v),
         "data_message_logged" => round_trip::<LoggedMessage>(v),
         "event" => round_trip::<Event>(v),
+        "mark" => round_trip::<ScreenMark>(v),
         other => Err(format!("no type for {other}")),
     }
 }
@@ -150,6 +151,8 @@ const REJECTED: &[&str] = &[
     "hello frame rate beyond a display",
     "hello frame rate without credits",
     "credit request beyond the window",
+    "mark with both squares and a rect",
+    "mark of an unknown role",
 ];
 
 #[test]
