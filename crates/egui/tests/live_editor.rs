@@ -1,6 +1,6 @@
 //! Against a real engine: the map editor screen, offered with the Debug Editor trait, drawn from its generic
-//! components: a house mapgen opened, a rectangle drawn on its canvas and previewed, and the change discarded on
-//! leaving.
+//! components: a house mapgen opened, a rectangle drawn on its canvas and previewed, a placement picked into its
+//! forms, a catalog entry picked into the legend form, and the change discarded on leaving.
 //!
 //! `BN_ENGINE=<engine> SHOT_DIR=<dir> cargo test --release -p bn-client-egui --test live_editor -- --ignored
 //! --nocapture`; `BN_ROOT` names the game root when it is not beside the engine.
@@ -148,6 +148,28 @@ fn glyphs(h: &H, id: &str) -> Vec<String> {
     rows.into_iter().map(|r| r.into_iter().collect()).collect()
 }
 
+/// The row ids of a list of the editor.
+fn rows(h: &H, id: &str) -> Vec<String> {
+    let top = h.state().model.screens().last().unwrap();
+    let Some(Component::List(list)) = top.root.as_ref().unwrap().find(id) else {
+        panic!("no {id}");
+    };
+    list.rows.iter().map(|r| r.id.clone()).collect()
+}
+
+/// The value of a field of a form of the editor.
+fn field(h: &H, form: &str, id: &str) -> String {
+    let top = h.state().model.screens().last().unwrap();
+    let Some(Component::Form(form)) = top.root.as_ref().unwrap().find(form) else {
+        panic!("no {form}");
+    };
+    form.fields
+        .iter()
+        .find(|f| f.id == id)
+        .map(|f| f.value.clone())
+        .unwrap_or_else(|| panic!("no field {id}"))
+}
+
 #[test]
 #[ignore = "requires BN_ENGINE pointing at an engine binary"]
 fn the_map_editor_opens_draws_and_discards() {
@@ -246,6 +268,24 @@ fn the_map_editor_opens_draws_and_discards() {
     );
     assert_eq!(glyphs(&h, "editor:preview").len(), 24);
     save(&mut h, "editor-preview");
+
+    // A picked placement fills the move and field forms.
+    let placed = rows(&h, "editor:placements");
+    invoke(&mut h, "editor:placement", row(&placed[0]));
+    assert!(field(&h, "editor:field", "pointer").starts_with("/object/place_"));
+    save(&mut h, "editor-placement");
+
+    // A catalog entry fills the legend form with the mapping that places it.
+    invoke(&mut h, "editor:catalog_kind", row("catalog:furniture"));
+    invoke(&mut h, "editor:catalog_filter", text("chair"));
+    let found = rows(&h, "editor:catalog");
+    invoke(&mut h, "editor:catalog_pick", row(&found[0]));
+    assert_eq!(field(&h, "editor:mapping", "layer"), "furniture");
+    assert_eq!(
+        Some(field(&h, "editor:mapping", "value")),
+        found[0].strip_prefix("entry:").map(Into::into)
+    );
+    save(&mut h, "editor-catalog");
 
     // Leaving with the change unsaved asks first.
     invoke(&mut h, "QUIT", InvokeArgs::default());
