@@ -1,5 +1,6 @@
 //! Against a real engine: the map editor screen, offered with the Debug Editor trait, drawn from its generic
-//! components: a house mapgen opened, a rectangle drawn on its canvas, and the change discarded on leaving.
+//! components: a house mapgen opened, a rectangle drawn on its canvas and previewed, and the change discarded on
+//! leaving.
 //!
 //! `BN_ENGINE=<engine> SHOT_DIR=<dir> cargo test --release -p bn-client-egui --test live_editor -- --ignored
 //! --nocapture`; `BN_ROOT` names the game root when it is not beside the engine.
@@ -130,11 +131,11 @@ fn save(h: &mut H, name: &str) {
     settle(h);
 }
 
-/// The glyphs of the editor's canvas, row by row.
-fn canvas(h: &H) -> Vec<String> {
+/// The glyphs of a grid of the editor, row by row.
+fn glyphs(h: &H, id: &str) -> Vec<String> {
     let top = h.state().model.screens().last().unwrap();
-    let Some(Component::Grid(grid)) = top.root.as_ref().unwrap().find("editor:canvas") else {
-        panic!("no canvas");
+    let Some(Component::Grid(grid)) = top.root.as_ref().unwrap().find(id) else {
+        panic!("no {id}");
     };
     let mut rows = vec![vec![' '; grid.cols as usize]; grid.rows as usize];
     for cell in &grid.cells {
@@ -217,7 +218,7 @@ fn the_map_editor_opens_draws_and_discards() {
     save(&mut h, "editor-empty");
     let house = root.join("data/json/mapgen/house/2Story01.json");
     invoke(&mut h, "editor:open", text(&house.to_string_lossy()));
-    let opened = canvas(&h);
+    let opened = glyphs(&h, "editor:canvas");
     assert_eq!((opened.len(), opened[0].chars().count()), (24, 24));
     save(&mut h, "editor-open");
 
@@ -225,7 +226,7 @@ fn the_map_editor_opens_draws_and_discards() {
     invoke(&mut h, "editor:tool", row("tool:rect"));
     invoke(&mut h, "editor:paint", row("square:2,2"));
     invoke(&mut h, "editor:paint", row("square:9,7"));
-    let drawn = canvas(&h);
+    let drawn = glyphs(&h, "editor:canvas");
     assert_eq!(
         drawn[2].chars().skip(2).take(8).collect::<String>(),
         "########"
@@ -233,6 +234,18 @@ fn the_map_editor_opens_draws_and_discards() {
     assert_eq!(drawn[4].chars().nth(9), Some('#'));
     assert_ne!(drawn, opened);
     save(&mut h, "editor-drawn");
+
+    // The game's own generation of the edited entry, with the rectangle in it.
+    invoke(
+        &mut h,
+        "editor:preview",
+        InvokeArgs {
+            count: Some(7),
+            ..Default::default()
+        },
+    );
+    assert_eq!(glyphs(&h, "editor:preview").len(), 24);
+    save(&mut h, "editor-preview");
 
     // Leaving with the change unsaved asks first.
     invoke(&mut h, "QUIT", InvokeArgs::default());
