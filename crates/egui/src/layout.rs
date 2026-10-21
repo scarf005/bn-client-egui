@@ -46,7 +46,7 @@ pub fn split_widths(parts: &[Extent], room: f32, gap: f32) -> Vec<f32> {
 pub fn wrap_lines(parts: &[Extent], room: f32, gap: f32) -> Vec<std::ops::Range<usize>> {
     let mins = parts.iter().map(|p| p.min).collect::<Vec<_>>();
     if !overflows(&mins, room, gap) {
-        return vec![0..parts.len()];
+        return std::iter::once(0..parts.len()).collect();
     }
     let mut lines = Vec::new();
     let (mut start, mut used) = (0, 0.0);

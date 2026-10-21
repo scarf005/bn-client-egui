@@ -510,7 +510,7 @@ impl<M: GameModel> App<M> {
             .collect::<Vec<_>>();
         let lines = match split.relation {
             Relation::Peers => layout::wrap_lines(&extents, room, gap),
-            Relation::Detail => vec![0..parts.len()],
+            Relation::Detail => std::iter::once(0..parts.len()).collect(),
         };
         let count = lines.len();
         for (n, line) in lines.into_iter().enumerate() {

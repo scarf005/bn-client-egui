@@ -259,7 +259,7 @@ fn a_double_click_on_an_inventory_row_opens_the_engines_own_inventory() {
     key(&mut h, "i");
     serve(&mut h, &script, &mut answered);
     let at = h.get_by_label("rock (1)").rect().center();
-    common::double_click(&mut h, egui::pos2(at.x as f32, at.y as f32));
+    common::double_click(&mut h, egui::pos2(at.x, at.y));
     h.run_steps(2);
     assert_eq!(
         operations(&script),
@@ -339,7 +339,7 @@ fn to_front(h: &mut H, title: &str) {
     let window = h
         .get_by_role_and_label(egui::accesskit::Role::Window, title)
         .rect();
-    let title = egui::pos2(window.center().x as f32, window.min.y as f32 + 4.0);
+    let title = egui::pos2(window.center().x, window.min.y + 4.0);
     h.hover_at(title);
     h.run_steps(2);
     for pressed in [true, false] {
@@ -363,14 +363,14 @@ fn the_inventory_window_and_the_engines_inventory_screen_each_keep_their_own_scr
     assert!(shown(&h, "panel row 5") && shown(&h, "screen row 50"));
     to_front(&mut h, "Inventory");
     let at = h.get_by_label("panel row 5").rect().center();
-    wheel(&mut h, egui::pos2(at.x as f32, at.y as f32), -4000.0);
+    wheel(&mut h, egui::pos2(at.x, at.y), -4000.0);
     assert!(
         !shown(&h, "panel row 5"),
         "the window scrolled off its focus"
     );
     assert!(shown(&h, "screen row 50"), "the screen kept its scroll");
     let at = h.get_by_label("screen row 50").rect().center();
-    wheel(&mut h, egui::pos2(200.0, at.y as f32), 4000.0);
+    wheel(&mut h, egui::pos2(200.0, at.y), 4000.0);
     assert!(
         !shown(&h, "screen row 50"),
         "the screen scrolled off its cursor"
@@ -391,7 +391,7 @@ fn a_double_click_on_an_inventory_row_opens_nothing_while_the_game_offers_no_inv
     serve(&mut h, &script, &mut answered);
     assert!(h.query_by_label("Open Inventory").is_none());
     let at = h.get_by_label("rock (1)").rect().center();
-    common::double_click(&mut h, egui::pos2(at.x as f32, at.y as f32));
+    common::double_click(&mut h, egui::pos2(at.x, at.y));
     h.run_steps(2);
     assert_eq!(operations(&script), Vec::<Value>::new());
 }
@@ -401,7 +401,7 @@ fn a_double_click_on_an_inventory_row_opens_nothing_under_another_screen() {
     let (mut h, script) = inventory_under_the_drop_screen();
     to_front(&mut h, "Inventory");
     let at = h.get_by_label("panel row 5").rect().center();
-    common::double_click(&mut h, egui::pos2(at.x as f32, at.y as f32));
+    common::double_click(&mut h, egui::pos2(at.x, at.y));
     h.run_steps(2);
     assert_eq!(operations(&script), Vec::<Value>::new());
 }
