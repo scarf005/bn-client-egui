@@ -114,6 +114,7 @@ impl EngineModel {
             pages: Pages::default(),
             row_requests: HashMap::new(),
             explosion_tiles: HashMap::new(),
+            volley: None,
             inventory_items: vec![],
             trace: vec![],
             received: 0,

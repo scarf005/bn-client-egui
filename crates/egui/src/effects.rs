@@ -3,7 +3,7 @@
 //! What is on screen at a moment is first worked out as plain `Op`s, so a frame can be dumped and
 //! checked without a window; `paint` only draws them.
 
-use bn_client_core::{Effect, Layer, Pos, Rgb, Shape};
+use bn_client_core::{Effect, Layer, Pellet, Pos, Rgb, Shape};
 use eframe::egui::{self, Color32, Rect};
 
 /// The native step delay is a few milliseconds; a person needs at least this long to see a step.
@@ -64,10 +64,51 @@ pub struct Effects {
     tail: f64,
 }
 
+/// A shot on its square: its sprite, else the native bullet's, else its glyph.
+fn bullet(at: Pos, glyph: char, sprite: &Option<String>, color: Rgb) -> Op {
+    Op::Tile {
+        at,
+        layer: Box::new(Layer {
+            id: sprite
+                .clone()
+                .unwrap_or_else(|| "animation_bullet_normal".into()),
+            fallbacks: vec!["animation_bullet_normal".into()],
+            glyph: '\0',
+            ..Default::default()
+        }),
+        or: Box::new(Op::Glyph {
+            at,
+            ch: glyph,
+            color,
+            alpha: 1.0,
+        }),
+    }
+}
+
+/// The squares a shot flies over; none for anything else.
+fn flight(effect: &Effect) -> &[Pos] {
+    match &effect.shape {
+        Shape::Projectile { path, .. } => path,
+        _ => &[],
+    }
+}
+
+/// How long each step of a volley lasts: the slowest pellet's, so that every pellet takes its step k at once.
+fn volley_step(pellets: &[Pellet]) -> f64 {
+    pellets
+        .iter()
+        .map(|p| life(&p.flight) / flight(&p.flight).len().max(1) as f64)
+        .fold(SHOT_STEP, f64::max)
+}
+
 fn life(effect: &Effect) -> f64 {
     let native = effect.duration_ms as f64 / 1000.0;
     match &effect.shape {
         Shape::Projectile { path, .. } => native.max(SHOT_STEP * path.len() as f64),
+        Shape::Volley { pellets } => {
+            let steps = pellets.iter().map(|p| flight(&p.flight).len()).max();
+            volley_step(pellets) * steps.unwrap_or(0) as f64
+        }
         Shape::Burst { radius, .. } => native.max(BURST_STEP * (f64::from(*radius) + 1.0)),
         Shape::Blast { .. } => native.max(BLAST),
         Shape::Text { .. } => 0.0,
@@ -258,28 +299,43 @@ impl Effects {
         }
         self.tail = self.tail.max(now);
         for effect in produced {
-            let life = life(&effect);
-            if let Shape::Text {
+            self.push(now, now, effect);
+        }
+        self.playing.retain(|p| now < p.start + p.life);
+        self.texts.retain(|t| t.step(now) <= MAX_STEPS);
+    }
+
+    /// Plays `effect`: a text from `from`, a shot or blast after those before it.
+    fn push(&mut self, now: f64, from: f64, effect: Effect) {
+        let life = life(&effect);
+        let shape = match effect.shape {
+            Shape::Text {
                 at,
                 segments,
                 scroll,
                 hp,
-            } = effect.shape
-            {
-                self.add_text(now, at, segments, scroll, hp);
-                continue;
+            } => return self.add_text(from, at, segments, scroll, hp),
+            shape => shape,
+        };
+        // Shots and blasts follow one another, none starting later than the queue bound.
+        let start = self.tail.min(now + MAX_QUEUE);
+        self.tail = start + life;
+        // What a pellet's hit brought shows once the pellet reached the square it hit.
+        let follows = match &shape {
+            Shape::Volley { pellets } => {
+                let step = volley_step(pellets);
+                pellets
+                    .iter()
+                    .flat_map(|p| p.then.iter())
+                    .map(|f| (start + step * f.after as f64, f.effect.clone()))
+                    .collect()
             }
-            // Shots and blasts follow one another, none starting later than the queue bound.
-            let start = self.tail.min(now + MAX_QUEUE);
-            self.tail = start + life;
-            self.playing.push(Playing {
-                shape: effect.shape,
-                start,
-                life,
-            });
+            _ => vec![],
+        };
+        self.playing.push(Playing { shape, start, life });
+        for (from, effect) in follows {
+            self.push(now, from, effect);
         }
-        self.playing.retain(|p| now < p.start + p.life);
-        self.texts.retain(|t| t.step(now) <= MAX_STEPS);
     }
 
     /// The native `scrolling_combat_text::add`: texts that would move the same way at the same step
@@ -335,23 +391,23 @@ impl Effects {
                     else {
                         continue;
                     };
-                    out.push(Op::Tile {
-                        at: *at,
-                        layer: Box::new(Layer {
-                            id: sprite
-                                .clone()
-                                .unwrap_or_else(|| "animation_bullet_normal".into()),
-                            fallbacks: vec!["animation_bullet_normal".into()],
-                            glyph: '\0',
-                            ..Default::default()
-                        }),
-                        or: Box::new(Op::Glyph {
-                            at: *at,
-                            ch: *glyph,
-                            color: *color,
-                            alpha: 1.0,
-                        }),
-                    });
+                    out.push(bullet(*at, *glyph, sprite, *color));
+                }
+                Shape::Volley { pellets } => {
+                    // Every pellet at its square of this step; one whose flight ended is gone.
+                    let step = ((now - p.start) / volley_step(pellets)) as usize;
+                    for pellet in pellets {
+                        if let Shape::Projectile {
+                            path,
+                            glyph,
+                            sprite,
+                            color,
+                        } = &pellet.flight.shape
+                            && let Some(at) = path.get(step)
+                        {
+                            out.push(bullet(*at, *glyph, sprite, *color));
+                        }
+                    }
                 }
                 Shape::Burst {
                     at,
@@ -526,6 +582,7 @@ impl Sprites for crate::display::Display {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bn_client_core::Follow;
 
     fn text(at: Pos, scroll: Pos, words: &[&str]) -> Effect {
         Effect {
@@ -805,12 +862,12 @@ mod tests {
             flight: shot_on(y, len),
             then: vec![],
         };
-        e.add(0.0, vec![volley(vec![pellet(0, 3), pellet(1, 2)])], false);
+        let pellets = vec![pellet(0, 3), pellet(1, 2)];
+        e.add(0.0, vec![volley(pellets), shot_on(5, 1)], false);
         let at = |step: f64| squares(&e.ops(SHOT_STEP * step, true, &none));
         assert_eq!(at(0.5), [Pos { x: 0, y: 0 }, Pos { x: 0, y: 1 }]);
         assert_eq!(at(1.5), [Pos { x: 1, y: 0 }, Pos { x: 1, y: 1 }]);
         assert_eq!(at(2.5), [Pos { x: 2, y: 0 }], "the shorter pellet ended");
-        e.add(SHOT_STEP * 3.0 + 0.001, vec![shot_on(5, 1)], false);
         assert_eq!(
             at(3.5),
             [Pos { x: 0, y: 5 }],

@@ -126,6 +126,22 @@ pub struct Effect {
     pub duration_ms: u64,
 }
 
+/// One pellet of a multishot.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Pellet {
+    /// Its flight over every square it moved to, a `Shape::Projectile`.
+    pub flight: Effect,
+    /// What its hits brought, such as damage text, in order.
+    pub then: Vec<Follow>,
+}
+
+/// An effect a pellet's hit brought, shown once the pellet flew `after` squares, onto the square it hit.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Follow {
+    pub after: usize,
+    pub effect: Effect,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Shape {
     /// A shot flying along `path`; a tiles client looks `sprite` up first.
@@ -135,6 +151,9 @@ pub enum Shape {
         sprite: Option<String>,
         color: Rgb,
     },
+    /// The pellets of one multishot, flying side by side as the native game draws them: step k of every pellet at
+    /// once.
+    Volley { pellets: Vec<Pellet> },
     /// An explosion starting at `at` and reaching `radius` squares.
     Burst {
         at: Pos,

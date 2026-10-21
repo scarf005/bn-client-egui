@@ -41,7 +41,7 @@ pub struct LoggedLine {
     pub label: String,
 }
 
-/// A native animation fact (`projectile.moved`, `explosion.*`, `combat_text.shown`), kept as published.
+/// A native animation fact (`projectile.*`, `item.landed`, `explosion.*`, `combat_text.shown`), kept as published.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Fact {
     pub kind: String,
@@ -162,6 +162,8 @@ impl Replica {
             if matches!(
                 e.kind.as_str(),
                 "projectile.moved"
+                    | "projectile.hit"
+                    | "item.landed"
                     | "explosion.started"
                     | "explosion.blast"
                     | "explosion.shrapnel"
