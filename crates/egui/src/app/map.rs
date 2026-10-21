@@ -6,7 +6,7 @@ use crate::display::health_bar;
 use crate::iso::{self, camera::Viewport, pages::Pages, scene::Scene};
 use bn_client_core::localise::{Value as Arg, tr, tr_format};
 use bn_client_core::markup;
-use bn_client_core::{Cell, GameModel, Pos, Rgb};
+use bn_client_core::{Cell, GameModel, MapMark, MarkRole, Pos, Rgb};
 use eframe::egui::{self, accesskit};
 use std::sync::Arc;
 
@@ -82,6 +82,58 @@ impl Canvas {
             }
             None => {
                 painter.rect_stroke(self.rect(p), 0.0, stroke, egui::StrokeKind::Inside);
+            }
+        }
+    }
+
+    /// The screen point of the ground at (`x`, `y`) in view squares; none behind the eye.
+    fn ground(&self, x: f32, y: f32) -> Option<egui::Pos2> {
+        match &self.view {
+            Some(v) => v
+                .project(glam::Vec3::new(x, y, 0.0))
+                .map(|on| self.rect.min + egui::vec2(on.x, on.y)),
+            None => Some(self.rect.min + egui::vec2(x, y) * self.cell_px),
+        }
+    }
+
+    /// A screen's mark over the map: a selection fills its squares, a mapgen border outlines its rectangle and a
+    /// mapgen stamp ticks the rectangle's corners along its edges.
+    fn mark(&self, painter: &egui::Painter, mark: &MapMark) {
+        let (min, max) = (mark.min, mark.max);
+        let corners = [
+            (min.x, min.y),
+            (max.x + 1, min.y),
+            (max.x + 1, max.y + 1),
+            (min.x, max.y + 1),
+        ]
+        .map(|(x, y)| egui::vec2(x as f32, y as f32));
+        let at = |p: egui::Vec2| self.ground(p.x, p.y);
+        match mark.role {
+            MarkRole::Selection => {
+                let fill = egui::Color32::from_rgba_unmultiplied(80, 160, 255, 90);
+                for y in min.y.max(0)..=max.y.min(self.size.y - 1) {
+                    for x in min.x.max(0)..=max.x.min(self.size.x - 1) {
+                        self.fill(painter, Pos { x, y }, fill);
+                    }
+                }
+            }
+            MarkRole::OmtBorder => {
+                if let Some(points) = corners.into_iter().map(at).collect::<Option<Vec<_>>>() {
+                    let stroke = egui::Stroke::new(2.0, egui::Color32::from_rgb(255, 200, 0));
+                    painter.add(egui::Shape::closed_line(points, stroke));
+                }
+            }
+            MarkRole::Stamp => {
+                let stroke = egui::Stroke::new(2.0, egui::Color32::from_rgb(255, 80, 200));
+                for (i, &corner) in corners.iter().enumerate() {
+                    // One square along each edge that meets at the corner.
+                    for next in [corners[(i + 1) % 4], corners[(i + 3) % 4]] {
+                        let tick = corner + (next - corner) / (next - corner).length();
+                        if let (Some(from), Some(to)) = (at(corner), at(tick)) {
+                            painter.line_segment([from, to], stroke);
+                        }
+                    }
+                }
             }
         }
     }
@@ -664,6 +716,9 @@ impl<M: GameModel> App<M> {
                     egui::Color32::from_rgba_unmultiplied(0, 200, 255, alpha),
                 );
             }
+        }
+        for mark in self.model.marks() {
+            canvas.mark(painter, &mark);
         }
         if let Some(at) = self.marker() {
             canvas.outline(

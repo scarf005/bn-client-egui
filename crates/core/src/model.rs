@@ -3,13 +3,22 @@ use crate::interaction::InvokeError;
 use crate::markup::{self, Run};
 
 use crate::protocol::{
-    Column, Component, Editor, InvokeArgs, ItemList, List, Look, Mark, ModTileset, PanelKind, Row,
-    Screen, ScreenRole, Shortcut, TileAction,
+    Column, Component, Editor, InvokeArgs, ItemList, List, Look, Mark, MarkRole, ModTileset,
+    PanelKind, Row, Screen, ScreenRole, Shortcut, TileAction,
 };
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Pos {
     pub x: i32,
     pub y: i32,
+}
+
+/// View squares a screen highlights besides its cursor, from `min` to `max` with both included; a mark the
+/// engine gives square by square is one per square.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct MapMark {
+    pub role: MarkRole,
+    pub min: Pos,
+    pub max: Pos,
 }
 
 /// 8-bit sRGB colour.
@@ -609,6 +618,11 @@ pub trait GameModel: MenuModel {
     /// Where the engine's own cursor is (look mode), in view coordinates; none when it has no cursor.
     fn focus(&self) -> Option<Pos> {
         None
+    }
+    /// What the map screen nearest the top highlights besides its cursor on the shown level, such as the map
+    /// editor's selection; drawn over the map, never into what the avatar remembers.
+    fn marks(&self) -> Vec<MapMark> {
+        vec![]
     }
     /// What the engine's aiming screen shows beside the cursor: its title, the cursor's distance
     /// against the range, and whether a shot can be taken; none outside aiming.

@@ -3,7 +3,7 @@
 mod common;
 use bn_client_egui::app::CELL;
 use bn_client_egui::{App, Clock, EngineModel, GameModel};
-use common::{fixture, session};
+use common::session;
 use eframe::egui;
 use egui_kittest::Harness;
 use egui_kittest::kittest::Queryable;
@@ -11,7 +11,7 @@ use serde_json::{Value, json};
 
 type H<'a> = Harness<'a, App<EngineModel>>;
 
-/// The client over the fixture session, whose avatar stands at world (4, 4).
+/// The client over the fixture session, whose avatar stands at world (3, 4).
 fn harness<'a>() -> (H<'a>, bn_client_egui::transport::ScriptHandle) {
     let (t, script) = session();
     let clock = Clock::manual();
@@ -102,7 +102,7 @@ fn the_map_editors_selection_fills_each_selected_square_and_no_other() {
     let plain = shapes(&h);
     script.push(editor(
         42,
-        json!([{"role":"selection","squares":[world(6, 4), world(6, 5), world(4, 6)]}]),
+        json!([{"role":"selection","squares":[world(5, 4), world(5, 5), world(3, 6)]}]),
         &[],
     ));
     h.run_steps(4);
@@ -125,15 +125,15 @@ fn the_map_editors_selection_fills_each_selected_square_and_no_other() {
 fn the_mapgen_border_is_outlined_and_the_stamp_cornered_under_the_mapgen_list() {
     let (mut h, script) = harness();
     let marks = json!([
-        {"role":"omt_border","rect":{"min":world(2, 2),"max":world(7, 6)}},
-        {"role":"stamp","rect":{"min":world(1, 1),"max":world(8, 7)}}]);
+        {"role":"omt_border","rect":{"min":world(1, 2),"max":world(6, 6)}},
+        {"role":"stamp","rect":{"min":world(0, 1),"max":world(7, 7)}}]);
     let mapgen = json!({"screen_id":"screen:11","role":"dialog","title":"Mapgen",
         "root":{"id":"menu","kind":"list","columns":[],"rows":[],"total":0,"selection":"single"},
         "affordances":[]});
     script.push(editor(41, marks, &[mapgen]));
     h.run_steps(4);
     let shapes = shapes(&h);
-    // From the avatar at world (4, 4): the border's outer corners, then the stamp's.
+    // From the avatar at world (3, 4): the border's outer corners, then the stamp's.
     let border = [
         corner(&h, (-2, -2), (0.0, 0.0)),
         corner(&h, (3, -2), (1.0, 0.0)),

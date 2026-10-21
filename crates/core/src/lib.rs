@@ -22,6 +22,7 @@ pub use engine_model::{ConnectOptions, EngineModel};
 pub use model::FakeModel;
 pub use model::{
     ActionEntry, Cell, CommandStatus, Effect, Failure, FailureKind, GameModel, Glow, Health, Heard,
-    Layer, Loading, LogLine, Menu, MenuChoice, MenuModel, MenuPane, Mutation, OvermapWatch,
-    PaneTotals, PanelWatch, Pos, Rgb, Shape, action_hint,
+    Layer, Loading, LogLine, MapMark, Menu, MenuChoice, MenuModel, MenuPane, Mutation,
+    OvermapWatch, PaneTotals, PanelWatch, Pos, Rgb, Shape, action_hint,
 };
+pub use protocol::MarkRole;

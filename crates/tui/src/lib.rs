@@ -7,7 +7,9 @@ use bn_client_core::localise::{Value as Arg, tr, tr_format};
 use bn_client_core::markup::plain;
 use bn_client_core::protocol::{ItemListId, SidebarSide};
 use bn_client_core::sidebar::{self as native, Body};
-use bn_client_core::{ActionEntry, Failure, GameModel, Loading, Menu, MenuChoice, Pos, Rgb, keys};
+use bn_client_core::{
+    ActionEntry, Failure, GameModel, Loading, MapMark, MarkRole, Menu, MenuChoice, Pos, Rgb, keys,
+};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Position, Rect};
@@ -121,6 +123,23 @@ fn panel_lines(panel: &native::Panel) -> usize {
 
 fn color(c: Rgb) -> Color {
     Color::Rgb(c.0, c.1, c.2)
+}
+
+/// The background the marks of a screen give view square `at`: a selected square, the edge of a mapgen border, a
+/// corner of a mapgen stamp; the last mark over the square wins.
+fn mark_bg(marks: &[MapMark], at: Pos) -> Option<Color> {
+    marks.iter().rev().find_map(|m| {
+        let inside = (m.min.x..=m.max.x).contains(&at.x) && (m.min.y..=m.max.y).contains(&at.y);
+        let (side, end) = (
+            [m.min.x, m.max.x].contains(&at.x),
+            [m.min.y, m.max.y].contains(&at.y),
+        );
+        match m.role {
+            MarkRole::Selection => inside.then_some(Color::Blue),
+            MarkRole::OmtBorder => (inside && (side || end)).then_some(Color::DarkGray),
+            MarkRole::Stamp => (side && end).then_some(Color::Magenta),
+        }
+    })
 }
 
 /// The game's key token for a terminal key, or `None` for keys the game has no name for.
@@ -765,6 +784,7 @@ impl<M: GameModel> TuiApp<M> {
         let route = self.model.route();
         // The engine's own cursor (look, aiming, a zone's area) when it owns one.
         let cursor = self.model.focus();
+        let marks = self.model.marks();
         let lines = (y0..y0 + h)
             .map(|y| {
                 let mut spans = vec![];
@@ -782,6 +802,9 @@ impl<M: GameModel> TuiApp<M> {
                     }
                     if at != player && route.contains(&at) {
                         (glyph, style) = ('*', Style::new().fg(Color::Yellow));
+                    }
+                    if let Some(bg) = mark_bg(&marks, at) {
+                        style = style.bg(bg);
                     }
                     if cursor == Some(at) {
                         style = style.add_modifier(Modifier::REVERSED);

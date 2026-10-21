@@ -15,7 +15,7 @@ use crate::localise::{self, Catalogue, Value as Arg, tr_format, tr_plural};
 use crate::markup::{self, Run};
 use crate::model::{
     ActionEntry, Cell, CommandStatus, Effect, Failure, FailureKind, GameModel, Glow, Health, Heard,
-    Layer, Loading, LogLine, Mutation, OvermapWatch, PanelWatch, Pos, Rgb, Shape,
+    Layer, Loading, LogLine, MapMark, Mutation, OvermapWatch, PanelWatch, Pos, Rgb, Shape,
 };
 use crate::protocol::{
     self, Cell as WorldCell, Entity, InvokeArgs, Known, Look, ModTileset, Operation, PanelKind,
@@ -1216,6 +1216,37 @@ impl GameModel for EngineModel {
             x: at.x - ox,
             y: at.y - oy,
         })
+    }
+
+    fn marks(&self) -> Vec<MapMark> {
+        let (Some((ox, oy)), Some(z)) = (self.origin, self.shown_z()) else {
+            return vec![];
+        };
+        // A list over the map editor (the mapgen previews) leaves the editor's marks on the map.
+        let stack = self.replica.stack().iter().rev();
+        let Some(map) = stack.filter_map(|s| s.root.as_ref()?.cursor_map()).next() else {
+            return vec![];
+        };
+        let view = |p: &WorldPos| Pos {
+            x: p.x - ox,
+            y: p.y - oy,
+        };
+        let mark = |role, min, max| MapMark {
+            role,
+            min: view(min),
+            max: view(max),
+        };
+        map.marks()
+            .iter()
+            .flat_map(|m| {
+                let squares = m.squares.iter().filter(|p| p.z == z);
+                let squares = squares.map(|p| mark(m.role, p, p));
+                let rect = m.rect.iter().filter(|r| (r.min.z..=r.max.z).contains(&z));
+                squares
+                    .chain(rect.map(|r| mark(m.role, &r.min, &r.max)))
+                    .collect::<Vec<_>>()
+            })
+            .collect()
     }
 
     fn aiming(&self) -> Option<String> {

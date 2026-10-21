@@ -2251,6 +2251,28 @@ pub struct MapComponent {
     pub item_lists: Vec<ItemList>,
 }
 
+/// Squares a screen highlights on the map besides its cursor: every square, or the rectangle with both corners.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ScreenMark {
+    pub role: MarkRole,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub squares: Vec<WorldPos>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rect: Option<Coverage>,
+}
+
+/// What a screen's marked squares are.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MarkRole {
+    /// The squares the map editor's edits apply to.
+    Selection,
+    /// The edge of the overmap terrain square mapgen targets.
+    OmtBorder,
+    /// The rectangle a mapgen preview is generated into, marked at its corners.
+    Stamp,
+}
+
 /// A list of the avatar's items beside the map, under the engine's heading.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ItemList {
@@ -2273,6 +2295,16 @@ impl MapComponent {
     /// The square the screen's cursor is on.
     pub fn cursor(&self) -> Option<WorldPos> {
         serde_json::from_value(self.target.as_ref()?["current"].clone()).ok()
+    }
+
+    /// The squares the screen highlights besides its cursor; a mark of a role this client does not know is left
+    /// out.
+    pub fn marks(&self) -> Vec<ScreenMark> {
+        let marks = self.target.as_ref().map(|t| &t["marks"]);
+        let marks = marks.and_then(Value::as_array).into_iter().flatten();
+        marks
+            .filter_map(|m| serde_json::from_value(m.clone()).ok())
+            .collect()
     }
 
     /// What the engine says of the cursor's square: the screen's status in words, then each fact it prints of
