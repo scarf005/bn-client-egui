@@ -2253,12 +2253,36 @@ pub struct MapComponent {
 
 /// Squares a screen highlights on the map besides its cursor: every square, or the rectangle with both corners.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(try_from = "ScreenMarkWire")]
 pub struct ScreenMark {
     pub role: MarkRole,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub squares: Vec<WorldPos>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rect: Option<Coverage>,
+}
+
+#[derive(Deserialize)]
+struct ScreenMarkWire {
+    role: MarkRole,
+    squares: Option<Vec<WorldPos>>,
+    rect: Option<Coverage>,
+}
+
+/// A mark is its squares or its rectangle, never both.
+impl TryFrom<ScreenMarkWire> for ScreenMark {
+    type Error = String;
+
+    fn try_from(wire: ScreenMarkWire) -> Result<Self, String> {
+        match wire.squares.is_some() != wire.rect.is_some() {
+            true => Ok(Self {
+                role: wire.role,
+                squares: wire.squares.unwrap_or_default(),
+                rect: wire.rect,
+            }),
+            false => Err("a mark has either squares or a rect".into()),
+        }
+    }
 }
 
 /// What a screen's marked squares are.
