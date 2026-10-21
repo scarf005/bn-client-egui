@@ -350,19 +350,59 @@ fn live_throwing_follows_the_pointer_and_a_click_throws() {
 #[ignore = "requires BN_ENGINE pointing at an engine binary"]
 fn live_firing_follows_the_pointer_and_a_click_fires() {
     let mut h = start();
-    // A loaded pistol, wielded.
-    spawn(&mut h, "12 gauge pistol");
-    type_key(&mut h, "w");
-    run_until(&mut h, "the wield list", 60, |h| {
-        !rows_labelled(h, "pistol").is_empty()
-    });
-    let (activate, row) = rows_labelled(&h, "pistol").remove(0);
-    choose(&mut h, &activate, &row);
-    run_until(&mut h, "wielded", 60, |h| !h.state().model.busy());
-    dismiss_popups(&mut h);
-    settle(&mut h);
+    wield_pistol(&mut h);
     type_key(&mut h, "f");
     the_target_follows_the_pointer(&mut h, "fire");
+}
+
+/// A loaded 12 gauge pistol, whose shell is a multishot of pellets, wielded.
+fn wield_pistol(h: &mut H) {
+    spawn(h, "12 gauge pistol");
+    type_key(h, "w");
+    run_until(h, "the wield list", 60, |h| {
+        !rows_labelled(h, "pistol").is_empty()
+    });
+    let (activate, row) = rows_labelled(h, "pistol").remove(0);
+    choose(h, &activate, &row);
+    run_until(h, "wielded", 60, |h| !h.state().model.busy());
+    dismiss_popups(h);
+    settle(h);
+}
+
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn live_a_shotgun_blast_is_saved_frame_by_frame() {
+    let mut h = start();
+    wield_pistol(&mut h);
+    type_key(&mut h, "f");
+    run_until(&mut h, "the target cursor", 60, |h| {
+        h.state().model.focus().is_some() && !h.state().model.busy()
+    });
+    let me = h.state().model.player();
+    let at = on_screen(
+        &h,
+        Pos {
+            x: me.x + 7,
+            y: me.y - 2,
+        },
+    );
+    // The cursor goes to the square, and a click there fires.
+    h.hover_at(at);
+    run_until(&mut h, "the aim", 60, |h| !h.state().model.busy());
+    settle(&mut h);
+    for pressed in [true, false] {
+        h.event(egui::Event::PointerButton {
+            pos: at,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        });
+    }
+    run_until(&mut h, "the shot", 60, |h| h.state().playing_effects() > 0);
+    for frame in 0..12 {
+        save(&mut h, &format!("blast-{frame:02}.png"));
+        h.run_steps(2);
+    }
 }
 
 #[test]
