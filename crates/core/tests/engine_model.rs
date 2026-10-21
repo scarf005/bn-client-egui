@@ -2,7 +2,7 @@
 mod common;
 use bn_client_core::colors::ColorMap;
 use bn_client_core::transport::ScriptedTransport;
-use bn_client_core::{EngineModel, GameModel, MenuModel, Pos, Rgb};
+use bn_client_core::{EngineModel, GameModel, MapMark, MarkRole, MenuModel, Pos, Rgb};
 use common::{connected, fixture, session, subscribe_reply};
 use serde_json::{Value, json};
 
@@ -3006,4 +3006,97 @@ fn the_map_window_reads_overmap_squares_without_a_dimension_in_a_pocket_dimensio
         (&reads[0]["min"]["dim"], &reads[0]["max"]["dim"]),
         (&json!(""), &json!(""))
     );
+}
+
+/// The screen of the engine's map editor example `name`.
+fn editmap_screen(name: &str) -> Value {
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/0.2.examples/editmap.json"
+    );
+    let all = serde_json::from_str::<Value>(&std::fs::read_to_string(path).unwrap()).unwrap();
+    all["valid"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["name"] == name)
+        .unwrap()["value"]
+        .clone()
+}
+
+/// A boundary whose stack is the map under `screens`, bottom first.
+fn stacked(sequence: u64, screens: &[Value]) -> Value {
+    let mut event = show(sequence, json!([]), Value::Null);
+    let map = json!({"screen_id":"screen:map","role":"map","root":null,"affordances":[]});
+    event["params"]["events"][0]["changes"]["interaction"]["stack"] = std::iter::once(map)
+        .chain(screens.iter().cloned())
+        .collect();
+    event
+}
+
+#[test]
+fn the_map_editors_border_and_stamp_stay_marked_under_the_mapgen_list_over_it() {
+    let (t, h) = session();
+    let mut m = connected(t);
+    let mapgen = json!({"screen_id":"screen:11","role":"dialog","title":"Mapgen",
+        "root":{"id":"menu","kind":"list","columns":[],"rows":[],"total":0,"selection":"single"},
+        "affordances":[]});
+    h.push(stacked(
+        41,
+        &[
+            editmap_screen("map editor under a mapgen preview with the stamp"),
+            mapgen,
+        ],
+    ));
+    m.poll();
+    let o = m.origin();
+    let at = |x: i32, y: i32| Pos {
+        x: x - o.x,
+        y: y - o.y,
+    };
+    let before = m.cell(at(1200, 1200));
+    assert_eq!(
+        m.marks(),
+        [
+            MapMark {
+                role: MarkRole::OmtBorder,
+                min: at(1200, 1200),
+                max: at(1223, 1223),
+            },
+            MapMark {
+                role: MarkRole::Stamp,
+                min: at(1199, 1199),
+                max: at(1224, 1224),
+            },
+        ]
+    );
+    assert_eq!(m.cell(at(1200, 1200)), before, "marks change no square");
+}
+
+#[test]
+fn a_selection_marks_each_square_of_the_shown_level_only() {
+    let (t, h) = session();
+    let mut m = connected(t);
+    let mut screen = editmap_screen("map editor with its selection");
+    let target = &mut screen["root"]["child"]["target"];
+    target["marks"][0]["squares"] = json!([{"dim":"","x":3,"y":4,"z":0},{"dim":"","x":4,"y":4,"z":0},
+        {"dim":"","x":3,"y":4,"z":1}]);
+    h.push(stacked(41, &[screen]));
+    m.poll();
+    let o = m.origin();
+    let square = |x: i32| MapMark {
+        role: MarkRole::Selection,
+        min: Pos {
+            x: x - o.x,
+            y: 4 - o.y,
+        },
+        max: Pos {
+            x: x - o.x,
+            y: 4 - o.y,
+        },
+    };
+    assert_eq!(m.marks(), [square(3), square(4)]);
+    h.push(stacked(42, &[]));
+    m.poll();
+    assert!(m.marks().is_empty(), "no marks once the editor is gone");
 }

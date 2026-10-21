@@ -421,3 +421,102 @@ fn native_editmap_shows_the_engines_parts_and_its_edit_key_runs_the_engines_affo
         .unwrap();
     assert_eq!(operation["affordance_id"], "EDIT_TERRAIN", "{operation}");
 }
+
+/// The map editor with its cursor at world (3, 4) and `marks`, under the screens `over`; docked right so the map
+/// beside it shows.
+fn show_editor(app: &mut TuiApp<EngineModel>, h: &ScriptHandle, marks: Value, over: &[Value]) {
+    for name in ["events_41_walk", "events_42_message"] {
+        h.push(fixture(name));
+    }
+    let mut menu = fixture("events_43_menu");
+    let change = &mut menu["params"]["events"][0]["changes"]["interaction"];
+    change["actions"] = json!([]);
+    change["interaction"] = Value::Null;
+    let editor = json!({"screen_id":"screen:7","role":"dialog","kind":"editmap","dock":"right","title":"Map editor",
+        "root":{"id":"target","kind":"panel","title":"Map editor","child":{"id":"target:map",
+            "kind":"map","mode":"world",
+            "target":{"source":{"dim":"","x":2,"y":4,"z":0},"current":{"dim":"","x":3,"y":4,"z":0},
+                "range":20,"distance_metric":"square","status":"editmap","candidates":[],
+                "marks":marks}}},
+        "affordances":[]});
+    let map = json!({"screen_id":"screen:map","role":"map","root":null,"affordances":[]});
+    change["stack"] = [map, editor]
+        .into_iter()
+        .chain(over.iter().cloned())
+        .collect();
+    h.push(menu);
+    app.model.poll();
+}
+
+/// The background of the map square `dx`, `dy` from the avatar, which stands at world (4, 4); the terminal is wide
+/// enough that the avatar is left of a screen docked right.
+fn square_bg(app: &mut TuiApp<EngineModel>, dx: i32, dy: i32) -> ratatui::style::Color {
+    let mut t = Terminal::new(TestBackend::new(240, 40)).unwrap();
+    t.draw(|f| app.draw(f)).unwrap();
+    let buf = t.backend().buffer();
+    let avatar = (0..buf.area.height)
+        .flat_map(|y| (0..buf.area.width).map(move |x| (x, y)))
+        .find(|&pos| buf[pos].symbol() == "@")
+        .expect("the avatar");
+    let at = (
+        (i32::from(avatar.0) + dx) as u16,
+        (i32::from(avatar.1) + dy) as u16,
+    );
+    buf[at].bg
+}
+
+fn world(x: i32, y: i32) -> Value {
+    json!({"dim":"","x":x,"y":y,"z":0})
+}
+
+#[test]
+fn the_map_editors_selection_lights_each_selected_square_and_no_other() {
+    let (mut app, h) = engine();
+    text(&mut app);
+    show_editor(
+        &mut app,
+        &h,
+        json!([{"role":"selection","squares":[world(6, 4), world(6, 5), world(4, 6)]}]),
+        &[],
+    );
+    let lit = square_bg(&mut app, 2, 0);
+    assert_eq!(square_bg(&mut app, 2, 1), lit);
+    assert_eq!(square_bg(&mut app, 0, 2), lit);
+    assert_ne!(square_bg(&mut app, 1, 0), lit, "a square between is not");
+    assert_ne!(square_bg(&mut app, 2, 2), lit);
+}
+
+#[test]
+fn the_mapgen_border_and_stamp_corners_stay_lit_under_the_mapgen_list() {
+    let (mut app, h) = engine();
+    text(&mut app);
+    let marks = json!([
+        {"role":"omt_border","rect":{"min":world(2, 2),"max":world(7, 6)}},
+        {"role":"stamp","rect":{"min":world(1, 1),"max":world(8, 7)}}]);
+    let mapgen = json!({"screen_id":"screen:11","role":"dialog","title":"Mapgen","dock":"right",
+        "root":{"id":"menu","kind":"list","columns":[],"rows":[],"total":0,"selection":"single"},
+        "affordances":[]});
+    show_editor(&mut app, &h, marks, &[mapgen]);
+    // Squares from the avatar at world (4, 4).
+    let border = square_bg(&mut app, -2, -2);
+    let stamp = square_bg(&mut app, -3, -3);
+    let inside = square_bg(&mut app, -1, -1);
+    assert_ne!(border, inside, "the border is lit");
+    assert_ne!(stamp, inside, "the stamp's corner is lit");
+    assert_ne!(stamp, border, "the stamp is not the border");
+    for (dx, dy) in [(3, -2), (3, 2), (-2, 2), (0, -2), (3, 0)] {
+        assert_eq!(square_bg(&mut app, dx, dy), border, "border at {dx}, {dy}");
+    }
+    for (dx, dy) in [(4, -3), (4, 3), (-3, 3)] {
+        assert_eq!(
+            square_bg(&mut app, dx, dy),
+            stamp,
+            "stamp corner at {dx}, {dy}"
+        );
+    }
+    assert_eq!(
+        square_bg(&mut app, 0, -3),
+        inside,
+        "the stamp marks only its corners"
+    );
+}
