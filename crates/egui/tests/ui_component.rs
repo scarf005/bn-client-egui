@@ -1186,14 +1186,14 @@ fn an_action_of_the_item_examine_menu_runs_the_menus_run_with_the_action_id() {
 #[test]
 fn a_response_runs_the_talk_screens_respond_with_its_data_name() {
     let (mut h, script) = harness(example("npctalk.json", "NPC talk screen"));
-    let at = h.get_by_label("Who are you?").rect().center();
+    let at = h.get_by_label("What are you doing here?").rect().center();
     common::double_click(&mut h, at);
     h.run_steps(3);
     assert_eq!(
         submits(&script),
         [boundary_invoke(
             "talk:respond",
-            json!({"row": "TALK_MARLOSS_VOICE:2"})
+            json!({"row": "TALK_EVAC_MERCHANT:5"})
         )]
     );
 }
