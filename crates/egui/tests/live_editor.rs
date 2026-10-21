@@ -287,9 +287,24 @@ fn the_map_editor_opens_draws_and_discards() {
     );
     save(&mut h, "editor-catalog");
 
-    // Leaving with the change unsaved asks first.
+    // Leaving with the change unsaved asks to save, discard or stay.
     invoke(&mut h, "QUIT", InvokeArgs::default());
-    invoke(&mut h, "YES", InvokeArgs::default());
+    run_until(&mut h, "the leave menu", 60, |h| {
+        h.state().model.menu().is_some_and(|m| m.choices.len() == 3)
+    });
+    save(&mut h, "editor-leave");
+    let discard = h
+        .state()
+        .model
+        .menu()
+        .and_then(|m| {
+            m.choices
+                .iter()
+                .find(|c| c.label == "Leave without saving")
+                .map(|c| c.id.clone())
+        })
+        .expect("a discard choice");
+    h.state_mut().model.choose(&discard);
     run_until(&mut h, "the map", 60, |h| {
         !h.state().model.busy() && top_kind(h).as_deref() != Some("editor")
     });
