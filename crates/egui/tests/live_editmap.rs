@@ -289,11 +289,16 @@ fn the_map_editor_its_pickers_shape_and_mapgen() {
     h.key_press(egui::Key::Escape);
     settle(&mut h);
     save(&mut h, "mapgen-back");
-    let at = h
-        .get_by_label_contains("airport_runway_west_north")
-        .rect()
-        .center();
-    common::double_click(&mut h, at);
+    // The row the list opens on, whatever the start location.
+    let row = h
+        .state()
+        .model
+        .screens()
+        .last()
+        .and_then(|s| s.focus.clone())
+        .and_then(|f| f.row_id)
+        .expect("a focused row");
+    choose(&mut h, "bn:choose:list:choices", &row);
     run_until(&mut h, "the preview", 120, |h| {
         !h.state().model.busy() && top_kind(h).as_deref() == Some("uilist")
     });

@@ -130,6 +130,18 @@ fn start<'a>() -> H<'a> {
     run_until(&mut h, "the main menu", 120, |h| {
         h.state().model.menu().is_some()
     });
+    // A profile without a language asks for one first, unless the system names one the game has.
+    let asks_language = |h: &H| {
+        h.state().model.screens().last().is_some_and(|s| {
+            serde_json::to_string(s)
+                .unwrap()
+                .contains(r#""label":"English""#)
+        })
+    };
+    if asks_language(&h) {
+        choose(&mut h, "bn:choose:list:choices", "entry:0");
+        run_until(&mut h, "the language", 60, |h| !asks_language(h));
+    }
     choose(&mut h, "menu:tab", "new_game");
     choose(&mut h, "menu:entry", "new_game:play_now_default");
     run_until(&mut h, "the map", 900, |h| h.state().model.size().x > 0);
