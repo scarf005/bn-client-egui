@@ -117,6 +117,17 @@ fn find<'a>(screen: &'a Screen, id: &str) -> Option<&'a Affordance> {
     screen.affordances.iter().find(|a| a.id == id)
 }
 
+/// Whether the rows of one of the screen's lists run the affordance, on a double click or Enter.
+fn run_by_rows(screen: &Screen, affordance: &Affordance) -> bool {
+    let lists = screen.root.iter().flat_map(Component::nested);
+    lists
+        .filter_map(|c| match c {
+            Component::List(l) => l.activate.as_deref(),
+            _ => None,
+        })
+        .any(|id| id == affordance.id)
+}
+
 /// The ids of the affordances some component names.
 fn claimed(root: &Component) -> HashSet<&str> {
     root.nested()

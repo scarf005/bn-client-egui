@@ -125,7 +125,8 @@ impl<M: GameModel> App<M> {
             .affordances
             .iter()
             .filter_map(|id| find(screen, id))
-            .filter(|a| !driven(component, a))
+            // A list's rows run its `activate`, also where a panel around the list names it.
+            .filter(|a| !driven(component, a) && !run_by_rows(screen, a))
             .collect::<Vec<_>>();
         self.affordance_buttons(ui, &own, row, out);
     }
