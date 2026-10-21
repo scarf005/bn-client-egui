@@ -781,4 +781,66 @@ mod tests {
         let late = squares(&e.ops(0.17, true, &none)).len();
         assert!(0 < early && early < late, "{early} < {late}");
     }
+
+    /// A shot along row `y` from x 0 over `len` squares.
+    fn shot_on(y: i32, len: i32) -> Effect {
+        let mut e = shot(len);
+        if let Shape::Projectile { path, .. } = &mut e.shape {
+            path.iter_mut().for_each(|p| p.y = y);
+        }
+        e
+    }
+
+    fn volley(pellets: Vec<Pellet>) -> Effect {
+        Effect {
+            shape: Shape::Volley { pellets },
+            duration_ms: 0,
+        }
+    }
+
+    #[test]
+    fn a_volleys_pellets_take_each_step_together_and_each_ends_where_its_flight_does() {
+        let mut e = Effects::default();
+        let pellet = |y, len| Pellet {
+            flight: shot_on(y, len),
+            then: vec![],
+        };
+        e.add(0.0, vec![volley(vec![pellet(0, 3), pellet(1, 2)])], false);
+        let at = |step: f64| squares(&e.ops(SHOT_STEP * step, true, &none));
+        assert_eq!(at(0.5), [Pos { x: 0, y: 0 }, Pos { x: 0, y: 1 }]);
+        assert_eq!(at(1.5), [Pos { x: 1, y: 0 }, Pos { x: 1, y: 1 }]);
+        assert_eq!(at(2.5), [Pos { x: 2, y: 0 }], "the shorter pellet ended");
+        e.add(SHOT_STEP * 3.0 + 0.001, vec![shot_on(5, 1)], false);
+        assert_eq!(
+            at(3.5),
+            [Pos { x: 0, y: 5 }],
+            "a shot after the volley starts once all its pellets flew"
+        );
+    }
+
+    #[test]
+    fn a_pellets_hit_text_rises_once_the_pellet_reached_the_square_it_hit() {
+        let mut e = Effects::default();
+        let up = Pos { x: 0, y: -1 };
+        let hit = text(Pos { x: 2, y: 9 }, up, &["-3"]);
+        e.add(
+            0.0,
+            vec![volley(vec![Pellet {
+                flight: shot_on(0, 4),
+                then: vec![Follow {
+                    after: 3,
+                    effect: hit,
+                }],
+            }])],
+            false,
+        );
+        let rows = |t: f64| {
+            squares(&e.ops(t, true, &none))
+                .iter()
+                .filter(|p| p.y != 0)
+                .count()
+        };
+        assert_eq!(rows(TEXT_STEP * 1.5), 0, "a text on its own would rise now");
+        assert!(rows(SHOT_STEP * 3.0 + TEXT_STEP * 1.5) > 0);
+    }
 }

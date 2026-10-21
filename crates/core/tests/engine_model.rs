@@ -3100,3 +3100,134 @@ fn a_selection_marks_each_square_of_the_shown_level_only() {
     m.poll();
     assert!(m.marks().is_empty(), "no marks once the editor is gone");
 }
+
+/// One notification of the facts `(type, data)` in order, from sequence `first`, each step 20 ms long.
+fn facts_event(first: u64, facts: &[(&str, Value)]) -> Value {
+    let events = facts
+        .iter()
+        .enumerate()
+        .map(|(i, (kind, data))| {
+            let sequence = first + i as u64;
+            json!({"sequence": sequence.to_string(), "revision": "32", "type": kind, "data": data,
+                "display": {"duration_ms": 20}})
+        })
+        .collect::<Vec<_>>();
+    json!({"jsonrpc": "2.0", "method": "bn.events", "params": {"epoch": "e7f3", "events": events}})
+}
+
+/// A move of `projectile` onto the squares `path` (x, y on level 0), of the multishot `group` when there is one.
+fn pellet_move(
+    projectile: &str,
+    group: Option<&str>,
+    path: &[(i32, i32)],
+) -> (&'static str, Value) {
+    let mut data = json!({"projectile": projectile,
+        "path": path.iter().map(|&(x, y)| square(x, y, 0)).collect::<Vec<_>>(),
+        "look": {"kind": "projectile", "id": null, "glyph": "*", "color": "red"}});
+    if let Some(group) = group {
+        data["group"] = group.into();
+    }
+    ("projectile.moved", data)
+}
+
+fn pellet_hit(projectile: &str, group: &str, (x, y): (i32, i32)) -> (&'static str, Value) {
+    (
+        "projectile.hit",
+        json!({"projectile": projectile, "at": square(x, y, 0), "entity": "e:7", "group": group}),
+    )
+}
+
+fn damage_text((x, y): (i32, i32)) -> (&'static str, Value) {
+    (
+        "combat_text.shown",
+        json!({"at": square(x, y, 0), "segments": [{"text": "-3", "color": "light_red"}]}),
+    )
+}
+
+/// The squares of a flight, as (x, y).
+fn flown(effect: &bn_client_core::Effect) -> Vec<(i32, i32)> {
+    let bn_client_core::Shape::Projectile { path, .. } = &effect.shape else {
+        panic!("{effect:?}");
+    };
+    path.iter().map(|p| (p.x, p.y)).collect()
+}
+
+#[test]
+fn a_multishots_pellets_fly_together_with_each_hits_text_at_the_square_it_hit() {
+    use bn_client_core::Shape;
+    let (t, h) = session();
+    let mut m = connected(t);
+    h.push(facts_event(
+        41,
+        &[
+            pellet_move("projectile:1", Some("g:1"), &[(4, 4), (5, 4)]),
+            pellet_move("projectile:1", Some("g:1"), &[(6, 4)]),
+            pellet_hit("projectile:1", "g:1", (5, 4)),
+            ("entity.damaged", json!({"id": "e:7", "amount": 3})),
+            damage_text((5, 4)),
+            pellet_move("projectile:2", Some("g:1"), &[(4, 5)]),
+            pellet_move("projectile:2", Some("g:1"), &[(5, 6)]),
+            pellet_hit("projectile:2", "g:1", (5, 6)),
+            damage_text((5, 6)),
+        ],
+    ));
+    m.poll();
+    assert!(
+        m.take_effects().is_empty(),
+        "a multishot is held while more of its pellets may follow"
+    );
+    let effects = m.take_effects();
+    assert_eq!(effects.len(), 1, "{effects:?}");
+    let Shape::Volley { pellets } = &effects[0].shape else {
+        panic!("{:?}", effects[0]);
+    };
+    assert_eq!(
+        pellets.iter().map(|p| flown(&p.flight)).collect::<Vec<_>>(),
+        [vec![(4, 4), (5, 4), (6, 4)], vec![(4, 5), (5, 6)]]
+    );
+    let shown = |p: usize| {
+        pellets[p]
+            .then
+            .iter()
+            .map(|f| (f.after, matches!(f.effect.shape, Shape::Text { .. })))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        shown(0),
+        [(2, true)],
+        "after the square it hit, not its last"
+    );
+    assert_eq!(shown(1), [(2, true)]);
+    assert!(
+        m.take_effects().is_empty(),
+        "each multishot is handed out once"
+    );
+}
+
+#[test]
+fn a_shot_after_a_multishot_ends_it_and_a_single_shot_plays_alone() {
+    use bn_client_core::Shape;
+    let (t, h) = session();
+    let mut m = connected(t);
+    h.push(facts_event(
+        41,
+        &[
+            pellet_move("projectile:1", Some("g:1"), &[(4, 4)]),
+            pellet_move("projectile:2", Some("g:1"), &[(4, 5)]),
+            pellet_move("projectile:3", Some("g:2"), &[(4, 6)]),
+            pellet_move("projectile:4", None, &[(4, 7), (4, 8)]),
+            damage_text((4, 8)),
+        ],
+    ));
+    m.poll();
+    let effects = m.take_effects();
+    let pellets = |e: &bn_client_core::Effect| match &e.shape {
+        Shape::Volley { pellets } => pellets.iter().map(|p| flown(&p.flight)).collect::<Vec<_>>(),
+        _ => panic!("{e:?}"),
+    };
+    assert_eq!(effects.len(), 4, "{effects:?}");
+    assert_eq!(pellets(&effects[0]), [vec![(4, 4)], vec![(4, 5)]]);
+    assert_eq!(pellets(&effects[1]), [vec![(4, 6)]]);
+    assert_eq!(flown(&effects[2]), [(4, 7), (4, 8)], "as today");
+    assert!(matches!(effects[3].shape, Shape::Text { .. }));
+}
