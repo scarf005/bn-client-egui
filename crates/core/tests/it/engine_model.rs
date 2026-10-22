@@ -1227,10 +1227,13 @@ fn creatures_and_the_avatar_draw_over_the_terrain_with_their_overlays() {
             color: m.colors().resolve("c_light_red").0
         })
     );
+    // Its attitude toward the avatar is hostile, which a 3D view points out when it is out of sight.
+    assert!(zombie.hostile);
     // The avatar stands over the items on the ground: its gendered sprite, then the jacket, which has
     // no glyph to fall back on.
     let me = at(3, 4);
     assert_eq!(me.health, None);
+    assert!(!me.hostile);
     let ids = me.layers.iter().map(|l| l.id.as_str()).collect::<Vec<_>>();
     assert_eq!(
         ids,

@@ -112,6 +112,8 @@ pub struct Cell {
     pub glow: Option<Glow>,
     /// The creature drawn here is hurt.
     pub health: Option<Health>,
+    /// The creature drawn here regards the avatar as hostile.
+    pub hostile: bool,
     /// How many levels down the layers lie, seen through open air; 0 on the avatar's own level.
     pub depth: u8,
     /// The game's per-square seed for weighted sprite variants, also for squares nothing is known about.
