@@ -1,5 +1,5 @@
-//! The choices of a dialog that holds one list are answered by one click, as its buttons are; the rows of any other
-//! screen are only focused by one, and used by a double click.
+//! The choices of a screen that holds one list and no detail pane are answered by one click, as its buttons are; the
+//! rows of any other screen are only focused by one, and used by a double click.
 use crate::common::{fixture, session};
 use bn_client_egui::transport::ScriptHandle;
 use bn_client_egui::{App, EngineModel};
@@ -112,19 +112,10 @@ fn invoked(script: &ScriptHandle) -> Vec<(Value, Value)> {
 }
 
 #[test]
-fn one_click_on_the_one_list_of_a_dialog_runs_the_choice_and_one_on_another_screens_row_only_focuses_it()
+fn one_click_on_the_one_list_of_a_screen_without_detail_runs_the_choice_and_one_on_another_screens_row_only_focuses_it()
  {
-    let (mut dialogs, mut others) = (0, 0);
-    let named = [
-        "wait menu screen",
-        "query popup screen",
-        "character sheet",
-        "armor layers screen",
-    ];
+    let (mut answered, mut others) = (0, 0);
     for (name, screen) in screens() {
-        if !named.iter().any(|n| name.ends_with(&format!("\"{n}\""))) {
-            continue;
-        }
         let Some((activate, row, label, lists)) = first_choice(&screen) else {
             continue;
         };
@@ -150,25 +141,28 @@ fn one_click_on_the_one_list_of_a_dialog_runs_the_choice_and_one_on_another_scre
         });
         h.run_steps(3);
         let ran = invoked(&script).contains(&(json!(activate), json!(row)));
-        match screen["role"] == "dialog" && lists == 1 {
+        let detail = screen["root"]
+            .to_string()
+            .contains(r#""relation":"detail""#);
+        match lists == 1 && !detail {
             true => {
-                dialogs += 1;
+                answered += 1;
                 assert!(
                     ran,
-                    "{name}: a click on {label} of a dialog's one list ran nothing"
+                    "{name}: a click on {label} of the screen's one list ran nothing"
                 );
             }
             false => {
                 others += 1;
                 assert!(
                     !ran,
-                    "{name}: a click on {label} used the row of a screen with more lists, or none a dialog"
+                    "{name}: a click on {label} used the row of a screen with a detail pane or more lists"
                 );
             }
         }
     }
     assert!(
-        dialogs > 0 && others > 0,
-        "{dialogs} dialogs, {others} screens"
+        answered > 10 && others > 5,
+        "{answered} answered, {others} focused screens"
     );
 }
