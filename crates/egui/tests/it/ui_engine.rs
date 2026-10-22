@@ -11,6 +11,12 @@ use std::time::Duration;
 type H<'a> = Harness<'a, App<EngineModel>>;
 
 fn harness<'a>() -> (H<'a>, ScriptHandle) {
+    let (harness, script, _) = harness_clocked();
+    (harness, script)
+}
+
+/// `harness` with the manual clock the client reads, to let the time a command has run pass.
+fn harness_clocked<'a>() -> (H<'a>, ScriptHandle, Clock) {
     let (t, h) = session();
     let t = t.on("bn.command.submit", vec![fixture("submit_result")]);
     let clock = Clock::manual();
@@ -19,9 +25,9 @@ fn harness<'a>() -> (H<'a>, ScriptHandle) {
         .with_size(egui::vec2(1100.0, 800.0))
         .build_ui_state(
             |ui, app: &mut App<EngineModel>| app.show(ui),
-            App::new(model).with_clock(clock),
+            App::new(model).with_clock(clock.clone()),
         );
-    (harness, h)
+    (harness, h, clock)
 }
 
 fn submits(h: &ScriptHandle) -> Vec<serde_json::Value> {
@@ -299,12 +305,19 @@ fn spinners(h: &H) -> usize {
 
 #[test]
 fn a_spinner_runs_in_the_top_bar_while_a_command_executes_and_is_gone_when_it_completes() {
-    let (mut h, script) = harness();
+    let (mut h, script, clock) = harness_clocked();
     open_menu(&mut h, &script);
     assert_eq!(spinners(&h), 0, "nothing runs yet");
     click_choice(&mut h);
     script.push(notice("executing", None));
     h.run_steps(5);
+    assert_eq!(
+        spinners(&h),
+        0,
+        "a command that has just started is too short to show"
+    );
+    clock.advance(std::time::Duration::from_millis(500));
+    h.run_steps(3);
     assert_eq!(spinners(&h), 1, "the command is executing");
     script.push(notice("completed", None));
     h.run_steps(3);
@@ -316,6 +329,7 @@ fn reduced_motion_shows_a_still_mark_in_place_of_the_spinner() {
     let (t, script) = session();
     let t = t.on("bn.command.submit", vec![fixture("submit_result")]);
     let clock = Clock::manual();
+    let clock_handle = clock.clone();
     let path = std::env::temp_dir().join(format!("bn-spinner-{}.json", std::process::id()));
     std::fs::write(
         &path,
@@ -331,6 +345,8 @@ fn reduced_motion_shows_a_still_mark_in_place_of_the_spinner() {
     click_choice(&mut h);
     script.push(notice("executing", None));
     h.run_steps(5);
+    clock_handle.advance(std::time::Duration::from_millis(500));
+    h.run_steps(3);
     assert_eq!(spinners(&h), 0, "nothing spins");
     h.get_by_label("…");
     h.get_by_label("combat knife: Under way.");
@@ -1070,4 +1086,11 @@ fn the_map_key_opens_the_clients_map_window_and_the_game_keeps_taking_keys() {
         "the player moves with the map open"
     );
     h.get_by_label("Travel and notes");
+}
+
+#[test]
+fn the_text_cursor_does_not_blink() {
+    let (mut h, _) = harness();
+    h.run_steps(3);
+    assert!(!h.ctx.global_style().visuals.text_cursor.blink);
 }

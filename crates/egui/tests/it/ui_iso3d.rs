@@ -108,11 +108,17 @@ fn pick_2d(h: &mut H) {
     open_client_settings(h);
     h.get_by_label("2D").click();
     h.run_steps(3);
+    // The player closes the window, which would cover the map otherwise.
+    h.get_by_label("Close window").click();
+    h.run_steps(3);
 }
 
 fn pick_3d(h: &mut H) {
     open_client_settings(h);
     h.get_by_label("3D").click();
+    h.run_steps(3);
+    // The player closes the window, which would cover the map otherwise.
+    h.get_by_label("Close window").click();
     h.run_steps(3);
 }
 

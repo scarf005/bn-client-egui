@@ -61,24 +61,12 @@ impl<M: GameModel> App<M> {
             panes: false,
             column: false,
         };
-        // As wide as its content, within the share of the room a window beside the map takes.
-        let width = screen.root.as_ref().and_then(|root| {
-            let builder = egui::UiBuilder::new().max_rect(region);
-            let ui = egui::Ui::new(ctx.clone(), egui::Id::new("measure"), builder);
-            let margin = ui.spacing().window_margin.sum().x;
-            let content = self.extent(&ui, screen, root, placement.widest() - margin);
-            let content = Extent {
-                min: content.min + margin,
-                natural: content.natural + margin,
-                ..content
-            };
-            placement.width(content, 0.0)
-        });
         let spec = WindowSpec {
             closable: true,
             place: Some(place),
             movable: true,
-            width,
+            width: placement.first_width(),
+            scrolls: false,
             ..self.window_spec(ctx, Some(&kind), &title)
         };
         let offered = self.model.actions().into_iter().find(|a| a.id == action);

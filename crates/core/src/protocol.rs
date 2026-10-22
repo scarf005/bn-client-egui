@@ -2478,6 +2478,8 @@ pub enum AffordanceRole {
     Digit,
     /// Only resizes or rearranges the native window.
     Layout,
+    /// A key that edits the text of the screen's text field, which the client's own text box takes.
+    Edit,
 }
 
 /// Which expectation an invoke of the affordance carries; the engine assigns it.

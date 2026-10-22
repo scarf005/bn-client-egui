@@ -2,9 +2,6 @@
 
 use super::*;
 
-/// The most buttons a screen's footer asks its window to be wide for; a row narrower than its buttons puts the
-/// rest of its actions in a menu.
-const FOOTER_BUTTONS: usize = 6;
 /// The button of the menu that holds the actions, or the tabs, a row has no room for.
 pub(super) const MORE: &str = "⋯";
 /// The footer's help button, in a window without a title bar.
@@ -64,14 +61,6 @@ impl FooterButtons<'_> {
     fn shown(&self, fits: impl Fn(usize) -> bool) -> usize {
         (0..=self.rest.len()).rev().find(|n| fits(*n)).unwrap_or(0)
     }
-}
-
-/// The width of the screen's footer on one row of at most `FOOTER_BUTTONS` buttons.
-pub(super) fn footer_width(ui: &egui::Ui, affordances: &[&Affordance], title_bar: bool) -> f32 {
-    let row = footer_buttons(affordances, title_bar);
-    let fixed = row.back.len() + row.confirm.len() + usize::from(row.help.is_some());
-    let n = row.shown(|n| fixed + n + usize::from(n < row.rest.len()) <= FOOTER_BUTTONS);
-    row.width(ui, n)
 }
 
 /// The width of a button holding only `text`.
@@ -252,7 +241,7 @@ pub(super) fn own_buttons<'a>(screen: &'a Screen, component: &Component) -> Vec<
         .collect()
 }
 
-/// Whether `a` is drawn as a button: picking, moving and digits run from their rows and keys instead, and what
+/// Whether `a` is drawn as a button: picking, moving, digits and text edits run from their rows and keys instead, and what
 /// only rearranges the native window changes nothing here.
 pub(super) fn drawn_button(a: &Affordance) -> bool {
     !matches!(
@@ -262,6 +251,7 @@ pub(super) fn drawn_button(a: &Affordance) -> bool {
                 | AffordanceRole::Navigate
                 | AffordanceRole::Digit
                 | AffordanceRole::Layout
+                | AffordanceRole::Edit
         )
     )
 }

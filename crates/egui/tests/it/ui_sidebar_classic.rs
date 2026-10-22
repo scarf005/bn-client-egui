@@ -6,7 +6,7 @@ use crate::common::legible::cut_text;
 use bn_client_egui::{App, EngineModel};
 use eframe::egui::{self, epaint};
 use egui_kittest::Harness;
-use egui_kittest::kittest::Queryable;
+use egui_kittest::kittest::{NodeT, Queryable};
 use serde_json::{Value, json};
 
 type H<'a> = Harness<'a, App<EngineModel>>;
@@ -244,4 +244,58 @@ fn dragging_the_log_edge_up_takes_room_from_the_items_and_the_size_sticks() {
         .ctx
         .fonts_mut(|f| f.row_height(&egui::FontId::proportional(15.0)));
     assert!(rect(&h, "Log").height() >= 6.0 * line);
+}
+
+/// Where every line of the message log is, as it is drawn now.
+fn log_lines(h: &H) -> Vec<(String, Option<[i32; 4]>)> {
+    h.query_all_by_label_contains("a long line")
+        .map(|n| {
+            let node = n.accesskit_node();
+            let bounds = node
+                .bounding_box()
+                .map(|r| [r.x0, r.y0, r.x1, r.y1].map(|v| (v * 10.0) as i32));
+            (node.value().unwrap_or_default().to_string(), bounds)
+        })
+        .collect()
+}
+
+#[test]
+fn a_message_log_in_a_narrow_sidebar_stays_where_it_is_frame_after_frame() {
+    let sizes = [egui::vec2(560.0, 800.0), SIZES[0]];
+    let mut jumping = vec![];
+    for size in sizes {
+        for (columns, count) in [20, 30, 44]
+            .into_iter()
+            .flat_map(|c| [3, 12, 40].map(move |n| (c, n)))
+        {
+            let map = fixture("subscribe_result")["result"]["interaction"]["stack"][0].clone();
+            let (app, script) = crate::common::staged(json!([map]));
+            let mut h = crate::common::themed_harness(size, app);
+            h.run_steps(3);
+            let mut walk = classic();
+            walk["params"]["events"][0]["changes"]["avatar"]["sidebar"]["layout"]["width"] =
+                columns.into();
+            script.push(walk);
+            for n in 0..count {
+                let text = format!(
+                    "This is a long line {n} that has to wrap more than once in a narrow log panel."
+                );
+                script.push(logged(42 + n, &text));
+            }
+            h.run_steps(10);
+            let seen = (0..30)
+                .map(|_| {
+                    h.run_steps(1);
+                    log_lines(&h)
+                })
+                .collect::<Vec<_>>();
+            let changing = seen.windows(2).filter(|w| w[0] != w[1]).count();
+            if changing > 0 {
+                jumping.push(format!(
+                    "{size:?} {columns} columns with {count} lines: moved in {changing} of 29 frames"
+                ));
+            }
+        }
+    }
+    assert!(jumping.is_empty(), "{jumping:#?}");
 }

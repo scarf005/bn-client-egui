@@ -11,8 +11,8 @@ pub(super) const SIDE_SHARE: f32 = 0.4;
 /// The share of the map region a dialog takes at most, and a screen at least, in width.
 const SCREEN_SHARE: f32 = 0.6;
 
-/// The narrowest and the widest a dialog is.
-const DIALOG_WIDTH: (f32, f32) = (320.0, 720.0);
+/// The narrowest and the widest a dialog first is.
+const DIALOG_WIDTH: (f32, f32) = (320.0, 960.0);
 
 /// The widest the column of a full screen with no map or canvas of its own is.
 pub(super) const COLUMN_WIDTH: f32 = 720.0;
@@ -140,36 +140,25 @@ pub(super) fn placement(screen: &Screen, room: &Room) -> Placement {
             .components()
             .into_iter()
             .any(|c| matches!(c, Component::List(list) if !list.columns.is_empty())),
-        panes: screen.components().into_iter().any(|c| {
+        panes: form::filter_submit(screen).is_none()
+            && screen.components().into_iter().any(|c| {
             matches!(c, Component::Split(split) if split.children.iter().filter(|c| !heading(c)).count() > 1)
         }),
     }
 }
 
 impl Placement {
-    /// The widest the class lets the window be, which its content is measured in.
-    pub(super) fn widest(&self) -> f32 {
-        let most = match self.class {
-            Class::Full | Class::Screen => self.room,
+    /// The width the window first has, which the player changes by resizing it: a readable column for a dialog,
+    /// the whole room for a table, panes or a screen, and the share a side window takes; none for a window that
+    /// fills its place.
+    pub(super) fn first_width(&self) -> Option<f32> {
+        let width = match self.class {
+            Class::Full => return None,
             Class::Dialog if self.table || self.panes => self.room,
-            Class::Dialog => DIALOG_WIDTH.1.min(SCREEN_SHARE * self.room),
+            Class::Dialog => (SCREEN_SHARE * self.room).clamp(DIALOG_WIDTH.0, DIALOG_WIDTH.1),
+            Class::Screen => self.room,
             Class::Side => SIDE_SHARE * self.room,
         };
-        most.min(self.place.room().x)
-    }
-
-    /// The window's width for content and a one-row footer `footer` wide (both with the window's margins): as
-    /// wide as both up to `widest`, but never narrower than the class's least, the content's least, nor a side
-    /// window narrower than its footer, nor wider than its place; none for a window that fills its place.
-    pub(super) fn width(&self, content: Extent, footer: f32) -> Option<f32> {
-        let least = match self.class {
-            Class::Full => return None,
-            Class::Dialog => DIALOG_WIDTH.0,
-            Class::Screen => SCREEN_SHARE * self.room,
-            Class::Side => footer,
-        };
-        let wanted = content.natural.max(footer);
-        let width = wanted.min(self.widest().max(content.min)).max(least);
         Some(width.min(self.place.room().x))
     }
 }

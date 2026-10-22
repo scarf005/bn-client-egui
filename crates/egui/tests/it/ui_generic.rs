@@ -34,6 +34,10 @@ fn boundary(screen: Value, revision: u32) -> Value {
 }
 
 fn harness<'a>(screen: Value) -> (H<'a>, ScriptHandle) {
+    harness_in(screen, egui::vec2(1100.0, 800.0))
+}
+
+fn harness_in<'a>(screen: Value, size: egui::Vec2) -> (H<'a>, ScriptHandle) {
     let mut subscribe = fixture("subscribe_result");
     subscribe["result"]["interaction"] = boundary(screen, 12);
     let reply = vec![
@@ -48,12 +52,10 @@ fn harness<'a>(screen: Value) -> (H<'a>, ScriptHandle) {
         .on("bn.subscribe", reply);
     let clock = Clock::manual();
     let model = EngineModel::open(Box::new(t), ConnectOptions::default()).with_clock(clock.clone());
-    let mut harness = Harness::builder()
-        .with_size(egui::vec2(1100.0, 800.0))
-        .build_ui_state(
-            |ui, app: &mut App<EngineModel>| app.show(ui),
-            App::new(model).with_clock(clock),
-        );
+    let mut harness = Harness::builder().with_size(size).build_ui_state(
+        |ui, app: &mut App<EngineModel>| app.show(ui),
+        App::new(model).with_clock(clock),
+    );
     harness.run_steps(4);
     (harness, script)
 }
@@ -80,13 +82,18 @@ fn typed(script: &ScriptHandle) -> Vec<(String, bool)> {
         .collect()
 }
 
+/// The engine shows `screen` alone, as revision `revision`.
+fn screen_event(screen: Value, revision: u32) -> Value {
+    json!({"jsonrpc": "2.0", "method": "bn.events", "params": {"epoch": "e7f3", "events": [{
+        "sequence": (revision + 9).to_string(), "revision": revision.to_string(),
+        "type": "interaction.changed", "changes": {"interaction": boundary(screen, revision)}}]}})
+}
+
 /// The prompt of the example with the engine showing `value`, as revision `revision`.
 fn prompt_event(value: &str, revision: u32) -> Value {
     let mut screen = example("filter prompt before typing");
     screen["root"]["children"][0]["fields"][0]["value"] = value.into();
-    json!({"jsonrpc": "2.0", "method": "bn.events", "params": {"epoch": "e7f3", "events": [{
-        "sequence": (revision + 9).to_string(), "revision": revision.to_string(),
-        "type": "interaction.changed", "changes": {"interaction": boundary(screen, revision)}}]}})
+    screen_event(screen, revision)
 }
 
 /// The engine takes the `n`th command sent (from 1) and finishes it.
@@ -129,13 +136,124 @@ fn a_list_that_is_not_filterable_offers_no_filter() {
 }
 
 #[test]
-fn the_filter_prompt_shows_the_rows_the_text_leaves_and_they_are_not_choices() {
-    let (mut h, script) = harness(example("filter prompt after typing"));
+fn the_filter_prompt_shows_the_rows_the_text_leaves() {
+    let (h, _) = harness(example("filter prompt after typing"));
     h.get_by_label("Teleport…");
     assert!(h.query_by_label("Info…").is_none());
+}
+
+/// The player drags the window's bottom edge up by `by` points.
+fn shrink_from_below(h: &mut H, by: f32) {
+    let window = h.get_by_role(egui::accesskit::Role::Window).rect();
+    let bottom = window.center_bottom() - egui::vec2(0.0, 2.0);
+    for (at, pressed) in [(bottom, true), (bottom - egui::vec2(0.0, by), false)] {
+        h.hover_at(at);
+        h.run_steps(2);
+        h.event(egui::Event::PointerButton {
+            pos: at,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        });
+        h.run_steps(2);
+    }
+}
+
+#[test]
+fn the_description_of_the_selected_row_shows_in_full_under_a_list_in_a_window_of_the_first_size() {
+    let mut screen = example("filterable list screen");
+    let text = (1..=8)
+        .map(|n| format!("detail line {n}"))
+        .collect::<Vec<_>>();
+    // A long list, as the spawn menu's: more rows than its share of the window holds.
+    let list = &mut screen["root"]["children"][1];
+    list["rows"][0]["description"] = text.join("\n").into();
+    let row = list["rows"][7].clone();
+    let more = (0..22).map(|n| {
+        let mut row = row.clone();
+        row["id"] = format!("entry:{}", 100 + n).into();
+        row["selected"] = false.into();
+        row
+    });
+    list["rows"].as_array_mut().unwrap().extend(more);
+    list["total"] = 30.into();
+    let (mut h, _) = harness_in(screen, egui::vec2(800.0, 800.0));
+    shrink_from_below(&mut h, 100.0);
+    let first = h.get_by_label_contains("detail line 1").rect();
+    let window = h.get_by_role(egui::accesskit::Role::Window).rect();
+    // Room for at least five of the description's lines (a line is about 18 points) above the window's end.
+    assert!(
+        window.bottom() - first.top() >= 5.0 * 18.0,
+        "{first:?} in {window:?}"
+    );
+}
+
+#[test]
+fn the_filter_prompt_has_no_buttons_for_the_keys_that_edit_its_text() {
+    let (h, _) = harness(example("filter prompt before typing"));
+    assert!(h.query_by_label_contains("Remove previous").is_none());
+    assert!(h.query_by_label_contains("Remove current").is_none());
+    assert!(h.query_by_label_contains("Clear text").is_none());
+}
+
+#[test]
+fn the_filter_prompt_is_the_window_of_the_list_it_filters_with_its_box_above_the_results() {
+    let (mut h, script) = harness(example("filterable list screen"));
+    let window = |h: &H| h.get_by_role(egui::accesskit::Role::Window).rect();
+    shrink_from_below(&mut h, 120.0);
+    let before = window(&h);
+    assert!(before.height() < 680.0, "{before:?}");
+    let mut prompt = example("filter prompt after typing");
+    prompt["screen_id"] = "screen:13".into();
+    let mut stacked = boundary(example("filterable list screen"), 32);
+    stacked["stack"].as_array_mut().unwrap().push(prompt);
+    script.push(
+        json!({"jsonrpc": "2.0", "method": "bn.events", "params": {"epoch": "e7f3", "events": [{
+        "sequence": "41", "revision": "32", "type": "interaction.changed",
+        "changes": {"interaction": stacked}}]}}),
+    );
+    h.run_steps(4);
+    assert_eq!(
+        window(&h),
+        before,
+        "typing a filter keeps the window as it was"
+    );
+    let result = h.get_by_label("Teleport…").rect();
+    assert!(field(&h).rect().bottom() <= result.top());
+}
+
+#[test]
+fn a_click_on_a_filter_result_confirms_the_text_and_then_chooses_that_row() {
+    let (mut h, script) = harness(example("filter prompt after typing"));
     h.get_by_label("Teleport…").click();
     h.run_steps(3);
-    assert!(operations(&script).is_empty(), "{:?}", operations(&script));
+    assert_eq!(typed(&script), [("tele".to_string(), true)]);
+    let mut list = example("filterable list screen");
+    list["screen_id"] = "screen:13".into();
+    script.push(screen_event(list, 32));
+    finish(&script, 1, "c:5");
+    h.run_steps(4);
+    let ops = operations(&script);
+    assert_eq!(
+        ops.last().unwrap()["affordance_id"],
+        "bn:choose:list:choices",
+        "{ops:?}"
+    );
+    assert_eq!(ops.last().unwrap()["args"]["row"], "entry:4", "{ops:?}");
+}
+
+#[test]
+fn a_click_on_a_result_of_a_prompt_whose_filter_matches_nothing_chooses_nothing() {
+    let (mut h, script) = harness(example("filter prompt after typing"));
+    h.get_by_label("Teleport…").click();
+    h.run_steps(3);
+    let mut list = example("filterable list screen");
+    list["screen_id"] = "screen:13".into();
+    list["root"]["children"][1]["rows"] = json!([]);
+    script.push(screen_event(list, 32));
+    finish(&script, 1, "c:5");
+    h.run_steps(4);
+    assert_eq!(operations(&script).len(), 1, "{:?}", operations(&script));
 }
 
 #[test]
@@ -233,6 +351,37 @@ fn escape_in_the_prompt_cancels_it() {
     assert_eq!(
         operations(&script),
         [json!({"kind": "invoke", "affordance_id": "bn:cancel", "args": {}})]
+    );
+}
+
+#[test]
+fn escape_in_a_filled_prompt_empties_it_and_a_second_escape_cancels() {
+    let (mut h, script) = harness(example("filter prompt before typing"));
+    field(&h).focus();
+    h.run_steps(2);
+    field(&h).type_text("tele");
+    h.run_steps(3);
+    finish(&script, 1, "c:5");
+    h.run_steps(3);
+    h.key_press(egui::Key::Escape);
+    h.run_steps(3);
+    let ops = operations(&script);
+    assert_eq!(ops.last().unwrap()["args"]["text"], "", "{ops:?}");
+    assert!(
+        !operations(&script)
+            .iter()
+            .any(|op| op["affordance_id"] == "bn:cancel"),
+        "the first Escape only clears: {:?}",
+        operations(&script)
+    );
+    finish(&script, 2, "c:6");
+    h.run_steps(3);
+    h.key_press(egui::Key::Escape);
+    h.run_steps(3);
+    assert!(
+        operations(&script)
+            .iter()
+            .any(|op| op["affordance_id"] == "bn:cancel")
     );
 }
 

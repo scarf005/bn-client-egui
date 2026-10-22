@@ -10,6 +10,10 @@ const BESIDE: f32 = 900.0;
 /// The most rows a list over its description shows before it scrolls, and the most lines of the description.
 const ROWS_OVER: usize = 12;
 
+/// The share of a window's height a list over its description takes at most, and the fewest rows it keeps.
+const LIST_SHARE: f32 = 0.55;
+const LEAST_ROWS: usize = 4;
+
 impl<M: GameModel> App<M> {
     /// `list` (the component `c`), and the focused row's refusal and description.
     pub(super) fn described_list(
@@ -34,8 +38,12 @@ impl<M: GameModel> App<M> {
         }
         let room = ui.available_width();
         if room < BESIDE {
+            // The list keeps to its share of the window's height, so the description under it has the rest.
+            let spacing = ui.spacing();
+            let step = spacing.interact_size.y + spacing.item_spacing.y;
+            let share = (LIST_SHARE * ui.available_height() / step).floor() as usize;
             let rows = self.screens.list_rows.get().unwrap_or(ROWS_OVER);
-            self.with_list_rows(Some(rows.min(ROWS_OVER)), || {
+            self.with_list_rows(Some(rows.min(ROWS_OVER).min(share.max(LEAST_ROWS))), || {
                 self.list(ui, screen, list, out)
             });
             return self.row_detail(ui, &list.head.id, focused, ROWS_OVER as f32);

@@ -23,6 +23,11 @@ struct RowLayout<'a> {
     wraps: bool,
     /// The table's body, which a category row's band spans.
     across: egui::Rect,
+    /// The list is the one of a dialog with no detail beside it, whose rows a single click answers.
+    answers: bool,
+    /// The screen is a list filter's prompt: a row it shows is a result, and a click on one confirms the text and
+    /// then chooses that row of the list.
+    filter: bool,
 }
 
 impl<M: GameModel> App<M> {
@@ -64,6 +69,16 @@ impl<M: GameModel> App<M> {
             Selection::Multi | Selection::Count => Some(picked),
             _ => row.toggled,
         }
+    }
+
+    /// A screen of one list with no detail beside it asks a question: each row is an answer.
+    fn asks(screen: &Screen) -> bool {
+        let parts = screen.components();
+        let lists = parts.iter().filter(|c| matches!(c, Component::List(_)));
+        let details = parts
+            .iter()
+            .filter(|c| matches!(c, Component::Split(s) if s.relation == Relation::Detail));
+        lists.count() == 1 && details.count() == 0
     }
 
     pub(super) fn list(
@@ -181,6 +196,8 @@ impl<M: GameModel> App<M> {
                 widths: &widths,
                 wraps,
                 across: body.max_rect(),
+                answers: screen.role == ScreenRole::Dialog && Self::asks(screen),
+                filter: form::filter_submit(screen).is_some(),
             };
             body.heterogeneous_rows(heights.iter().copied(), |row| {
                 let at = row.index();
@@ -245,8 +262,8 @@ impl<M: GameModel> App<M> {
     }
 
     /// One row: its checkbox and marks, its item, its key, its label as a button, its column values and its
-    /// count editor. A click focuses the row and marks it in a picking list; a double click runs the list's
-    /// `activate`, as Enter does.
+    /// count editor. A click focuses the row and marks it in a picking list; a double click, or a single click on the
+    /// choices of a question, runs the list's `activate`, as Enter does.
     fn list_row(
         &self,
         mut cells: egui_extras::TableRow,
@@ -268,7 +285,8 @@ impl<M: GameModel> App<M> {
             .picks(id)
             .iter()
             .find(|p| p.id == row.id);
-        let on = row.enabled && row.selectable;
+        let result = layout.filter && row.enabled && !row.selectable;
+        let on = row.enabled && (row.selectable || result);
         let highlighted = cursor == Some(row.id.as_str()) || (cursor.is_none() && row.selected);
         cells.set_selected(highlighted);
         // The row's text is drawn on the selection bar when it is highlighted.
@@ -395,12 +413,18 @@ impl<M: GameModel> App<M> {
             (false, false) => button.on_disabled_hover_text(denial),
             _ => button,
         };
-        if button.clicked() {
+        if button.clicked() && result {
+            out.push(Intent::Reach(row.id.clone()));
+        } else if button.clicked() {
             out.push(Intent::Focus {
                 component: id.clone(),
                 row: row.id.clone(),
             });
-            match (list.selection, &list.activate, button.double_clicked()) {
+            match (
+                list.selection,
+                &list.activate,
+                layout.answers || button.double_clicked(),
+            ) {
                 (Selection::Multi | Selection::Count, _, _) => out.push(Intent::Mark {
                     component: id.clone(),
                     row: row.id.clone(),

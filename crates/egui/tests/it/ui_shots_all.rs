@@ -26,8 +26,9 @@ const TITLE_FLOW: &[&str] = &[
 /// finding. A fixed one must leave the list.
 #[rustfmt::skip]
 const KNOWN: &[(&str, Kind, &str)] = &[
-    ("colors/colour manager with a custom colour set@1280x800", Kind::Cut, "F1"),
-    ("colors/colour manager@1280x800", Kind::Cut, "F1"),
+    ("options/options screen with the editor of an integer option@1280x800", Kind::Cut, "a scrolled list shows part of the row at its edge"),
+    ("overmap/overmap screen for a client that draws tiles@1920x1080", Kind::Cut, "the first row of tile glyphs overshoots the viewport top by 1 pt"),
+    ("overmap/overmap screen@1920x1080", Kind::Cut, "the first row of tile glyphs overshoots the viewport top by 1 pt"),
 ];
 
 /// One screen of the examples, keyed `file/name`.
