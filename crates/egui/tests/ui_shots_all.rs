@@ -34,7 +34,6 @@ const KNOWN: &[(&str, Kind, &str)] = &[
     ("colors/colour manager@1280x800", Kind::Cut, "F1"),
     ("editor/map editor with a drawn room and a new mapping@1280x800", Kind::Cut, "F22"),
     ("editor/map editor with a nested chunk open@1280x800", Kind::Cut, "F22"),
-    ("editor/map editor with a placement picked@1280x800", Kind::Cut, "F22"),
     ("info/scores@1280x800", Kind::Cut, "F6"),
     ("info/scores@1920x1080", Kind::Cut, "F6"),
     ("newgame/character creation on the overview page@1280x800", Kind::Cut, "F6"),

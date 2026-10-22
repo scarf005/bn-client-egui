@@ -558,10 +558,7 @@ impl<M: GameModel> App<M> {
             (extents, lines)
         };
         let (mut extents, mut lines) = laid(ui, room);
-        let fills = parts
-            .iter()
-            .flat_map(|c| c.nested())
-            .any(|c| matches!(c, Component::Map(_) | Component::Canvas(_)));
+        let fills = parts.iter().flat_map(|c| c.nested()).any(takes_room);
         let natural = split.relation == Relation::Peers && !fills && lines.len() > 1;
         // Peers that scroll down keep room beside them for the scroll bar.
         let room = match natural {
