@@ -23,9 +23,9 @@ use crate::{a11y, editor, text};
 use bn_client_core::interaction::{self, ArgKind, InvokeError};
 use bn_client_core::protocol::{
     Affordance, AffordanceRole, CanvasComponent, Component, Editor, EditorValue, FieldKind, Form,
-    FormField, Grid, InvokeArgs, List, MapComponent, MapMode, OvermapTile, OvermapWire, PanelStat,
-    Relation, Row, Screen, ScreenDock, ScreenRole, Selection, SidebarSide, Split, Text, TextBlock,
-    TextRole, Tone, WorldPos,
+    FormField, Grid, GridRole, InvokeArgs, List, MapComponent, MapMode, OvermapTile, OvermapWire,
+    PanelStat, Relation, Row, Screen, ScreenDock, ScreenRole, Selection, SidebarSide, Split, Text,
+    TextBlock, TextRole, Tone, WorldPos,
 };
 use bn_client_core::{Cell, GameModel, Pos, Rgb, markup};
 use eframe::egui::{self, WidgetInfo, WidgetType};

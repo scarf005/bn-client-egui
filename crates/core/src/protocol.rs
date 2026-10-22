@@ -2208,6 +2208,15 @@ pub struct Grid {
     /// The looks the cells name, each once.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub looks: Vec<Look>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub role: Option<GridRole>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GridRole {
+    /// Squares the player draws on, which take whatever room there is.
+    Canvas,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]

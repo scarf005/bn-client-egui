@@ -168,20 +168,12 @@ fn draws_world(screen: &Screen) -> bool {
     screen.components().into_iter().any(takes_room)
 }
 
-/// A map or a canvas, which take whatever room they get. A grid the player draws on, whose squares run the
-/// grid's own affordance (the map editor's), is such a canvas whatever its size; a grid that only shows squares
-/// (a vehicle's) is not.
+/// A map or a canvas, which take whatever room they get: the engine's canvas, or a grid it marks as one (the map
+/// editor's); a grid that only shows or picks squares (a vehicle's, the direction compass) is not.
 pub(super) fn takes_room(c: &Component) -> bool {
-    let drawn_on = |grid: &Grid| {
-        grid.cells.iter().any(|cell| {
-            cell.affordance
-                .as_ref()
-                .is_some_and(|a| grid.head.affordances.contains(a))
-        })
-    };
     match c {
         Component::Map(_) | Component::Canvas(_) => true,
-        Component::Grid(grid) => drawn_on(grid),
+        Component::Grid(grid) => grid.role == Some(GridRole::Canvas),
         _ => false,
     }
 }
