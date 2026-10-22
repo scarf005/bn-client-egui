@@ -71,7 +71,7 @@ fn open<'a>(screen: Value) -> (H<'a>, ScriptHandle) {
     let clock = Clock::manual();
     let model = EngineModel::open(Box::new(t), ConnectOptions::default()).with_clock(clock.clone());
     let mut h = Harness::builder()
-        .with_size(egui::vec2(1280.0, 800.0))
+        .with_size(egui::vec2(1280.0, 1600.0))
         .build_ui_state(
             |ui, app: &mut App<EngineModel>| app.show(ui),
             App::new(model).with_clock(clock),

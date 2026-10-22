@@ -1036,7 +1036,9 @@ impl<M: GameModel> App<M> {
                         if let (true, Some(id), Some(a)) =
                             (cell.enabled, &cell.id, &cell.affordance)
                         {
-                            squares.insert((x, y), (button.rect, id.clone(), a.clone()));
+                            // Only the part of the square in view takes a drag.
+                            let seen = button.rect.intersect(ui.clip_rect());
+                            squares.insert((x, y), (seen, id.clone(), a.clone()));
                         }
                         button.widget_info(|| {
                             WidgetInfo::labeled(
