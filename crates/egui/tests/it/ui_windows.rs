@@ -2,6 +2,7 @@
 //! expanded from the title bar, closed where the engine offers cancel, and remembered per kind.
 use crate::common::{fixture, session};
 use bn_client_egui::transport::ScriptHandle;
+use bn_client_egui::windows::{self, Origin, Place, WindowSpec, WindowState};
 use bn_client_egui::{App, EngineModel};
 use eframe::egui;
 use egui_kittest::Harness;
@@ -53,7 +54,7 @@ fn settings(tag: &str) -> std::path::PathBuf {
     crate::common::game_root(tag).join("settings.json")
 }
 
-fn press(h: &mut H, pos: egui::Pos2, pressed: bool) {
+fn press<S>(h: &mut Harness<S>, pos: egui::Pos2, pressed: bool) {
     h.event(egui::Event::PointerButton {
         pos,
         button: egui::PointerButton::Primary,
@@ -63,7 +64,7 @@ fn press(h: &mut H, pos: egui::Pos2, pressed: bool) {
     h.run_steps(1);
 }
 
-fn click(h: &mut H, pos: egui::Pos2) {
+fn click<S>(h: &mut Harness<S>, pos: egui::Pos2) {
     h.hover_at(pos);
     h.run_steps(2);
     press(h, pos, true);
@@ -71,7 +72,7 @@ fn click(h: &mut H, pos: egui::Pos2) {
     h.run_steps(2);
 }
 
-fn drag(h: &mut H, from: egui::Pos2, to: egui::Pos2) {
+fn drag<S>(h: &mut Harness<S>, from: egui::Pos2, to: egui::Pos2) {
     h.hover_at(from);
     h.run_steps(2);
     press(h, from, true);
@@ -620,4 +621,56 @@ fn every_window_has_minimize_maximize_and_close_buttons_that_act() {
         h.get_by_label("Minimize");
         h.get_by_label("Close window");
     }
+}
+
+/// A screen of `size` showing only the window `spec` makes, with the state it last kept.
+fn bare_window<'a>(
+    size: egui::Vec2,
+    spec: impl Fn() -> WindowSpec + 'a,
+) -> Harness<'a, Option<WindowState>> {
+    let mut h = Harness::builder()
+        .with_size(size)
+        .with_pixels_per_point(1.25)
+        .build_ui_state(
+            move |ui, state: &mut Option<WindowState>| {
+                *state = windows::show(ui.ctx(), spec(), |_| ()).state;
+            },
+            None,
+        );
+    h.run_steps(3);
+    h
+}
+
+fn bare_spec(saved: Option<WindowState>, place: Option<Place>, width: Option<f32>) -> WindowSpec {
+    WindowSpec {
+        title: "Bare".into(),
+        id: egui::Id::new("bare window"),
+        saved,
+        origin: Origin {
+            pivot: egui::Align2::LEFT_TOP,
+            pos: egui::pos2(40.0, 40.0),
+        },
+        place,
+        movable: false,
+        width,
+        frame: None,
+        title_bar: true,
+        closable: false,
+        scrolls: false,
+        help: None,
+    }
+}
+
+#[test]
+fn a_placed_window_first_as_wide_as_a_room_with_a_fractional_edge_opens() {
+    let room = egui::Rect::from_min_max(egui::pos2(0.23, 10.0), egui::pos2(1092.8, 600.0));
+    assert!(
+        room.max.x - room.width() < room.min.x,
+        "the room rounds below its edge"
+    );
+    let h = bare_window(egui::vec2(1092.8, 614.4), move || {
+        bare_spec(None, Some(Place::Center(room)), Some(room.width()))
+    });
+    let shown = h.get_by_role(egui::accesskit::Role::Dialog).rect();
+    assert!((shown.width() - room.width()).abs() < 1.0, "{shown:?}");
 }
