@@ -689,3 +689,14 @@ fn a_window_smaller_than_the_least_size_is_dragged_by_a_corner_at_the_screens_co
     let kept = (*h.state()).expect("a free window is kept");
     assert!(kept.pos[0] >= 0.0 && kept.pos[1] >= 0.0, "{kept:?}");
 }
+
+#[test]
+fn a_window_maximized_on_a_screen_of_fractional_points_is_restored() {
+    let mut h = bare_window(egui::vec2(1092.8, 614.4), || bare_spec(None, None, None));
+    let before = (*h.state()).expect("a free window is kept");
+    let maximize = h.get_by_label("Maximize").rect().center();
+    click(&mut h, maximize);
+    let restore = h.get_by_label("Restore").rect().center();
+    click(&mut h, restore);
+    assert_eq!(h.state(), &Some(before));
+}
