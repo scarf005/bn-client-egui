@@ -17,8 +17,10 @@ use pages::Pages;
 use scene::Scene;
 use std::sync::Arc;
 
-/// The squares of the map the 3D view asks the model for: this many across and down, around the avatar.
+/// The squares of the map the 3D view asks the model for: at least and at most this many across and down, around
+/// the avatar, as many as the view's diagonal holds.
 pub const REACH: i32 = 61;
+pub const MAX_REACH: i32 = 151;
 /// Radians a key press turns the camera.
 pub const TURN: f32 = 15.0 * std::f32::consts::PI / 180.0;
 /// Radians per point of right-button drag.

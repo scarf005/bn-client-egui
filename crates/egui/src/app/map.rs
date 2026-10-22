@@ -303,11 +303,15 @@ impl<M: GameModel> App<M> {
     fn map_viewport(&mut self, ui: &egui::Ui, cell_px: f32, three: bool) -> f64 {
         // The room left for the map, in whole cells.
         let room = ui.available_size();
+        // The 3D map asks for the squares across the room's diagonal, so a turned camera finds none missing.
+        let scale = self
+            .display
+            .tileset()
+            .map_or(cell_px, |(t, _)| iso::scene::world_scale(t, cell_px));
+        let reach =
+            ((room.length() / scale).ceil() as i32 + 2).clamp(iso::REACH, iso::MAX_REACH) | 1;
         self.model.set_viewport(match three {
-            true => Pos {
-                x: iso::REACH,
-                y: iso::REACH,
-            },
+            true => Pos { x: reach, y: reach },
             false => Pos {
                 x: (room.x / cell_px) as i32,
                 y: (room.y / cell_px) as i32,
