@@ -150,7 +150,7 @@ fn the_window_of_a_cursor_screen_keeps_its_place_and_size_as_the_cursor_and_its_
     let (mut h, script) = playing(size, Some(example("look", "look-around screen")));
     crate::common::settle_windows(&mut h);
     let first = window_of(&h, "look");
-    let steps = [(8, 10), (-8, 1), (8, 0), (-8, 10), (2, 3)];
+    let steps = [(8, 10), (-3, 1), (8, 0), (-3, 10), (2, 3)];
     for (step, (dx, parts)) in steps.into_iter().enumerate() {
         look_moved(&h, &script, step as u64, dx, parts);
         for frame in 0..8 {
@@ -162,6 +162,21 @@ fn the_window_of_a_cursor_screen_keeps_its_place_and_size_as_the_cursor_and_its_
             );
         }
     }
+}
+
+#[test]
+fn a_cursor_screen_gives_up_its_side_only_when_the_cursor_comes_under_it() {
+    let size = egui::vec2(1280.0, 800.0);
+    let (mut h, script) = playing(size, Some(example("look", "look-around screen")));
+    crate::common::settle_windows(&mut h);
+    let first = window_of(&h, "look");
+    look_moved(&h, &script, 0, -8, 10);
+    h.run_steps(8);
+    let moved = window_of(&h, "look");
+    assert!(
+        moved.min.x > first.min.x,
+        "{first:?} stays where the cursor is: {moved:?}"
+    );
 }
 
 #[test]

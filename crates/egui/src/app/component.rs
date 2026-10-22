@@ -39,6 +39,7 @@ pub(super) use panel::PANELS;
 use placement::*;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
+use target::*;
 
 /// The margin around each pane of a split, on every side.
 const PANE_MARGIN: i8 = 2;
@@ -72,6 +73,15 @@ pub(super) struct Screens {
 }
 
 /// A list's scroll offset in the last frame, and the row of the focus it last brought into sight.
+/// What a window kept off the cursor holds while its screen is open: its side and the largest size its content has had.
+#[derive(Clone, Copy)]
+struct Anchor {
+    left: bool,
+    width: f32,
+    /// The height of the window's content.
+    content: f32,
+}
+
 #[derive(Default)]
 struct ListScroll {
     top: f32,
@@ -377,15 +387,24 @@ impl<M: GameModel> App<M> {
                 .map(square)
                 .collect()
         });
+        // A window kept off the cursor holds its side and the largest size its content has had while its screen is
+        // open, so the content changes in place as the target does.
+        let anchored = keeps_off_cursor(screen);
+        let anchor_key = egui::Id::new(("anchored", &screen.screen_id));
+        let anchor = ctx
+            .data(|d| d.get_temp::<Anchor>(anchor_key))
+            .filter(|_| anchored);
         let room = Room {
             region,
             sidebar: self.sidebar,
             avoid: &avoid,
             map: !interaction::titled(self.model.screens()),
+            kept_left: anchor.map(|a| a.left),
         };
         let placement = placement(screen, &room);
         let place = placement.place;
         let base = self.window_spec(ctx, super::screen_kind(screen).as_deref(), &title);
+        let base_id = base.id;
         let title_bar = base.title_bar;
         let named = screen.root.as_ref().map_or_else(HashSet::new, claimed);
         let rest = screen
@@ -406,6 +425,7 @@ impl<M: GameModel> App<M> {
             };
             placement.width(content, footer_width(&ui, &rest, title_bar) + margin)
         });
+        let width = width.map(|w| w.max(anchor.map_or(0.0, |a| a.width)));
         // The help sits in the title bar, or last in the footer of a window that has none.
         let titled = interaction::with_role(screen, AffordanceRole::Help)
             .filter(|a| a.enabled && base.title_bar);
@@ -421,10 +441,12 @@ impl<M: GameModel> App<M> {
             }),
             ..base
         };
+        let content = std::cell::Cell::new(0.0_f32);
         let shown = windows::show(ctx, spec, |ui| {
             let Some(root) = &screen.root else {
                 return;
             };
+            ui.set_min_height(anchor.map_or(0.0, |a| a.content));
             let footer = |ui: &mut egui::Ui, out: &mut Vec<Intent>| {
                 self.question(ui, screen, out);
                 if let Some(denial) = &self.screens.denial {
@@ -478,7 +500,29 @@ impl<M: GameModel> App<M> {
                 let height = ui.min_rect().bottom() - top;
                 ctx.data_mut(|d| d.insert_temp(kept, height));
             }
+            content.set(ui.min_rect().height());
         });
+        if let (true, Some(left)) = (anchored, at_left(place)) {
+            let width = ctx
+                .memory(|m| m.area_rect(base_id))
+                .map_or(0.0, |r| r.width());
+            let kept = anchor.unwrap_or(Anchor {
+                left,
+                width: 0.0,
+                content: 0.0,
+            });
+            let (width, content) = (width.max(kept.width), content.get().max(kept.content));
+            ctx.data_mut(|d| {
+                d.insert_temp(
+                    anchor_key,
+                    Anchor {
+                        left,
+                        width,
+                        content,
+                    },
+                )
+            });
+        }
         if let Some(a) = titled.filter(|_| shown.help) {
             out.push(Intent::Run(a.id.clone()));
         }

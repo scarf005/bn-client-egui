@@ -45,6 +45,9 @@ pub(super) struct Room<'a> {
     pub(super) avoid: &'a [egui::Rect],
     /// A game's map lies under the window.
     pub(super) map: bool,
+    /// The side (left: true) a window kept off the cursor took when its screen opened: it stays there while the
+    /// cursor does not come under it, instead of changing sides as the cursor crosses the middle.
+    pub(super) kept_left: Option<bool>,
 }
 
 /// A screen's window class and where it sits.
@@ -92,9 +95,13 @@ pub(super) fn placement(screen: &Screen, room: &Room) -> Placement {
         egui::Rect::from_x_y_ranges(x0..=x1, inner.y_range())
     };
     // Away from the cursor: the window's side is the one whose share of the room has none of `avoid`, and the
-    // window never takes more than that share, whatever its footer needs.
+    // window never takes more than that share, whatever its footer needs. The side it took stays its side until
+    // the cursor comes under it.
     let away = || {
         let covered = |left: bool| room.avoid.iter().any(|r| beside(left).intersects(*r));
+        if let Some(kept) = room.kept_left.filter(|kept| !covered(*kept)) {
+            return side(room.region, kept, SIDE_SHARE);
+        }
         let cursor_left = room
             .avoid
             .first()
@@ -186,6 +193,14 @@ pub(super) fn takes_room(c: &Component) -> bool {
         Component::Map(_) | Component::Canvas(_) => true,
         Component::Grid(grid) => grid.role == Some(GridRole::Canvas),
         _ => false,
+    }
+}
+
+/// Whether `place` is at the left of its room.
+pub(super) fn at_left(place: Place) -> Option<bool> {
+    match place {
+        Place::Side { pivot, .. } => Some(pivot.x() == egui::Align::Min),
+        _ => None,
     }
 }
 
