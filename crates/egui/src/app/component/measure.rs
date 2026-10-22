@@ -179,7 +179,7 @@ impl<M: GameModel> App<M> {
                         let mono = egui::TextStyle::Monospace.resolve(ui.style());
                         fixed(line_width(ui, &text, &mono))
                     }
-                    None => Extent {
+                    Some(TextRole::Prompt) | None => Extent {
                         grows: true,
                         ..prose(&text)
                     },

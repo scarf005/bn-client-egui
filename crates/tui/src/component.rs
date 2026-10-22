@@ -818,7 +818,7 @@ impl<M: GameModel> Painter<'_, M> {
             (Some(Tone::Bad), _) => Style::new().fg(Color::Red),
             (None, Some(TextRole::TerminalOutput)) => Style::new().fg(Color::Green),
             (None, Some(TextRole::Banner)) => Style::new().add_modifier(Modifier::BOLD),
-            (None, None) => Style::new(),
+            (None, Some(TextRole::Prompt) | None) => Style::new(),
         };
         let runs = self.model.styled(&text.markup.shown());
         // A banner is art: its lines are cut at the window's edge, never wrapped.

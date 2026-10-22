@@ -2017,6 +2017,9 @@ pub struct Row {
     pub affordances: Option<Vec<RowAffordance>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub look: Option<Look>,
+    /// The screen affordance that does what the row does, such as a popup's `YES`; not a button again.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub affordance: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -2177,6 +2180,8 @@ pub struct FieldOption {
 pub enum TextRole {
     TerminalOutput,
     Banner,
+    /// The question the parts after it in its split answer.
+    Prompt,
 }
 
 /// Text with the native colour tags in `markup`.
@@ -2462,6 +2467,8 @@ pub enum AffordanceRole {
     Help,
     /// Types its key, a digit, into a counting list's count; typing the digit already does it.
     Digit,
+    /// Only resizes or rearranges the native window.
+    Layout,
 }
 
 /// Which expectation an invoke of the affordance carries; the engine assigns it.

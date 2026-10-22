@@ -702,7 +702,7 @@ impl<M: GameModel> App<M> {
                 egui::TextStyle::Monospace.resolve(ui.style()),
                 egui::TextWrapMode::Extend,
             ),
-            None => (
+            Some(TextRole::Prompt) | None => (
                 egui::TextStyle::Body.resolve(ui.style()),
                 egui::TextWrapMode::Wrap,
             ),
