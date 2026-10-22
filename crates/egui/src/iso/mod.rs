@@ -10,6 +10,7 @@ pub mod scene;
 use crate::display::{Display, glyph_color, health_bar};
 use bn_client_core::GameModel;
 use bn_client_core::localise::tr;
+use bn_client_core::protocol::{Precipitation, Sky};
 use camera::{Camera, Viewport};
 use eframe::egui;
 use egui_wgpu::wgpu::TextureFormat;
@@ -137,13 +138,13 @@ impl View3d {
     }
 }
 
-/// The paint callback that draws `scene` into `rect`.
+/// The paint callback that draws `scene` into `rect` against `sky`.
 pub fn callback(
     rect: egui::Rect,
     view: &Viewport,
     target: TextureFormat,
     (scene, pages): (Arc<Scene>, Arc<Pages>),
-    stats: Arc<gpu::Stats>,
+    (stats, sky): (Arc<gpu::Stats>, egui::Color32),
 ) -> egui::Shape {
     let light = camera::light_view_proj(scene.width as f32, scene.height as f32, scene.heights);
     egui::Shape::Callback(egui_wgpu::Callback::new_paint_callback(
@@ -155,8 +156,67 @@ pub fn callback(
             size: rect.size(),
             target,
             stats,
+            sky,
         },
     ))
+}
+
+/// The colour of the sky the first-person view looks into: blue by day and dark by night as the daylight says,
+/// greyed by as much light as the weather takes away.
+pub fn sky_color(sky: &Sky) -> egui::Color32 {
+    let mix = |a: [f32; 3], b: [f32; 3], t: f32| {
+        std::array::from_fn::<_, 3, _>(|n| a[n] + (b[n] - a[n]) * t)
+    };
+    let cloud = (sky.dimming as f32 / 40.0).clamp(0.0, 1.0);
+    let day = mix([110.0, 165.0, 225.0], [140.0, 145.0, 150.0], 0.85 * cloud);
+    let [r, g, b] = mix(
+        [8.0, 12.0, 28.0],
+        day,
+        f32::from(sky.daylight.min(100)) / 100.0,
+    );
+    egui::Color32::from_rgb(r as u8, g as u8, b as u8)
+}
+
+/// What falls from `sky` over the first-person view at `time` seconds: streaks of rain or flakes of snow, as many as
+/// it lets fall; none when nothing falls.
+pub fn paint_weather(painter: &egui::Painter, rect: egui::Rect, sky: &Sky, time: f64) {
+    let count = match sky.precipitation {
+        Precipitation::None => return,
+        Precipitation::VeryLight => 40,
+        Precipitation::Light => 90,
+        Precipitation::Medium => 180,
+        Precipitation::Heavy => 320,
+    };
+    // A fixed scatter of points that falls through the view and comes round again.
+    let scatter = |n: u32, salt: u32| {
+        let h =
+            (n.wrapping_mul(2_654_435_761) ^ salt.wrapping_mul(40_503)).wrapping_mul(2_246_822_519);
+        (h >> 8) as f32 / (1 << 24) as f32
+    };
+    let (speed, colour) = match sky.rain {
+        true => (
+            900.0,
+            egui::Color32::from_rgba_unmultiplied(170, 190, 220, 150),
+        ),
+        false => (
+            90.0,
+            egui::Color32::from_rgba_unmultiplied(240, 240, 245, 220),
+        ),
+    };
+    for n in 0..count {
+        let x = rect.left() + scatter(n, 1) * rect.width();
+        let fall = (scatter(n, 2) * rect.height()
+            + time as f32 * speed * (0.8 + 0.4 * scatter(n, 3)))
+        .rem_euclid(rect.height());
+        let at = egui::pos2(x, rect.top() + fall);
+        match sky.rain {
+            true => painter.line_segment(
+                [at, at + egui::vec2(-3.0, 14.0)],
+                egui::Stroke::new(1.0, colour),
+            ),
+            false => painter.circle_filled(at, 1.5, colour),
+        };
+    }
 }
 
 /// Where a way on the map points on the screen, x right and y down, as the camera's yaw turns it: up is away from
@@ -278,6 +338,26 @@ pub fn paint_glyphs(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_sky_is_blue_by_day_dark_by_night_and_grey_under_clouds() {
+        let sky = |daylight: u8, dimming: u32| {
+            sky_color(&Sky {
+                daylight,
+                dimming,
+                ..Sky::default()
+            })
+        };
+        let brightness = |c: egui::Color32| u32::from(c.r()) + u32::from(c.g()) + u32::from(c.b());
+        let (day, night, cloudy) = (sky(100, 0), sky(0, 0), sky(100, 40));
+        assert!(day.b() > day.r() + 60, "{day:?}");
+        assert!(brightness(night) < brightness(day) / 4, "{night:?}");
+        // As light, and nearly as grey as blue.
+        assert!(cloudy.b() - cloudy.r() < 30, "{cloudy:?}");
+        assert!(
+            brightness(sky(50, 0)) < brightness(day) && brightness(sky(50, 0)) > brightness(night)
+        );
+    }
 
     #[test]
     fn the_compass_points_north_where_the_up_step_goes() {

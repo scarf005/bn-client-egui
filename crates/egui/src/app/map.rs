@@ -6,6 +6,7 @@ use crate::display::health_bar;
 use crate::iso::{self, camera::Viewport, pages::Pages, scene::Scene};
 use bn_client_core::localise::{Value as Arg, tr, tr_format};
 use bn_client_core::markup;
+use bn_client_core::protocol::Precipitation;
 use bn_client_core::{Cell, GameModel, MapMark, MarkRole, Pos, Rgb};
 use eframe::egui::{self, accesskit};
 use std::sync::Arc;
@@ -665,8 +666,32 @@ impl<M: GameModel> App<M> {
             if let Some(shown) = shown {
                 let stats = self.iso.stats.clone();
                 let scene = shown.0.clone();
-                painter.add(iso::callback(canvas.rect, v, target, shown, stats));
+                // The first-person view looks into the sky the engine describes; looking down, there is none.
+                let sky = self.model.sky().filter(|_| v.camera.first_person);
+                let colour = sky.as_ref().map_or(egui::Color32::BLACK, iso::sky_color);
+                painter.add(iso::callback(
+                    canvas.rect,
+                    v,
+                    target,
+                    shown,
+                    (stats, colour),
+                ));
                 iso::paint_glyphs(painter, canvas.rect, v, &scene, canvas.cell_px);
+                if let Some(sky) = &sky {
+                    // With reduced motion what falls stands still.
+                    let still = self.display.reduced_motion();
+                    let time = if still {
+                        0.0
+                    } else {
+                        painter.ctx().input(|i| i.time)
+                    };
+                    iso::paint_weather(painter, canvas.rect, sky, time);
+                    if sky.precipitation != Precipitation::None && !still {
+                        painter
+                            .ctx()
+                            .request_repaint_after(std::time::Duration::from_millis(33));
+                    }
+                }
                 iso::paint_bearings(painter, canvas.rect, v, &scene);
             }
             return;
