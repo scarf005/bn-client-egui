@@ -23,6 +23,8 @@ struct RowLayout<'a> {
     wraps: bool,
     /// The table's body, which a category row's band spans.
     across: egui::Rect,
+    /// The list is the only one of a dialog, whose choices a single click answers.
+    answers: bool,
 }
 
 impl<M: GameModel> App<M> {
@@ -181,6 +183,13 @@ impl<M: GameModel> App<M> {
                 widths: &widths,
                 wraps,
                 across: body.max_rect(),
+                answers: screen.role == ScreenRole::Dialog
+                    && screen
+                        .components()
+                        .into_iter()
+                        .filter(|c| matches!(c, Component::List(_)))
+                        .count()
+                        == 1,
             };
             body.heterogeneous_rows(heights.iter().copied(), |row| {
                 let at = row.index();
@@ -245,8 +254,8 @@ impl<M: GameModel> App<M> {
     }
 
     /// One row: its checkbox and marks, its item, its key, its label as a button, its column values and its
-    /// count editor. A click focuses the row and marks it in a picking list; a double click runs the list's
-    /// `activate`, as Enter does.
+    /// count editor. A click focuses the row and marks it in a picking list; a double click, or a single click on the
+    /// choices of a question, runs the list's `activate`, as Enter does.
     fn list_row(
         &self,
         mut cells: egui_extras::TableRow,
@@ -400,7 +409,11 @@ impl<M: GameModel> App<M> {
                 component: id.clone(),
                 row: row.id.clone(),
             });
-            match (list.selection, &list.activate, button.double_clicked()) {
+            match (
+                list.selection,
+                &list.activate,
+                layout.answers || button.double_clicked(),
+            ) {
                 (Selection::Multi | Selection::Count, _, _) => out.push(Intent::Mark {
                     component: id.clone(),
                     row: row.id.clone(),
