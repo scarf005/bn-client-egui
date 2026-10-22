@@ -23,7 +23,7 @@ struct RowLayout<'a> {
     wraps: bool,
     /// The table's body, which a category row's band spans.
     across: egui::Rect,
-    /// The list is the only one of a dialog, whose choices a single click answers.
+    /// The list is the one of a dialog with no detail beside it, whose rows a single click answers.
     answers: bool,
 }
 
@@ -66,6 +66,16 @@ impl<M: GameModel> App<M> {
             Selection::Multi | Selection::Count => Some(picked),
             _ => row.toggled,
         }
+    }
+
+    /// A screen of one list with no detail beside it asks a question: each row is an answer.
+    fn asks(screen: &Screen) -> bool {
+        let parts = screen.components();
+        let lists = parts.iter().filter(|c| matches!(c, Component::List(_)));
+        let details = parts
+            .iter()
+            .filter(|c| matches!(c, Component::Split(s) if s.relation == Relation::Detail));
+        lists.count() == 1 && details.count() == 0
     }
 
     pub(super) fn list(
@@ -183,13 +193,7 @@ impl<M: GameModel> App<M> {
                 widths: &widths,
                 wraps,
                 across: body.max_rect(),
-                answers: screen.role == ScreenRole::Dialog
-                    && screen
-                        .components()
-                        .into_iter()
-                        .filter(|c| matches!(c, Component::List(_)))
-                        .count()
-                        == 1,
+                answers: screen.role == ScreenRole::Dialog && Self::asks(screen),
             };
             body.heterogeneous_rows(heights.iter().copied(), |row| {
                 let at = row.index();
