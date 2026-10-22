@@ -899,12 +899,13 @@ mod overmap {
     #[test]
     fn hovering_another_square_names_it_and_its_note() {
         let (mut h, _script) = open_overmap();
-        let origin = h
+        let canvas = h
             .get_by_role_and_label(egui::accesskit::Role::Canvas, "Overmap")
-            .rect()
-            .min;
+            .rect();
+        // The fixture's three rows of squares, grown to fill the room.
+        let (origin, cell) = (canvas.min, canvas.height() / 3.0);
         // Cell (1, 1) is square (99, 200), which holds the note.
-        h.hover_at(origin + egui::vec2(1.5 * CELL, 1.5 * CELL));
+        h.hover_at(origin + egui::vec2(1.5 * cell, 1.5 * cell));
         h.run_steps(3);
         h.get_by_label("(99, 200, 0) cache");
     }
@@ -912,12 +913,13 @@ mod overmap {
     #[test]
     fn clicking_a_square_moves_the_cursor_and_clicking_the_cursor_travels() {
         let (mut h, script) = open_overmap();
-        let origin = h
+        let canvas = h
             .get_by_role_and_label(egui::accesskit::Role::Canvas, "Overmap")
-            .rect()
-            .min;
+            .rect();
+        // The fixture's three rows of squares, grown to fill the room.
+        let (origin, cell) = (canvas.min, canvas.height() / 3.0);
         let click = |h: &mut H, col: f32, row: f32| {
-            let pos = origin + egui::vec2((col + 0.5) * CELL, (row + 0.5) * CELL);
+            let pos = origin + egui::vec2((col + 0.5) * cell, (row + 0.5) * cell);
             h.hover_at(pos);
             h.run_steps(1);
             for pressed in [true, false] {
