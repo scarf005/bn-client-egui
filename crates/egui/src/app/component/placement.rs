@@ -20,7 +20,8 @@ const REGION_MARGIN: f32 = 8.0;
 /// The kinds of window a screen is shown in.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) enum Class {
-    /// A question or a short list: as large as its content, centred in the region, a readable column wide.
+    /// A question or a short list: as large as its content, centred in the region, a readable column wide but
+    /// for a table, which keeps its columns beside its labels.
     Dialog,
     /// A screen read beside the map: as large as its content and at least most of the region wide, centred, so
     /// the map stays visible around it.
@@ -49,6 +50,8 @@ pub(super) struct Placement {
     pub(super) place: Place,
     /// The width of the region inside its margin, which the class's shares are of.
     pub(super) room: f32,
+    /// The window holds a list with columns, which a dialog's reading width would leave no room for its labels.
+    pub(super) table: bool,
 }
 
 /// A window at the left or the right side of `region`, no wider than `share` of the region nor taller than it,
@@ -120,6 +123,10 @@ pub(super) fn placement(screen: &Screen, room: &Room) -> Placement {
         class,
         place,
         room: inner.width(),
+        table: screen
+            .components()
+            .into_iter()
+            .any(|c| matches!(c, Component::List(list) if !list.columns.is_empty())),
     }
 }
 
@@ -128,6 +135,7 @@ impl Placement {
     pub(super) fn widest(&self) -> f32 {
         let most = match self.class {
             Class::Full | Class::Screen => self.room,
+            Class::Dialog if self.table => self.room,
             Class::Dialog => DIALOG_WIDTH.1.min(SCREEN_SHARE * self.room),
             Class::Side => SIDE_SHARE * self.room,
         };
