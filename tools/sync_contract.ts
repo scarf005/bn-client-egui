@@ -72,7 +72,7 @@ const schemaTarget = new URL(
   "../crates/core/schema/0.2.schema.json",
   import.meta.url,
 );
-const hashTest = new URL("../crates/core/tests/wire_02.rs", import.meta.url);
+const hashTest = new URL("../crates/core/tests/it/wire_02.rs", import.meta.url);
 const schema = await Deno.readFile(schemaSource);
 const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", schema));
 const hash = `sha256:${

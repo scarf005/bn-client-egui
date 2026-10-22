@@ -12,6 +12,7 @@ License: AGPL-3.0-only (see LICENSE). Bundled fonts: [Noto Sans CJK KR and Noto 
     cargo run -p bn-client-egui --features fake -- --fake  # in-memory fake model, no engine
     cargo install --path crates/egui           # then just `bn-client-egui` (same for crates/tui: `bn-client-tui`)
     cargo test    # egui_kittest UI tests, protocol fixtures, reconstruction, scripted engine
+    cargo test -p bn-client-egui --test it ui_tiles::   # one test binary per crate: `crates/*/tests/it/<file>.rs`, filter by `<file>::`
 
 Engine lookup (first hit wins; `--help` lists the same): `--engine PATH`, `BN_ENGINE`, `cataclysm-bn-tiles` /
 `cataclysm-bn` (+ `.exe`) next to the client executable or in its parent directory, the path saved in
@@ -54,9 +55,9 @@ sprite facts only it knows (tile selection per square, light, season, facing, `l
 Crates: `crates/core` (protocol, transport, replica, models, colours, keys), `crates/egui`, `crates/tui`.
 Live integration tests (ignored by default, need an engine build; the TUI one drives its key handling):
 
-    BN_ENGINE=/path/to/cataclysm-bn-tiles cargo test -p bn-client-core --test live_engine -- --ignored
-    BN_ENGINE=/path/to/cataclysm-bn-tiles cargo test -p bn-client-tui --test live_tui -- --ignored
-    BN_ENGINE=... cargo test --release -p bn-client-core --test live_latency -- --ignored --nocapture   # timings
+    BN_ENGINE=/path/to/cataclysm-bn-tiles cargo test -p bn-client-core --test it live_engine:: -- --ignored
+    BN_ENGINE=/path/to/cataclysm-bn-tiles cargo test -p bn-client-tui --test it live_tui:: -- --ignored
+    BN_ENGINE=... cargo test --release -p bn-client-core --test it live_latency:: -- --ignored --nocapture   # timings
 
 `crates/core/schema/0.2.schema.json` and `tests/fixtures/0.2.examples/` are verbatim copies of the engine's
 `docs/schema/engine-client/` files (`deno run --allow-read --allow-write tools/sync_contract.ts <engine checkout>`;

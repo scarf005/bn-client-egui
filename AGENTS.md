@@ -18,3 +18,12 @@ The engine owns game rules and game text; this client only renders engine data a
 - Word every client chrome string with `localise::{tr, tr_format, tr_plural}` (printf placeholders, imported names
   so `xgettext` finds them), then run `tools/update_po.sh` and translate each `crates/core/po/<locale>.po`.
 - Known violations to remove: `client-logic-audit.md` in the engine's `out/lanes/`.
+
+## Tests
+
+- One integration-test binary per crate: `crates/<crate>/tests/it/main.rs` declares `mod <file>;` for every
+  `tests/it/<file>.rs` (shared helpers in `tests/it/common/`). A new test file is a new `mod` line there, never a new
+  `tests/*.rs`. Run one with `cargo test -p <crate> --test it <file>::`.
+- The tests of a crate share one process: no `set_var`, `set_current_dir` or fixed temp paths; derive scratch dirs from
+  the process id plus a per-call counter or the test's own tag.
+

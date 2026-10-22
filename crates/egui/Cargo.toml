@@ -21,7 +21,7 @@ profiling = { version = "1.0.18", default-features = false }
 puffin = { version = "0.20", optional = true }
 
 [features]
-# Scope timings of every frame (egui's own scopes included) through puffin; see tests/perf_live.rs.
+# Scope timings of every frame (egui's own scopes included) through puffin; see tests/it/perf_live.rs.
 profile = ["dep:puffin", "profiling/profile-with-puffin"]
 fake = ["bn-client-core/fake"]
 
