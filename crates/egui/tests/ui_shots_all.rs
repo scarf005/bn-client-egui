@@ -110,7 +110,6 @@ const KNOWN: &[(&str, Kind, &str)] = &[
     ("trade/trade screen@1280x800", Kind::Cut, "F5"),
     ("trade/trade screen@1280x800", Kind::Wrapped, "F1"),
     ("trade/trade screen@1920x1080", Kind::Cut, "F5"),
-    ("tutorial/map screen@1280x800", Kind::Cut, "F16"),
     ("vehicle/install list of the vehicle screen@1280x800", Kind::Cut, "F1"),
     ("vehicle/install list of the vehicle screen@1920x1080", Kind::Cut, "F1"),
 ];

@@ -9,10 +9,14 @@ use bn_client_core::sidebar::{Body, Direction, Layout, Panel};
 use bn_client_core::{Cell, GameModel, LogLine, markup};
 use eframe::egui::{self, accesskit};
 
-/// The message log's share of the sidebar height.
-const LOG_SHARE: f32 = 0.4;
-/// The log's height limits as shares of the sidebar height.
-const LOG_RANGE: (f32, f32) = (0.1, 0.8);
+/// The fewest lines of the message log the sidebar keeps in view, whatever the panels above it hold.
+const LOG_LINES: f32 = 6.0;
+/// The share of the log panel its game lines take; the client's own lines and the sounds share the rest.
+const NATIVE_SHARE: f32 = 0.7;
+/// The most of what the status leaves the item lists take before the player drags the log's edge.
+const ITEM_SHARE: f32 = 0.5;
+/// The gap between two panels, with a rule across its middle.
+const PANEL_GAP: f32 = 8.0;
 
 /// The side of the square an item's sprite or glyph is drawn in beside its row.
 const ICON: f32 = 24.0;
@@ -28,27 +32,40 @@ struct Dragged {
 }
 
 impl<M: GameModel> App<M> {
-    /// The whole sidebar: the message log pinned to its bottom, the panels of `layout` (all of the status
-    /// without one) filling the rest.
+    /// The whole sidebar: the panels of `layout` (all of the status without one) at their natural height, the item
+    /// lists below them in their own scroll areas, at most `ITEM_SHARE` of what the status leaves, and the message
+    /// log taking the rest, at least `LOG_LINES` of it. The player drags the log's top edge to share it otherwise.
     pub(super) fn sidebar_panel(&mut self, ui: &mut egui::Ui, layout: Option<&Layout>) {
         let log = layout.is_none_or(Layout::has_log);
-        if !log {
-            return self.sidebar_panels(ui, layout);
+        let line = ui.text_style_height(&egui::TextStyle::Body) + ui.spacing().item_spacing.y;
+        let least_log = match log {
+            true => LOG_LINES * line / NATIVE_SHARE,
+            false => 0.0,
+        };
+        // The status scrolls only when even the least log and item lists leave it too little room.
+        let room = ui.available_height() - least_log - MIN_LIST - 2.0 * PANEL_GAP;
+        egui::ScrollArea::vertical()
+            .id_salt("status")
+            .max_height(room.max(MIN_LIST))
+            .auto_shrink([false, true])
+            .show(ui, |ui| self.sidebar_panels(ui, layout));
+        let rest = ui.available_height() - PANEL_GAP;
+        let log_height = match log {
+            true => self.log_height.unwrap_or(rest * (1.0 - ITEM_SHARE)),
+            false => 0.0,
+        };
+        let room = rest - log_height.max(least_log) - PANEL_GAP;
+        if !self.model.item_lists().is_empty() {
+            rule(ui);
+            let size = egui::vec2(ui.available_width(), room.max(MIN_LIST));
+            ui.allocate_ui(size, |ui| self.items(ui));
         }
-        let room = ui.available_height();
-        let height = self.log_height.unwrap_or(room * LOG_SHARE);
-        let height = height.clamp(room * LOG_RANGE.0, room * LOG_RANGE.1);
-        let log = egui::Panel::bottom("log")
-            .resizable(false)
-            .exact_size(height)
-            .show(ui, |ui| self.log(ui));
-        // Our own handle on the panel's top edge: egui's nested panel handle never gets the pointer.
-        let edge = log.response.rect.expand2(egui::vec2(0.0, 3.0));
-        let handle = ui.interact(
-            egui::Rect::from_min_max(edge.left_top(), edge.right_top() + egui::vec2(0.0, 3.0)),
-            egui::Id::new("log_resize"),
-            egui::Sense::drag(),
-        );
+        if !log {
+            return;
+        }
+        let edge = rule(ui);
+        // Our own handle on the log's top edge, so the player can give the log more of the sidebar.
+        let handle = ui.interact(edge, egui::Id::new("log_resize"), egui::Sense::drag());
         ui.ctx().accesskit_node_builder(handle.id, |b| {
             b.set_role(accesskit::Role::Splitter);
             b.set_label(tr("Resize message log"));
@@ -56,43 +73,44 @@ impl<M: GameModel> App<M> {
         if handle.hovered() || handle.dragged() {
             ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeVertical);
         }
+        let rect = ui.available_rect_before_wrap();
         if handle.dragged() {
-            self.log_height = Some(height - handle.drag_delta().y);
+            self.log_height = Some(rect.height() - handle.drag_delta().y);
         }
-        egui::CentralPanel::no_frame().show(ui, |ui| self.sidebar_panels(ui, layout));
-    }
-
-    fn sidebar_panels(&mut self, ui: &mut egui::Ui, layout: Option<&Layout>) {
-        egui::ScrollArea::vertical().show(ui, |ui| {
-            match layout {
-                Some(layout) => {
-                    for panel in &layout.panels {
-                        self.panel(ui, panel);
-                    }
-                }
-                None => {
-                    // Without an avatar there is no status to show.
-                    let status = self.model.sidebar();
-                    if !status.is_empty() {
-                        crate::sidebar::show(ui, &status);
-                    }
-                }
-            }
-            self.items(ui);
+        let label = self.model.log_label();
+        named(ui, label.as_deref(), |ui| {
+            ui.set_clip_rect(rect.intersect(ui.clip_rect()));
+            self.log(ui);
         });
     }
 
-    /// One panel of the layout under the engine's label. The message log is pinned below, not here.
+    /// The panels of `layout`, each under the engine's label for a screen reader and a rule apart, as the native
+    /// sidebar draws them, with no heading; without a layout, all of the status.
+    fn sidebar_panels(&mut self, ui: &mut egui::Ui, layout: Option<&Layout>) {
+        let Some(layout) = layout else {
+            // Without an avatar there is no status to show.
+            let status = self.model.sidebar();
+            if !status.is_empty() {
+                crate::sidebar::show(ui, &status);
+            }
+            return;
+        };
+        let shown = layout.panels.iter().filter(|p| p.body != Body::Log);
+        for (n, panel) in shown.enumerate() {
+            if n > 0 {
+                rule(ui);
+            }
+            named(ui, Some(&panel.label), |ui| self.panel(ui, panel));
+        }
+    }
+
+    /// One panel of the layout. The message log is pinned below, not here.
     fn panel(&mut self, ui: &mut egui::Ui, panel: &Panel) {
         match &panel.body {
             Body::Status(rows) => {
-                ui.strong(&panel.label);
                 crate::sidebar::rows(ui, &panel.id, rows, panel.id == "Health");
             }
-            Body::Compass(directions) => {
-                ui.strong(&panel.label);
-                self.compass(ui, directions);
-            }
+            Body::Compass(directions) => self.compass(ui, directions),
             Body::Log => {}
         }
     }
@@ -100,15 +118,14 @@ impl<M: GameModel> App<M> {
     /// Per direction its heading, then its creatures nearest first, each with its sprite and distance.
     fn compass(&mut self, ui: &mut egui::Ui, directions: &[Direction]) {
         let season = self.model.season();
+        let text = |text: String| egui::RichText::new(text).font(crate::sidebar::FONT);
         for direction in directions {
-            ui.label(&direction.label);
+            ui.label(text(direction.label.clone()));
             for creature in &direction.creatures {
                 ui.horizontal(|ui| {
                     icon(ui, &mut self.display, &creature.cell, season.as_deref());
-                    ui.add(
-                        egui::Label::new(format!("{} {}", creature.name, creature.distance))
-                            .truncate(),
-                    );
+                    let line = format!("{} {}", creature.name, creature.distance);
+                    ui.add(egui::Label::new(text(line)).truncate());
                 });
             }
         }
@@ -147,21 +164,28 @@ impl<M: GameModel> App<M> {
                     idle.bg_stroke = egui::Stroke::NONE;
                     ui.dnd_drop_zone::<Dragged, _>(egui::Frame::NONE, |ui| {
                         ui.set_min_size(egui::vec2(ui.available_width(), 0.0));
-                        ui.heading(&title);
-                        // A long list scrolls inside the room the window has left, so the status above it
-                        // stays in view; the ground takes at most two fifths of it for itself.
-                        let room =
-                            (ui.clip_rect().max.y - ui.next_widget_position().y).max(MIN_LIST);
+                        ui.strong(&title);
+                        // A long list scrolls inside the room the status and the log leave, so both stay in
+                        // view; the ground takes at most two fifths of it for itself.
+                        let room = (ui.max_rect().max.y - ui.next_widget_position().y).max(0.0);
                         let room = match column {
                             ItemListId::Ground => room * 0.4,
                             ItemListId::Inventory => room,
                         };
-                        egui::ScrollArea::vertical()
+                        // The tops of last frame's rows, so the area ends between two of them.
+                        let key = egui::Id::new(("item_list_tops", &title));
+                        let (tops, total): (Vec<f32>, f32) =
+                            ui.data(|d| d.get_temp(key)).unwrap_or_default();
+                        let output = egui::ScrollArea::vertical()
                             .id_salt(&title)
-                            .max_height(room)
+                            .max_height(whole_lines_height(&tops, total, room))
+                            .min_scrolled_height(0.0)
                             .auto_shrink([false, true])
                             .show(ui, |ui| {
+                                let top = ui.next_widget_position().y;
+                                let mut tops = Vec::new();
                                 for (name, label, cell, item_id) in rows {
+                                    tops.push(ui.next_widget_position().y - top);
                                     ui.horizontal(|ui| {
                                         if let Some(cell) = cell {
                                             icon(ui, &mut self.display, cell, season.as_deref());
@@ -210,7 +234,9 @@ impl<M: GameModel> App<M> {
                                         }
                                     });
                                 }
+                                tops
                             });
+                        ui.data_mut(|d| d.insert_temp(key, (output.inner, output.content_size.y)));
                     })
                 })
                 .inner;
@@ -236,7 +262,6 @@ impl<M: GameModel> App<M> {
         let shown = native.iter().map(LogLine::shown).collect::<Vec<_>>();
         let native_live = self.native_live.update(&shown).to_owned();
         let command_live = self.command_live.update(self.model.messages()).to_owned();
-        let heading = self.model.log_label();
         // The log's lines, commands and sounds scroll inside the panel: content taller than the panel would
         // otherwise make the panel report a lower edge, and the panels above it would be drawn under it.
         let room = ui.available_height();
@@ -247,7 +272,6 @@ impl<M: GameModel> App<M> {
                 message_log(
                     ui,
                     LogOptions {
-                        heading: heading.as_deref(),
                         native,
                         commands: self.model.messages(),
                         live: [&native_live, &command_live],
@@ -257,6 +281,37 @@ impl<M: GameModel> App<M> {
                 super::sounds::show(ui, &self.model.sounds());
             });
     }
+}
+
+/// A gap of `PANEL_GAP` between two panels with a rule across it; the gap, where a drag handle on it sits.
+fn rule(ui: &mut egui::Ui) -> egui::Rect {
+    let size = egui::vec2(
+        ui.available_width(),
+        PANEL_GAP - 2.0 * ui.spacing().item_spacing.y,
+    );
+    let (rect, _) = ui.allocate_exact_size(size.max(egui::Vec2::ZERO), egui::Sense::hover());
+    let stroke = egui::Stroke::new(1.0, crate::theme::BORDER);
+    ui.painter().hline(rect.x_range(), rect.center().y, stroke);
+    rect.expand2(egui::vec2(0.0, PANEL_GAP / 2.0))
+}
+
+/// What `add` draws, as a group a screen reader names `label` in place of a painted heading.
+fn named<R>(ui: &mut egui::Ui, label: Option<&str>, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
+    let shown = ui.scope(add);
+    let rect = shown.response.rect;
+    if let Some(label) = label {
+        ui.ctx().accesskit_node_builder(shown.response.id, |b| {
+            b.set_role(accesskit::Role::Group);
+            b.set_label(label);
+            b.set_bounds(accesskit::Rect::new(
+                rect.min.x.into(),
+                rect.min.y.into(),
+                rect.max.x.into(),
+                rect.max.y.into(),
+            ));
+        });
+    }
+    shown.inner
 }
 
 /// The cell as its sprite when the tileset has one, else as its glyph, in a square of `ICON`.
@@ -292,9 +347,8 @@ fn glyph_icon(painter: &egui::Painter, rect: egui::Rect, cell: &Cell) {
     );
 }
 
-/// What the message log shows under the engine's heading, and the height of the panel it sits in.
+/// What the message log shows, and the height of the panel it sits in.
 pub(super) struct LogOptions<'a> {
-    pub heading: Option<&'a str>,
     pub native: &'a [LogLine],
     pub commands: &'a [String],
     pub live: [&'a str; 2],
@@ -306,25 +360,27 @@ pub(super) struct LogOptions<'a> {
 /// polite live region, so history is never re-announced.
 pub(super) fn message_log(ui: &mut egui::Ui, options: LogOptions) {
     let LogOptions {
-        heading,
         native,
         commands,
         live,
         room,
     } = options;
-    if let Some(heading) = heading {
-        ui.heading(heading);
-    }
     if !native.is_empty() {
         a11y::live_region(ui, live[0]);
     }
     // The tops of last frame's lines, so the area ends between two of them and shows no half line.
     let key = egui::Id::new("native_log_tops");
     let (tops, total): (Vec<f32>, f32) = ui.data(|d| d.get_temp(key)).unwrap_or_default();
-    let room = whole_lines_height(&tops, total, room * 0.7);
+    // The client's own lines share the panel only when there are some.
+    let share = match commands.is_empty() {
+        true => 1.0,
+        false => NATIVE_SHARE,
+    };
+    let room = whole_lines_height(&tops, total, room * share);
     let output = egui::ScrollArea::vertical()
         .id_salt("native_log")
         .max_height(room)
+        .auto_shrink([false, true])
         .stick_to_bottom(true)
         .show(ui, |ui| {
             let top = ui.next_widget_position().y;

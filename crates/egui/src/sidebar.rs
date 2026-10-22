@@ -18,6 +18,9 @@ const INDENT: usize = 2;
 /// Height of a gauge drawn over its bar's cells.
 const GAUGE_HEIGHT: f32 = 6.0;
 
+/// The sidebar's font, like the native panel's terminal cells: every status text is in it.
+pub const FONT: FontId = FontId::monospace(14.0);
+
 /// The width in points of `columns` native sidebar columns, in the sidebar's font.
 pub fn width_of(ui: &egui::Ui, columns: u32) -> f32 {
     columns as f32 * char_width(ui)
@@ -25,7 +28,7 @@ pub fn width_of(ui: &egui::Ui, columns: u32) -> f32 {
 
 fn char_width(ui: &egui::Ui) -> f32 {
     ui.painter()
-        .layout_no_wrap("0".into(), FontId::monospace(14.0), Color32::WHITE)
+        .layout_no_wrap("0".into(), FONT, Color32::WHITE)
         .size()
         .x
 }
@@ -131,7 +134,7 @@ struct Grid<'a> {
 
 fn format_of(span: &Span) -> TextFormat {
     TextFormat {
-        font_id: FontId::monospace(14.0),
+        font_id: FONT,
         color: crate::theme::readable(span.color, None),
         ..Default::default()
     }

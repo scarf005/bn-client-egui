@@ -214,3 +214,35 @@ fn shots() {
         common::save_shot(&mut h, &format!("sidebar-{}x{}.png", size.x, size.y));
     }
 }
+
+/// Drags the log's top edge by `dy` and lets the sidebar settle; the edge's new top.
+fn drag_log_edge(h: &mut H, dy: f32) -> f32 {
+    let edge = rect(h, "Resize message log").center();
+    h.hover_at(edge);
+    h.run_steps(2);
+    h.drag_at(edge);
+    h.run_steps(2);
+    for step in 1..=4 {
+        h.hover_at(edge + egui::vec2(0.0, dy * step as f32 / 4.0));
+        h.run_steps(2);
+    }
+    h.drop_at(edge + egui::vec2(0.0, dy));
+    h.run_steps(5);
+    rect(h, "Resize message log").min.y
+}
+
+#[test]
+fn dragging_the_log_edge_up_takes_room_from_the_items_and_the_size_sticks() {
+    let mut h = shown(egui::vec2(1920.0, 1080.0));
+    let before = rect(&h, "Resize message log").min.y;
+    let after = drag_log_edge(&mut h, -120.0);
+    assert!(after < before - 60.0, "{before} -> {after}");
+    h.run_steps(10);
+    assert_eq!(rect(&h, "Resize message log").min.y, after);
+    // Never below its least lines, however far it is dragged down.
+    drag_log_edge(&mut h, 600.0);
+    let line = h
+        .ctx
+        .fonts_mut(|f| f.row_height(&egui::FontId::proportional(15.0)));
+    assert!(rect(&h, "Log").height() >= 6.0 * line);
+}

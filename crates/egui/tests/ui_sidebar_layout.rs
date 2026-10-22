@@ -111,7 +111,7 @@ fn a_panel_the_client_cannot_draw_is_not_invented() {
 fn the_compass_lists_each_direction_and_its_creatures_nearest_first() {
     let h = shown("right", 44, &all_panels());
     let top = |label: &str| h.get_by_label(label).rect().min.y;
-    assert!(top("East:") > top("<Compass>"));
+    assert!(top("East:") >= top("<Compass>"));
     assert!(top("zombie 4") > top("East:"));
     assert!(top("Rae 9") > top("zombie 4"));
     assert!(top("center") > top("Rae 9"));

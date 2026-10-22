@@ -6,6 +6,7 @@ use bn_client_egui::{App, EngineModel};
 use common::{fixture, session};
 use eframe::egui;
 use egui_kittest::Harness;
+use egui_kittest::kittest::Queryable;
 use serde_json::{Value, json};
 
 type H<'a> = Harness<'a, App<EngineModel>>;
@@ -69,10 +70,10 @@ fn overlaps(h: &H) -> Vec<String> {
         .collect()
 }
 
-/// The painted rows of the panels above the message log lie above its heading.
+/// The painted rows of the panels above the message log lie above its top.
 fn above_the_log(h: &H) -> Vec<String> {
     let texts = painted(h);
-    let Some(log) = texts.iter().find(|(t, _)| t == "Message log") else {
+    let Some(log) = h.query_by_label("Message log").map(|n| n.rect()) else {
         return vec!["no message log".into()];
     };
     let above = [
@@ -85,8 +86,8 @@ fn above_the_log(h: &H) -> Vec<String> {
     ];
     texts
         .iter()
-        .filter(|(t, r)| above.iter().any(|a| t.contains(a)) && r.max.y > log.1.min.y + 1.0)
-        .map(|(t, r)| format!("{t:?} ends at {} under the log at {}", r.max.y, log.1.min.y))
+        .filter(|(t, r)| above.iter().any(|a| t.contains(a)) && r.max.y > log.min.y + 1.0)
+        .map(|(t, r)| format!("{t:?} ends at {} under the log at {}", r.max.y, log.min.y))
         .take(6)
         .collect()
 }
