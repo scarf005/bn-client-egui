@@ -14,9 +14,9 @@ use eframe::egui;
 use egui_kittest::Harness;
 use std::time::Duration;
 
-type H<'a> = Harness<'a, App<EngineModel>>;
+pub(crate) type H<'a> = Harness<'a, App<EngineModel>>;
 
-fn run_until(h: &mut H, what: &str, secs: u64, mut done: impl FnMut(&H) -> bool) {
+pub(crate) fn run_until(h: &mut H, what: &str, secs: u64, mut done: impl FnMut(&H) -> bool) {
     let mut watchdog = Watchdog::new(Duration::from_secs(secs), Duration::from_secs(900));
     while !done(h) {
         assert!(
@@ -41,7 +41,7 @@ fn top_kind(h: &H) -> Option<String> {
         .and_then(|s| s.kind.clone())
 }
 
-fn wait_kind(h: &mut H, kind: &str) {
+pub(crate) fn wait_kind(h: &mut H, kind: &str) {
     run_until(h, kind, 120, |h| {
         !h.state().model.busy() && top_kind(h).as_deref() == Some(kind)
     });
@@ -49,7 +49,7 @@ fn wait_kind(h: &mut H, kind: &str) {
 }
 
 /// Invokes an affordance of the screen on top once it offers it, and waits for the engine.
-fn invoke(h: &mut H, affordance: &str, args: InvokeArgs) {
+pub(crate) fn invoke(h: &mut H, affordance: &str, args: InvokeArgs) {
     let offered = |h: &H| {
         h.state()
             .model
@@ -77,14 +77,14 @@ fn invoke(h: &mut H, affordance: &str, args: InvokeArgs) {
     settle(h);
 }
 
-fn row(id: &str) -> InvokeArgs {
+pub(crate) fn row(id: &str) -> InvokeArgs {
     InvokeArgs {
         row: Some(id.into()),
         ..Default::default()
     }
 }
 
-fn text(value: &str) -> InvokeArgs {
+pub(crate) fn text(value: &str) -> InvokeArgs {
     InvokeArgs {
         text: Some(value.into()),
         ..Default::default()
@@ -92,7 +92,7 @@ fn text(value: &str) -> InvokeArgs {
 }
 
 /// Pictures of the window at both sizes.
-fn save(h: &mut H, name: &str) {
+pub(crate) fn save(h: &mut H, name: &str) {
     let Some(dir) = std::env::var_os("SHOT_DIR") else {
         return;
     };
@@ -110,7 +110,7 @@ fn save(h: &mut H, name: &str) {
 }
 
 /// The glyphs of a grid of the editor, row by row.
-fn glyphs(h: &H, id: &str) -> Vec<String> {
+pub(crate) fn glyphs(h: &H, id: &str) -> Vec<String> {
     let top = h.state().model.screens().last().unwrap();
     let Some(Component::Grid(grid)) = top.root.as_ref().unwrap().find(id) else {
         panic!("no {id}");
@@ -127,7 +127,7 @@ fn glyphs(h: &H, id: &str) -> Vec<String> {
 }
 
 /// The row ids of a list of the editor.
-fn rows(h: &H, id: &str) -> Vec<String> {
+pub(crate) fn rows(h: &H, id: &str) -> Vec<String> {
     let top = h.state().model.screens().last().unwrap();
     let Some(Component::List(list)) = top.root.as_ref().unwrap().find(id) else {
         panic!("no {id}");
@@ -150,11 +150,17 @@ fn field(h: &H, form: &str, id: &str) -> String {
 
 /// The client at the engine's main menu in English, with the game root and the scratch directory it uses.
 fn at_main_menu() -> (H<'static>, std::path::PathBuf, std::path::PathBuf) {
+    let dir = std::env::temp_dir().join(format!("bn-editor-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let (h, root) = start(&dir);
+    (h, root, dir)
+}
+
+/// A harness on a real engine's main menu in English, with the tiles drawn, and the game root.
+pub(crate) fn start(dir: &std::path::Path) -> (H<'static>, std::path::PathBuf) {
     let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
     let root =
         game_root(engine.as_ref(), std::env::var_os("BN_ROOT").map(Into::into)).expect("game root");
-    let dir = std::env::temp_dir().join(format!("bn-editor-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
     let settings = dir.join("settings.json");
     std::fs::write(&settings, r#"{"tiles":true,"tileset":"UltimateCataclysm"}"#).unwrap();
     let transport = crate::common::live::english_transport();
@@ -182,7 +188,7 @@ fn at_main_menu() -> (H<'static>, std::path::PathBuf, std::path::PathBuf) {
         invoke(&mut h, "bn:choose:list:choices", row("entry:0"));
         run_until(&mut h, "the language", 60, |h| !asks_language(h));
     }
-    (h, root, dir)
+    (h, root)
 }
 
 #[test]
