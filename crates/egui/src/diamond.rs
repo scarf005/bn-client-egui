@@ -49,15 +49,11 @@ impl Diamond {
         }
     }
 
-    /// The squares in the order the game draws them: row by row from the top of the screen, left to right.
-    pub fn order(&self, size: Pos) -> Vec<Pos> {
-        let mut squares = (0..size.y)
-            .flat_map(|y| (0..size.x).map(move |x| Pos { x, y }))
-            .collect::<Vec<_>>();
-        squares.sort_by_key(|p| {
-            let (dx, dy) = (p.x - self.at.x, p.y - self.at.y);
-            (dy - dx, dx + dy)
-        });
-        squares
+    /// The squares in the order the game draws them: row by row from the top of the screen, left to right. A
+    /// screen row is a diagonal of the view, south minus east alike, and along it east and south grow together.
+    pub fn order(&self, size: Pos) -> impl Iterator<Item = Pos> {
+        (1 - size.x..size.y).flat_map(move |k| {
+            (0.max(-k)..size.x.min(size.y - k)).map(move |x| Pos { x, y: x + k })
+        })
     }
 }

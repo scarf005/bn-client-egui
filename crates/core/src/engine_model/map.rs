@@ -100,6 +100,7 @@ impl EngineModel {
             coverage: look.coverage,
             form: look.form,
             vehicle: look.kind == "vehicle_part",
+            item: look.kind == "item",
             seed,
             tint_bg: paint(look, |t| t.bg.as_deref()),
             tint_fg: paint(look, |t| t.fg.as_deref()),

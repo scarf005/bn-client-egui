@@ -1,11 +1,14 @@
 //! Against a real engine: the vehicle editor from the main menu's Editor tab, drawn from its generic components: a
-//! prototype opened from the filtered list, its mounts drawn with the tileset, a part installed on a mount and one the
-//! game does not mount refused, the install undone, the design spawned and copied with its state beside the avatar,
-//! a part installed on the spawned vehicle in place and undone, and the editor left for the map.
+//! prototype opened from the filtered list, its mounts drawn with the tileset on the canvas, a tank's fuel and the
+//! vehicle's name in their own fields, a part installed on a mount and one the game does not mount refused, the
+//! install undone, the design spawned and copied with its state beside the avatar, a part installed on the spawned
+//! vehicle in place and undone, and the editor left for the map.
 //!
 //! `BN_ENGINE=<engine> SHOT_DIR=<dir> cargo test --release -p bn-client-egui --test it live_vehicle_editor:: --
 //! --ignored --nocapture`; `BN_ROOT` names the game root when it is not beside the engine.
-use crate::live_editor::{H, glyphs, invoke, row, rows, run_until, save, start, text, wait_kind};
+use crate::live_editor::{
+    H, field, glyphs, invoke, row, rows, run_until, save, start, text, wait_kind,
+};
 use bn_client_egui::GameModel;
 use bn_client_egui::protocol::{Component, InvokeArgs, ScreenRole};
 
@@ -56,6 +59,20 @@ fn the_vehicle_editor_opens_installs_and_undoes() {
     invoke(&mut h, "vehicle:open", row("prototype:car"));
     assert!(drawn_cells(&h, "vehicle:grid") > 10);
     save(&mut h, "vehicle-editor-car");
+    invoke(&mut h, "vehicle:mount", row("mount:-2,-1"));
+    let tank = rows(&h, "vehicle:stack")
+        .into_iter()
+        .find(|id| list_row(&h, "vehicle:stack", id).description.shown() == "/parts/18/parts/2")
+        .expect("the car's tank");
+    invoke(&mut h, "vehicle:pick", row(&tank));
+    save(&mut h, "vehicle-editor-stack");
+    invoke(&mut h, "vehicle:tool", row("tool:part"));
+    assert_eq!(field(&h, "vehicle:part_form", "fuel"), "gasoline");
+    save(&mut h, "vehicle-editor-part");
+    invoke(&mut h, "vehicle:tool", row("tool:vehicle"));
+    assert_eq!(field(&h, "vehicle:props", "name"), "Car");
+    save(&mut h, "vehicle-editor-props");
+    invoke(&mut h, "vehicle:tool", row("tool:mount"));
 
     invoke(&mut h, "vehicle:filter", text("bicycle"));
     save(&mut h, "vehicle-editor-list");
@@ -77,9 +94,11 @@ fn the_vehicle_editor_opens_installs_and_undoes() {
     save(&mut h, "vehicle-editor-denied");
 
     invoke(&mut h, "vehicle:undo", InvokeArgs::default());
+    invoke(&mut h, "vehicle:tool", row("tool:mount"));
     assert_eq!(rows(&h, "vehicle:stack"), before);
 
     invoke(&mut h, "vehicle:spawn", InvokeArgs::default());
+    invoke(&mut h, "vehicle:source", row("source:world"));
     assert_eq!(rows(&h, "vehicle:world").len(), 1);
     invoke(&mut h, "vehicle:copy", row("world:0"));
     invoke(&mut h, "vehicle:paste", InvokeArgs::default());

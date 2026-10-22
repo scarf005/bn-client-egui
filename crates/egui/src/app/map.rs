@@ -800,7 +800,6 @@ impl<M: GameModel> App<M> {
                     canvas.rect.max + egui::vec2(canvas.cell_px, 2.0 * canvas.cell_px),
                 );
                 d.order(canvas.size)
-                    .into_iter()
                     .filter(|p| reach.intersects(d.tile(*p)))
                     .collect::<Vec<_>>()
             }
