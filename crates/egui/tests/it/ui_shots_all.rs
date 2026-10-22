@@ -25,10 +25,7 @@ const TITLE_FLOW: &[&str] = &[
 /// Faults of the UI/UX plan's findings (`F<n>`) not fixed yet: `file/name@size`, the kind of fault and the
 /// finding. A fixed one must leave the list.
 #[rustfmt::skip]
-const KNOWN: &[(&str, Kind, &str)] = &[
-    ("colors/colour manager with a custom colour set@1280x800", Kind::Cut, "F1"),
-    ("colors/colour manager@1280x800", Kind::Cut, "F1"),
-];
+const KNOWN: &[(&str, Kind, &str)] = &[];
 
 /// One screen of the examples, keyed `file/name`.
 struct Example {
