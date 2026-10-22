@@ -30,6 +30,10 @@ pub enum Op {
         color: Rgb,
         alpha: f32,
     },
+    /// A small round shot, for a tileset with no bullet sprite.
+    Dot {
+        at: Pos,
+    },
     /// A tileset sprite, or what stands in for it when the tileset has none.
     Tile {
         at: Pos,
@@ -64,8 +68,8 @@ pub struct Effects {
     tail: f64,
 }
 
-/// A shot on its square: its sprite, else the native bullet's, else its glyph.
-fn bullet(at: Pos, glyph: char, sprite: &Option<String>, color: Rgb) -> Op {
+/// A shot on its square: its sprite, else the native bullet's, else a dot (its glyph in ASCII).
+fn bullet(at: Pos, glyph: char, sprite: &Option<String>, color: Rgb, ascii: bool) -> Op {
     Op::Tile {
         at,
         layer: Box::new(Layer {
@@ -76,11 +80,14 @@ fn bullet(at: Pos, glyph: char, sprite: &Option<String>, color: Rgb) -> Op {
             glyph: '\0',
             ..Default::default()
         }),
-        or: Box::new(Op::Glyph {
-            at,
-            ch: glyph,
-            color,
-            alpha: 1.0,
+        or: Box::new(match ascii {
+            true => Op::Glyph {
+                at,
+                ch: glyph,
+                color,
+                alpha: 1.0,
+            },
+            false => Op::Dot { at },
         }),
     }
 }
@@ -391,7 +398,7 @@ impl Effects {
                     else {
                         continue;
                     };
-                    out.push(bullet(*at, *glyph, sprite, *color));
+                    out.push(bullet(*at, *glyph, sprite, *color, ascii));
                 }
                 Shape::Volley { pellets } => {
                     // Every pellet at its square of this step; one whose flight ended is gone.
@@ -405,7 +412,7 @@ impl Effects {
                         } = &pellet.flight.shape
                             && let Some(at) = path.get(step)
                         {
-                            out.push(bullet(*at, *glyph, sprite, *color));
+                            out.push(bullet(*at, *glyph, sprite, *color, ascii));
                         }
                     }
                 }
@@ -527,6 +534,9 @@ impl Effects {
     }
 }
 
+/// The colour of a shot drawn as a dot.
+const SHOT: Color32 = Color32::from_rgb(255, 236, 150);
+
 fn tint(color: Rgb, alpha: f32) -> Color32 {
     Color32::from_rgba_unmultiplied(
         color.0,
@@ -560,6 +570,12 @@ fn draw(
                 font.clone(),
                 tint(*color, *alpha),
             );
+        }
+        Op::Dot { at } => {
+            let square = cell(*at);
+            let radius = (square.width() * 0.16).max(2.5);
+            let stroke = egui::Stroke::new(1.0, Color32::from_black_alpha(160));
+            painter.circle(square.center(), radius, SHOT, stroke);
         }
         Op::Tile { at, layer, or } => {
             if !sprites.tile(painter, cell(*at), layer) {
@@ -639,6 +655,13 @@ mod tests {
         ops.iter().filter_map(at).collect()
     }
 
+    fn first_tile(ops: &[Op]) -> Option<(&Layer, &Op)> {
+        ops.iter().find_map(|op| match op {
+            Op::Tile { layer, or, .. } => Some((&**layer, &**or)),
+            _ => None,
+        })
+    }
+
     fn shot(len: i32) -> Effect {
         Effect {
             shape: Shape::Projectile {
@@ -649,6 +672,35 @@ mod tests {
             },
             duration_ms: 20,
         }
+    }
+
+    #[test]
+    fn a_shot_is_the_sprite_the_engine_names_else_the_native_bullet_else_a_dot_or_its_glyph() {
+        let flame = Effect {
+            shape: Shape::Projectile {
+                path: vec![Pos { x: 0, y: 0 }],
+                glyph: '*',
+                sprite: Some("animation_bullet_flame".into()),
+                color: Rgb(255, 0, 0),
+            },
+            duration_ms: 20,
+        };
+        let play = |effect, ascii| {
+            let mut e = Effects::default();
+            e.add(0.0, vec![effect], false);
+            e.ops(TEXT_STEP, ascii, &none)
+        };
+        let ops = play(flame, false);
+        let (layer, _) = first_tile(&ops).expect("a sprite");
+        assert_eq!(layer.id, "animation_bullet_flame");
+        assert_eq!(layer.fallbacks[0], "animation_bullet_normal");
+        let ops = play(shot(1), false);
+        let (layer, or) = first_tile(&ops).expect("a sprite");
+        assert_eq!(layer.id, "animation_bullet_normal");
+        assert!(matches!(or, Op::Dot { .. }), "{or:?}");
+        let ops = play(shot(1), true);
+        let (_, or) = first_tile(&ops).expect("a sprite");
+        assert!(matches!(or, Op::Glyph { ch: '*', .. }), "{or:?}");
     }
 
     #[test]

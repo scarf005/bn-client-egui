@@ -14,6 +14,7 @@ mod overmap;
 mod panel;
 mod placement;
 mod tabs;
+mod target;
 
 use super::{App, sidebar};
 use crate::kit::section::{self, Fact};
@@ -40,6 +41,7 @@ pub(super) use panel::PANELS;
 use placement::*;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet, VecDeque};
+use target::*;
 
 /// The margin around each pane of a split, on every side.
 const PANE_MARGIN: i8 = 2;
@@ -84,6 +86,13 @@ struct Paint {
     /// The square's row; none for the affordance that opens or closes a drag.
     row: Option<String>,
     affordance: String,
+}
+
+/// What a window kept off the cursor holds while its screen is open: its side, and the pass it was last shown in.
+#[derive(Clone, Copy)]
+struct Anchor {
+    left: bool,
+    pass: u64,
 }
 
 /// A list's scroll offset in the last frame, and the row of the focus it last brought into sight.
@@ -464,11 +473,20 @@ impl<M: GameModel> App<M> {
                 .map(square)
                 .collect()
         });
+        // A window kept off the cursor holds its side while its screen is open; its size is the player's.
+        let anchored = keeps_off_cursor(screen);
+        let anchor_key = egui::Id::new(("anchored", &screen.screen_id));
+        // One not shown in the last pass belongs to an earlier opening of the screen.
+        let pass = ctx.cumulative_pass_nr();
+        let anchor = ctx
+            .data(|d| d.get_temp::<Anchor>(anchor_key))
+            .filter(|a| anchored && a.pass + 1 >= pass);
         let room = Room {
             region,
             sidebar: self.sidebar,
             avoid: &avoid,
             map: !interaction::titled(self.model.screens()),
+            kept_left: anchor.map(|a| a.left),
         };
         let placement = placement(screen, &room);
         let place = placement.place;
@@ -554,6 +572,9 @@ impl<M: GameModel> App<M> {
                 ctx.data_mut(|d| d.insert_temp(kept, height));
             }
         });
+        if let (true, Some(left)) = (anchored, at_left(place)) {
+            ctx.data_mut(|d| d.insert_temp(anchor_key, Anchor { left, pass }));
+        }
         if let Some(a) = titled.filter(|_| shown.help) {
             out.push(Intent::Run(a.id.clone()));
         }
@@ -608,10 +629,15 @@ impl<M: GameModel> App<M> {
                         ui.label(self.line(ui, &subtitle.shown()));
                     }
                     if let Some(stats) = &panel.stats {
-                        Self::facts(ui, &panel.head.id, stats);
+                        let (levels, others) = split_levels(screen, stats);
+                        Self::facts(ui, &panel.head.id, &others);
+                        self.aim_levels(ui, &levels, out);
                     }
                     if let Some(filter) = &panel.filter {
                         ui.weak(format!("/{filter}"));
+                    }
+                    if let Some(map) = panel.child.as_deref().and_then(Component::cursor_map) {
+                        self.target_candidates(ui, screen, map, out);
                     }
                     if let Some(child) = &panel.child {
                         self.component(ui, screen, child, out);
@@ -795,7 +821,7 @@ impl<M: GameModel> App<M> {
     }
 
     /// The panel's stats as facts: label and value, or a stat without a value as its label in its tone.
-    fn facts(ui: &mut egui::Ui, id: &str, stats: &[PanelStat]) {
+    fn facts(ui: &mut egui::Ui, id: &str, stats: &[&PanelStat]) {
         let facts = stats
             .iter()
             .map(|stat| {

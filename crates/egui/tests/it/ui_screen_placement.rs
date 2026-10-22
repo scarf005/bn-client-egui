@@ -11,7 +11,7 @@ use serde_json::{Value, json};
 
 type H<'a> = Harness<'a, App<EngineModel>>;
 
-fn example(file: &str, name: &str) -> Value {
+pub(crate) fn example(file: &str, name: &str) -> Value {
     let path = format!(
         "{}/../core/tests/fixtures/0.2.examples/{file}.json",
         env!("CARGO_MANIFEST_DIR")
@@ -27,7 +27,7 @@ fn example(file: &str, name: &str) -> Value {
 }
 
 /// A game in progress in a window of `size`, with `screen` on top of the map.
-fn playing<'a>(size: egui::Vec2, screen: Option<Value>) -> (H<'a>, ScriptHandle) {
+pub(crate) fn playing<'a>(size: egui::Vec2, screen: Option<Value>) -> (H<'a>, ScriptHandle) {
     playing_with(size, screen, None)
 }
 
@@ -118,6 +118,88 @@ fn the_look_screen_covers_neither_the_cursor_nor_the_avatar() {
         let center = map.min + egui::vec2(at.x as f32 + 0.5, at.y as f32 + 0.5) * CELL;
         assert!(!window.contains(center), "{window:?} covers {at:?}");
     }
+}
+
+/// The look screen with the engine's cursor `dx` squares east of the avatar and `parts` of what is on its square,
+/// published as the next change of the interaction.
+fn look_moved(h: &H, script: &ScriptHandle, step: u64, dx: i64, parts: usize) {
+    let (origin, me) = (h.state().model.origin(), h.state().model.player());
+    let mut screen = example("look", "look-around screen");
+    let target = &mut screen["root"]["child"]["target"];
+    for (square, at) in [("source", 0), ("current", dx)] {
+        target[square]["x"] = json!(i64::from(origin.x + me.x) + at);
+        target[square]["y"] = json!(origin.y + me.y);
+    }
+    let all = target["parts"].as_array().unwrap().clone();
+    target["parts"] = json!(all.into_iter().take(parts).collect::<Vec<_>>());
+    let map = fixture("subscribe_result")["result"]["interaction"]["stack"][0].clone();
+    script.push(
+        json!({"jsonrpc": "2.0", "method": "bn.events", "params": {"epoch": "e7f3", "events": [{
+        "sequence": (43 + step).to_string(), "revision": (34 + step).to_string(),
+        "type": "interaction.changed", "changes": {"interaction": {
+        "boundary_id": "b:60",
+        "readiness": {"phase": "playing", "game_ready": true, "accepts_interaction_commands": true,
+            "accepts_registered_actions": true},
+        "actions": [], "interaction": null, "stack": [map, screen]}}}]}}),
+    );
+}
+
+#[test]
+fn the_window_of_a_cursor_screen_keeps_its_place_and_size_as_the_cursor_and_its_content_change() {
+    let size = egui::vec2(1280.0, 800.0);
+    let (mut h, script) = playing(size, Some(example("look", "look-around screen")));
+    crate::common::settle_windows(&mut h);
+    let first = window_of(&h, "look");
+    let steps = [(8, 10), (-3, 1), (8, 0), (-3, 10), (2, 3)];
+    for (step, (dx, parts)) in steps.into_iter().enumerate() {
+        look_moved(&h, &script, step as u64, dx, parts);
+        for frame in 0..8 {
+            h.run_steps(1);
+            assert_eq!(
+                window_of(&h, "look"),
+                first,
+                "cursor {dx} east with {parts} lines, frame {frame}"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_cursor_screen_gives_up_its_side_only_when_the_cursor_comes_under_it() {
+    let size = egui::vec2(1280.0, 800.0);
+    let (mut h, script) = playing(size, Some(example("look", "look-around screen")));
+    crate::common::settle_windows(&mut h);
+    let first = window_of(&h, "look");
+    look_moved(&h, &script, 0, -8, 10);
+    h.run_steps(8);
+    let moved = window_of(&h, "look");
+    assert!(
+        moved.min.x > first.min.x,
+        "{first:?} stays where the cursor is: {moved:?}"
+    );
+}
+
+#[test]
+fn a_cursor_screen_opened_again_takes_its_side_afresh() {
+    let size = egui::vec2(1280.0, 800.0);
+    let (mut h, script) = playing(size, Some(example("look", "look-around screen")));
+    crate::common::settle_windows(&mut h);
+    let first = window_of(&h, "look");
+    look_moved(&h, &script, 0, -8, 10);
+    h.run_steps(8);
+    let map = fixture("subscribe_result")["result"]["interaction"]["stack"][0].clone();
+    script.push(
+        json!({"jsonrpc": "2.0", "method": "bn.events", "params": {"epoch": "e7f3", "events": [{
+        "sequence": "44", "revision": "35", "type": "interaction.changed", "changes": {"interaction": {
+        "boundary_id": "b:61",
+        "readiness": {"phase": "playing", "game_ready": true, "accepts_interaction_commands": true,
+            "accepts_registered_actions": true},
+        "actions": [], "interaction": null, "stack": [map]}}}]}}),
+    );
+    h.run_steps(8);
+    look_moved(&h, &script, 2, 0, 10);
+    h.run_steps(8);
+    assert_eq!(window_of(&h, "look"), first);
 }
 
 #[test]

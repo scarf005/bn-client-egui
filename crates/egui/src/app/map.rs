@@ -7,6 +7,7 @@ use crate::display::health_bar;
 use crate::iso::{self, camera::Viewport, pages::Pages, scene::Scene};
 use bn_client_core::localise::{Value as Arg, tr, tr_format};
 use bn_client_core::markup;
+use bn_client_core::protocol::Component;
 use bn_client_core::protocol::Precipitation;
 use bn_client_core::{Cell, GameModel, MapMark, MarkRole, Pos, Rgb};
 use eframe::egui::{self, accesskit};
@@ -858,6 +859,26 @@ impl<M: GameModel> App<M> {
                 );
             }
         }
+        // The line of fire the engine publishes while aiming, on the level the cursor is on.
+        let origin = self.model.origin();
+        let aimed = self.model.screens().last().and_then(|s| s.root.as_ref());
+        if let Some(map) = aimed.and_then(Component::cursor_map) {
+            let level = map.cursor().map(|at| at.z);
+            let line = map.trajectory().into_iter().filter(|p| Some(p.z) == level);
+            for p in line {
+                let at = Pos {
+                    x: p.x - origin.x,
+                    y: p.y - origin.y,
+                };
+                if (0..size.x).contains(&at.x) && (0..size.y).contains(&at.y) {
+                    canvas.fill(
+                        painter,
+                        at,
+                        egui::Color32::from_rgba_unmultiplied(255, 170, 0, 90),
+                    );
+                }
+            }
+        }
         for mark in self.model.marks() {
             canvas.mark(painter, &mark);
         }
@@ -888,7 +909,6 @@ impl<M: GameModel> App<M> {
             painter.rect_filled(filled, 0.0, ui.visuals().selection.bg_fill);
         }
         // Effects stand on world squares: placed by the origin of this frame, not of when they arrived.
-        let origin = self.model.origin();
         let tiles = self.display.tiles();
         self.effects.paint(
             painter,
