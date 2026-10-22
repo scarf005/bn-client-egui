@@ -1,8 +1,8 @@
-//! The map editor over a game: its window fills the map region like any screen of its own canvas, and every
+//! The map editor over a game: its window fills the map region like any screen of its own map or canvas, and every
 //! field shows the whole value the engine published for it.
 mod common;
 use bn_client_egui::{App, EngineModel};
-use common::legible::{cut_text, room};
+use common::legible::cut_text;
 use eframe::egui;
 use egui_kittest::Harness;
 use egui_kittest::kittest::Queryable;
@@ -11,9 +11,6 @@ use serde_json::Value;
 type H<'a> = Harness<'a, App<EngineModel>>;
 
 const SIZES: [egui::Vec2; 2] = [egui::vec2(1280.0, 800.0), egui::vec2(1920.0, 1080.0)];
-
-/// The space a window keeps from the edge of the map region.
-const MARGIN: f32 = 8.0;
 
 /// The editor examples with a document open: `file` and name.
 const OPEN: [(&str, &str); 4] = [
@@ -81,20 +78,24 @@ fn field_values(screen: &Value) -> Vec<String> {
     out
 }
 
+/// The overmap's window at `size`: a screen of its own map, which fills the map region.
+fn overmap_window(size: egui::Vec2) -> egui::Rect {
+    let h = shown(&example("overmap", "overmap screen"), size);
+    h.get_by_role_and_label(egui::accesskit::Role::Window, "Overmap")
+        .rect()
+}
+
 #[test]
-fn the_editor_window_fills_the_map_region() {
+fn the_editor_window_fills_the_map_region_as_the_overmap_does() {
     let mut wrong = vec![];
-    for (file, name) in OPEN {
-        for size in SIZES {
-            let h = shown(&example(file, name), size);
-            let (window, inner) = (window(&h), room(&h).shrink(MARGIN));
-            let near = |a: f32, b: f32| (a - b).abs() <= 2.0;
-            let fills = near(window.left(), inner.left())
-                && near(window.right(), inner.right())
-                && near(window.top(), inner.top())
-                && near(window.bottom(), inner.bottom());
-            if !fills {
-                wrong.push(format!("{name} at {size:?}: {window:?} in {inner:?}"));
+    for size in SIZES {
+        let full = overmap_window(size);
+        for (file, name) in OPEN {
+            let window = window(&shown(&example(file, name), size));
+            if (window.min - full.min).length() > 1.0 || (window.max - full.max).length() > 1.0 {
+                wrong.push(format!(
+                    "{name} at {size:?}: {window:?}, the overmap {full:?}"
+                ));
             }
         }
     }
@@ -119,3 +120,4 @@ fn every_field_shows_its_whole_value() {
     }
     assert!(cut.is_empty(), "{cut:#?}");
 }
+
