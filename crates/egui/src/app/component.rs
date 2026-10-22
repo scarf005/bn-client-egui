@@ -48,6 +48,8 @@ const PEER_ROWS: usize = 12;
 const GRID_CELL: f32 = 26.0;
 /// The largest a grid's cell grows to when the room allows.
 const GRID_MAX_CELL: f32 = 2.0 * GRID_CELL;
+/// The least and the most the zoom gesture scales a canvas grid's cells from the size that fills its room.
+const GRID_ZOOM: (f32, f32) = (0.5, 4.0);
 
 /// The client-local state of the top screen: what the interaction core keeps, and what the player is asked.
 #[derive(Default)]
@@ -578,10 +580,18 @@ impl<M: GameModel> App<M> {
             (Relation::Peers, [at]) => Some(*at),
             _ => None,
         };
+        let fills = parts.iter().flat_map(|c| c.nested()).any(takes_room);
+        // Beside a map or a canvas, which take the room left, the other panes keep their natural width.
         let measure = |ui: &egui::Ui, panes: &[&Component], room: f32| {
             panes
                 .iter()
-                .map(|c| with_margin(self.extent(ui, screen, c, room)))
+                .map(|c| {
+                    let extent = with_margin(self.extent(ui, screen, c, room));
+                    Extent {
+                        grows: extent.grows && (!fills || c.nested().into_iter().any(takes_room)),
+                        ..extent
+                    }
+                })
                 .collect::<Vec<_>>()
         };
         let laid = |ui: &egui::Ui, room: f32| {
@@ -593,7 +603,6 @@ impl<M: GameModel> App<M> {
             (extents, lines)
         };
         let (mut extents, mut lines) = laid(ui, room);
-        let fills = parts.iter().flat_map(|c| c.nested()).any(takes_room);
         let natural = split.relation == Relation::Peers && !fills && lines.len() > 1;
         // Peers that scroll down keep room beside them for the scroll bar.
         let room = match natural {
@@ -835,12 +844,44 @@ impl<M: GameModel> App<M> {
 
     fn grid(&self, ui: &mut egui::Ui, grid: &Grid, out: &mut Vec<Intent>) {
         let (xs, ys) = drawn_span(grid);
-        // The cells grow with the room the grid has, up to twice their size, their glyphs with them.
+        // The cells grow with the room the grid has, up to twice their size, their glyphs with them; a canvas's
+        // fill its room, and the zoom gesture over it scales them from there.
         let fit = (ui.available_width() / xs.len().max(1) as f32)
             .min(ui.available_height() / ys.len().max(1) as f32);
-        let cell = fit.clamp(GRID_CELL, GRID_MAX_CELL);
+        let canvas = grid.role == Some(GridRole::Canvas);
+        let zoom_key = egui::Id::new(("grid zoom", &grid.head.id));
+        let zoom = ui.data(|d| d.get_temp::<f32>(zoom_key)).unwrap_or(1.0);
+        let cell = match canvas {
+            true => fit.max(GRID_CELL) * zoom,
+            false => fit.clamp(GRID_CELL, GRID_MAX_CELL),
+        };
         let size = egui::vec2(cell, cell);
         let glyph_size = egui::TextStyle::Monospace.resolve(ui.style()).size * cell / GRID_CELL;
+        if canvas {
+            let shown = egui::ScrollArea::both()
+                .id_salt(("grid", &grid.head.id))
+                .auto_shrink([true, true])
+                .show(ui, |ui| self.grid_cells(ui, grid, size, glyph_size, out));
+            let delta = ui.input(|i| i.zoom_delta());
+            if delta != 1.0 && ui.rect_contains_pointer(shown.inner_rect) {
+                let zoom = (zoom * delta).clamp(GRID_ZOOM.0, GRID_ZOOM.1);
+                ui.data_mut(|d| d.insert_temp(zoom_key, zoom));
+            }
+        } else {
+            self.grid_cells(ui, grid, size, glyph_size, out);
+        }
+    }
+
+    /// The cells of `grid`, each `size`, their glyphs `glyph_size` large; a cell names what it holds on hover.
+    fn grid_cells(
+        &self,
+        ui: &mut egui::Ui,
+        grid: &Grid,
+        size: egui::Vec2,
+        glyph_size: f32,
+        out: &mut Vec<Intent>,
+    ) {
+        let (xs, ys) = drawn_span(grid);
         ui.scope(|ui| {
             ui.spacing_mut().item_spacing = egui::Vec2::ZERO;
             for y in ys {
@@ -904,10 +945,11 @@ impl<M: GameModel> App<M> {
                                 markup::plain(&name),
                             )
                         });
-                        let button = match &cell.denial {
-                            Some(why) if !cell.enabled => {
+                        let button = match (&cell.denial, &cell.label) {
+                            (Some(why), _) if !cell.enabled => {
                                 button.on_disabled_hover_text(why.shown())
                             }
+                            (_, Some(_)) => button.on_hover_text(markup::plain(&name)),
                             _ => button,
                         };
                         if let (true, Some(id), Some(a)) =

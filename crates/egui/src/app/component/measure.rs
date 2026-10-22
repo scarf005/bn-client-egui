@@ -215,12 +215,13 @@ impl<M: GameModel> App<M> {
                     },
                 }
             }
+            // A canvas takes the room left beside the other panes.
             Component::Grid(grid) => {
                 let cols = drawn_span(grid).0.len() as f32;
                 Extent {
                     min: cols * (GRID_CELL + gap),
                     natural: cols * (GRID_MAX_CELL + gap),
-                    grows: false,
+                    grows: grid.role == Some(GridRole::Canvas),
                 }
             }
             // The overmap's squares take all the room they get; the game's map is drawn under the window, and
