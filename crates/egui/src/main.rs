@@ -1,9 +1,9 @@
 use bn_client_egui::display::{self, settings_path};
 use bn_client_egui::fonts;
+use bn_client_egui::kit::tokens;
 use bn_client_egui::launch::{LaunchArgs, Opened, Search, open_engine, resolve};
 use bn_client_egui::localise::{Catalogue, tr};
 use bn_client_egui::setup::{Launcher, Starter};
-use bn_client_egui::theme;
 use bn_client_egui::transport::game_root;
 use bn_client_egui::{App, ConnectOptions, GameModel};
 use clap::Parser;
@@ -32,7 +32,7 @@ fn run(model: impl GameModel + 'static, root: Option<PathBuf>) -> eframe::Result
         &tr("Cataclysm: Bright Nights client"),
         native_options(),
         Box::new(move |cc| {
-            theme::apply(&cc.egui_ctx);
+            tokens::apply(&cc.egui_ctx);
             fonts::install_bundled(&cc.egui_ctx);
             if let Some(root) = &root {
                 fonts::install(&cc.egui_ctx, root);
@@ -100,7 +100,7 @@ fn main() -> eframe::Result {
         &tr("Cataclysm: Bright Nights client"),
         native_options(),
         Box::new(move |cc| {
-            theme::apply(&cc.egui_ctx);
+            tokens::apply(&cc.egui_ctx);
             fonts::install_bundled(&cc.egui_ctx);
             let starter = launch.clone();
             let start: Starter = Box::new(move |ctx, engine| start_engine(ctx, engine, &starter));

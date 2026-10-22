@@ -1,6 +1,7 @@
 //! The engine's current interaction as a window at the same place every time.
 
 use super::App;
+use crate::kit::{table, tokens};
 use crate::windows::{self, WindowSpec};
 use crate::{a11y, editor};
 use bn_client_core::localise::{Value as Arg, tr, tr_format};
@@ -143,7 +144,7 @@ impl<M: GameModel> App<M> {
                         ui.horizontal(|ui| {
                             let whole_row = choice.id != "acknowledge" && choice.denial.is_empty();
                             if whole_row {
-                                list_row_style(ui);
+                                table::row_style(ui);
                             }
                             let text = if choice.id == "acknowledge" {
                                 choice.label.clone().into()
@@ -422,18 +423,9 @@ impl<M: GameModel> App<M> {
 /// The native list's window, framed like every other.
 pub(super) fn list_frame(ctx: &egui::Context) -> egui::Frame {
     egui::Frame::window(&ctx.global_style())
-        .fill(crate::theme::DIALOG)
-        .stroke(egui::Stroke::new(1.0, crate::theme::BORDER))
+        .fill(tokens::DIALOG)
+        .stroke(egui::Stroke::new(1.0, tokens::BORDER))
         .corner_radius(0)
-}
-
-/// Rows of a native list have no button frame; the cursor row is the selection bar.
-pub(super) fn list_row_style(ui: &mut egui::Ui) {
-    let visuals = ui.visuals_mut();
-    visuals.widgets.inactive.weak_bg_fill = egui::Color32::TRANSPARENT;
-    visuals.widgets.inactive.bg_stroke = egui::Stroke::NONE;
-    visuals.selection.bg_fill = crate::theme::SELECTION;
-    visuals.selection.stroke = egui::Stroke::new(1.0, egui::Color32::WHITE);
 }
 
 /// A description the player can read; the engine fills it with the bound action's name (`NO`,

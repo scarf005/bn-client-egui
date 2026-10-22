@@ -948,7 +948,7 @@ fn the_cell_tooltip_does_not_hang_over_a_dialog() {
 fn the_interrupt_button_appearing_does_not_move_the_map_or_the_sidebar() {
     let (mut h, _script) = harness();
     // The real theme: its button padding is what made the bar one pixel taller.
-    bn_client_egui::theme::apply(&h.ctx);
+    bn_client_egui::kit::tokens::apply(&h.ctx);
     h.run_steps(5);
     let top = |h: &H| {
         (

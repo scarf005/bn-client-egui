@@ -2,7 +2,7 @@
 //! the text cells kept for their place and the screen reader but not shown as `|||..`.
 use bn_client_core::Rgb;
 use bn_client_core::sidebar::{Gauge, Line, Span};
-use bn_client_egui::theme;
+use bn_client_egui::kit::tokens;
 use eframe::egui;
 use egui_kittest::Harness;
 
@@ -45,7 +45,7 @@ fn track(rects: &[egui::epaint::RectShape]) -> egui::epaint::RectShape {
         .find(|r| {
             r.rect.height() <= 8.0
                 && r.rect.width() > 20.0
-                && r.fill != theme::readable(GREEN, None)
+                && r.fill != tokens::readable(GREEN, tokens::PANEL)
         })
         .cloned()
         .expect("the gauge's track")
@@ -57,7 +57,7 @@ fn a_gauge_fills_its_track_in_proportion_in_the_values_colour() {
     let track = track(&rects);
     let fill = rects
         .iter()
-        .find(|r| r.fill == theme::readable(GREEN, None))
+        .find(|r| r.fill == tokens::readable(GREEN, tokens::PANEL))
         .expect("the filled part");
     assert!(track.rect.contains_rect(fill.rect), "{fill:?} in {track:?}");
     let share = fill.rect.width() / track.rect.width();
@@ -68,8 +68,12 @@ fn a_gauge_fills_its_track_in_proportion_in_the_values_colour() {
 fn an_empty_gauge_shows_its_track_outlined_in_the_values_colour() {
     let rects = painted(row(0, 100));
     let track = track(&rects);
-    assert_eq!(track.stroke.color, theme::readable(GREEN, None));
-    assert!(!rects.iter().any(|r| r.fill == theme::readable(GREEN, None)));
+    assert_eq!(track.stroke.color, tokens::readable(GREEN, tokens::PANEL));
+    assert!(
+        !rects
+            .iter()
+            .any(|r| r.fill == tokens::readable(GREEN, tokens::PANEL))
+    );
 }
 
 #[test]

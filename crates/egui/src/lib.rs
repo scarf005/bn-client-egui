@@ -6,13 +6,13 @@ pub mod editor;
 mod effects;
 pub mod fonts;
 pub mod iso;
+pub mod kit;
 pub mod layout;
 #[cfg(feature = "profile")]
 pub mod profile;
 pub mod setup;
 pub mod sidebar;
 pub mod text;
-pub mod theme;
 pub mod tileset;
 pub mod tint;
 pub mod toolbar;

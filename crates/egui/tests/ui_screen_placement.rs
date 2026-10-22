@@ -201,7 +201,7 @@ fn a_window_left_narrower_than_its_room_keeps_its_width_frame_after_frame() {
         let size = egui::vec2(screen, 1000.0);
         let (mut h, _) = playing_with(size, Some(crafting_weapons()), Some(&settings));
         // In the client's own look, whose scroll bars take room.
-        bn_client_egui::theme::apply(&h.ctx);
+        bn_client_egui::kit::tokens::apply(&h.ctx);
         bn_client_egui::fonts::install_bundled(&h.ctx);
         let widths = (0..40)
             .map(|_| {

@@ -120,17 +120,15 @@ fn a_row_the_tileset_has_no_sprite_for_draws_its_glyph_in_the_square() {
 }
 
 #[test]
-fn ascii_mode_keeps_the_glyph_in_the_row_text() {
+fn ascii_mode_draws_the_glyph_in_the_item_column_before_the_text() {
     let h = listed("row-ascii", false, 1100.0);
-    let (sprites, _) = beside(&h, h.get_by_label_contains("bra").rect());
+    let (sprites, glyphs) = beside(&h, h.get_by_label_contains("bra").rect());
     assert_eq!(sprites, 0);
-    let text = h.output().shapes.iter().filter_map(|c| match &c.shape {
-        egui::Shape::Text(t) => Some(t.galley.text().to_string()),
-        _ => None,
-    });
-    assert!(
-        text.into_iter().any(|t| t == "[ bra"),
-        "the glyph leads the row text"
+    assert_eq!(glyphs, ["["]);
+    assert_eq!(
+        text_of(&h, "bra"),
+        "bra",
+        "the glyph is not also in the text"
     );
 }
 

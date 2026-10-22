@@ -310,7 +310,8 @@ impl<M: GameModel> App<M> {
             egui::TextStyle::Body
         };
         let font = style.resolve(ui.style());
-        text::job(&self.model.styled(text), &font).into()
+        let ground = crate::kit::tokens::ground(ui);
+        text::job(&self.model.styled(text), &font, ground).into()
     }
 
     /// Native-style loading screen: splash image, current step as live text, the step list.

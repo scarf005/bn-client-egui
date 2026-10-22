@@ -27,15 +27,19 @@ fn example(file: &str, name: &str) -> Value {
 
 /// The client in a window of `size` with `screen` open over the fixture's map.
 fn open<'a>(screen: Value, size: egui::Vec2) -> H<'a> {
+    opened(Harness::builder().with_size(size), screen)
+}
+
+/// `open` on the harness `builder` makes. The screen opens once the client's theme and fonts are in place, as
+/// in a game.
+fn opened<'a>(builder: egui_kittest::HarnessBuilder<App<EngineModel>>, screen: Value) -> H<'a> {
     let map = fixture("subscribe_result")["result"]["interaction"]["stack"][0].clone();
-    let mut subscribe = fixture("subscribe_result");
-    subscribe["result"]["interaction"]["stack"] = json!([map, screen]);
     let reply = vec![
-        subscribe,
+        fixture("subscribe_result"),
         fixture("snapshot_part_0"),
         fixture("snapshot_part_1"),
     ];
-    let (t, _script) = bn_client_egui::transport::ScriptedTransport::new();
+    let (t, script) = bn_client_egui::transport::ScriptedTransport::new();
     let t = t
         .on("bn.hello", vec![fixture("hello_result")])
         .on("bn.subscribe", reply.clone())
@@ -44,11 +48,16 @@ fn open<'a>(screen: Value, size: egui::Vec2) -> H<'a> {
     let model = EngineModel::open(Box::new(t), bn_client_egui::ConnectOptions::default())
         .with_clock(clock.clone());
     let app = App::new(model).with_clock(clock);
-    let mut h = Harness::builder()
-        .with_size(size)
-        .build_ui_state(|ui, app: &mut App<EngineModel>| app.show(ui), app);
-    bn_client_egui::theme::apply(&h.ctx);
+    let mut h = builder.build_ui_state(|ui, app: &mut App<EngineModel>| app.show(ui), app);
+    bn_client_egui::kit::tokens::apply(&h.ctx);
     bn_client_egui::fonts::install_bundled(&h.ctx);
+    h.run_steps(4);
+    script.push(json!({"jsonrpc": "2.0", "method": "bn.events", "params": {"epoch": "e7f3", "events": [{
+        "sequence": "41", "revision": "32", "type": "interaction.changed", "changes": {"interaction": {
+        "boundary_id": "b:41",
+        "readiness": {"phase": "playing", "game_ready": true, "accepts_interaction_commands": true,
+            "accepts_registered_actions": true},
+        "actions": [], "interaction": null, "stack": [map, screen]}}}]}}));
     h.run_steps(8);
     h
 }
@@ -192,4 +201,79 @@ fn trade_rows_stay_on_one_row_at_1920() {
         .map(|t| format!("{:?} on {} rows", t.galley.text(), t.galley.rows.len()))
         .collect::<Vec<_>>();
     assert!(broken.is_empty(), "{broken:?}");
+}
+
+/// Writes PNGs of the screens these tests read to `$SHOT_DIR` for a person to look at:
+/// `cargo test --test ui_kit_table -- --ignored`.
+#[test]
+#[ignore = "needs a Vulkan adapter and SHOT_DIR"]
+fn shots() {
+    let dir = std::path::PathBuf::from(std::env::var("SHOT_DIR").expect("SHOT_DIR"));
+    let screens = [
+        ("colors", "colour manager", "colors"),
+        ("generic", "filterable list screen", "filterable-list"),
+        ("generic", "list of switches screen", "switches"),
+        ("generic", "query popup screen", "query-popup"),
+        ("trade", "trade screen", "trade"),
+        ("pickup", "pickup screen", "pickup"),
+        ("inventory", "drop selector screen", "inventory-drop"),
+    ];
+    for (w, h) in [(1280.0, 800.0), (1920.0, 1080.0)] {
+        for (file, name, png) in screens {
+            let builder = Harness::builder().with_size(egui::vec2(w, h)).wgpu();
+            let mut harness = opened(builder, example(file, name));
+            let path = dir.join(format!("{png}-{w}x{h}.png"));
+            std::fs::create_dir_all(&dir).unwrap();
+            harness.render().expect("renders").save(path).unwrap();
+        }
+    }
+}
+
+#[test]
+fn a_trade_label_cut_at_1280_shows_its_whole_text_on_hover() {
+    let screen = example("trade", "trade screen");
+    let labels = ["list:npc", "list:you"]
+        .into_iter()
+        .flat_map(|id| row_labels(&screen, id))
+        .collect::<Vec<_>>();
+    let mut h = open(screen, egui::vec2(1280.0, 800.0));
+    let cut = painted_labels(&h, &labels)
+        .into_iter()
+        .find(|t| t.galley.elided)
+        .expect("a label cut short at 1280");
+    let whole = cut.galley.text().to_string();
+    h.hover_at(cut.pos + cut.galley.rect.center().to_vec2());
+    h.run_steps(4);
+    let shown = texts(&h)
+        .into_iter()
+        .any(|t| t.galley.text() == whole && !t.galley.elided);
+    assert!(shown, "{whole:?} on hover");
+}
+
+#[test]
+fn colour_manager_keeps_every_value_column_in_sight() {
+    let h = open(
+        example("colors", "colour manager"),
+        egui::vec2(1280.0, 800.0),
+    );
+    let captions = [
+        "Normal",
+        "Custom Normal color:",
+        "Invert",
+        "Custom Invert color:",
+    ];
+    let shown = |caption: &str| {
+        h.output().shapes.iter().any(|c| match &c.shape {
+            egui::Shape::Text(t) if t.galley.text() == caption => c
+                .clip_rect
+                .expand(0.5)
+                .contains_rect(t.visual_bounding_rect()),
+            _ => false,
+        })
+    };
+    let hidden = captions
+        .into_iter()
+        .filter(|c| !shown(c))
+        .collect::<Vec<_>>();
+    assert!(hidden.is_empty(), "{hidden:?}");
 }

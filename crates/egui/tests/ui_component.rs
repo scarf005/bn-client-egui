@@ -1502,7 +1502,7 @@ fn wrapped_peer_lists_share_the_height_so_every_line_shows_above_the_footer() {
     let screen = json!({"screen_id": "screen:9", "role": "screen", "title": "Test", "root": root,
         "affordances": [leave]});
     let (mut h, _) = harness(screen);
-    bn_client_egui::theme::apply(&h.ctx);
+    bn_client_egui::kit::tokens::apply(&h.ctx);
     bn_client_egui::fonts::install_bundled(&h.ctx);
     common::settle_windows(&mut h);
     let footer = h.get_by_label_contains("Leave").rect().top();
@@ -1551,11 +1551,11 @@ fn peer_panes_too_wide_for_one_line_go_on_to_the_next_instead_of_scrolling_sidew
     let screen = serde_json::from_str::<Value>(&std::fs::read_to_string(path).unwrap()).unwrap();
     let (mut h, _) = harness(screen);
     // In the client's own fonts, whose words are as wide as a player sees them.
-    bn_client_egui::theme::apply(&h.ctx);
+    bn_client_egui::kit::tokens::apply(&h.ctx);
     bn_client_egui::fonts::install_bundled(&h.ctx);
     common::settle_windows(&mut h);
     let window = h.get_by_role(egui::accesskit::Role::Window).rect();
-    let last = h.get_by_label_contains("sand (20)").rect();
+    let last = h.get_by_label_contains("10 adobe bricks").rect();
     assert!(
         last.right() <= window.right(),
         "the last pane ends at {} past the window's {}",
@@ -1594,7 +1594,7 @@ fn a_pane_is_as_wide_as_its_heading_and_its_rows_beside_their_scroll_bar() {
     tools["rows"] = json!([]);
     tools["total"] = json!(0);
     let (mut h, _) = harness(screen);
-    bn_client_egui::theme::apply(&h.ctx);
+    bn_client_egui::kit::tokens::apply(&h.ctx);
     bn_client_egui::fonts::install_bundled(&h.ctx);
     common::settle_windows(&mut h);
     let one_line = h.get_by_label_contains("10 adobe bricks").rect().height();

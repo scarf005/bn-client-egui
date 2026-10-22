@@ -3,12 +3,12 @@
 use bn_client_core::markup::Run;
 use eframe::egui::{self, text::LayoutJob};
 
-/// Runs as one layout job; uncoloured runs take the colour of the widget showing them.
-pub fn job(runs: &[Run], font: &egui::FontId) -> LayoutJob {
+/// Runs as one layout job drawn on `ground`; uncoloured runs take the colour of the widget showing them.
+pub fn job(runs: &[Run], font: &egui::FontId, ground: egui::Color32) -> LayoutJob {
     let mut job = LayoutJob::default();
     for run in runs {
         let color = run.color.map_or(egui::Color32::PLACEHOLDER, |c| {
-            crate::theme::readable(c, None)
+            crate::kit::tokens::readable(c, ground)
         });
         job.append(
             &run.text,

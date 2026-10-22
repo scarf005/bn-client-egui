@@ -13,6 +13,7 @@ mod panel;
 mod placement;
 
 use super::{App, sidebar};
+use crate::kit::tokens::{self, BAD, GOOD};
 use crate::layout::{self, Extent};
 use crate::windows::{self, Place, Shown, WindowSpec};
 use crate::{a11y, editor, text};
@@ -42,8 +43,6 @@ const PANE_MARGIN: i8 = 2;
 const GRID_CELL: f32 = 26.0;
 /// The largest a grid's cell grows to when the room allows.
 const GRID_MAX_CELL: f32 = 2.0 * GRID_CELL;
-const GOOD: egui::Color32 = egui::Color32::from_rgb(110, 210, 110);
-const BAD: egui::Color32 = egui::Color32::from_rgb(235, 95, 95);
 
 /// The client-local state of the top screen: what the interaction core keeps, and what the player is asked.
 #[derive(Default)]
@@ -54,9 +53,8 @@ pub(super) struct Screens {
     /// How far each list is scrolled and the focus it last scrolled into sight, by screen and component id: a
     /// panel window and the engine's own screen may hold lists of the same id.
     list_scroll: RefCell<HashMap<(String, String), ListScroll>>,
-    /// The height each list had in the last frame, by screen and component id, for the rows a page key moves in
-    /// it.
-    list_heights: RefCell<HashMap<(String, String), f32>>,
+    /// The rows each list had room for in the last frame, by screen and component id: what a page key moves in it.
+    list_pages: RefCell<HashMap<(String, String), usize>>,
     /// The squares of this frame's list rows left for their item's sprite, painted once the window is drawn.
     icons: RefCell<Vec<RowIcon>>,
     /// What this frame's overmap draws, painted once the window is drawn, so that a tileset's sprites come
@@ -187,7 +185,7 @@ impl<M: GameModel> App<M> {
         let cancel = interaction::with_role(top, AffordanceRole::Cancel).map(|a| a.id.clone());
         let kind = super::screen_kind(top);
         // Only the lists drawn this frame have a page.
-        self.screens.list_heights.borrow_mut().clear();
+        self.screens.list_pages.borrow_mut().clear();
         let shown = self.screen_window(ctx, top, &mut out);
         if self.keep_window(ctx, kind.as_deref(), &shown)
             && let Some(cancel) = cancel
@@ -218,9 +216,7 @@ impl<M: GameModel> App<M> {
     pub(super) fn component_keys(&mut self, ctx: &egui::Context) {
         self.keys_consumed = false;
         self.sync_screens();
-        let spacing = &ctx.global_style().spacing;
-        let row = spacing.interact_size.y + spacing.item_spacing.y;
-        let heights = self.screens.list_heights.borrow().clone();
+        let pages = self.screens.list_pages.borrow().clone();
         let keys = super::input::frame_keys(ctx).into_iter().map(|k| k.token);
         // A text box has the typing; its keys are not the screen's, except Escape, which closes the screen.
         let typing = ctx.text_edit_focused();
@@ -254,7 +250,7 @@ impl<M: GameModel> App<M> {
             }
             let page = |id: &str| {
                 let at = (top.screen_id.clone(), id.to_string());
-                heights.get(&at).map_or(1, |h| ((h / row) as usize).max(1))
+                pages.get(&at).copied().unwrap_or(1)
             };
             let model = &self.model;
             let out = self
@@ -437,8 +433,13 @@ impl<M: GameModel> App<M> {
 
     /// One line of the engine's text with its colour tags; what does not fit is cut.
     fn line(&self, ui: &egui::Ui, markup: &str) -> egui::WidgetText {
+        self.line_on(ui, markup, tokens::ground(ui))
+    }
+
+    /// `line` drawn on `ground`.
+    fn line_on(&self, ui: &egui::Ui, markup: &str, ground: egui::Color32) -> egui::WidgetText {
         let font = egui::TextStyle::Body.resolve(ui.style());
-        let mut job = text::job(&self.model.styled(markup), &font);
+        let mut job = text::job(&self.model.styled(markup), &font, ground);
         job.wrap.max_rows = 1;
         job.wrap.break_anywhere = true;
         job.into()
@@ -626,7 +627,8 @@ impl<M: GameModel> App<M> {
                 egui::TextWrapMode::Wrap,
             ),
         };
-        let job = text::job(&self.model.styled(&block.markup.shown()), &font);
+        let ground = tokens::ground(ui);
+        let job = text::job(&self.model.styled(&block.markup.shown()), &font, ground);
         let show = |ui: &mut egui::Ui| {
             ui.scope(|ui| {
                 if let Some(tone) = block.tone {
@@ -674,8 +676,10 @@ impl<M: GameModel> App<M> {
             let c = colors.index(index);
             egui::Color32::from_rgb(c.0, c.1, c.2)
         };
+        let window = tokens::ground(ui);
         let ink = |fg: u8, bg: u8| {
-            crate::theme::readable(colors.index(fg), (bg != 0).then(|| colors.index(bg)))
+            let ground = if bg == 0 { window } else { paint(bg) };
+            tokens::readable(colors.index(fg), ground)
         };
         // The rows touch; what follows the canvas keeps the theme's spacing.
         ui.scope(|ui| {
@@ -763,7 +767,7 @@ impl<M: GameModel> App<M> {
                         };
                         if !actionable {
                             let shown = match marked {
-                                true => shown.background_color(crate::theme::SELECTION),
+                                true => shown.background_color(tokens::SELECTION),
                                 false => shown,
                             };
                             let label = ui.add_sized(size, egui::Label::new(shown));

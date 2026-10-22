@@ -1,12 +1,7 @@
 //! The widths components need, measured without laying them out.
 
 use super::*;
-
-/// The widths a list's label and its columns need.
-pub(super) struct ListWidths {
-    pub(super) label: f32,
-    pub(super) columns: Vec<f32>,
-}
+use crate::kit::table;
 
 /// The smallest font a canvas is drawn in.
 const CANVAS_MIN_FONT: f32 = 10.0;
@@ -84,11 +79,12 @@ impl<M: GameModel> App<M> {
                 let rows = self.known_rows(list);
                 let widths = self.list_widths(ui, list, &rows);
                 // The rows sit beside their scroll bar.
-                let natural = widths.label
-                    + widths.columns.iter().map(|w| w + gap).sum::<f32>()
-                    + ui.spacing().scroll.allocated_width();
+                let bar = ui.spacing().scroll.allocated_width();
+                let natural = widths.natural(gap) + bar;
+                // Every column keeps its values in sight; only the label is cut, down to its longest word.
+                let least = natural - widths.label + widths.label_min;
                 Extent {
-                    min: natural.min(room / 2.0),
+                    min: least.min(room),
                     natural,
                     grows: true,
                 }
@@ -213,42 +209,73 @@ impl<M: GameModel> App<M> {
         }
     }
 
-    /// The widths a list's label and each of its columns need: the widest caption or value in each.
-    pub(super) fn list_widths(&self, ui: &egui::Ui, list: &List, rows: &[&Row]) -> ListWidths {
+    /// What each column of a list needs: the widest of its rows' parts, and of a value column's caption.
+    pub(super) fn list_widths(&self, ui: &egui::Ui, list: &List, rows: &[&Row]) -> table::Widths {
         let font = egui::TextStyle::Body.resolve(ui.style());
         let spacing = ui.spacing();
-        let pad = 2.0 * spacing.button_padding.x;
-        let widest = |texts: &mut dyn Iterator<Item = f32>| texts.fold(0.0, f32::max);
-        let squares = self.squares(rows);
-        let icon = if squares {
-            list::ICON + spacing.item_spacing.x
-        } else {
-            0.0
+        let widest = |widths: &mut dyn Iterator<Item = f32>| widths.fold(0.0, f32::max);
+        let plain = |markup: &str| text_width(ui, &markup::plain(markup), &font);
+        let items = rows.iter().filter(|r| r.header != Some(true));
+        let pick = widest(&mut items.clone().map(|row| {
+            let check = Self::row_check(list, row, false).map(|_| table::CHECK);
+            let marks = Self::row_marks(row).map(|m| plain(&m));
+            let parts = [check, marks].into_iter().flatten().collect::<Vec<_>>();
+            parts.iter().sum::<f32>() + layout::gaps(parts.len(), spacing.item_spacing.x)
+        }));
+        let item = match self.squares(rows) {
+            true => tokens::ITEM,
+            false => widest(
+                &mut items
+                    .clone()
+                    .filter_map(|r| r.look.as_ref())
+                    .map(|l| plain(&l.glyph)),
+            ),
         };
+        let keys = items.clone().filter_map(|r| r.hotkey.as_deref());
+        let key = widest(&mut keys.clone().map(|k| text_width(ui, k, &table::key_font())));
+        let key = match keys.count() {
+            0 => 0.0,
+            _ => key.max(table::key_min(ui)),
+        };
+        // A label sits in its button, a nested one past its indent.
+        let pad = 2.0 * spacing.button_padding.x;
+        let indent = |row: &Row| f32::from(u8::from(row.parent_id.is_some())) * tokens::INDENT;
         let label = widest(
-            &mut rows.iter().filter(|r| r.header != Some(true)).map(|row| {
-                let square = squares && row.look.is_some();
-                let marked = Self::row_markup(list, row, false, square);
-                icon + text_width(ui, &markup::plain(&marked), &font) + pad
-            }),
+            &mut rows
+                .iter()
+                .map(|row| indent(row) + plain(&Self::row_label(row)) + pad),
         );
-        let columns = list
+        let label_min = widest(&mut rows.iter().map(|row| {
+            indent(row) + word_width(ui, &markup::plain(&Self::row_label(row)), &font) + pad
+        }));
+        let caption = egui::FontId::proportional(tokens::CAPTION);
+        let values = list
             .columns
             .iter()
             .map(|column| {
-                let caption = text_width(ui, &markup::plain(&column.label.shown()), &font);
+                let caption = text_width(ui, &markup::plain(&column.label.shown()), &caption);
                 let values = rows.iter().map(|row| {
                     let value = row
                         .columns
                         .iter()
                         .find(|c| c.key.as_deref() == Some(column.key.as_str()));
-                    value.map_or(0.0, |c| {
-                        text_width(ui, &markup::plain(&c.value.shown()), &font)
-                    })
+                    value.map_or(0.0, |c| plain(&c.value.shown()))
                 });
                 caption.max(widest(&mut { values }))
             })
             .collect();
-        ListWidths { label, columns }
+        let count = match list.selection {
+            Selection::Count => spacing.interact_size.x,
+            _ => 0.0,
+        };
+        table::Widths {
+            pick,
+            item,
+            key,
+            label_min,
+            label,
+            values,
+            count,
+        }
     }
 }

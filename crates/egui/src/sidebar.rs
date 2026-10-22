@@ -102,7 +102,7 @@ fn gauge(painter: &egui::Painter, track: egui::Rect, gauge: Gauge, color: Color3
     painter.rect(
         track,
         0.0,
-        crate::theme::GAUGE,
+        crate::kit::tokens::GAUGE,
         outline,
         egui::StrokeKind::Inside,
     );
@@ -135,7 +135,7 @@ struct Grid<'a> {
 fn format_of(span: &Span) -> TextFormat {
     TextFormat {
         font_id: FONT,
-        color: crate::theme::readable(span.color, None),
+        color: crate::kit::tokens::readable(span.color, crate::kit::tokens::PANEL),
         ..Default::default()
     }
 }
@@ -190,7 +190,7 @@ fn job_of(spans: &[&Span], gap: &str, breaks: &[usize], grid: &Grid) -> Row {
             lead_in = 0.0;
         }
         if let Some((text, gauge)) = bar {
-            let color = crate::theme::readable(span.color, None);
+            let color = crate::kit::tokens::readable(span.color, crate::kit::tokens::PANEL);
             bars.push(Bar {
                 start: job.text.chars().count(),
                 gauge,

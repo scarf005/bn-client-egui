@@ -50,7 +50,7 @@ fn playing<'a>(
     let mut h = Harness::builder()
         .with_size(size)
         .build_ui_state(|ui, app: &mut App<EngineModel>| app.show(ui), app);
-    bn_client_egui::theme::apply(&h.ctx);
+    bn_client_egui::kit::tokens::apply(&h.ctx);
     bn_client_egui::fonts::install_bundled(&h.ctx);
     h.run_steps(3);
     script.push(fixture("events_41_walk"));
@@ -301,7 +301,7 @@ fn sheet_open<'a>(size: egui::Vec2, settings: &std::path::Path) -> H<'a> {
     let mut h = Harness::builder()
         .with_size(size)
         .build_ui_state(|ui, app: &mut App<EngineModel>| app.show(ui), app);
-    bn_client_egui::theme::apply(&h.ctx);
+    bn_client_egui::kit::tokens::apply(&h.ctx);
     bn_client_egui::fonts::install_bundled(&h.ctx);
     h.run_steps(3);
     h.event(egui::Event::Text("@".into()));

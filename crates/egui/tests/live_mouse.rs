@@ -84,7 +84,7 @@ fn doors_and_lockers(h: &H) -> Vec<Pos> {
 /// A new game of the main menu's `entry` drawn with tiles, its pop-ups closed.
 fn start<'a>(entry: &str) -> H<'a> {
     let mut h = tiled("mouse", egui::vec2(1280.0, 720.0));
-    bn_client_egui::theme::apply(&h.ctx);
+    bn_client_egui::kit::tokens::apply(&h.ctx);
     new_game(&mut h, entry);
     run_until(&mut h, "quiet", 180, |h| !h.state().model.busy());
     settle(&mut h);

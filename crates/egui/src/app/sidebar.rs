@@ -290,7 +290,7 @@ fn rule(ui: &mut egui::Ui) -> egui::Rect {
         PANEL_GAP - 2.0 * ui.spacing().item_spacing.y,
     );
     let (rect, _) = ui.allocate_exact_size(size.max(egui::Vec2::ZERO), egui::Sense::hover());
-    let stroke = egui::Stroke::new(1.0, crate::theme::BORDER);
+    let stroke = egui::Stroke::new(1.0, crate::kit::tokens::BORDER);
     ui.painter().hline(rect.x_range(), rect.center().y, stroke);
     rect.expand2(egui::vec2(0.0, PANEL_GAP / 2.0))
 }
@@ -395,7 +395,10 @@ pub(super) fn message_log(ui: &mut egui::Ui, options: LogOptions) {
                 tops.push(ui.next_widget_position().y - top);
                 let text = egui::RichText::new(line.shown());
                 ui.label(line.color.map_or(text.clone(), |c| {
-                    text.color(crate::theme::readable(c, None))
+                    text.color(crate::kit::tokens::readable(
+                        c,
+                        crate::kit::tokens::ground(ui),
+                    ))
                 }));
             }
             tops

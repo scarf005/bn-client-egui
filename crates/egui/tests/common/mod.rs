@@ -451,7 +451,7 @@ fn themed<'a>(
         |ui, app: &mut bn_client_egui::App<EngineModel>| app.show(ui),
         app,
     );
-    bn_client_egui::theme::apply(&h.ctx);
+    bn_client_egui::kit::tokens::apply(&h.ctx);
     bn_client_egui::fonts::install_bundled(&h.ctx);
     h
 }
