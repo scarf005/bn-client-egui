@@ -24,9 +24,14 @@ pub fn root() -> PathBuf {
 }
 
 /// A new engine in a profile of its own whose game language is English: tests name what they pick by its
-/// English label, whatever the language of the machine they run on. It runs on the seed `BN_SEED`, else
-/// `live`, so a new game starts in the same place every run.
+/// English label, whatever the language of the machine they run on. It runs on the seed `BN_SEED`, else `2`,
+/// so a new game starts in the same place at the same hour every run.
 pub fn english_transport() -> StdioTransport {
+    english_transport_on(&std::env::var("BN_SEED").unwrap_or_else(|_| "2".into()))
+}
+
+/// `english_transport()` on `seed`, for a test that needs a start the default seed does not give.
+pub fn english_transport_on(seed: &str) -> StdioTransport {
     static SPAWNED: AtomicUsize = AtomicUsize::new(0);
     let n = SPAWNED.fetch_add(1, Ordering::Relaxed);
     let dir = std::env::temp_dir().join(format!("bn-live-{}-{n}", std::process::id()));
@@ -41,7 +46,7 @@ pub fn english_transport() -> StdioTransport {
         fresh: false,
         userdir: Some(dir),
         configdir: Some(config),
-        seed: Some(std::env::var("BN_SEED").unwrap_or_else(|_| "live".into())),
+        seed: Some(seed.into()),
     };
     StdioTransport::spawn_with(&engine(), &profile).expect("engine starts")
 }
