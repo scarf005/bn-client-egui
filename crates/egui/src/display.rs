@@ -955,10 +955,13 @@ impl Display {
         for layer in &cell.layers {
             let (layer, paints) = resolve_layer(&atlas.tileset, layer);
             let layer = layer.as_ref();
-            let chosen = atlas.tileset.choose(&Query {
+            let wanted = Query {
                 frame: self.frame,
                 ..query(layer, season)
-            });
+            };
+            let chosen = atlas
+                .tileset
+                .choose_or_stand_in(&wanted, layer.glyph, layer.color_index);
             animate(painter, chosen.as_ref());
             let sprites = chosen.iter().flat_map(|c| {
                 [(c.bg, paints.0), (c.fg, paints.1)]

@@ -85,6 +85,15 @@ impl ColorMap {
         self.palette[usize::from(index.min(15))]
     }
 
+    /// The curses colour index (0-15) of a colour name's foreground, which picks a tileset's ASCII sprite. Unknown
+    /// names read as `c_light_gray`.
+    pub fn curses(name: &str) -> u8 {
+        BY_NAME
+            .get(name)
+            .or_else(|| BY_NAME.get("c_light_gray"))
+            .map_or(7, |&(fg, _)| fg)
+    }
+
     /// Foreground, and background when it is not black. Unknown names read as `c_light_gray`.
     pub fn resolve(&self, name: &str) -> (Rgb, Option<Rgb>) {
         let &(fg, bg) = BY_NAME

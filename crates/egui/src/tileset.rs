@@ -85,6 +85,25 @@ struct SheetDef {
     transparency: Option<Key>,
     #[serde(default)]
     tiles: Vec<TileDef>,
+    /// The sheet is a font of 256 symbols per entry, which draws what the tileset has no tile for.
+    #[serde(default)]
+    ascii: Vec<AsciiDef>,
+}
+
+/// 256 symbols of an ASCII sprite sheet in one colour.
+#[derive(Deserialize)]
+struct AsciiDef {
+    /// The sprite of symbol 0 in the sheet.
+    offset: u32,
+    #[serde(default)]
+    bold: bool,
+    /// A curses colour name, or `DEFAULT` for all colours.
+    #[serde(default = "default_color")]
+    color: String,
+}
+
+fn default_color() -> String {
+    "DEFAULT".into()
 }
 
 #[derive(Deserialize)]
@@ -329,6 +348,7 @@ pub struct Tileset {
 }
 
 /// What to draw for one thing in a cell.
+#[derive(Clone, Copy)]
 pub struct Query<'a> {
     pub id: &'a str,
     pub fallbacks: &'a [String],
@@ -377,6 +397,23 @@ pub struct Chosen {
 
 /// How long the game shows one frame of an idle animation (cata_tiles.cpp `idle_animation_manager`).
 pub const FRAME: std::time::Duration = std::time::Duration::from_millis(17);
+
+/// The id of the tile that draws an ASCII symbol in a tileset, as `cata_tiles.cpp` names them: the symbol's code
+/// and the curses colour (0-15, or -1 for all colours).
+pub fn ascii_id(symbol: u32, color: i8) -> String {
+    format!("ASCII_{symbol}_{color}")
+}
+
+/// The symbol code a glyph has in a tileset's ASCII sheet: the box-drawing glyphs have the codes the game gives
+/// them, any other glyph its character code when that is below 256.
+fn ascii_symbol(glyph: char) -> Option<u32> {
+    let line = "│─└┌┐┘├┴┤┬┼".chars().position(|c| c == glyph);
+    match (line, u32::from(glyph)) {
+        (Some(i), _) => Some(0xa0 + i as u32),
+        (None, 1..256) => Some(u32::from(glyph)),
+        _ => None,
+    }
+}
 
 /// The game's mix of a seed into the integer that picks a weighted variant.
 pub fn mix(seed: u32) -> u32 {
@@ -440,6 +477,7 @@ impl Tileset {
                 pixelscale: None,
                 transparency: None,
                 tiles: config.tiles,
+                ascii: vec![],
             });
         }
         let mut set = Self {
@@ -636,12 +674,82 @@ impl Tileset {
                 first,
                 count,
             });
+            for set in &def.ascii {
+                self.add_ascii(set, (first, count));
+            }
             first += count;
             for entry in def.tiles {
                 self.add(entry, start);
             }
         }
         Ok(())
+    }
+
+    /// The tiles of one ASCII set of the sheet that starts at sprite `first` and holds `count`, as the game's
+    /// `load_ascii_set` makes them: the box-drawing symbols join their neighbours as walls do.
+    fn add_ascii(&mut self, set: &AsciiDef, (first, count): (u32, u32)) {
+        let color = match set.color.as_str() {
+            "BLACK" => 0,
+            "RED" => 1,
+            "GREEN" => 2,
+            "YELLOW" => 3,
+            "BLUE" => 4,
+            "MAGENTA" => 5,
+            "CYAN" => 6,
+            "WHITE" => 7,
+            _ => -1,
+        };
+        let color = if color < 0 {
+            -1
+        } else {
+            color + 8 * i8::from(set.bold)
+        };
+        let base = first + set.offset;
+        let sprite = |at: u32| Variants(vec![(1, vec![base + at])]);
+        let plain = |at: u32| Tile {
+            fg: sprite(at),
+            ..Tile::default()
+        };
+        for symbol in (0..256).filter(|s| set.offset + s < count) {
+            let id = ascii_id(symbol, color);
+            // The sprite a box-drawing symbol shows when it is not joined.
+            let shown = match symbol {
+                0xa0 => 186,
+                0xa1 => 205,
+                0xa2 => 200,
+                0xa3 => 201,
+                0xa4 => 187,
+                0xa5 => 188,
+                0xa6 => 208,
+                0xa7 => 202,
+                0xa8 => 184,
+                0xa9 => 203,
+                0xaa => 206,
+                other => other,
+            };
+            let mut tile = plain(shown);
+            if [0xa0, 0xa1].contains(&symbol) {
+                let parts = [
+                    ("center", 206),
+                    ("corner", 201),
+                    ("edge", 186),
+                    ("t_connection", 203),
+                    ("end_piece", 210),
+                    ("unconnected", 219),
+                ];
+                for (key, at) in parts {
+                    let part = Tile {
+                        rotates: true,
+                        part: true,
+                        ..plain(at)
+                    };
+                    self.tiles.insert(format!("{id}_{key}"), part);
+                }
+                tile.multitile = true;
+                tile.subtiles = parts.map(|(key, _)| key.to_string()).to_vec();
+            }
+            self.tiles.insert(id, tile);
+        }
     }
 
     fn add(&mut self, entry: TileDef, offset: u32) {
@@ -739,6 +847,25 @@ impl Tileset {
             fg: place(&tile.fg, &tile.fg_mask, true),
             joined,
             animated: tile.animated && varied && q.frame.is_some(),
+        })
+    }
+
+    /// The sprites of `q`, else what the game draws for a thing the tileset has no tile for: the tileset's ASCII
+    /// sprite of the thing's `glyph` in its curses `color`, in any colour, and its `unknown` tile. An overlay,
+    /// whose glyph is NUL, draws nothing instead.
+    pub fn choose_or_stand_in(&self, q: &Query, glyph: char, color: u8) -> Option<Chosen> {
+        self.choose(q).or_else(|| {
+            let ascii = ascii_symbol(glyph).into_iter().flat_map(|symbol| {
+                let color = i8::try_from(color).unwrap_or(-1);
+                [ascii_id(symbol, color), ascii_id(symbol, -1)]
+            });
+            let ids = ascii.chain(["unknown".to_string()]).collect::<Vec<_>>();
+            let (id, fallbacks) = ids.split_first().filter(|_| glyph != '\0')?;
+            self.choose(&Query {
+                id,
+                fallbacks,
+                ..*q
+            })
         })
     }
 

@@ -79,6 +79,8 @@ pub struct Layer {
     /// What stands in for the sprite when the tileset has none; NUL for an overlay, which then draws nothing.
     pub glyph: char,
     pub color: Rgb,
+    /// The curses colour index (0-15) of `color`, which picks the tileset's ASCII sprite of the glyph.
+    pub color_index: u8,
     pub bg: Option<Rgb>,
 }
 

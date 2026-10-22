@@ -1,5 +1,6 @@
 #![recursion_limit = "512"]
 mod animated_tiles;
+mod ascii_stand_in;
 mod common;
 mod diamond;
 mod fonts;
@@ -12,6 +13,7 @@ mod live_editor;
 mod live_generic;
 mod live_glow;
 mod live_input;
+mod live_iso2d;
 mod live_iso3d;
 mod live_mouse;
 mod live_panels;

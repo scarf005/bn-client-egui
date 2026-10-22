@@ -107,6 +107,7 @@ impl EngineModel {
             tint_vars: look.tint_vars.clone(),
             glyph: glyph(look),
             color,
+            color_index: ColorMap::curses(&look.color),
             bg,
         }
     }
