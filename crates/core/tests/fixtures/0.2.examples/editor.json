@@ -718,6 +718,13 @@
             "expect": "screen"
           },
           {
+            "id": "editor:vehicle",
+            "label": "Vehicle editor",
+            "keys": [],
+            "enabled": true,
+            "expect": "screen"
+          },
+          {
             "id": "QUIT",
             "label": "Exit screen",
             "keys": [
@@ -3302,6 +3309,13 @@
                 "default": 0
               }
             },
+            "expect": "screen"
+          },
+          {
+            "id": "editor:vehicle",
+            "label": "Vehicle editor",
+            "keys": [],
+            "enabled": true,
             "expect": "screen"
           },
           {
@@ -6300,6 +6314,13 @@
             "expect": "screen"
           },
           {
+            "id": "editor:vehicle",
+            "label": "Vehicle editor",
+            "keys": [],
+            "enabled": true,
+            "expect": "screen"
+          },
+          {
             "id": "editor:object",
             "label": "Edit",
             "keys": [],
@@ -9171,6 +9192,13 @@
                 "default": 0
               }
             },
+            "expect": "screen"
+          },
+          {
+            "id": "editor:vehicle",
+            "label": "Vehicle editor",
+            "keys": [],
+            "enabled": true,
             "expect": "screen"
           },
           {
