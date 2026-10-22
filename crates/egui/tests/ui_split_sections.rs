@@ -115,11 +115,11 @@ fn talk(lines: usize) -> Value {
     screen
 }
 
+/// A dialogue longer than half the window keeps half; a short greeting wraps instead
+/// (`ui_window_class::a_dialog_holding_panes_keeps_each_reply_on_one_line`).
 #[test]
 fn the_npc_dialogue_is_at_least_as_wide_as_the_responses_at_1280() {
-    for lines in [0, 6] {
-        dialogue_beside_responses(lines);
-    }
+    dialogue_beside_responses(6);
 }
 
 fn dialogue_beside_responses(lines: usize) {

@@ -21,7 +21,7 @@ const REGION_MARGIN: f32 = 8.0;
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) enum Class {
     /// A question or a short list: as large as its content, centred in the region, a readable column wide but
-    /// for a table, which keeps its columns beside its labels.
+    /// for a table, which keeps its columns beside its labels, and panes side by side, which keep their lines.
     Dialog,
     /// A screen read beside the map: as large as its content and at least most of the region wide, centred, so
     /// the map stays visible around it.
@@ -52,6 +52,8 @@ pub(super) struct Placement {
     pub(super) room: f32,
     /// The window holds a list with columns, which a dialog's reading width would leave no room for its labels.
     pub(super) table: bool,
+    /// The window holds panes side by side, which a dialog's reading width would wrap word by word.
+    pub(super) panes: bool,
 }
 
 /// A window at the left or the right side of `region`, no wider than `share` of the region nor taller than it,
@@ -127,6 +129,9 @@ pub(super) fn placement(screen: &Screen, room: &Room) -> Placement {
             .components()
             .into_iter()
             .any(|c| matches!(c, Component::List(list) if !list.columns.is_empty())),
+        panes: screen.components().into_iter().any(|c| {
+            matches!(c, Component::Split(split) if split.children.iter().filter(|c| !heading(c)).count() > 1)
+        }),
     }
 }
 
@@ -135,7 +140,7 @@ impl Placement {
     pub(super) fn widest(&self) -> f32 {
         let most = match self.class {
             Class::Full | Class::Screen => self.room,
-            Class::Dialog if self.table => self.room,
+            Class::Dialog if self.table || self.panes => self.room,
             Class::Dialog => DIALOG_WIDTH.1.min(SCREEN_SHARE * self.room),
             Class::Side => SIDE_SHARE * self.room,
         };

@@ -94,7 +94,8 @@ pub fn detail_widths(parts: &[Extent], room: f32, gap: f32) -> Vec<f32> {
 }
 
 /// The widths of peers of which `prose` is the only running text: the others take up to their natural
-/// widths, the prose the rest, and never less than an equal share of the room while its lines are longer.
+/// widths, the prose the rest, and never less than an equal share of the room while its lines are longer. A text
+/// no longer than that share wraps its words to leave the others their natural widths, when it can.
 pub fn prose_widths(parts: &[Extent], prose: usize, room: f32, gap: f32) -> Vec<f32> {
     let others = parts
         .iter()
@@ -106,10 +107,13 @@ pub fn prose_widths(parts: &[Extent], prose: usize, room: f32, gap: f32) -> Vec<
     let text = parts[prose];
     let fair = inner / parts.len() as f32;
     let spare = inner - others.iter().map(|p| p.natural).sum::<f32>();
-    let width = spare
-        .max(fair.min(text.natural))
-        .min(inner - others.iter().map(|p| p.min).sum::<f32>())
-        .max(text.min);
+    let yields = text.natural <= fair && spare >= text.min;
+    let width = match yields {
+        true => spare,
+        false => spare.max(fair.min(text.natural)),
+    }
+    .min(inner - others.iter().map(|p| p.min).sum::<f32>())
+    .max(text.min);
     let mut widths = split_widths(&others, room - width - gap, gap);
     widths.insert(prose, width);
     widths
