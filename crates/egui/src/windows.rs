@@ -39,15 +39,15 @@ impl Origin {
 }
 
 /// Where a window sits by the screen's layout rather than where the player left it. Unless the spec lets the
-/// player move it, such a window cannot be moved, is not remembered and never leaves the screen.
+/// player move it, such a window cannot be moved and is not remembered; moved or not, it never leaves its room.
 #[derive(Clone, Copy, Debug)]
 pub enum Place {
     /// The whole of `rect`.
     Fill(egui::Rect),
     /// The middle of `rect`, as large as its content and no larger than `rect`.
     Center(egui::Rect),
-    /// `pivot` of the window at `pos`, as large as its content and no larger than `max`; moved, it stays in
-    /// `within`.
+    /// `pivot` of the window at `pos`, as large as its content, no narrower than the spec's width and no larger
+    /// than `max`; moved, it stays in `within`.
     Side {
         pivot: egui::Align2,
         pos: egui::Pos2,
@@ -65,6 +65,7 @@ pub struct WindowSpec {
     /// A placed window is only first placed by its layout: the player moves and resizes it, and where they
     /// leave it is kept as for any other window.
     pub movable: bool,
+    /// The width a window first has; a window placed at a side is never narrower.
     pub width: Option<f32>,
     pub height: Option<f32>,
     pub max_width: Option<f32>,
@@ -128,27 +129,29 @@ fn widened(window: egui::Window<'_>, width: Option<f32>) -> egui::Window<'_> {
     }
 }
 
-/// The most a window `place` puts may take.
-fn room(place: Place) -> egui::Vec2 {
-    match place {
-        Place::Fill(rect) | Place::Center(rect) => rect.size(),
-        Place::Side { max, .. } => max,
+impl Place {
+    /// The most a window this puts may take.
+    pub fn room(self) -> egui::Vec2 {
+        match self {
+            Place::Fill(rect) | Place::Center(rect) => rect.size(),
+            Place::Side { max, .. } => max,
+        }
     }
-}
 
-/// Where a window `place` puts may lie once the player moves it.
-fn bounds(place: Place) -> egui::Rect {
-    match place {
-        Place::Fill(rect) | Place::Center(rect) => rect,
-        Place::Side { within, .. } => within,
+    /// Where a window this puts may lie, however it is moved.
+    fn bounds(self) -> egui::Rect {
+        match self {
+            Place::Fill(rect) | Place::Center(rect) => rect,
+            Place::Side { within, .. } => within,
+        }
     }
 }
 
 /// The top left corner of `kept` moved so that the window, no larger than `place` lets it be, lies wholly in
 /// `place`'s bounds.
 fn kept_inside(kept: WindowState, place: Place) -> egui::Pos2 {
-    let bounds = bounds(place);
-    let far = bounds.max - egui::Vec2::from(kept.size).min(room(place));
+    let bounds = place.bounds();
+    let far = bounds.max - egui::Vec2::from(kept.size).min(place.room());
     egui::pos2(
         kept.pos[0].clamp(bounds.min.x, far.x.max(bounds.min.x)),
         kept.pos[1].clamp(bounds.min.y, far.y.max(bounds.min.y)),
@@ -168,7 +171,7 @@ fn first_placed(window: egui::Window<'_>, place: Place, width: Option<f32>) -> e
         Place::Side { pivot, pos, .. } => (pivot, pos),
     };
     // A window may first grow as tall as its room: egui's default height would cut a long list short.
-    let window = window.default_height(room(place).y);
+    let window = window.default_height(place.room().y);
     // egui holds the pivot only while it first sizes the window, so with its width known the window starts
     // from its left edge, as a window the player never moved does.
     match width {
@@ -211,10 +214,8 @@ pub fn show<R>(
             .fixed_size(rect.size()),
         (Some(Place::Center(rect)), _) => widened(window, spec.width)
             .collapsible(false)
-            .anchor(
-                egui::Align2::CENTER_CENTER,
-                rect.center() - ctx.content_rect().center(),
-            )
+            // The anchor aligns within the rectangle the window is constrained to: `rect`.
+            .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
             .max_size(rect.size()),
         (
             Some(Place::Side {
@@ -256,9 +257,17 @@ pub fn show<R>(
             }
         }
     };
-    // Where the player left a window it still fits the room its layout gives, whatever a last run kept.
-    if let Some(place) = spec.place.filter(|_| spec.movable) {
-        window = window.max_size(room(place));
+    // Where the player left a window it still fits the room its layout gives, whatever a last run kept, and
+    // no window its layout places leaves that room for the bars around it; a window at a side is never narrower
+    // than its layout made it.
+    if let Some(place) = spec.place {
+        window = window.constrain_to(place.bounds());
+        if spec.movable {
+            window = window.max_size(place.room());
+        }
+        if let (Place::Side { .. }, Some(width)) = (place, spec.width) {
+            window = window.min_width(width);
+        }
     }
     if let Some(w) = spec.max_width {
         window = window.max_width(w);

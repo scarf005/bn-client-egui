@@ -344,27 +344,43 @@ impl<M: GameModel> App<M> {
                 .map(square)
                 .collect()
         });
-        let place = placement(screen, region, self.sidebar, &avoid);
-        // A window that is not the whole room is as wide as its content, within the room.
-        let width = match (place, &screen.root) {
-            (Place::Fill(_), _) | (_, None) => None,
-            (_, Some(root)) => {
-                let builder = egui::UiBuilder::new().max_rect(region);
-                let ui = egui::Ui::new(ctx.clone(), egui::Id::new("measure"), builder);
-                let content = self.extent(&ui, root, region.width()).natural;
-                Some(content + frame.total_margin().sum().x + ui.spacing().window_margin.sum().x)
-            }
+        let room = Room {
+            region,
+            sidebar: self.sidebar,
+            avoid: &avoid,
+            map: !interaction::titled(self.model.screens()),
         };
+        let placement = placement(screen, &room);
+        let place = placement.place;
         let base = self.window_spec(ctx, super::screen_kind(screen).as_deref(), &title);
+        let title_bar = base.title_bar;
+        let named = screen.root.as_ref().map_or_else(HashSet::new, claimed);
+        let rest = screen
+            .affordances
+            .iter()
+            .filter(|a| !named.contains(a.id.as_str()))
+            .collect::<Vec<_>>();
+        // A window is as wide as its content and its footer on one row, as its class allows.
+        let width = screen.root.as_ref().and_then(|root| {
+            let builder = egui::UiBuilder::new().max_rect(region);
+            let ui = egui::Ui::new(ctx.clone(), egui::Id::new("measure"), builder);
+            let margin = frame.total_margin().sum().x + ui.spacing().window_margin.sum().x;
+            let content = self.extent(&ui, root, placement.widest() - margin);
+            let content = Extent {
+                min: content.min + margin,
+                natural: content.natural + margin,
+                ..content
+            };
+            placement.width(content, footer_width(&ui, &rest, title_bar) + margin)
+        });
         // The help sits in the title bar, or last in the footer of a window that has none.
         let titled = interaction::with_role(screen, AffordanceRole::Help)
             .filter(|a| a.enabled && base.title_bar);
-        let title_bar = base.title_bar;
         let spec = WindowSpec {
             closable: interaction::with_role(screen, AffordanceRole::Cancel).is_some(),
             frame: Some(frame),
             place: Some(place),
-            movable: !keeps_off_cursor(screen),
+            movable: !keeps_off_cursor(screen) && placement.class != Class::Full,
             width,
             help: titled.map(|a| windows::TitleHelp {
                 label: markup::plain(&a.label.shown()),
@@ -376,12 +392,6 @@ impl<M: GameModel> App<M> {
             let Some(root) = &screen.root else {
                 return;
             };
-            let named = claimed(root);
-            let rest = screen
-                .affordances
-                .iter()
-                .filter(|a| !named.contains(a.id.as_str()))
-                .collect::<Vec<_>>();
             let footer = |ui: &mut egui::Ui, out: &mut Vec<Intent>| {
                 self.question(ui, screen, out);
                 if let Some(denial) = &self.screens.denial {
@@ -390,7 +400,7 @@ impl<M: GameModel> App<M> {
                 self.footer(ui, &rest, title_bar, out);
             };
             // A screen that fills the room keeps its footer under its body, whatever the body's height.
-            if matches!(place, Place::Fill(_)) {
+            if placement.class == Class::Full {
                 egui::Panel::bottom(egui::Id::new(("footer", &screen.screen_id)))
                     .resizable(false)
                     .frame(egui::Frame::NONE)
@@ -404,8 +414,19 @@ impl<M: GameModel> App<M> {
                         .show(ui, |ui| self.component(ui, screen, root, out))
                 });
             } else {
-                self.component(ui, screen, root, out);
+                // A body taller than the room scrolls above the footer, which keeps the height it had last frame,
+                // by the window's kind.
+                let kept = ui.id().with("footer height");
+                let reserve = ctx.data(|d| d.get_temp::<f32>(kept)).unwrap_or(0.0);
+                egui::ScrollArea::vertical()
+                    .id_salt("body")
+                    .auto_shrink([false, true])
+                    .max_height(ui.available_height() - reserve)
+                    .show(ui, |ui| self.component(ui, screen, root, out));
+                let top = ui.min_rect().bottom();
                 footer(ui, out);
+                let height = ui.min_rect().bottom() - top;
+                ctx.data_mut(|d| d.insert_temp(kept, height));
             }
         });
         if let Some(a) = titled.filter(|_| shown.help) {

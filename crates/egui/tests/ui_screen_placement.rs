@@ -79,8 +79,8 @@ fn screen_rect(size: egui::Vec2) -> egui::Rect {
 #[test]
 fn a_full_screen_fills_the_map_room_and_leaves_the_sidebar_visible() {
     let size = egui::vec2(1280.0, 800.0);
-    let (h, _) = playing(size, Some(example("crafting", "Crafting screen")));
-    let window = window_of(&h, "crafting");
+    let (h, _) = playing(size, Some(example("overmap", "overmap screen")));
+    let window = window_of(&h, "overmap");
     let map = h.get_by_label("Map").rect();
     assert!(window.min.y <= 40.0, "{window:?}");
     assert!(window.max.y <= size.y, "{window:?}");
@@ -123,12 +123,16 @@ fn the_look_screen_covers_neither_the_cursor_nor_the_avatar() {
 }
 
 #[test]
-fn a_wide_dialog_is_as_wide_as_its_content_and_stays_inside_the_map_room() {
+fn a_wide_dialog_takes_its_whole_column_and_stays_inside_the_map_room() {
     let size = egui::vec2(1280.0, 800.0);
     let (h, _) = playing(size, Some(example("character", "character sheet")));
     let window = window_of(&h, "character_sheet");
     let map = h.get_by_label("Map").rect();
-    assert!(window.width() > 640.0, "{window:?}");
+    // A dialog's column is 60% of the map room inside its margins, at most 720.
+    assert!(
+        window.width() >= 0.6 * (map.width() - 16.0) - 8.0,
+        "{window:?}"
+    );
     assert!(screen_rect(size).contains_rect(window), "{window:?}");
     assert!(
         (window.center().x - map.center().x).abs() < 40.0,

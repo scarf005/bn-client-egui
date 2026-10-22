@@ -1,4 +1,4 @@
-//! Where a screen's window sits over the map.
+//! Where a screen's window sits over the map, and how wide it is, by the class of window the screen is.
 
 use super::*;
 
@@ -8,72 +8,154 @@ pub(super) const KEEP_CLEAR: f32 = 1.0;
 /// The share of the map region a window beside the cursor, or docked to a side, takes in width.
 pub(super) const SIDE_SHARE: f32 = 0.4;
 
+/// The share of the map region a dialog takes at most, and a screen at least, in width.
+const SCREEN_SHARE: f32 = 0.6;
+
+/// The narrowest and the widest a dialog is.
+const DIALOG_WIDTH: (f32, f32) = (320.0, 720.0);
+
 /// The space kept between a window and the edge of the map region.
 const REGION_MARGIN: f32 = 8.0;
 
-/// How a screen of the stack sits in `region` (the map panel; the sidebar stays visible): a full screen fills it, a
-/// dialog is centred, a window that asked for a side sits there, and a screen that puts a cursor on the map sits
-/// on the side away from it. `avoid` are the rectangles on the map that must stay uncovered.
-pub(super) fn placement(
-    screen: &Screen,
-    region: egui::Rect,
-    sidebar: Option<(SidebarSide, egui::Rect)>,
-    avoid: &[egui::Rect],
-) -> Place {
+/// The kinds of window a screen is shown in.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) enum Class {
+    /// A question or a short list: as large as its content, centred in the region, a readable column wide.
+    Dialog,
+    /// A screen read beside the map: as large as its content and at least most of the region wide, centred, so
+    /// the map stays visible around it.
+    Screen,
+    /// A screen of its own map or canvas, or one shown with no game under it: the whole region.
+    Full,
+    /// A window docked to a side or kept off the cursor: as large as its content and at least its footer on one
+    /// row (unless that would cover the cursor), at a side of the region.
+    Side,
+}
+
+/// What a screen's window sits in.
+pub(super) struct Room<'a> {
+    /// The map panel, or what the top bar leaves where no game runs.
+    pub(super) region: egui::Rect,
+    pub(super) sidebar: Option<(SidebarSide, egui::Rect)>,
+    /// The rectangles on the map that must stay uncovered.
+    pub(super) avoid: &'a [egui::Rect],
+    /// A game's map lies under the window.
+    pub(super) map: bool,
+}
+
+/// A screen's window class and where it sits.
+pub(super) struct Placement {
+    pub(super) class: Class,
+    pub(super) place: Place,
+    /// The width of the region inside its margin, which the class's shares are of.
+    pub(super) room: f32,
+}
+
+/// A window at the left or the right side of `region`, no wider than `share` of the region nor taller than it,
+/// and kept inside it.
+pub(super) fn side(region: egui::Rect, left: bool, share: f32) -> Place {
     let inner = region.shrink(REGION_MARGIN);
-    let max = egui::vec2(inner.width() * SIDE_SHARE, inner.height());
-    let side = |left: bool| Place::Side {
-        pivot: if left {
-            egui::Align2::LEFT_TOP
-        } else {
-            egui::Align2::RIGHT_TOP
-        },
-        pos: if left {
-            inner.left_top()
-        } else {
-            inner.right_top()
-        },
-        max,
-        within: inner,
+    let (pivot, pos) = match left {
+        true => (egui::Align2::LEFT_TOP, inner.left_top()),
+        false => (egui::Align2::RIGHT_TOP, inner.right_top()),
     };
+    Place::Side {
+        pivot,
+        pos,
+        max: egui::vec2(inner.width() * share, inner.height()),
+        within: inner,
+    }
+}
+
+/// How a screen of the stack sits in the room (the sidebar stays visible): a dialog and a screen are centred, a
+/// screen of a map or canvas fills the region, a window that asked for a side sits there, and a screen that puts
+/// a cursor on the map sits on the side away from it.
+pub(super) fn placement(screen: &Screen, room: &Room) -> Placement {
+    let inner = room.region.shrink(REGION_MARGIN);
     let beside = |left: bool| {
-        let (x0, x1) = if left {
-            (inner.left(), inner.left() + max.x)
-        } else {
-            (inner.right() - max.x, inner.right())
+        let width = inner.width() * SIDE_SHARE;
+        let (x0, x1) = match left {
+            true => (inner.left(), inner.left() + width),
+            false => (inner.right() - width, inner.right()),
         };
         egui::Rect::from_x_y_ranges(x0..=x1, inner.y_range())
     };
-    // Away from the cursor: the window's side is the one whose half of the room has none of `avoid`.
+    // Away from the cursor: the window's side is the one whose share of the room has none of `avoid`, and the
+    // window never takes more than that share, whatever its footer needs.
     let away = || {
-        let covered = |left: bool| avoid.iter().any(|r| beside(left).intersects(*r));
-        let cursor_left = avoid
+        let covered = |left: bool| room.avoid.iter().any(|r| beside(left).intersects(*r));
+        let cursor_left = room
+            .avoid
             .first()
             .is_some_and(|r| r.center().x < inner.center().x);
-        match (covered(!cursor_left), covered(cursor_left)) {
-            (false, _) => side(!cursor_left),
-            (true, false) => side(cursor_left),
-            (true, true) => side(!cursor_left),
-        }
+        let left = match (covered(!cursor_left), covered(cursor_left)) {
+            (true, false) => cursor_left,
+            _ => !cursor_left,
+        };
+        side(room.region, left, SIDE_SHARE)
     };
-    match (screen.dock, screen.role) {
-        (Some(ScreenDock::Left), _) => side(true),
-        (Some(ScreenDock::Right), _) => side(false),
+    let (class, place) = match (screen.dock, screen.role) {
+        (Some(ScreenDock::Left), _) => (Class::Side, side(room.region, true, 1.0)),
+        (Some(ScreenDock::Right), _) => (Class::Side, side(room.region, false, 1.0)),
         // Over the sidebar: its own place, level with the map's top.
-        (Some(ScreenDock::Overlapping), _) => match sidebar {
-            Some((_, rect)) => Place::Side {
-                pivot: egui::Align2::LEFT_TOP,
-                pos: egui::pos2(rect.left(), inner.top()),
-                max: egui::vec2(rect.width(), inner.height()),
-                within: inner.union(rect),
+        (Some(ScreenDock::Overlapping), _) => (
+            Class::Side,
+            match room.sidebar {
+                Some((_, rect)) => Place::Side {
+                    pivot: egui::Align2::LEFT_TOP,
+                    pos: egui::pos2(rect.left(), inner.top()),
+                    max: egui::vec2(rect.width(), inner.height()),
+                    within: inner.union(rect),
+                },
+                None => side(room.region, true, 1.0),
             },
-            None => side(true),
-        },
-        (Some(ScreenDock::Cursor), _) => away(),
-        _ if keeps_off_cursor(screen) => away(),
-        (None, ScreenRole::Dialog) => Place::Center(inner),
-        (None, _) => Place::Fill(inner),
+        ),
+        (Some(ScreenDock::Cursor), _) => (Class::Side, away()),
+        _ if keeps_off_cursor(screen) => (Class::Side, away()),
+        (None, ScreenRole::Dialog) => (Class::Dialog, Place::Center(inner)),
+        _ if !room.map || draws_world(screen) => (Class::Full, Place::Fill(inner)),
+        _ => (Class::Screen, Place::Center(inner)),
+    };
+    Placement {
+        class,
+        place,
+        room: inner.width(),
     }
+}
+
+impl Placement {
+    /// The widest the class lets the window be, which its content is measured in.
+    pub(super) fn widest(&self) -> f32 {
+        let most = match self.class {
+            Class::Full | Class::Screen => self.room,
+            Class::Dialog => DIALOG_WIDTH.1.min(SCREEN_SHARE * self.room),
+            Class::Side => SIDE_SHARE * self.room,
+        };
+        most.min(self.place.room().x)
+    }
+
+    /// The window's width for content and a one-row footer `footer` wide (both with the window's margins): as
+    /// wide as both up to `widest`, but never narrower than the class's least, the content's least, nor a side
+    /// window narrower than its footer, nor wider than its place; none for a window that fills its place.
+    pub(super) fn width(&self, content: Extent, footer: f32) -> Option<f32> {
+        let least = match self.class {
+            Class::Full => return None,
+            Class::Dialog => DIALOG_WIDTH.0,
+            Class::Screen => SCREEN_SHARE * self.room,
+            Class::Side => footer,
+        };
+        let wanted = content.natural.max(footer);
+        let width = wanted.min(self.widest().max(content.min)).max(least);
+        Some(width.min(self.place.room().x))
+    }
+}
+
+/// A screen that holds a map or a canvas of its own, which take whatever room they get.
+fn draws_world(screen: &Screen) -> bool {
+    screen
+        .components()
+        .into_iter()
+        .any(|c| matches!(c, Component::Map(_) | Component::Canvas(_)))
 }
 
 /// A screen that puts a cursor on the map (look, aim), or asks to sit away from it, must not hide what the

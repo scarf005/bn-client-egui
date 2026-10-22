@@ -4,7 +4,6 @@
 //! from them.
 
 use super::*;
-use crate::windows::Origin;
 use bn_client_core::PanelWatch;
 use bn_client_core::interaction::Interaction;
 use bn_client_core::protocol::PanelKind;
@@ -35,7 +34,8 @@ impl<M: GameModel> App<M> {
     }
 
     /// One panel window: its screen drawn as the top screen is, with the window's focus standing in for the top
-    /// screen's. The character sheet first opens at the map's top left, the inventory at its top right.
+    /// screen's. The character sheet first opens at the map's top left, the inventory at its top right, and
+    /// neither leaves the map's room.
     fn panel_window(&mut self, ctx: &egui::Context, panel: PanelKind, action: &str) {
         let Some(mut focus) = self.panels.remove(&panel) else {
             return self.model.watch_panel(panel, None);
@@ -52,26 +52,29 @@ impl<M: GameModel> App<M> {
         let kind = format!("panel:{action}");
         let title = markup::plain(&screen.title.as_ref().map(Text::shown).unwrap_or_default());
         let region = self.region.unwrap_or_else(|| ctx.content_rect());
-        let origin = match panel {
-            PanelKind::Character => Origin {
-                pivot: egui::Align2::LEFT_TOP,
-                pos: region.left_top(),
-            },
-            PanelKind::Inventory => Origin {
-                pivot: egui::Align2::RIGHT_TOP,
-                pos: region.right_top(),
-            },
+        let place = side(region, panel == PanelKind::Character, 1.0);
+        let placement = Placement {
+            class: Class::Side,
+            place,
+            room: place.room().x,
         };
         // As wide as its content, within the share of the room a window beside the map takes.
-        let width = screen.root.as_ref().map(|root| {
+        let width = screen.root.as_ref().and_then(|root| {
             let builder = egui::UiBuilder::new().max_rect(region);
             let ui = egui::Ui::new(ctx.clone(), egui::Id::new("measure"), builder);
-            let content = self.extent(&ui, root, region.width()).natural;
-            (content + ui.spacing().window_margin.sum().x).min(region.width() * SIDE_SHARE)
+            let margin = ui.spacing().window_margin.sum().x;
+            let content = self.extent(&ui, root, placement.widest() - margin);
+            let content = Extent {
+                min: content.min + margin,
+                natural: content.natural + margin,
+                ..content
+            };
+            placement.width(content, 0.0)
         });
         let spec = WindowSpec {
             closable: true,
-            origin,
+            place: Some(place),
+            movable: true,
             width,
             ..self.window_spec(ctx, Some(&kind), &title)
         };
@@ -82,8 +85,12 @@ impl<M: GameModel> App<M> {
             if let Some(a) = &offered {
                 full = ui.button(markup::plain(&a.name)).clicked();
             }
+            // A sheet taller than the room scrolls rather than leaving it.
             if let Some(root) = &screen.root {
-                self.component(ui, screen, root, &mut out);
+                egui::ScrollArea::vertical()
+                    .id_salt(("body", action))
+                    .auto_shrink([false, true])
+                    .show(ui, |ui| self.component(ui, screen, root, &mut out));
             }
         });
         self.screens.passive = false;

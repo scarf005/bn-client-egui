@@ -314,3 +314,19 @@ fn a_panel_window_restored_over_the_top_bar_is_moved_into_the_map_region() {
         );
     }
 }
+
+#[test]
+fn a_side_window_kept_narrow_by_a_last_run_is_still_wide_enough_for_its_footer() {
+    let footer = ["Confirm Choice", "Select all", "Filter", "Wear", "Wield"];
+    let file = common::game_root("window-class-narrow").join("settings.json");
+    let windows = json!({"windows": {"screen:pickup": {"pos": [20.0, 50.0], "size": [175.0, 500.0],
+        "collapsed": false}}});
+    std::fs::write(&file, windows.to_string()).unwrap();
+    let (h, _) = playing(SIZES[0], example("pickup", "pickup screen"), Some(&file));
+    let window = window_of(&h, "pickup");
+    let row = buttons(&h, &footer);
+    assert!(
+        row.iter().all(|b| (b.top() - row[0].top()).abs() < 1.0),
+        "footer of {window:?} on more than one row: {row:?}"
+    );
+}

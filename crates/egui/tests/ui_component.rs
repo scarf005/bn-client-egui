@@ -1526,7 +1526,10 @@ fn a_grid_takes_the_room_of_its_cells_and_cursor_not_of_its_empty_edges() {
         "cells": [
             {"x": 5, "y": 4, "glyph": "A", "enabled": true},
             {"x": 7, "y": 5, "glyph": "B", "enabled": true}]});
-    let (h, _) = harness(dialog(grid, vec![]));
+    // Docked at a side, whose window is as narrow as its content; a dialog is at least a readable column.
+    let mut screen = dialog(grid, vec![]);
+    screen["dock"] = json!("left");
+    let (h, _) = harness(screen);
     let a = h.get_by_label("A").rect();
     let b = h.get_by_label("B").rect();
     assert!((b.left() - a.left() - 2.0 * a.width()).abs() < 1.0);
