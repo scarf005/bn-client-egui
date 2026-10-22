@@ -1110,7 +1110,12 @@ impl<M: GameModel> App<M> {
         out: &mut Vec<Intent>,
     ) {
         let key = egui::Id::new(("grid-drag", &grid.head.id));
-        let mut held = ui.data(|d| d.get_temp::<Option<drag::Drag>>(key)).flatten();
+        // A drag not kept in the last pass belongs to an earlier showing of the grid: it ends unsent.
+        let pass = ui.ctx().cumulative_pass_nr();
+        let mut held = ui
+            .data(|d| d.get_temp::<(Option<drag::Drag>, u64)>(key))
+            .filter(|(_, last)| last + 1 >= pass)
+            .and_then(|(held, _)| held);
         let pointer = ui.input(|i| {
             let at = i.pointer.interact_pos();
             drag::Pointer {
@@ -1161,7 +1166,7 @@ impl<M: GameModel> App<M> {
             }));
         }
         out.extend(marker(&grid.drag_end).filter(|_| was_held && held.is_none()));
-        ui.data_mut(|d| d.insert_temp(key, held));
+        ui.data_mut(|d| d.insert_temp(key, (held, pass)));
     }
 }
 
