@@ -124,7 +124,8 @@ fn a_filterable_list_offers_the_engines_filter_and_the_click_runs_it() {
 #[test]
 fn a_list_that_is_not_filterable_offers_no_filter() {
     let (h, _) = harness(example("query popup screen"));
-    h.get_by_label("Yes");
+    // The row and the registered action's button read the same.
+    assert!(h.query_all_by_label("Yes").next().is_some());
     assert!(h.query_by_label_contains("Filter").is_none());
 }
 

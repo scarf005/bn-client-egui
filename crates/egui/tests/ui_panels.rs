@@ -369,8 +369,9 @@ fn the_inventory_window_and_the_engines_inventory_screen_each_keep_their_own_scr
         "the window scrolled off its focus"
     );
     assert!(shown(&h, "screen row 50"), "the screen kept its scroll");
-    let at = h.get_by_label("screen row 50").rect().center();
-    wheel(&mut h, egui::pos2(200.0, at.y), 4000.0);
+    // Over the row's left end, away from the inventory window to the right.
+    let at = h.get_by_label("screen row 50").rect().left_center();
+    wheel(&mut h, egui::pos2(at.x + 8.0, at.y), 4000.0);
     assert!(
         !shown(&h, "screen row 50"),
         "the screen scrolled off its cursor"
