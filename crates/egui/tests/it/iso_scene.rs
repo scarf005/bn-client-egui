@@ -765,16 +765,17 @@ fn a_window_drawn_from_above_is_a_sill_block_and_a_lintel_block_of_its_wall_with
 fn a_wall_beside_a_window_keeps_the_face_seen_through_its_opening_and_hides_the_windows() {
     let m = model(vec![window(4, 4, "t_wall"), wall(5, 4, "t_wall")]);
     let scene = flat_scene_of(&m, "flat-window-wall");
-    // The wall's six faces; the sill and the lintel without their east sides against it.
-    assert_eq!(planes(&scene).len(), 6 + 2 * 5);
+    // The wall's top and four sides of three blocks; the sill, the pane and the lintel without their east sides
+    // against it.
+    assert_eq!(planes(&scene).len(), (1 + 4 * 3) + 3 * 4);
     let (x, _) = square(&m, (5, 4));
     let between = sides(&planes(&scene))
         .into_iter()
         .filter(|i| i.a[0] == 0.0 && i.origin[0] == x as f32)
         .collect::<Vec<_>>();
-    assert_eq!(between.len(), 1, "{between:?}");
+    assert_eq!(between.len(), 3, "the wall's three blocks: {between:?}");
     assert!(
-        (between[0].b[2] + 3.0).abs() < 1e-4,
+        between.iter().all(|i| (i.b[2] + 1.0).abs() < 1e-4),
         "the wall's: {between:?}"
     );
 }
