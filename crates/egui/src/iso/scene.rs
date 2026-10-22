@@ -268,7 +268,7 @@ pub fn build(
                     _ if layer.coverage > 0 && !m.iso => Kind::Standing {
                         coverage: layer.coverage,
                     },
-                    (false, _) => Kind::Thing,
+                    (false, _) => Kind::Item,
                     (true, false) => Kind::Terrain,
                     (true, true) => Kind::Joined,
                 };
@@ -285,7 +285,7 @@ pub fn build(
                         (Kind::Standing { .. } | Kind::Formed(_), true) if layer.terrain => {
                             Kind::Terrain
                         }
-                        (Kind::Formed(_), true) => Kind::Thing,
+                        (Kind::Formed(_) | Kind::Item, true) => Kind::Thing,
                         (Kind::Vehicle | Kind::Standing { .. }, true) => Kind::Thing,
                         (kind, _) => kind,
                     };

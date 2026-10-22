@@ -57,6 +57,10 @@ const LEVEL: f32 = 3.0;
 const LAYER_BIAS: f32 = 0.002;
 /// A vehicle part of a tileset drawn from above stands this many squares tall: a person in it shows from the chest.
 const VEHICLE: f32 = 0.5;
+/// An item or a field lying on the ground of a tileset drawn from above is this many squares thick, a creature this many
+/// tall: the sprite's opaque pixels pushed up that far.
+const ITEM: f32 = 0.1;
+const CREATURE: f32 = 0.4;
 /// The blocks a wall of a tileset drawn from above stacks to a level: a storey is 3 m, a block 1 m.
 const LEVEL_BLOCKS: f32 = 3.0;
 /// The sill and the lintel of a window of a tileset drawn from above, as shares of the level its wall rises: a
@@ -197,6 +201,8 @@ fn runs(len: i32, side: impl Fn(i32) -> Option<bool>) -> Vec<(i32, i32, bool)> {
 pub enum Kind {
     /// Anything that is not a square's terrain, a creature or a vehicle part.
     Thing,
+    /// An item or a field lying on the ground.
+    Item,
     /// A monster, a person or the avatar.
     Creature,
     /// A part of a vehicle.
@@ -246,7 +252,9 @@ pub fn shape(m: &Metrics, sprite: &SpriteSource, kind: Kind) -> Shape {
         let block = m.level / LEVEL_BLOCKS;
         return match (kind, inside) {
             (Kind::Formed(form), _) => Shape::Built { form, block },
-            (Kind::Creature, _) | (_, false) => Shape::Board,
+            (_, false) => Shape::Board,
+            (Kind::Creature, true) => Shape::Extrude { top: CREATURE },
+            (Kind::Item, true) => Shape::Extrude { top: ITEM },
             (Kind::Wall { .. }, true) => Shape::Blocks { top: m.level },
             (Kind::Window, true) => Shape::Window {
                 sill: SILL * m.level,
@@ -1077,8 +1085,12 @@ mod tests {
             assert_eq!(shape(&flat, &tall, kind), Shape::Board);
             assert_eq!(shape(&flat, &wide, kind), Shape::Board);
         }
-        // A creature stands however small it is.
-        assert_eq!(shape(&flat, &small, Kind::Creature), Shape::Board);
+        // A creature inside its square is thick, one that reaches out of it stands.
+        assert_eq!(
+            shape(&flat, &small, Kind::Creature),
+            Shape::Extrude { top: CREATURE }
+        );
+        assert_eq!(shape(&flat, &tall, Kind::Creature), Shape::Board);
     }
 
     #[test]
@@ -1113,6 +1125,35 @@ mod tests {
         ));
         assert_eq!(shape(&m, &iso, wall), Shape::Board);
         assert_eq!(shape(&m, &iso, Kind::Vehicle), Shape::Board);
+    }
+
+    #[test]
+    fn items_and_creatures_drawn_from_above_are_thick_with_sides_only_on_the_opaque_edges() {
+        let flat = Metrics::new((32, 32), false, None);
+        let whole = sprite((32.0, 32.0), (0.0, 0.0));
+        let reach = sprite((32.0, 64.0), (0.0, -32.0));
+        // An L of the top and left halves: six straight edges.
+        let l = Outline::of([32, 32], |x, y| x < 16 || y < 16);
+        for (kind, thick) in [(Kind::Item, ITEM), (Kind::Creature, CREATURE)] {
+            assert_eq!(shape(&flat, &whole, kind), Shape::Extrude { top: thick });
+            // What reaches out of its square was drawn standing.
+            assert_eq!(shape(&flat, &reach, kind), Shape::Board);
+            let p = Placement {
+                outline: Some(&l),
+                ..square(&whole, kind)
+            };
+            let quads = place(&flat, &p);
+            // The top, the bottom and a side per edge of the outline, each as deep as the sprite is thick.
+            assert_eq!(quads.len(), 2 + l.edges.len(), "{kind:?}");
+            assert_eq!(quads[0].origin[2], thick);
+            let sides = quads.iter().filter(|q| q.b[2] != 0.0).collect::<Vec<_>>();
+            assert_eq!(sides.len(), 6);
+            assert!(sides.iter().all(|q| (q.b[2] + thick).abs() < 1e-6));
+        }
+        // An isometric tileset keeps its things as boards, and a clear sprite is no solid.
+        let iso = sprite((48.0, 48.0), (0.0, -24.0));
+        assert_eq!(shape(&ultica(), &iso, Kind::Item), Shape::Board);
+        assert_eq!(shape(&flat, &whole, Kind::Thing), Shape::Floor { z: 0.0 });
     }
 
     #[test]
@@ -1450,7 +1491,7 @@ mod tests {
             page: PAGE,
             at: Vec2::new(32.0, 16.0),
             src: Vec2::new(16.0, 16.0),
-            offset: Vec2::ZERO,
+            offset: Vec2::new(0.0, -4.0),
             scale: 1.0,
         };
         let board = |turn| {
