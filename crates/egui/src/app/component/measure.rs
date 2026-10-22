@@ -124,15 +124,12 @@ impl<M: GameModel> App<M> {
                 }
             }
             Component::Panel(panel) => {
-                let frame = egui::Frame::group(ui.style()).total_margin().sum().x;
+                let frame = section::margin_width();
                 let stats = panel.stats.iter().flatten().map(|stat| {
-                    let label = markup::plain(&stat.label.shown());
-                    fixed(
-                        text_width(ui, &label, &font)
-                            + gap
-                            + text_width(ui, &stat_text(stat), &font),
-                    )
+                    let label = text_width(ui, &markup::plain(&stat.label.shown()), &font);
+                    (label, text_width(ui, &stat_text(stat), &font))
                 });
+                let stats = fixed(section::facts_width(ui, stats));
                 let lines = [Some(prose(&markup::plain(&panel.title.shown())))]
                     .into_iter()
                     .flatten()
@@ -142,7 +139,7 @@ impl<M: GameModel> App<M> {
                             .iter()
                             .map(|t| prose(&markup::plain(&t.shown()))),
                     )
-                    .chain(stats)
+                    .chain([stats])
                     .chain(inside(&panel.child))
                     .fold(fixed(0.0), stacked);
                 Extent {

@@ -13,6 +13,7 @@ mod panel;
 mod placement;
 
 use super::{App, sidebar};
+use crate::kit::section::{self, Fact};
 use crate::kit::split::{self, Extent};
 use crate::kit::tokens::{self, BAD, GOOD};
 use crate::windows::{self, Place, Shown, WindowSpec};
@@ -499,17 +500,14 @@ impl<M: GameModel> App<M> {
                 self.split(ui, screen, split, &parts, out);
             }
             Component::Panel(panel) => {
-                egui::Frame::group(ui.style()).show(ui, |ui| {
-                    // A panel the screen's own title already names has none.
-                    let title = markup::plain(&panel.title.shown());
-                    if !title.is_empty() {
-                        ui.label(egui::RichText::new(title).strong());
-                    }
+                // A panel the screen's own title already names has none.
+                let title = markup::plain(&panel.title.shown());
+                section::show(ui, &title, |ui| {
                     if let Some(subtitle) = &panel.subtitle {
                         ui.label(self.line(ui, &subtitle.shown()));
                     }
-                    for stat in panel.stats.iter().flatten() {
-                        self.stat(ui, stat);
+                    if let Some(stats) = &panel.stats {
+                        Self::facts(ui, &panel.head.id, stats);
                     }
                     if let Some(filter) = &panel.filter {
                         ui.weak(format!("/{filter}"));
@@ -600,20 +598,28 @@ impl<M: GameModel> App<M> {
         }
     }
 
-    fn stat(&self, ui: &mut egui::Ui, stat: &PanelStat) {
-        let shown = stat_text(stat);
-        let label = markup::plain(&stat.label.shown());
-        let color = stat.tone.map_or(ui.visuals().text_color(), tone_color);
-        if shown.is_empty() {
-            ui.label(egui::RichText::new(label).color(color));
-            return;
-        }
-        // The label and the value are parts of their own; the engine's text carries any punctuation.
-        ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = 4.0;
-            ui.label(label);
-            ui.label(egui::RichText::new(shown).color(color));
-        });
+    /// The panel's stats as facts: label and value, or a stat without a value as its label in its tone.
+    fn facts(ui: &mut egui::Ui, id: &str, stats: &[PanelStat]) {
+        let facts = stats
+            .iter()
+            .map(|stat| {
+                let shown = stat_text(stat);
+                let label = egui::RichText::new(markup::plain(&stat.label.shown()));
+                let color = stat.tone.map_or(ui.visuals().text_color(), tone_color);
+                match shown.is_empty() {
+                    true => Fact {
+                        label: label.color(color),
+                        value: None,
+                    },
+                    // The engine's text carries any punctuation.
+                    false => Fact {
+                        label,
+                        value: Some(egui::RichText::new(shown).color(color)),
+                    },
+                }
+            })
+            .collect::<Vec<_>>();
+        section::facts(ui, egui::Id::new(("facts", id)), &facts);
     }
 
     fn text_block(&self, ui: &mut egui::Ui, block: &TextBlock) {

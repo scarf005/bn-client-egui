@@ -1,6 +1,7 @@
 //! Splits and descriptions as a player reads them over the map: rows of peer panes painted whole, the only
 //! prose of a split as wide as the panes beside it, the active outline only around a pane that holds something, and the focused row's description in a pane of its own instead of a strip under the list.
 mod common;
+use bn_client_egui::kit::section;
 use bn_client_egui::{App, EngineModel};
 use eframe::egui::{self, epaint};
 use egui_kittest::Harness;
@@ -172,5 +173,55 @@ fn the_focused_items_description_is_whole_at_1280() {
     assert!(
         whole(&h, "A rock the size of a baseball").is_some(),
         "the description is cut"
+    );
+}
+
+/// The left edge of the leftmost node labelled `label`.
+fn left_of(h: &H, label: &str) -> egui::Rect {
+    h.query_all_by_label(label)
+        .map(|n| n.rect())
+        .min_by(|a, b| a.left().total_cmp(&b.left()))
+        .unwrap_or_else(|| panic!("no {label}"))
+}
+
+#[test]
+fn a_panels_stats_are_facts_whose_values_share_one_column() {
+    let h = shown(
+        example("aim", "advanced inventory screen"),
+        egui::vec2(1280.0, 800.0),
+    );
+    let values = ["0.0 kg", "0.00/1000.00 L", "name"].map(|v| left_of(&h, v));
+    assert!(
+        values
+            .iter()
+            .all(|v| (v.left() - values[0].left()).abs() < 0.5),
+        "{values:?}"
+    );
+    let label = left_of(&h, "Weight");
+    assert!(label.right() < values[0].left(), "{label:?} {values:?}");
+}
+
+#[test]
+fn a_panels_title_sits_on_a_band_across_its_section() {
+    let h = shown(
+        example("aim", "advanced inventory screen"),
+        egui::vec2(1280.0, 800.0),
+    );
+    let title = h.get_by_label("Left pane").rect();
+    let rows = left_of(&h, "Inventory");
+    let bands = h
+        .output()
+        .shapes
+        .iter()
+        .filter_map(|s| match &s.shape {
+            egui::Shape::Rect(r) if r.fill == section::BAND => Some(r.rect),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert!(
+        bands
+            .iter()
+            .any(|b| b.contains_rect(title) && b.right() >= rows.right()),
+        "{title:?} on none of {bands:?}"
     );
 }
