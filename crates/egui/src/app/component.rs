@@ -441,37 +441,38 @@ impl<M: GameModel> App<M> {
                     .show(ui, |ui| footer(ui, out));
                 // A body taller than the room, a full-size grid over further parts, scrolls instead of being cut.
                 egui::CentralPanel::no_frame().show(ui, |ui| {
-                    egui::ScrollArea::vertical()
+                    let scroll = egui::ScrollArea::vertical()
                         .id_salt(("body", &screen.screen_id))
-                        .auto_shrink(false)
-                        .show(ui, |ui| match placement.column {
-                            true => {
-                                // A row's bar reaches half a gap past each side of its table.
-                                let width = ui.available_width().min(COLUMN_WIDTH)
-                                    - ui.spacing().item_spacing.x;
-                                ui.vertical_centered(|ui| {
-                                    ui.scope(|ui| {
-                                        ui.set_width(width);
-                                        ui.with_layout(
-                                            egui::Layout::top_down(egui::Align::Min),
-                                            |ui| self.component(ui, screen, root, out),
-                                        );
-                                    })
-                                });
-                            }
-                            false => self.component(ui, screen, root, out),
-                        })
+                        .auto_shrink(false);
+                    let room = ui.available_height();
+                    body_scroll(ui, scroll, room, |ui| match placement.column {
+                        true => {
+                            // A row's bar reaches half a gap past each side of its table.
+                            let width = ui.available_width().min(COLUMN_WIDTH)
+                                - ui.spacing().item_spacing.x;
+                            ui.vertical_centered(|ui| {
+                                ui.scope(|ui| {
+                                    ui.set_width(width);
+                                    ui.with_layout(
+                                        egui::Layout::top_down(egui::Align::Min),
+                                        |ui| self.component(ui, screen, root, out),
+                                    );
+                                })
+                            });
+                        }
+                        false => self.component(ui, screen, root, out),
+                    });
                 });
             } else {
                 // A body taller than the room scrolls above the footer, which keeps the height it had last frame,
                 // by the window's kind.
                 let kept = ui.id().with("footer height");
                 let reserve = ctx.data(|d| d.get_temp::<f32>(kept)).unwrap_or(0.0);
-                egui::ScrollArea::vertical()
+                let scroll = egui::ScrollArea::vertical()
                     .id_salt("body")
-                    .auto_shrink([false, true])
-                    .max_height(ui.available_height() - reserve)
-                    .show(ui, |ui| self.component(ui, screen, root, out));
+                    .auto_shrink([false, true]);
+                let room = ui.available_height() - reserve;
+                body_scroll(ui, scroll, room, |ui| self.component(ui, screen, root, out));
                 let top = ui.min_rect().bottom();
                 footer(ui, out);
                 let height = ui.min_rect().bottom() - top;

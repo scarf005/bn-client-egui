@@ -118,3 +118,18 @@ pub fn prose_widths(parts: &[Extent], prose: usize, room: f32, gap: f32) -> Vec<
     widths.insert(prose, width);
     widths
 }
+
+/// The height, at most `room`, of a viewport from the top of content whose lines of text are `rows`, as
+/// (top, bottom) from the content's top: `room`, or the top of the line it would cut across, until it cuts none.
+pub fn whole_rows(rows: &[(f32, f32)], room: f32) -> f32 {
+    let mut at = room;
+    while let Some(top) = rows
+        .iter()
+        .filter(|(top, bottom)| *top + 0.5 < at && at < *bottom - 0.5)
+        .map(|(top, _)| *top)
+        .reduce(f32::min)
+    {
+        at = top;
+    }
+    at
+}

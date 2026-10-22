@@ -1,6 +1,6 @@
 //! The width rule of split panes: content-sized, never below the minimum, the rest to the panes that grow.
 use bn_client_egui::kit::split::{
-    Extent, detail_widths, gaps, overflows, prose_widths, split_widths, wrap_lines,
+    Extent, detail_widths, gaps, overflows, prose_widths, split_widths, whole_rows, wrap_lines,
 };
 
 const GAP: f32 = 8.0;
@@ -143,4 +143,20 @@ fn the_only_prose_never_takes_the_other_panes_below_their_minimums() {
     let parts = [pane(400.0, 500.0, true), pane(100.0, 900.0, true)];
     let widths = prose_widths(&parts, 1, 600.0 + GAP, GAP);
     assert_eq!(widths, vec![400.0, 200.0]);
+}
+
+#[test]
+fn a_viewport_ends_above_the_line_it_would_cut_and_at_the_room_between_lines() {
+    let lines = [(0.0, 20.0), (24.0, 44.0), (48.0, 68.0)];
+    assert_eq!(whole_rows(&lines, 60.0), 48.0);
+    assert_eq!(whole_rows(&lines, 40.0), 24.0);
+    assert_eq!(whole_rows(&lines, 46.0), 46.0);
+    assert_eq!(whole_rows(&lines, 100.0), 100.0);
+    assert_eq!(whole_rows(&[], 60.0), 60.0);
+}
+
+#[test]
+fn lines_side_by_side_that_overlap_move_the_end_above_both() {
+    let panes = [(0.0, 20.0), (4.0, 24.0), (30.0, 50.0), (34.0, 54.0)];
+    assert_eq!(whole_rows(&panes, 40.0), 30.0);
 }

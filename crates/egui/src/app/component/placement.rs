@@ -198,3 +198,68 @@ pub(super) fn keeps_off_cursor(screen: &Screen) -> bool {
             .as_ref()
             .is_some_and(|r| r.cursor_map().is_some())
 }
+
+/// What a window body painted, from the top of its content: the lines of text, as (top, bottom).
+#[derive(Clone, Default)]
+struct Painted(Vec<(f32, f32)>);
+
+/// The lines of text painted in `layer` since its shape number `from`, in view, as (top, bottom) from `top`.
+fn painted_lines(
+    ctx: &egui::Context,
+    layer: egui::LayerId,
+    from: usize,
+    top: f32,
+) -> Vec<(f32, f32)> {
+    fn walk(clip: egui::Rect, shape: &egui::Shape, top: f32, out: &mut Vec<(f32, f32)>) {
+        match shape {
+            egui::Shape::Text(text) => out.extend(text.galley.rows.iter().filter_map(|row| {
+                let at = row.rect().translate(text.pos.to_vec2());
+                clip.intersect(at)
+                    .is_positive()
+                    .then_some((at.top() - top, at.bottom() - top))
+            })),
+            egui::Shape::Vec(shapes) => shapes.iter().for_each(|s| walk(clip, s, top, out)),
+            _ => {}
+        }
+    }
+    let mut out = Vec::new();
+    ctx.graphics(|g| {
+        let shapes = g
+            .get(layer)
+            .into_iter()
+            .flat_map(|l| l.all_entries().skip(from));
+        shapes.for_each(|s| walk(s.clip_rect, &s.shape, top, &mut out));
+    });
+    out
+}
+
+/// Draws a window body in `scroll`, a vertical scroll area at most `room` tall that ends between lines of text
+/// instead of across one: the lines painted so far, those past the viewport as last seen, say where.
+pub(super) fn body_scroll(
+    ui: &mut egui::Ui,
+    scroll: egui::ScrollArea,
+    room: f32,
+    draw: impl FnOnce(&mut egui::Ui),
+) {
+    let ctx = ui.ctx().clone();
+    let key = ui.id().with("body lines");
+    let seen = ctx.data(|d| d.get_temp::<Painted>(key)).unwrap_or_default();
+    let height = split::whole_rows(&seen.0, room);
+    let layer = ui.layer_id();
+    scroll.max_height(height).show(ui, |ui| {
+        let top = ui.cursor().top();
+        let from = ctx.graphics(|g| g.get(layer).map_or(0, |l| l.all_entries().len()));
+        draw(ui);
+        // The lines in view are as painted now; those past the viewport stay as they were last seen.
+        let past = ui.clip_rect().top() - top + height;
+        let kept = seen.0.iter().filter(|(line, _)| *line >= past - 0.5);
+        let lines = painted_lines(&ctx, layer, from, top)
+            .into_iter()
+            .chain(kept.copied())
+            .collect::<Vec<_>>();
+        if split::whole_rows(&lines, room) != height {
+            ctx.request_repaint();
+        }
+        ctx.data_mut(|d| d.insert_temp(key, Painted(lines)));
+    });
+}
