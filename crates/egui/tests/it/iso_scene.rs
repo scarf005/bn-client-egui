@@ -502,37 +502,34 @@ fn sides(quads: &[Instance]) -> Vec<Instance> {
 }
 
 #[test]
-fn an_opaque_wall_drawn_from_above_is_a_solid_of_its_top_its_bottom_and_four_sides_a_level_tall() {
+fn an_opaque_wall_drawn_from_above_is_three_blocks_of_its_top_and_four_sides_a_level_tall() {
     let m = model(vec![wall(4, 4, "t_wall")]);
     let scene = flat_scene_of(&m, "flat-solid");
     let quads = planes(&scene);
-    assert_eq!(quads.len(), 6, "{quads:?}");
+    // The top, and four sides of three 1 m blocks stacked to the 3 m level.
+    assert_eq!(quads.len(), 1 + 4 * 3, "{quads:?}");
     let (x, y) = square(&m, (4, 4));
     let (x, y) = (x as f32, y as f32);
-    // The top and the bottom are the whole sprite over the whole square, a level apart.
-    let mut lids = quads
+    // The top is the whole sprite over the whole square, a level up.
+    let lids = quads
         .iter()
         .filter(|i| i.b[2] == 0.0)
         .map(|i| (i.origin, i.a, i.b))
         .collect::<Vec<_>>();
-    lids.sort_by(|a, b| a.0[2].total_cmp(&b.0[2]));
-    let ground = ([1.0, 0.0, 0.0], [0.0, 1.0, 0.0]);
-    assert_eq!(
-        lids,
-        [
-            ([x, y, 0.0], ground.0, ground.1),
-            ([x, y, 3.0], ground.0, ground.1)
-        ]
-    );
-    // Each side spans a whole edge of the square from the top down to the ground.
+    assert_eq!(lids, [([x, y, 3.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0])]);
+    // Each side spans a whole edge of the square, a block tall, one block at each height from the top down.
     let sides = sides(&quads);
-    assert_eq!(sides.len(), 4, "{sides:?}");
+    assert_eq!(sides.len(), 4 * 3, "{sides:?}");
     assert!(
-        sides.iter().all(|i| (i.origin[2] - 3.0).abs() < 1e-4
-            && (i.b[2] + 3.0).abs() < 1e-4
-            && (i.a[0].abs() + i.a[1].abs() - 1.0).abs() < 1e-4),
+        sides.iter().all(
+            |i| (i.b[2] + 1.0).abs() < 1e-4 && (i.a[0].abs() + i.a[1].abs() - 1.0).abs() < 1e-4
+        ),
         "{sides:?}"
     );
+    let mut tops = sides.iter().map(|i| i.origin[2]).collect::<Vec<_>>();
+    tops.sort_by(f32::total_cmp);
+    tops.dedup();
+    assert_eq!(tops, [1.0, 2.0, 3.0]);
     assert_eq!(
         scene.column(x as i32, y as i32).unwrap().solid,
         Some((0.0, 3.0))
@@ -540,59 +537,52 @@ fn an_opaque_wall_drawn_from_above_is_a_solid_of_its_top_its_bottom_and_four_sid
 }
 
 #[test]
-fn a_side_face_stretches_the_sprites_edge_pixels_down_its_height() {
+fn a_side_face_shows_the_whole_sprite_at_its_own_aspect_on_each_block() {
     let m = model(vec![wall(4, 4, "t_wall")]);
     let scene = flat_scene_of(&m, "flat-side-uv");
-    let (x, y) = square(&m, (4, 4));
-    let (x, y) = (x as f32, y as f32);
     let sides = sides(&planes(&scene));
-    // The wall is sprite 2 of its sheet: 64 pixels from the left of its page.
-    let at = |i: &Instance, u: f32| {
-        let world = glam::Vec2::new(i.origin[0] + i.a[0] * u, i.origin[1] + i.a[1] * u);
-        let page = glam::Vec2::from(i.uv) + glam::Vec2::from(i.uv_a) * u;
-        (world, page)
-    };
-    let south = sides
-        .iter()
-        .find(|i| (i.origin[1] - (y + 1.0)).abs() < 1e-4 && i.a[1] == 0.0)
-        .expect("a south face");
-    for u in [0.0, 1.0] {
-        let (world, page) = at(south, u);
-        // The bottom row of the sprite, from where the face starts to where it ends.
-        let expected = glam::Vec2::new(64.0 + (world.x - x) * 32.0, 31.5);
-        assert!((page - expected).length() < 0.15, "{page} {expected}");
+    assert!(!sides.is_empty());
+    // The wall is sprite 2 of its sheet: 64 pixels from the left of its page, 32 pixels square. Each block's face
+    // shows it from its top left corner, as many pixels across as down: no row is stretched.
+    for i in &sides {
+        let (corner, across, down) = (
+            glam::Vec2::from(i.uv),
+            glam::Vec2::from(i.uv_a),
+            glam::Vec2::from(i.uv_b),
+        );
+        assert!(
+            (corner - glam::Vec2::new(64.0, 0.0)).length() < 0.15,
+            "{i:?}"
+        );
+        assert!(
+            (across - glam::Vec2::new(32.0, 0.0)).length() < 0.15,
+            "{i:?}"
+        );
+        assert!((down - glam::Vec2::new(0.0, 32.0)).length() < 0.15, "{i:?}");
     }
-    let east = sides
-        .iter()
-        .find(|i| (i.origin[0] - (x + 1.0)).abs() < 1e-4 && i.a[0] == 0.0)
-        .expect("an east face");
-    for u in [0.0, 1.0] {
-        let (world, page) = at(east, u);
-        let expected = glam::Vec2::new(64.0 + 31.5, (world.y - y) * 32.0);
-        assert!((page - expected).length() < 0.15, "{page} {expected}");
-    }
-    // Down the face the sprite stays on that row.
-    assert!(
-        sides
-            .iter()
-            .all(|i| glam::Vec2::from(i.uv_b).length() < 1e-4),
-        "{sides:?}"
-    );
 }
 
 #[test]
-fn a_wall_with_a_hole_has_sides_round_the_hole_too() {
+fn a_wall_with_a_hole_is_whole_blocks_whose_faces_show_the_hole() {
     let m = model(vec![wall(4, 4, "t_wall_holed")]);
     let scene = flat_scene_of(&m, "flat-hole");
     let quads = planes(&scene);
-    assert_eq!(quads.len(), 2 + 4 + 4, "{quads:?}");
+    // As a block game draws a block with clear pixels: the top and the blocks' faces, nothing round the hole.
+    assert_eq!(quads.len(), 1 + 4 * 3, "{quads:?}");
     let (x, y) = square(&m, (4, 4));
-    let inner = |v: f32, base: i32| (14.0 / 32.0..=18.0 / 32.0).contains(&(v - base as f32));
+    let inner = |v: f32, base: i32| (0.01..=0.99).contains(&(v - base as f32));
     let around = sides(&quads)
         .into_iter()
         .filter(|i| inner(i.origin[0], x) && inner(i.origin[1], y))
         .count();
-    assert_eq!(around, 4, "{quads:?}");
+    assert_eq!(around, 0, "{quads:?}");
+    // Each face is the whole sprite, its hole with it.
+    assert!(
+        quads
+            .iter()
+            .all(|i| (glam::Vec2::from(i.uv_a).length() - 32.0).abs() < 0.15),
+        "{quads:?}"
+    );
 }
 
 #[test]
@@ -603,17 +593,22 @@ fn walls_side_by_side_leave_out_the_faces_they_share() {
         wall(6, 4, "t_wall"),
     ]);
     let scene = flat_scene_of(&row, "flat-row");
-    assert_eq!(planes(&scene).len(), 5 + 4 + 5);
+    // Each end wall's top and three sides of three blocks, the middle one's top and two sides.
+    assert_eq!(
+        planes(&scene).len(),
+        (1 + 3 * 3) + (1 + 2 * 3) + (1 + 3 * 3)
+    );
     let (x, _) = square(&row, (5, 4));
     let shared = sides(&planes(&scene))
         .into_iter()
         .filter(|i| i.a[0] == 0.0 && [x, x + 1].contains(&(i.origin[0] as i32)))
         .count();
     assert_eq!(shared, 0, "no face between two walls");
-    // A wall over half its square shows the face of the whole wall beside it, which hides its own.
+    // A wall whose sprite fills half its square is still whole blocks: it and the wall beside it hide the faces
+    // they share.
     let half = model(vec![wall(4, 4, "t_wall"), wall(5, 4, "t_wall_half")]);
     let scene = flat_scene_of(&half, "flat-half");
-    assert_eq!(planes(&scene).len(), 6 + 5);
+    assert_eq!(planes(&scene).len(), 2 * (1 + 3 * 3));
 }
 
 #[test]
@@ -635,16 +630,17 @@ fn a_vehicle_part_beside_a_wall_hides_its_side_there_and_the_taller_wall_keeps_i
     car["vehicle"] = look("vehicle_part", "vp_frame");
     let m = model(vec![wall(4, 4, "t_wall"), car]);
     let scene = flat_scene_of(&m, "flat-car-wall");
-    // The wall's six faces, the grass and the part's grass background, and the part's faces but its west one.
-    assert_eq!(planes(&scene).len(), 6 + 1 + 1 + 5);
+    // The wall's top and four sides of three blocks, the grass and the part's grass background, and the part's faces
+    // but its west one.
+    assert_eq!(planes(&scene).len(), (1 + 4 * 3) + 1 + 1 + 5);
     let (x, _) = square(&m, (5, 4));
     let between = sides(&planes(&scene))
         .into_iter()
         .filter(|i| i.a[0] == 0.0 && i.origin[0] == x as f32)
         .collect::<Vec<_>>();
-    assert_eq!(between.len(), 1, "{between:?}");
+    assert_eq!(between.len(), 3, "the wall's three blocks: {between:?}");
     assert!(
-        (between[0].b[2] + 3.0).abs() < 1e-4,
+        between.iter().all(|i| (i.b[2] + 1.0).abs() < 1e-4),
         "the wall's: {between:?}"
     );
 }
@@ -669,35 +665,42 @@ fn a_tree_of_an_isometric_tileset_stands_on_its_ground_which_lies_in_its_square(
 fn what_covers_some_of_a_person_drawn_from_above_stands_that_share_of_a_person_on_its_ground() {
     let mut shrub = cell(4, 4, 0, "t_shrub");
     shrub["terrain"]["coverage"] = 40.into();
-    let mut flower = cell(5, 4, 0, "t_grass");
+    let mut flower = cell(6, 4, 0, "t_grass");
     flower["furniture"] = look("furniture", "f_flower");
     flower["furniture"]["coverage"] = 80.into();
     let m = model(vec![shrub, flower]);
     let scene = flat_scene_of(&m, "flat-standing");
-    let quads = at(&scene, &m, (4, 4));
-    // The grass under it lies; the shrub is its top, its bottom and the four sides of its outline.
+    // A person is two blocks tall: what covers 40% of one is 0.8 of a block.
+    let (x, y) = square(&m, (4, 4));
+    let (fx, fy) = (x as f32, y as f32);
+    let quads = all(&scene)
+        .into_iter()
+        .filter(|i| {
+            (fx..=fx + 1.0).contains(&i.origin[0]) && (fy..=fy + 1.0).contains(&i.origin[1])
+        })
+        .collect::<Vec<_>>();
+    // The grass under it lies; the shrub is its top and its four sides.
     let ground = quads
         .iter()
         .filter(|i| i.origin[2].abs() < 0.01 && i.b[2] == 0.0)
         .count();
-    assert_eq!(quads.len(), 1 + 2 + 4, "{quads:?}");
-    assert_eq!(ground, 2, "the grass and the shrub's bottom: {quads:?}");
+    assert_eq!(quads.len(), 1 + 1 + 4, "{quads:?}");
+    assert_eq!(ground, 1, "the grass: {quads:?}");
     let top = quads.iter().map(|i| i.origin[2]).fold(f32::MIN, f32::max);
-    assert!((top - 0.4).abs() < 0.01, "{quads:?}");
+    assert!((top - 0.8).abs() < 0.01, "{quads:?}");
     assert!(
-        sides(&quads).iter().all(|i| (i.b[2] + 0.4).abs() < 0.01),
+        sides(&quads).iter().all(|i| (i.b[2] + 0.8).abs() < 0.01),
         "{quads:?}"
     );
-    let (x, y) = square(&m, (4, 4));
     let solid = scene.column(x, y).unwrap().solid.unwrap();
-    assert!((solid.1 - 0.4).abs() < 0.01, "{solid:?}");
+    assert!((solid.1 - 0.8).abs() < 0.01, "{solid:?}");
     // Furniture stands by its own coverage.
-    let furniture = at(&scene, &m, (5, 4));
+    let furniture = at(&scene, &m, (6, 4));
     let top = furniture
         .iter()
         .map(|i| i.origin[2])
         .fold(f32::MIN, f32::max);
-    assert!((top - 0.8).abs() < 0.01, "{furniture:?}");
+    assert!((top - 1.6).abs() < 0.01, "{furniture:?}");
     assert!(
         furniture.iter().all(|i| i.flags[0] & BOARD == 0),
         "{furniture:?}"
@@ -723,32 +726,38 @@ fn window(x: i32, y: i32, id: &str) -> Value {
 }
 
 #[test]
-fn a_window_drawn_from_above_is_a_sill_and_a_lintel_of_its_wall_with_the_opening_between() {
+fn a_window_drawn_from_above_is_a_sill_block_and_a_lintel_block_of_its_wall_with_a_thin_pane_between()
+ {
     let m = model(vec![window(4, 4, "t_wall")]);
     let scene = flat_scene_of(&m, "flat-window");
     let quads = planes(&scene);
-    // Each of the sill and the lintel: a top, a bottom and four sides.
-    assert_eq!(quads.len(), 2 * 6, "{quads:?}");
+    // Each of the sill, the pane and the lintel: a top and four sides.
+    assert_eq!(quads.len(), 3 * 5, "{quads:?}");
     let mut lids = quads
         .iter()
         .filter(|i| i.b[2] == 0.0)
         .map(|i| i.origin[2])
         .collect::<Vec<_>>();
     lids.sort_by(f32::total_cmp);
-    let expected = [0.0, 0.9, 2.4, 3.0];
+    let expected = [1.0, 2.0, 3.0];
     assert!(
-        lids.iter().zip(expected).all(|(a, b)| (a - b).abs() < 0.01),
+        lids.len() == 3 && lids.iter().zip(expected).all(|(a, b)| (a - b).abs() < 0.01),
         "{lids:?}"
     );
-    // Nothing is drawn in the opening.
-    assert!(
-        quads.iter().all(|i| {
-            let (high, low) = (i.origin[2], i.origin[2] + i.b[2].min(0.0));
-            high <= 0.9 + 0.01 || low >= 2.4 - 0.01
-        }),
-        "{quads:?}"
-    );
+    // In the opening only the pane is drawn, thin and along the line of the wall.
     let (x, y) = square(&m, (4, 4));
+    let opening = quads
+        .iter()
+        .filter(|i| i.origin[2] > 1.0 + 0.01 && i.origin[2] <= 2.0 + 0.01)
+        .collect::<Vec<_>>();
+    assert_eq!(opening.len(), 5, "{opening:?}");
+    assert!(
+        opening.iter().all(|i| {
+            let ys = [i.origin[1], i.origin[1] + i.a[1] + i.b[1]];
+            ys.iter().all(|v| (v - y as f32 - 0.5).abs() < 0.05)
+        }),
+        "{opening:?}"
+    );
     assert_eq!(scene.column(x, y).unwrap().solid, Some((0.0, 3.0)));
 }
 
