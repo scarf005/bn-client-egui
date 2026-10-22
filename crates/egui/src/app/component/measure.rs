@@ -130,11 +130,28 @@ impl<M: GameModel> App<M> {
             }
             Component::Panel(panel) => {
                 let frame = section::margin_width();
-                let stats = panel.stats.iter().flatten().map(|stat| {
-                    let label = text_width(ui, &markup::plain(&stat.label.shown()), &font);
-                    (label, text_width(ui, &stat_text(stat), &font))
-                });
-                let stats = fixed(section::facts_width(ui, stats));
+                let stats = panel
+                    .stats
+                    .iter()
+                    .flatten()
+                    .map(|stat| (markup::plain(&stat.label.shown()), stat_text(stat)))
+                    .collect::<Vec<_>>();
+                let width = |(label, value): &(String, String)| {
+                    (text_width(ui, label, &font), text_width(ui, value, &font))
+                };
+                // A fact without a value is a line of prose, wrapped at its longest word; one with a value
+                // keeps its label beside it.
+                let (valued, plain) = stats.iter().partition::<Vec<_>, _>(|(_, v)| !v.is_empty());
+                let valued = section::facts_width(ui, valued.into_iter().map(width));
+                let word = plain
+                    .iter()
+                    .map(|(label, _)| word_width(ui, label, &font))
+                    .fold(0.0, f32::max);
+                let stats = Extent {
+                    min: valued.max(word),
+                    natural: section::facts_width(ui, stats.iter().map(width)),
+                    grows: false,
+                };
                 let lines = [Some(prose(&markup::plain(&panel.title.shown())))]
                     .into_iter()
                     .flatten()

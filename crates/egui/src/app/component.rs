@@ -444,7 +444,23 @@ impl<M: GameModel> App<M> {
                     egui::ScrollArea::vertical()
                         .id_salt(("body", &screen.screen_id))
                         .auto_shrink(false)
-                        .show(ui, |ui| self.component(ui, screen, root, out))
+                        .show(ui, |ui| match placement.column {
+                            true => {
+                                // A row's bar reaches half a gap past each side of its table.
+                                let width = ui.available_width().min(COLUMN_WIDTH)
+                                    - ui.spacing().item_spacing.x;
+                                ui.vertical_centered(|ui| {
+                                    ui.scope(|ui| {
+                                        ui.set_width(width);
+                                        ui.with_layout(
+                                            egui::Layout::top_down(egui::Align::Min),
+                                            |ui| self.component(ui, screen, root, out),
+                                        );
+                                    })
+                                });
+                            }
+                            false => self.component(ui, screen, root, out),
+                        })
                 });
             } else {
                 // A body taller than the room scrolls above the footer, which keeps the height it had last frame,
@@ -737,10 +753,13 @@ impl<M: GameModel> App<M> {
         };
         // A banner is the screen's heading and keeps its height; any other text scrolls past a window's.
         if block.role == Some(TextRole::Banner) {
-            show(ui);
+            ui.vertical_centered(show);
         } else {
+            // The viewport is a whole number of lines tall, so none is cut across.
+            let line = ui.fonts_mut(|f| f.row_height(&font));
+            let lines = (ui.available_height() / line).floor().max(1.0);
             egui::ScrollArea::vertical()
-                .max_height(ui.available_height())
+                .max_height(lines * line)
                 .auto_shrink(true)
                 .show(ui, show);
         }

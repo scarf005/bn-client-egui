@@ -14,6 +14,9 @@ const SCREEN_SHARE: f32 = 0.6;
 /// The narrowest and the widest a dialog is.
 const DIALOG_WIDTH: (f32, f32) = (320.0, 720.0);
 
+/// The widest the column of a full screen with no map or canvas of its own is.
+pub(super) const COLUMN_WIDTH: f32 = 720.0;
+
 /// The space kept between a window and the edge of the map region.
 const REGION_MARGIN: f32 = 8.0;
 
@@ -54,6 +57,9 @@ pub(super) struct Placement {
     pub(super) table: bool,
     /// The window holds panes side by side, which a dialog's reading width would wrap word by word.
     pub(super) panes: bool,
+    /// The window fills its place with a banner and no map or canvas (the title screen): its content is one centred
+    /// column, which a selection bar would otherwise stretch across.
+    pub(super) column: bool,
 }
 
 /// A window at the left or the right side of `region`, no wider than `share` of the region nor taller than it,
@@ -125,6 +131,11 @@ pub(super) fn placement(screen: &Screen, room: &Room) -> Placement {
         class,
         place,
         room: inner.width(),
+        column: class == Class::Full
+            && !draws_world(screen)
+            && screen.components().into_iter().any(|c| {
+                matches!(c, Component::Text(t) if t.role == Some(TextRole::Banner))
+            }),
         table: screen
             .components()
             .into_iter()

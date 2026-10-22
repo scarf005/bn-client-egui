@@ -59,6 +59,7 @@ impl<M: GameModel> App<M> {
             room: place.room().x,
             table: false,
             panes: false,
+            column: false,
         };
         // As wide as its content, within the share of the room a window beside the map takes.
         let width = screen.root.as_ref().and_then(|root| {

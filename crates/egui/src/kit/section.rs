@@ -63,6 +63,7 @@ pub fn facts(ui: &mut egui::Ui, id: egui::Id, facts: &[Fact]) {
     egui::Grid::new(id)
         .num_columns(2)
         .min_col_width(0.0)
+        .max_col_width(ui.available_width())
         .show(ui, |ui| {
             for fact in facts {
                 match &fact.value {
