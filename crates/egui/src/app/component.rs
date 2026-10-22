@@ -13,6 +13,7 @@ mod overmap;
 mod panel;
 mod placement;
 mod tabs;
+mod target;
 
 use super::{App, sidebar};
 use crate::kit::section::{self, Fact};
@@ -577,10 +578,15 @@ impl<M: GameModel> App<M> {
                         ui.label(self.line(ui, &subtitle.shown()));
                     }
                     if let Some(stats) = &panel.stats {
-                        Self::facts(ui, &panel.head.id, stats);
+                        let (levels, others) = split_levels(screen, stats);
+                        Self::facts(ui, &panel.head.id, &others);
+                        self.aim_levels(ui, &levels, out);
                     }
                     if let Some(filter) = &panel.filter {
                         ui.weak(format!("/{filter}"));
+                    }
+                    if let Some(map) = panel.child.as_deref().and_then(Component::cursor_map) {
+                        self.target_candidates(ui, screen, map, out);
                     }
                     if let Some(child) = &panel.child {
                         self.component(ui, screen, child, out);
@@ -752,7 +758,7 @@ impl<M: GameModel> App<M> {
     }
 
     /// The panel's stats as facts: label and value, or a stat without a value as its label in its tone.
-    fn facts(ui: &mut egui::Ui, id: &str, stats: &[PanelStat]) {
+    fn facts(ui: &mut egui::Ui, id: &str, stats: &[&PanelStat]) {
         let facts = stats
             .iter()
             .map(|stat| {

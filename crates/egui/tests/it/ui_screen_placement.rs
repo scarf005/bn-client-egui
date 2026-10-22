@@ -11,7 +11,7 @@ use serde_json::{Value, json};
 
 type H<'a> = Harness<'a, App<EngineModel>>;
 
-fn example(file: &str, name: &str) -> Value {
+pub(crate) fn example(file: &str, name: &str) -> Value {
     let path = format!(
         "{}/../core/tests/fixtures/0.2.examples/{file}.json",
         env!("CARGO_MANIFEST_DIR")
@@ -27,7 +27,7 @@ fn example(file: &str, name: &str) -> Value {
 }
 
 /// A game in progress in a window of `size`, with `screen` on top of the map.
-fn playing<'a>(size: egui::Vec2, screen: Option<Value>) -> (H<'a>, ScriptHandle) {
+pub(crate) fn playing<'a>(size: egui::Vec2, screen: Option<Value>) -> (H<'a>, ScriptHandle) {
     playing_with(size, screen, None)
 }
 
