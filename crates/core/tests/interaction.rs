@@ -654,6 +654,7 @@ fn files_under(dir: &str) -> Vec<String> {
 /// draw what the core decides, and the binary only parses arguments.
 const CLIENT_OWNED: &[&str] = &[
     "crates/egui/src/app/component.rs",
+    "crates/egui/src/app/component/detail.rs",
     "crates/egui/src/app/component/footer.rs",
     "crates/egui/src/app/component/form.rs",
     "crates/egui/src/app/component/list.rs",
@@ -661,6 +662,7 @@ const CLIENT_OWNED: &[&str] = &[
     "crates/egui/src/app/component/overmap.rs",
     "crates/egui/src/app/component/panel.rs",
     "crates/egui/src/app/component/placement.rs",
+    "crates/egui/src/app/component/tabs.rs",
     "crates/egui/src/app/input.rs",
     "crates/egui/src/app/map.rs",
     "crates/egui/src/app/palette.rs",
