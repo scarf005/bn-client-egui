@@ -961,6 +961,10 @@ impl GameModel for EngineModel {
         self.replica.environment()?.season.clone()
     }
 
+    fn sky(&self) -> Option<protocol::Sky> {
+        self.replica.environment()?.sky.clone()
+    }
+
     fn mod_tilesets(&self) -> &[ModTileset] {
         self.replica
             .environment()
