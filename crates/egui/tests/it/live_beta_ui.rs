@@ -8,7 +8,7 @@ use bn_client_egui::EngineModel;
 use bn_client_egui::protocol::InvokeArgs;
 use bn_client_egui::{GameModel, MenuModel};
 use eframe::egui;
-use egui_kittest::kittest::Queryable;
+use egui_kittest::kittest::{NodeT, Queryable};
 use std::time::Duration;
 
 const SIZES: [(f32, f32); 2] = [(1280.0, 800.0), (1920.0, 1080.0)];
@@ -124,4 +124,70 @@ fn a_click_on_a_prompt_choice_acts_on_the_first_press() {
         settle(&mut h);
     }
     assert_eq!(missed, 0, "clicks that did nothing");
+}
+
+/// Where the message log's lines are drawn now, in tenths of a point.
+fn log_positions(h: &H) -> Vec<(String, [i32; 4])> {
+    let lines = h
+        .state()
+        .model
+        .native_log()
+        .iter()
+        .map(|l| l.shown())
+        .collect::<Vec<_>>();
+    lines
+        .iter()
+        .flat_map(|line| h.query_all_by_label_contains(line))
+        .filter_map(|n| {
+            let node = n.accesskit_node();
+            let r = node.bounding_box()?;
+            Some((
+                node.value().unwrap_or_default().to_string(),
+                [r.x0, r.y0, r.x1, r.y1].map(|v| (v * 10.0) as i32),
+            ))
+        })
+        .collect()
+}
+
+/// The message log of a sidebar dragged narrow does not move while nothing new is logged.
+#[test]
+#[ignore = "needs BN_ENGINE and a Vulkan adapter"]
+fn a_message_log_in_a_narrow_sidebar_stays_still() {
+    let mut h = client(SIZES[0]);
+    new_game(&mut h, "new_game:play_now_default");
+    for _ in 0..6 {
+        h.state_mut().model.invoke_action("pause");
+        run_until(&mut h, "the turn", 60, |h| !h.state().model.busy());
+    }
+    settle(&mut h);
+    let handle = h.get_by_label("Resize sidebar").rect().center();
+    for width in [0.0, 160.0, 300.0] {
+        let to = handle + egui::vec2(width, 0.0);
+        h.hover_at(handle);
+        h.run_steps(2);
+        for (pos, pressed) in [(handle, true), (to, true), (to, false)] {
+            h.event(egui::Event::PointerButton {
+                pos,
+                button: egui::PointerButton::Primary,
+                pressed,
+                modifiers: egui::Modifiers::NONE,
+            });
+            h.hover_at(pos);
+            h.run_steps(2);
+        }
+        settle(&mut h);
+        let mut seen = vec![];
+        for _ in 0..40 {
+            h.run_steps(1);
+            std::thread::sleep(Duration::from_millis(16));
+            seen.push(log_positions(&h));
+        }
+        let changing = seen.windows(2).filter(|w| w[0] != w[1]).count();
+        println!(
+            "LOGJUMP width +{width}: lines {} moved in {changing} of 39 frames",
+            seen[0].len()
+        );
+        save(&mut h, &format!("log-narrow-{width}.png"));
+        assert_eq!(changing, 0, "the log moved at +{width}");
+    }
 }
