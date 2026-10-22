@@ -396,7 +396,13 @@ impl<M: GameModel> App<M> {
                     .frame(egui::Frame::NONE)
                     .show_separator_line(false)
                     .show(ui, |ui| footer(ui, out));
-                egui::CentralPanel::no_frame().show(ui, |ui| self.component(ui, screen, root, out));
+                // A body taller than the room, a full-size grid over further parts, scrolls instead of being cut.
+                egui::CentralPanel::no_frame().show(ui, |ui| {
+                    egui::ScrollArea::vertical()
+                        .id_salt(("body", &screen.screen_id))
+                        .auto_shrink(false)
+                        .show(ui, |ui| self.component(ui, screen, root, out))
+                });
             } else {
                 self.component(ui, screen, root, out);
                 footer(ui, out);
@@ -526,8 +532,10 @@ impl<M: GameModel> App<M> {
         let count = lines.len();
         for (n, line) in lines.into_iter().enumerate() {
             let widths = layout::split_widths(&extents[line.clone()], room, gap);
-            // Each line gets its share of the height left, so a list in one does not push the next out.
-            let height = ui.available_height() / (count - n) as f32;
+            // Each line gets its share of the height left, so a list in one does not push the next out; past a
+            // line taller than its share, a line still gets a few rows, and the window scrolls to them.
+            let floor = 4.0 * ui.text_style_height(&egui::TextStyle::Body);
+            let height = (ui.available_height() / (count - n) as f32).max(floor);
             let mut panes = |ui: &mut egui::Ui| {
                 ui.horizontal_top(|ui| {
                     for (child, width) in parts[line.clone()].iter().zip(&widths) {
@@ -536,7 +544,7 @@ impl<M: GameModel> App<M> {
                         } else {
                             egui::Stroke::NONE
                         };
-                        let size = egui::vec2(*width, height.min(ui.available_height()));
+                        let size = egui::vec2(*width, height);
                         let rect = egui::Rect::from_min_size(ui.cursor().min, size);
                         let down = egui::Layout::top_down(egui::Align::Min);
                         let mut pane =
