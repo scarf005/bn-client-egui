@@ -62,7 +62,25 @@ impl Default for Camera {
     }
 }
 
+/// The engine's eight steps and the way each goes on the map, counter-clockwise from east as the yaw turns.
+const STEPS: [(&str, (i32, i32)); 8] = [
+    ("RIGHT", (1, 0)),
+    ("RIGHTDOWN", (1, 1)),
+    ("DOWN", (0, 1)),
+    ("LEFTDOWN", (-1, 1)),
+    ("LEFT", (-1, 0)),
+    ("LEFTUP", (-1, -1)),
+    ("UP", (0, -1)),
+    ("RIGHTUP", (1, -1)),
+];
+
 impl Camera {
+    /// The step that goes the way the step `key` points on the screen, up being away from the eye: the nearest of
+    /// the eight to that way on the map. None for what is not a step.
+    pub fn screen_step(&self, key: &str) -> Option<&'static str> {
+        STEPS.iter().find(|(id, _)| *id == key).map(|_| None)?
+    }
+
     /// Turns the camera by `yaw` around the target and tilts it by `pitch`, radians.
     pub fn orbit(&mut self, yaw: f32, pitch: f32) {
         self.yaw = (self.yaw + yaw).rem_euclid(std::f32::consts::TAU);
@@ -247,6 +265,61 @@ mod tests {
         // The same screen point on the ground is a square further back.
         let ground = v.pick(v.project_seen(on_wall_top), 0.0).unwrap();
         assert_ne!(ground.floor(), hit.floor());
+    }
+
+    #[test]
+    fn a_step_key_moves_the_way_it_points_on_the_screen_at_any_yaw_and_in_first_person() {
+        let screen = [
+            ("UP", Vec2::new(0.0, -1.0)),
+            ("DOWN", Vec2::new(0.0, 1.0)),
+            ("LEFT", Vec2::new(-1.0, 0.0)),
+            ("RIGHT", Vec2::new(1.0, 0.0)),
+            ("LEFTUP", Vec2::new(-1.0, -1.0)),
+            ("RIGHTDOWN", Vec2::new(1.0, 1.0)),
+        ];
+        let ways = [
+            ("UP", (0, -1)),
+            ("RIGHTUP", (1, -1)),
+            ("RIGHT", (1, 0)),
+            ("RIGHTDOWN", (1, 1)),
+            ("DOWN", (0, 1)),
+            ("LEFTDOWN", (-1, 1)),
+            ("LEFT", (-1, 0)),
+            ("LEFTUP", (-1, -1)),
+        ];
+        for yaw in (0..24).map(|n| n as f32 * 15.0 + 7.0) {
+            let v = view(yaw, 35.264);
+            let origin = v.project_seen(v.target);
+            for (key, wanted) in screen {
+                let step = v.camera.screen_step(key).expect("a step");
+                let (dx, dy) = ways.iter().find(|(id, _)| *id == step).unwrap().1;
+                let drawn =
+                    v.project_seen(v.target + Vec3::new(dx as f32, dy as f32, 0.0)) - origin;
+                // On the screen the step goes within an eighth of a turn of where its key points.
+                let off = drawn.angle_to(wanted).abs();
+                assert!(off < std::f32::consts::FRAC_PI_4, "yaw {yaw} {key}: {step}");
+            }
+        }
+        // At the default yaw the eye is south-west: up the screen is north-east.
+        assert_eq!(Camera::default().screen_step("UP"), Some("RIGHTUP"));
+        // Looking north from the south, the steps are the game's own.
+        let north = Camera {
+            yaw: std::f32::consts::FRAC_PI_2,
+            ..Camera::default()
+        };
+        for (step, _) in ways {
+            assert_eq!(north.screen_step(step), Some(step));
+        }
+        // The first-person eye looks the way the orbit's eye looks at the avatar, so the steps are the same.
+        let first = Camera {
+            first_person: true,
+            ..Camera::default()
+        };
+        assert_eq!(
+            first.screen_step("LEFT"),
+            Camera::default().screen_step("LEFT")
+        );
+        assert_eq!(Camera::default().screen_step("pickup"), None);
     }
 
     #[test]
