@@ -216,11 +216,31 @@ fn a_full_screen_follows_the_map_region_when_it_grows() {
     );
 }
 
+/// A screen first shown in a narrower region, before the sidebar or the window settled, is never narrower than
+/// one first shown in the region it ends in.
+#[test]
+fn a_screen_widens_with_the_map_region_to_the_width_it_has_there() {
+    let screen = || example("distractions", "distraction manager");
+    let (mut grown, _) = playing(SIZES[0], screen(), None);
+    grown.set_size(SIZES[1]);
+    grown.run_steps(4);
+    common::settle_windows(&mut grown);
+    let (fresh, _) = playing(SIZES[1], screen(), None);
+    let (grown, fresh) = (
+        window_of(&grown, "distraction_manager"),
+        window_of(&fresh, "distraction_manager"),
+    );
+    assert!(
+        grown.width() >= fresh.width() - 1.0,
+        "{grown:?} narrower than {fresh:?}"
+    );
+}
+
 #[test]
 fn a_dialog_is_no_wider_than_a_readable_column() {
     for size in SIZES {
-        let (h, _) = playing(size, example("info", "message log"), None);
-        let window = window_of(&h, "messages");
+        let (h, _) = playing(size, example("npctalk", "NPC talk screen"), None);
+        let window = window_of(&h, "talk");
         let room = region(&h).width() - 2.0 * MARGIN;
         assert!(
             window.width() <= 720.0_f32.min(0.6 * room) + 1.0,
@@ -228,6 +248,17 @@ fn a_dialog_is_no_wider_than_a_readable_column() {
         );
         assert!(window.width() >= 320.0, "{size:?}: {window:?}");
     }
+}
+
+/// A table has no words to wrap: a dialog holding one is as wide as its labels beside its columns need, past the
+/// reading column, which at 1280x800 leaves the mutation table's labels no room.
+#[test]
+fn a_dialog_holding_a_table_keeps_each_label_on_one_line() {
+    let screen = example("character", "mutation screen");
+    let (h, _) = playing(SIZES[0], screen.clone(), None);
+    let labels = common::legible::column_list_labels(&screen);
+    let wrapped = common::legible::wrapped_labels(&h.output().shapes, &labels);
+    assert!(wrapped.is_empty(), "{wrapped:#?}");
 }
 
 #[test]
