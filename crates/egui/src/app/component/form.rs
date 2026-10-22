@@ -49,6 +49,24 @@ pub(super) fn key_fill(screen: &Screen, key: &str) -> Option<Intent> {
     })
 }
 
+/// The call that confirms the text the screen's list filter holds, when the screen is one.
+pub(super) fn filter_submit(screen: &Screen) -> Option<Intent> {
+    screen.components().into_iter().find_map(|c| {
+        let Component::Form(form) = c else {
+            return None;
+        };
+        let submit = find(screen, form.submit.as_deref()?)
+            .filter(|a| a.enabled && a.role == Some(AffordanceRole::Confirm))?;
+        let field = form.fields.iter().find(|f| f.kind == FieldKind::Text)?;
+        Some(Intent::Fill {
+            affordance: submit.id.clone(),
+            form: form.head.id.clone(),
+            field: field.id.clone(),
+            value: field.value.clone(),
+        })
+    })
+}
+
 impl<M: GameModel> App<M> {
     pub(super) fn form(
         &self,

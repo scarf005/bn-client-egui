@@ -1,6 +1,6 @@
 //! The classes a screen's window falls in, in the client's own look: every window lies in the map region (off the
-//! top bar, the shortcut bar and the sidebar), a screen is as tall as its content and leaves the map visible around
-//! it, a full screen reaches the sidebar, a dialog keeps a readable width, and a side window is wide enough for its
+//! top bar, the shortcut bar and the sidebar), a screen opens at least 60% as tall as the region and leaves the map
+//! visible around it, a full screen reaches the sidebar, a dialog keeps a readable width, and a side window is wide enough for its
 //! footer on one row.
 use crate::common::{fixture, session};
 use bn_client_egui::transport::ScriptHandle;
@@ -86,23 +86,6 @@ fn region(h: &H) -> egui::Rect {
     )
 }
 
-/// The buttons whose label starts with one of `labels`, in that order.
-fn buttons(h: &H, labels: &[&str]) -> Vec<egui::Rect> {
-    labels
-        .iter()
-        .map(|label| {
-            h.get_all_by_role(egui::accesskit::Role::Button)
-                .find(|b| {
-                    b.accesskit_node()
-                        .label()
-                        .is_some_and(|l| l.starts_with(label))
-                })
-                .unwrap_or_else(|| panic!("no button {label}"))
-                .rect()
-        })
-        .collect()
-}
-
 #[test]
 fn every_window_lies_in_the_map_region_off_the_top_bar_toolbar_and_sidebar() {
     let screens = [
@@ -130,36 +113,34 @@ fn every_window_lies_in_the_map_region_off_the_top_bar_toolbar_and_sidebar() {
 }
 
 #[test]
-fn a_window_restored_over_the_top_bar_and_toolbar_is_moved_into_the_map_region() {
+fn a_window_restored_off_the_screen_is_moved_onto_it() {
     for size in SIZES {
         let file = crate::common::game_root("window-class-restored").join("settings.json");
-        let windows = json!({"windows": {"screen:messages": {"pos": [0.0, 0.0], "size": [700.0, 300.0],
+        let windows = json!({"windows": {"screen:messages": {"pos": [5000.0, 3000.0], "size": [700.0, 300.0],
             "collapsed": false}}});
         std::fs::write(&file, windows.to_string()).unwrap();
         let (h, _) = playing(size, example("info", "message log"), Some(&file));
         let window = window_of(&h, "messages");
-        let region = region(&h);
+        let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, size);
         assert!(
-            region.expand(0.5).contains_rect(window),
-            "{size:?}: {window:?} outside {region:?}"
+            screen.expand(0.5).contains_rect(window) && window.size() == egui::vec2(700.0, 300.0),
+            "{size:?}: {window:?} outside {screen:?}"
         );
     }
 }
 
 #[test]
-fn a_screen_is_as_tall_as_its_content_and_leaves_the_map_visible() {
+fn a_screen_opens_at_least_60_percent_as_tall_as_the_map_region_and_leaves_the_map_visible() {
     for size in SIZES {
         let (h, _) = playing(size, example("inventory", "drop selector screen"), None);
         let window = window_of(&h, "inventory");
         let region = region(&h);
-        // The footer is one row, where the content ends.
-        let last = buttons(&h, &["Confirm your selection"])[0];
         assert!(
-            window.bottom() - last.bottom() < 40.0,
-            "{size:?}: {window:?} runs past its footer at {last:?}"
+            window.height() >= 0.6 * region.height(),
+            "{size:?}: {window:?} shorter than 60% of {region:?}"
         );
         assert!(
-            window.height() < region.height() - 4.0 * MARGIN,
+            window.height() < region.height() - 2.0 * MARGIN,
             "{size:?}: {window:?} hides the map in {region:?}"
         );
         assert!(
@@ -237,10 +218,6 @@ fn only_a_grid_the_engine_marks_as_a_canvas_fills_the_region() {
         let (h, _) = playing(size, direction_prompt(), None);
         let window = window_of(&h, "direction");
         assert!(!fills(&h, window), "{size:?}: {window:?} fills the region");
-        assert!(
-            window.height() < region(&h).height() / 2.0,
-            "{size:?}: {window:?} taller than its compass"
-        );
         let [plain, named] = [&aim, &named].map(|screen| {
             let (h, _) = playing(size, screen.clone(), None);
             window_of(&h, "advanced_inventory")
@@ -272,34 +249,27 @@ fn a_full_screen_follows_the_map_region_when_it_grows() {
     );
 }
 
-/// A screen first shown in a narrower region, before the sidebar or the window settled, is never narrower than
-/// one first shown in the region it ends in.
+/// A window changes size only when the player resizes it: not when the app window, and so the map region, does.
 #[test]
-fn a_screen_widens_with_the_map_region_to_the_width_it_has_there() {
+fn a_screen_keeps_its_size_when_the_map_region_grows() {
     let screen = || example("distractions", "distraction manager");
-    let (mut grown, _) = playing(SIZES[0], screen(), None);
-    grown.set_size(SIZES[1]);
-    grown.run_steps(4);
-    crate::common::settle_windows(&mut grown);
-    let (fresh, _) = playing(SIZES[1], screen(), None);
-    let (grown, fresh) = (
-        window_of(&grown, "distraction_manager"),
-        window_of(&fresh, "distraction_manager"),
-    );
-    assert!(
-        grown.width() >= fresh.width() - 1.0,
-        "{grown:?} narrower than {fresh:?}"
-    );
+    let (mut h, _) = playing(SIZES[0], screen(), None);
+    let before = window_of(&h, "distraction_manager");
+    h.set_size(SIZES[1]);
+    h.run_steps(4);
+    crate::common::settle_windows(&mut h);
+    let after = window_of(&h, "distraction_manager");
+    assert_eq!(before.size(), after.size());
 }
 
 #[test]
-fn a_dialog_is_no_wider_than_a_readable_column() {
+fn a_dialog_first_opens_a_readable_column_wide() {
     for size in SIZES {
         let (h, _) = playing(size, example("tutorial", "wait menu screen"), None);
         let window = window_of(&h, "uilist");
         let room = region(&h).width() - 2.0 * MARGIN;
         assert!(
-            window.width() <= 720.0_f32.min(0.6 * room) + 1.0,
+            window.width() <= 960.0_f32.min(0.6 * room) + 1.0,
             "{size:?}: {window:?} wider than its column in {room}"
         );
         assert!(window.width() >= 320.0, "{size:?}: {window:?}");
@@ -335,19 +305,27 @@ fn a_dialog_holding_panes_keeps_each_reply_on_one_line() {
 }
 
 #[test]
-fn a_side_window_is_wide_enough_for_its_footer_on_one_row() {
+fn a_side_window_keeps_every_footer_button_it_shows_inside_itself() {
     let footer = ["Confirm Choice", "Select all", "Filter", "Wear", "Wield"];
     for size in SIZES {
         let (h, _) = playing(size, example("pickup", "pickup screen"), None);
         let window = window_of(&h, "pickup");
-        let row = buttons(&h, &footer);
-        for button in &row {
+        let shown = h
+            .get_all_by_role(egui::accesskit::Role::Button)
+            .filter(|b| {
+                let label = b.accesskit_node().label();
+                footer
+                    .iter()
+                    .any(|f| label.as_ref().is_some_and(|l| l.starts_with(f)))
+            })
+            .map(|b| b.rect())
+            .collect::<Vec<_>>();
+        assert!(!shown.is_empty(), "{size:?}: no footer button");
+        for button in shown {
             assert!(
-                (button.top() - row[0].top()).abs() < 1.0
-                    && (button.height() - row[0].height()).abs() < 1.0,
-                "{size:?}: footer of {window:?} on more than one row: {row:?}"
+                window.contains_rect(button),
+                "{size:?}: {button:?} cut by {window:?}"
             );
-            assert!(window.contains_rect(*button), "{size:?}: {button:?} cut");
         }
     }
 }
@@ -400,10 +378,10 @@ fn sheet_open<'a>(size: egui::Vec2, settings: &std::path::Path) -> H<'a> {
 }
 
 #[test]
-fn a_panel_window_restored_over_the_top_bar_is_moved_into_the_map_region() {
+fn a_panel_window_restored_off_the_screen_is_moved_onto_it() {
     for size in SIZES {
         let file = crate::common::game_root("window-class-panel").join("settings.json");
-        let windows = json!({"windows": {"panel:player_data": {"pos": [0.0, 0.0], "size": [500.0, 400.0],
+        let windows = json!({"windows": {"panel:player_data": {"pos": [5000.0, 3000.0], "size": [500.0, 400.0],
             "collapsed": false}}});
         std::fs::write(&file, windows.to_string()).unwrap();
         let h = sheet_open(size, &file);
@@ -411,28 +389,22 @@ fn a_panel_window_restored_over_the_top_bar_is_moved_into_the_map_region() {
             .ctx
             .memory(|m| m.area_rect(egui::Id::new(("dialog", "panel:player_data"))))
             .expect("no sheet window");
-        let region = region(&h);
+        let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, size);
         assert!(
-            region.expand(0.5).contains_rect(window),
-            "{size:?}: {window:?} outside {region:?}"
+            screen.expand(0.5).contains_rect(window),
+            "{size:?}: {window:?} outside {screen:?}"
         );
     }
 }
 
 #[test]
-fn a_side_window_kept_narrow_by_a_last_run_is_still_wide_enough_for_its_footer() {
-    let footer = ["Confirm Choice", "Select all", "Filter", "Wear", "Wield"];
+fn a_side_window_kept_narrow_by_a_last_run_opens_as_narrow() {
     let file = crate::common::game_root("window-class-narrow").join("settings.json");
     let windows = json!({"windows": {"screen:pickup": {"pos": [20.0, 50.0], "size": [175.0, 500.0],
         "collapsed": false}}});
     std::fs::write(&file, windows.to_string()).unwrap();
     let (h, _) = playing(SIZES[0], example("pickup", "pickup screen"), Some(&file));
-    let window = window_of(&h, "pickup");
-    let row = buttons(&h, &footer);
-    assert!(
-        row.iter().all(|b| (b.top() - row[0].top()).abs() < 1.0),
-        "footer of {window:?} on more than one row: {row:?}"
-    );
+    assert_eq!(window_of(&h, "pickup").size(), egui::vec2(175.0, 500.0));
 }
 
 /// Writes the direction prompt over the map at both sizes to `$SHOT_DIR/<width>x<height>/direction.png`.

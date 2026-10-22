@@ -8,6 +8,7 @@ use bn_client_core::localise::{Value as Arg, tr, tr_format};
 use bn_client_core::protocol::{PanelKind, SidebarSide};
 use bn_client_core::{CommandStatus, Failure, GameModel, Loading, Pos, interaction};
 use eframe::egui::{self, accesskit};
+use map::MapView;
 
 mod component;
 mod input;
@@ -51,10 +52,10 @@ impl<M: GameModel> App<M> {
             place: None,
             movable: false,
             width: None,
-            height: None,
-            max_width: None,
+            scrolls: true,
             frame: None,
-            title_bar: !title.is_empty(),
+            // Over the game every window has one; the title screen's untitled menu is the home they open from.
+            title_bar: !title.is_empty() || !interaction::titled(self.model.screens()),
             closable: false,
             help: None,
         }
@@ -178,7 +179,7 @@ pub struct App<M: GameModel> {
     /// The room the map panel took in the last frame: where screens and dialogs sit.
     region: Option<egui::Rect>,
     /// The map canvas's top left corner and a square's side in the last frame, to place a window off the cursor.
-    map_view: Option<(egui::Pos2, f32)>,
+    map_view: Option<MapView>,
     /// The engine's selected row of the open menu, to keep it in view when the wheel moves it.
     menu_cursor: Option<String>,
     /// The text prompt that already took the keyboard focus when it opened.
@@ -417,6 +418,9 @@ impl<M: GameModel> App<M> {
             .then(|| self.pending_since.unwrap_or_else(|| self.clock.now()));
         if !self.images {
             egui_extras::install_image_loaders(ui.ctx());
+            // A steady text cursor: nothing moves that the player did not move.
+            ui.ctx()
+                .all_styles_mut(|s| s.visuals.text_cursor.blink = false);
             self.images = true;
         }
         if let Some(failure) = self.model.failure() {
@@ -570,10 +574,11 @@ impl<M: GameModel> App<M> {
         }
         // Stops a wait or other activity, like the native interrupt key.
         if self.model.busy() {
-            // Still, the activity is told by the status text above; only the motion goes.
-            if self.display.reduced_motion() {
+            // Still, the activity is told by the status text above; only the motion goes, and a command
+            // too short to show is no motion at all.
+            if self.settled() && self.display.reduced_motion() {
                 ui.label("…");
-            } else {
+            } else if self.settled() {
                 ui.spinner();
             }
             if ui.button(tr("Interrupt")).clicked() {

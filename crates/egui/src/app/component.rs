@@ -69,18 +69,17 @@ pub(super) struct Screens {
     overmap: RefCell<Vec<OvermapPaint>>,
     /// A panel window is being drawn: its screen takes no command, so its tabs and rows only move its focus.
     pub(super) passive: bool,
+    /// The row to choose once the filter prompt that showed it has confirmed its text.
+    reach: Option<String>,
     /// The most rows the lists drawn now show before they scroll, when fewer than their room holds.
     list_rows: std::cell::Cell<Option<usize>>,
 }
 
 /// A list's scroll offset in the last frame, and the row of the focus it last brought into sight.
-/// What a window kept off the cursor holds while its screen is open: its side and the largest size its content has had.
+/// What a window kept off the cursor holds while its screen is open: its side.
 #[derive(Clone, Copy)]
 struct Anchor {
     left: bool,
-    width: f32,
-    /// The height of the window's content.
-    content: f32,
 }
 
 #[derive(Default)]
@@ -123,6 +122,8 @@ enum Intent {
     More(String),
     /// A row of a list that runs nothing was double-clicked.
     Open,
+    /// A result row of a list filter's prompt was clicked: confirm the text, then choose the row.
+    Reach(String),
     Text(String),
     Pane(String),
     Confirm,
@@ -221,6 +222,44 @@ impl<M: GameModel> App<M> {
         if let Some((id, args)) = self.screens.interaction.take_select() {
             let _ = self.model.invoke_affordance(&id, args);
         }
+        self.reach_row();
+    }
+
+    /// Chooses the row a filter's result click named once the prompt is gone and the list has it; a list that
+    /// lacks it, or is not a list, ends the wait.
+    fn reach_row(&mut self) {
+        let Some(row) = self.screens.reach.clone() else {
+            return;
+        };
+        let Some(top) = interaction::described(self.model.screens()) else {
+            return;
+        };
+        if form::filter_submit(top).is_some() {
+            return;
+        }
+        self.screens.reach = None;
+        let found = top.components().into_iter().find_map(|c| match c {
+            Component::List(list) if self.model.rows(list).iter().any(|r| r.id == row) => {
+                Some((list.head.id.clone(), list.activate.clone()))
+            }
+            _ => None,
+        });
+        if let Some((component, Some(activate))) = found {
+            self.screens.interaction.focus_row(&component, &row);
+            let out = self.screens.interaction.activate(top, &activate);
+            self.settle(out);
+        }
+    }
+
+    /// What the window of `screen` is remembered as: a list filter's prompt is the window of the screen it filters,
+    /// so typing in it neither moves nor resizes that window.
+    fn window_kind(&self, screen: &Screen) -> Option<String> {
+        let stack = self.model.screens();
+        let below = stack.len().checked_sub(2).and_then(|at| stack.get(at));
+        match (form::filter_submit(screen), below) {
+            (Some(_), Some(below)) => super::screen_kind(below),
+            _ => super::screen_kind(screen),
+        }
     }
 
     /// The screen on top drawn from its components when the engine describes it so, else the 0.1 menu.
@@ -231,7 +270,7 @@ impl<M: GameModel> App<M> {
         };
         let mut out = vec![];
         let cancel = interaction::with_role(top, AffordanceRole::Cancel).map(|a| a.id.clone());
-        let kind = super::screen_kind(top);
+        let kind = self.window_kind(top);
         // Only the lists drawn this frame have a page.
         self.screens.list_pages.borrow_mut().clear();
         let shown = self.screen_window(ctx, top, &mut out);
@@ -266,10 +305,11 @@ impl<M: GameModel> App<M> {
         self.sync_screens();
         let pages = self.screens.list_pages.borrow().clone();
         let keys = super::input::frame_keys(ctx).into_iter().map(|k| k.token);
-        // A text box has the typing; its keys are not the screen's, except Escape, which closes the screen.
+        // A text box has the typing; its keys are not the screen's, except Escape, which closes the screen (a filled filter box clears first).
         let typing = ctx.text_edit_focused();
+        let clears = crate::editor::clears_on_escape(ctx);
         let keys = keys
-            .filter(|key| !typing || key == "ESC")
+            .filter(|key| !typing || (key == "ESC" && !clears))
             .collect::<Vec<_>>();
         // A Tab the screen takes is its own: egui must not also walk its focus onto a widget. Any other Tab
         // walks egui's focus over the buttons.
@@ -338,6 +378,13 @@ impl<M: GameModel> App<M> {
             Intent::Text(typed) => return interaction.answer_text(&typed),
             Intent::Cancel => return interaction.cancel(),
             Intent::Open => return,
+            Intent::Reach(row) => {
+                let Some(confirm) = form::filter_submit(top) else {
+                    return;
+                };
+                self.screens.reach = Some(row);
+                return self.apply(confirm);
+            }
             Intent::Run(id) => interaction.activate(top, &id),
             Intent::Move { affordance, at } => {
                 let args = InvokeArgs {
@@ -373,14 +420,8 @@ impl<M: GameModel> App<M> {
         let frame = super::menu::list_frame(ctx);
         let region = self.region.unwrap_or_else(|| ctx.content_rect());
         // The squares to keep clear: the engine's cursor and the avatar, a square around each.
-        let avoid = self.map_view.map_or(vec![], |(origin, cell)| {
-            let square = |at: Pos| {
-                egui::Rect::from_min_size(
-                    origin + egui::vec2(at.x as f32, at.y as f32) * cell,
-                    egui::Vec2::splat(cell),
-                )
-                .expand(KEEP_CLEAR * cell)
-            };
+        let avoid = self.map_view.map_or(vec![], |view| {
+            let square = |at: Pos| view.square(at).expand(KEEP_CLEAR * view.cell);
             self.model
                 .focus()
                 .into_iter()
@@ -388,8 +429,7 @@ impl<M: GameModel> App<M> {
                 .map(square)
                 .collect()
         });
-        // A window kept off the cursor holds its side and the largest size its content has had while its screen is
-        // open, so the content changes in place as the target does.
+        // A window kept off the cursor holds its side while its screen is open; its size is the player's.
         let anchored = keeps_off_cursor(screen);
         let anchor_key = egui::Id::new(("anchored", &screen.screen_id));
         let anchor = ctx
@@ -404,8 +444,7 @@ impl<M: GameModel> App<M> {
         };
         let placement = placement(screen, &room);
         let place = placement.place;
-        let base = self.window_spec(ctx, super::screen_kind(screen).as_deref(), &title);
-        let base_id = base.id;
+        let base = self.window_spec(ctx, self.window_kind(screen).as_deref(), &title);
         let title_bar = base.title_bar;
         let named = screen.root.as_ref().map_or_else(HashSet::new, claimed);
         let rest = screen
@@ -413,20 +452,6 @@ impl<M: GameModel> App<M> {
             .iter()
             .filter(|a| !named.contains(a.id.as_str()))
             .collect::<Vec<_>>();
-        // A window is as wide as its content and its footer on one row, as its class allows.
-        let width = screen.root.as_ref().and_then(|root| {
-            let builder = egui::UiBuilder::new().max_rect(region);
-            let ui = egui::Ui::new(ctx.clone(), egui::Id::new("measure"), builder);
-            let margin = frame.total_margin().sum().x + ui.spacing().window_margin.sum().x;
-            let content = self.extent(&ui, screen, root, placement.widest() - margin);
-            let content = Extent {
-                min: content.min + margin,
-                natural: content.natural + margin,
-                ..content
-            };
-            placement.width(content, footer_width(&ui, &rest, title_bar) + margin)
-        });
-        let width = width.map(|w| w.max(anchor.map_or(0.0, |a| a.width)));
         // The help sits in the title bar, or last in the footer of a window that has none.
         let titled = interaction::with_role(screen, AffordanceRole::Help)
             .filter(|a| a.enabled && base.title_bar);
@@ -435,19 +460,18 @@ impl<M: GameModel> App<M> {
             frame: Some(frame),
             place: Some(place),
             movable: !keeps_off_cursor(screen) && placement.class != Class::Full,
-            width,
+            width: placement.first_width(),
+            scrolls: false,
             help: titled.map(|a| windows::TitleHelp {
                 label: markup::plain(&a.label.shown()),
                 tip: glyph_tip(a),
             }),
             ..base
         };
-        let content = std::cell::Cell::new(0.0_f32);
         let shown = windows::show(ctx, spec, |ui| {
             let Some(root) = &screen.root else {
                 return;
             };
-            ui.set_min_height(anchor.map_or(0.0, |a| a.content));
             let footer = |ui: &mut egui::Ui, out: &mut Vec<Intent>| {
                 self.question(ui, screen, out);
                 if let Some(denial) = &self.screens.denial {
@@ -501,28 +525,9 @@ impl<M: GameModel> App<M> {
                 let height = ui.min_rect().bottom() - top;
                 ctx.data_mut(|d| d.insert_temp(kept, height));
             }
-            content.set(ui.min_rect().height());
         });
         if let (true, Some(left)) = (anchored, at_left(place)) {
-            let width = ctx
-                .memory(|m| m.area_rect(base_id))
-                .map_or(0.0, |r| r.width());
-            let kept = anchor.unwrap_or(Anchor {
-                left,
-                width: 0.0,
-                content: 0.0,
-            });
-            let (width, content) = (width.max(kept.width), content.get().max(kept.content));
-            ctx.data_mut(|d| {
-                d.insert_temp(
-                    anchor_key,
-                    Anchor {
-                        left,
-                        width,
-                        content,
-                    },
-                )
-            });
+            ctx.data_mut(|d| d.insert_temp(anchor_key, Anchor { left }));
         }
         if let Some(a) = titled.filter(|_| shown.help) {
             out.push(Intent::Run(a.id.clone()));
@@ -606,8 +611,9 @@ impl<M: GameModel> App<M> {
 
     /// The panes side by side, each as wide as its content needs (`split::split_widths`), the only prose of
     /// peers as wide as the rest (`split::prose_widths`) and a list beside its detail at least two fifths of the
-    /// room (`split::detail_widths`). Peers whose minimums do not fit go on to further lines
-    /// (`split::wrap_lines`); a line whose minimums still do not fit scrolls sideways instead of breaking words.
+    /// room (`split::detail_widths`). Panes whose minimums do not fit go on to further lines
+    /// (`split::wrap_lines`), a detail under its list; a line whose minimums still do not fit scrolls sideways
+    /// instead of breaking words.
     /// Peers on more than one line are as tall as what they hold, a list up to `PEER_ROWS` rows, and scroll
     /// down together; one line of panes, peers around a map or a canvas, and a list beside its detail share the
     /// height they have.
@@ -619,6 +625,12 @@ impl<M: GameModel> App<M> {
         parts: &[&Component],
         out: &mut Vec<Intent>,
     ) {
+        // A list filter's box is above the results it filters.
+        if form::filter_submit(screen).is_some() {
+            return parts
+                .iter()
+                .for_each(|child| self.component(ui, screen, child, out));
+        }
         let gap = ui.spacing().item_spacing.x;
         let room = ui.available_width();
         let texts = (0..parts.len())
@@ -636,10 +648,7 @@ impl<M: GameModel> App<M> {
         };
         let laid = |ui: &egui::Ui, room: f32| {
             let extents = measure(ui, parts, room);
-            let lines = match split.relation {
-                Relation::Peers => split::wrap_lines(&extents, room, gap),
-                Relation::Detail => std::iter::once(0..parts.len()).collect(),
-            };
+            let lines = split::wrap_lines(&extents, room, gap);
             (extents, lines)
         };
         let (mut extents, mut lines) = laid(ui, room);
@@ -676,7 +685,8 @@ impl<M: GameModel> App<M> {
                 };
                 // Peers as tall as they hold have no bottom; sharing the height, each line gets its share of
                 // what is left, past a few rows.
-                let floor = 4.0 * ui.text_style_height(&egui::TextStyle::Body);
+                let spacing = ui.spacing();
+                let floor = 4.0 * (spacing.interact_size.y + spacing.item_spacing.y);
                 let height = match natural {
                     true => f32::INFINITY,
                     false => (ui.available_height() / (count - n) as f32).max(floor),

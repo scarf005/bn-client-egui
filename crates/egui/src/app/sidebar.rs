@@ -265,6 +265,9 @@ impl<M: GameModel> App<M> {
         // The log's lines, commands and sounds scroll inside the panel: content taller than the panel would
         // otherwise make the panel report a lower edge, and the panels above it would be drawn under it.
         let room = ui.available_height();
+        // Bars float over the lines: one that took the lines' width when they overflow would wrap them
+        // differently, so that they overflow no more, and the log would flip between the two every frame.
+        ui.spacing_mut().scroll = egui::style::ScrollStyle::floating();
         egui::ScrollArea::vertical()
             .id_salt("log_panel")
             .auto_shrink([false, false])

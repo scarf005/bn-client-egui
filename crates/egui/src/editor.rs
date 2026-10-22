@@ -135,6 +135,15 @@ struct Typing {
     submit: bool,
 }
 
+/// Where the id of the typing prompt's box is kept while it holds text, as of its last frame.
+const FILLED: egui::Id = egui::Id::NULL;
+
+/// Whether the focused text box is a typing prompt holding text, whose Escape empties it instead of closing.
+pub fn clears_on_escape(ctx: &egui::Context) -> bool {
+    let filled = ctx.data(|d| d.get_temp::<Option<egui::Id>>(FILLED).flatten());
+    filled.is_some_and(|id| ctx.memory(|m| m.has_focus(id)))
+}
+
 /// What a typing prompt hands out this frame.
 #[derive(Default)]
 pub struct Typed {
@@ -181,8 +190,32 @@ pub fn typing_prompt(
         }
         state.engine = value.into();
     }
-    let edit = egui::TextEdit::singleline(&mut state.text).desired_width(f32::INFINITY);
+    // Escape empties a filled box first; the screen's own Escape waits for an empty one.
+    let box_id = egui::Id::new(("typing-box", id));
+    let cleared = !state.text.is_empty()
+        && ui.memory(|m| m.has_focus(box_id))
+        && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
+    if cleared {
+        state.text.clear();
+    }
+    let edit = egui::TextEdit::singleline(&mut state.text)
+        .id(box_id)
+        .desired_width(f32::INFINITY);
     let response = ui.add(edit.hint_text(label));
+    // egui drops the focus of a box on Escape unless the box's event filter says it handles it.
+    if response.has_focus() && !state.text.is_empty() {
+        ui.memory_mut(|m| {
+            m.set_focus_lock_filter(
+                box_id,
+                egui::EventFilter {
+                    escape: true,
+                    horizontal_arrows: true,
+                    vertical_arrows: true,
+                    ..Default::default()
+                },
+            )
+        });
+    }
     let name = label.to_string();
     ui.ctx()
         .accesskit_node_builder(response.id, move |b| b.set_label(name));
@@ -201,6 +234,12 @@ pub fn typing_prompt(
                 egui::Event::Ime(egui::ImeEvent::Commit(_)) => false,
                 _ => composing,
             })
+    });
+    ui.data_mut(|d| {
+        d.insert_temp(
+            FILLED,
+            (cleared || !state.text.is_empty()).then_some(box_id),
+        )
     });
     let mut typed = Typed::default();
     if state.submit && !busy {

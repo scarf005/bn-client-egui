@@ -169,3 +169,19 @@ fn the_zoom_survives_a_restart() {
     let (h, _script) = zooming(Some(path));
     assert_eq!(h.state().display().zoom(), kept);
 }
+
+#[test]
+fn the_zoom_reaches_five_times_closer_and_farther() {
+    let (mut h, _script) = zooming(None);
+    let before = h.state().display().zoom();
+    for _ in 0..40 {
+        wheel(&mut h, 1.0);
+    }
+    let most = h.state().display().zoom() / before;
+    for _ in 0..80 {
+        wheel(&mut h, -1.0);
+    }
+    let least = h.state().display().zoom() / before;
+    assert!(most >= 5.0, "{most}");
+    assert!(least <= 0.2, "{least}");
+}

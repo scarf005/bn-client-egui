@@ -118,13 +118,8 @@ impl<M: GameModel> App<M> {
                     .into_iter()
                     .map(|c| with_margin(self.extent(ui, screen, c, room)))
                     .collect::<Vec<_>>();
-                // Peers wrap onto further lines, so they need only the room of their widest.
-                let min = match split.relation {
-                    Relation::Peers => parts.iter().map(|p| p.min).fold(0.0, f32::max),
-                    Relation::Detail => {
-                        parts.iter().map(|p| p.min).sum::<f32>() + split::gaps(parts.len(), gap)
-                    }
-                };
+                // Panes wrap onto further lines, so they need only the room of their widest.
+                let min = parts.iter().map(|p| p.min).fold(0.0, f32::max);
                 let beside = Extent {
                     min,
                     natural: parts.iter().map(|p| p.natural).sum::<f32>()

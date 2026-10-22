@@ -59,6 +59,8 @@ pub struct Paint {
     /// The format of the pass the scene is copied into.
     pub target: wgpu::TextureFormat,
     pub stats: Arc<Stats>,
+    /// What shows where nothing is drawn: the sky.
+    pub sky: egui::Color32,
 }
 
 struct Offscreen {
@@ -552,7 +554,11 @@ impl Gpu {
                 depth_slice: None,
                 resolve_target: None,
                 ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                    // The scene holds sRGB-encoded colours, as the sky's are.
+                    load: wgpu::LoadOp::Clear({
+                        let [r, g, b, _] = paint.sky.to_array().map(|c| f64::from(c) / 255.0);
+                        wgpu::Color { r, g, b, a: 1.0 }
+                    }),
                     store: wgpu::StoreOp::Store,
                 },
             })],

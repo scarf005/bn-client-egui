@@ -55,20 +55,13 @@ impl<M: GameModel> App<M> {
         let max_width = (ctx.content_rect().width() * 0.8).max(520.0);
         let kind = self.model.screens().last().and_then(super::screen_kind);
         let spec = WindowSpec {
-            title_bar: !title.is_empty(),
             closable: menu.can_cancel && !menu.acknowledges(),
-            // Rows fill the list, so the window is as wide as it may get from its first frame; growing
-            // into it later would move its centred position.
             width: Some(max_width + frame.total_margin().sum().x),
-            max_width: Some(max_width + frame.total_margin().sum().x),
-            // The window offers its content the whole height a list may take, not half of what is free.
-            height: Some(super::dialog_scroll_height(ctx)),
             frame: Some(frame),
             ..self.window_spec(ctx, kind.as_deref(), &title)
         };
         let window_id = spec.id;
         let shown = windows::show(ctx, spec, |ui| {
-            ui.set_min_width(520.0);
             // Cancel sits right under the title, so it is at the same place for every dialog.
             if menu.can_cancel && !menu.acknowledges() {
                 let button = ui.add_enabled(self.idle(), egui::Button::new(tr("Cancel")));

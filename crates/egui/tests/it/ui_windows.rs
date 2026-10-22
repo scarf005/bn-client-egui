@@ -133,15 +133,15 @@ fn a_window_is_moved_by_its_title_bar_and_found_there_after_a_restart() {
 fn a_window_is_collapsed_and_expanded_from_its_title_bar_and_stays_collapsed_after_a_restart() {
     let file = settings("windows-collapse");
     let (mut h, _) = menu_window(&file, true);
-    let arrow = egui::pos2(window(&h).left() + 14.0, title_bar(&h).center().y);
-    click(&mut h, arrow);
+    let minimize = h.get_by_label("Minimize").rect().center();
+    click(&mut h, minimize);
     h.run_steps(3);
     assert!(h.query_by_label("entry 0").is_none(), "collapsed");
     drop(h);
     let (mut h, _) = menu_window(&file, true);
     assert!(h.query_by_label("entry 0").is_none(), "still collapsed");
-    let arrow = egui::pos2(window(&h).left() + 14.0, title_bar(&h).center().y);
-    click(&mut h, arrow);
+    let expand = h.get_by_label("Expand").rect().center();
+    click(&mut h, expand);
     h.run_steps(3);
     assert!(h.query_by_label("entry 0").is_some(), "expanded");
 }
@@ -151,8 +151,8 @@ fn a_window_is_resized_from_its_edge_and_keeps_its_size_after_a_restart() {
     let file = settings("windows-resize");
     let (mut h, _) = menu_window(&file, true);
     let before = window(&h);
-    // On the frame's bottom edge, halfway across.
-    let edge = egui::pos2(before.center().x, before.bottom() + 2.0);
+    // On the window's bottom edge, halfway across.
+    let edge = egui::pos2(before.center().x, before.bottom() - 2.0);
     drag(&mut h, edge, edge + egui::vec2(0.0, -100.0));
     let after = window(&h);
     assert!(
@@ -187,7 +187,7 @@ fn a_window_resized_from_its_left_edge_keeps_its_right_edge() {
         found.unwrap().rect()
     };
     let before = dialog(&h);
-    let edge = egui::pos2(before.left() - 2.0, before.center().y);
+    let edge = egui::pos2(before.left() + 2.0, before.center().y);
     drag(&mut h, edge, edge + egui::vec2(60.0, 0.0));
     let after = dialog(&h);
     assert!(
@@ -232,7 +232,7 @@ fn a_window_the_engine_does_not_let_cancel_has_no_close_button() {
 fn a_menu_window_is_narrowed_by_dragging_its_left_edge() {
     let (mut h, _) = menu_window(&settings("windows-menu-narrow"), true);
     let before = window(&h);
-    let edge = egui::pos2(before.left() - 2.0, before.center().y);
+    let edge = egui::pos2(before.left() + 2.0, before.center().y);
     drag(&mut h, edge, edge + egui::vec2(150.0, 0.0));
     let after = window(&h);
     assert!(
@@ -291,10 +291,10 @@ fn inventory_window_as<'a>(
 /// Drags the inventory window's bottom and right edges 100 points in, so that it can move inside its room.
 fn shrink_inventory(h: &mut H) {
     let (window, _) = inventory_frame(h);
-    let bottom = egui::pos2(window.center().x, window.bottom() + 2.0);
+    let bottom = egui::pos2(window.center().x, window.bottom() - 2.0);
     drag(h, bottom, bottom - egui::vec2(0.0, 100.0));
     let (window, _) = inventory_frame(h);
-    let right = egui::pos2(window.right() + 2.0, window.center().y);
+    let right = egui::pos2(window.right() - 2.0, window.center().y);
     drag(h, right, right - egui::vec2(100.0, 0.0));
 }
 
@@ -365,7 +365,7 @@ fn a_screen_window_kept_from_a_last_run_keeps_its_size_while_the_pointer_moves_o
 }
 
 #[test]
-fn a_screen_window_kept_wider_than_the_screen_opens_no_wider_than_its_room() {
+fn a_screen_window_kept_wider_than_the_screen_opens_no_wider_than_the_screen() {
     let file = settings("windows-screen-too-wide");
     let (h, _) = inventory_window(&file);
     let (fresh, _) = inventory_frame(&h);
@@ -376,7 +376,7 @@ fn a_screen_window_kept_wider_than_the_screen_opens_no_wider_than_its_room() {
     let (h, _) = inventory_window(&file);
     let (opened, _) = inventory_frame(&h);
     assert!(
-        opened.width() <= fresh.width() + 1.0,
+        opened.width() <= 1100.0 && opened.width() > fresh.width(),
         "{fresh:?} vs {opened:?}"
     );
 }
@@ -452,4 +452,172 @@ fn a_menu_window_is_found_where_it_was_left_when_it_opens_under_another_title() 
         (again.min - moved.min).length() < 2.0,
         "{again:?} vs {moved:?}"
     );
+}
+
+/// The one window shown, as a whole.
+fn only_window(h: &H) -> egui::Rect {
+    use egui::accesskit::Role;
+    let mut windows = [Role::Window, Role::Dialog]
+        .into_iter()
+        .flat_map(|role| h.query_all_by_role(role));
+    let found = windows.next().expect("a window");
+    assert!(windows.next().is_none(), "more than one window");
+    found.rect()
+}
+
+/// A client with the window of each kind the rules are held to, by name: an engine menu, an engine screen, the
+/// action palette and the client's settings.
+fn every_window_kind<'a>() -> Vec<(&'static str, H<'a>)> {
+    let (menu, _) = menu_window(&settings("rules-menu"), true);
+    let (untitled, _) = menu_window_titled(&settings("rules-untitled"), true, "");
+    let (screen, _) = inventory_window(&settings("rules-screen"));
+    let (t, _) = session();
+    let mut palette = Harness::builder()
+        .with_size(egui::vec2(1100.0, 800.0))
+        .build_ui_state(
+            |ui, app: &mut App<EngineModel>| app.show(ui),
+            App::new(EngineModel::new(Box::new(t))),
+        );
+    palette.run_steps(3);
+    palette.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::P);
+    palette.run_steps(5);
+    let (t, _) = session();
+    let mut options = Harness::builder()
+        .with_size(egui::vec2(1100.0, 800.0))
+        .build_ui_state(
+            |ui, app: &mut App<EngineModel>| app.show(ui),
+            App::new(EngineModel::new(Box::new(t))),
+        );
+    options.run_steps(3);
+    crate::common::open_client_settings(&mut options);
+    vec![
+        ("menu", menu),
+        ("untitled menu", untitled),
+        ("screen", screen),
+        ("palette", palette),
+        ("client settings", options),
+    ]
+}
+
+#[test]
+fn a_window_is_the_size_it_was_whatever_its_content_does_for_every_kind_of_window() {
+    for (kind, mut h) in every_window_kind() {
+        let before = only_window(&h);
+        for i in 0..40 {
+            // The pointer crosses the window, hovering rows and buttons, and keys change what the content is.
+            let at = before.min
+                + egui::vec2(
+                    before.width() * (i % 10) as f32 / 10.0,
+                    20.0 + 15.0 * (i / 10) as f32 * 4.0,
+                );
+            h.hover_at(at);
+            h.run_steps(1);
+            if i % 7 == 0 {
+                h.event(egui::Event::Text("e".into()));
+            }
+            assert_eq!(only_window(&h), before, "{kind} changed at frame {i}");
+        }
+    }
+}
+
+#[test]
+fn a_menu_row_wider_than_the_window_does_not_widen_it() {
+    let (mut h, script) = menu_window(&settings("rules-wide-row"), true);
+    let before = window(&h);
+    let mut menu = fixture("events_43_menu");
+    let change = &mut menu["params"]["events"][0]["changes"]["interaction"];
+    change["interaction"]["title"] = "Pick up".into();
+    change["interaction"]["choices"] = json!([{"id": "c:0", "label": "wide ".repeat(300), "description": "",
+        "denial": "", "enabled": true, "selectable": true, "selected": true, "columns": []}]);
+    script.push(menu);
+    h.run_steps(6);
+    assert_eq!(window(&h), before);
+}
+
+/// The points on the border of `rect` that press its eight resize handles, with the edges each moves
+/// (left, right, top, bottom).
+fn borders(rect: egui::Rect) -> Vec<(egui::Pos2, [bool; 4])> {
+    let (l, r, t, b) = (
+        rect.left() + 3.0,
+        rect.right() - 3.0,
+        rect.top() + 3.0,
+        rect.bottom() - 3.0,
+    );
+    let (cx, cy) = (rect.center().x, rect.center().y);
+    vec![
+        (egui::pos2(l, cy), [true, false, false, false]),
+        (egui::pos2(r, cy), [false, true, false, false]),
+        (egui::pos2(cx, t), [false, false, true, false]),
+        (egui::pos2(cx, b), [false, false, false, true]),
+        (egui::pos2(l, t), [true, false, true, false]),
+        (egui::pos2(r, t), [false, true, true, false]),
+        (egui::pos2(l, b), [true, false, false, true]),
+        (egui::pos2(r, b), [false, true, false, true]),
+    ]
+}
+
+#[test]
+fn dragging_a_border_moves_only_that_edge_for_every_kind_of_window() {
+    for (kind, mut h) in every_window_kind() {
+        for index in 0..8 {
+            let before = only_window(&h);
+            let (from, [left, right, top, bottom]) = borders(before)[index];
+            // Each edge is dragged inward, where the screen leaves room whatever the window's place.
+            let by = egui::vec2(
+                if left { 25.0 } else { -25.0 },
+                if top { 20.0 } else { -20.0 },
+            );
+            drag(&mut h, from, from + by);
+            let after = only_window(&h);
+            let edges = [
+                (left, before.left(), after.left()),
+                (right, before.right(), after.right()),
+                (top, before.top(), after.top()),
+                (bottom, before.bottom(), after.bottom()),
+            ];
+            for (moves, was, now) in edges {
+                match moves {
+                    true => assert!(
+                        (now - was).abs() > 5.0,
+                        "{kind} {index}: {before:?} -> {after:?}"
+                    ),
+                    false => assert!(
+                        (now - was).abs() < 0.6,
+                        "{kind} {index}: {before:?} -> {after:?}"
+                    ),
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn pressing_a_border_without_dragging_changes_nothing_for_every_kind_of_window() {
+    for (kind, mut h) in every_window_kind() {
+        for index in 0..8 {
+            let before = only_window(&h);
+            let (at, _) = borders(before)[index];
+            click(&mut h, at);
+            assert_eq!(only_window(&h), before, "{kind} {index}");
+        }
+    }
+}
+
+#[test]
+fn every_window_has_minimize_maximize_and_close_buttons_that_act() {
+    for (kind, mut h) in every_window_kind() {
+        let before = only_window(&h);
+        let maximize = h.get_by_label("Maximize").rect().center();
+        click(&mut h, maximize);
+        assert_eq!(
+            only_window(&h),
+            egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1100.0, 800.0)),
+            "{kind} maximized"
+        );
+        let restore = h.get_by_label("Restore").rect().center();
+        click(&mut h, restore);
+        assert_eq!(only_window(&h), before, "{kind} restored");
+        h.get_by_label("Minimize");
+        h.get_by_label("Close window");
+    }
 }

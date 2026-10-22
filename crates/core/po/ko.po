@@ -5,7 +5,9 @@ msgid ""
 msgstr ""
 "Project-Id-Version: bn-client\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-20 08:56+0900\n"
+"POT-Creation-Date: 2026-10-23 04:21+0900\n"
+
+"POT-Creation-Date: 2026-10-23 03:04+0900\n"
 "PO-Revision-Date: 2026-10-18 09:30+0900\n"
 "Language-Team: Korean\n"
 "Language: ko\n"
@@ -14,12 +16,12 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
 
-#: crates/core/src/engine_model.rs:654
+#: crates/core/src/engine_model.rs:773
 msgid "The engine has not answered for %d second."
 msgid_plural "The engine has not answered for %d seconds."
 msgstr[0] "엔진이 %d초 동안 응답하지 않았습니다."
 
-#: crates/core/src/engine_model.rs:779
+#: crates/core/src/engine_model.rs:899
 msgid "The engine could not be restarted: %s"
 msgstr "엔진을 다시 시작하지 못했습니다: %s"
 
@@ -32,7 +34,9 @@ msgid "Right click"
 msgstr "오른쪽 클릭"
 
 #: crates/core/src/engine_model/commands.rs:141
-#: crates/egui/src/app/component/form.rs:175 crates/egui/src/app/menu.rs:73
+#: crates/egui/src/app/component/form.rs:193 crates/egui/src/app/menu.rs:67
+
+#: crates/egui/src/app/component/form.rs:175 crates/egui/src/app/menu.rs:74
 msgid "Cancel"
 msgstr "취소"
 
@@ -40,23 +44,23 @@ msgstr "취소"
 msgid "Command"
 msgstr "명령"
 
-#: crates/core/src/engine_model/responses.rs:147
+#: crates/core/src/engine_model/responses.rs:148
 msgid "Bad snapshot: %s"
 msgstr "잘못된 스냅샷: %s"
 
-#: crates/core/src/engine_model/session.rs:270
+#: crates/core/src/engine_model/session.rs:272
 msgid "Bad engine message: %s"
 msgstr "잘못된 엔진 메시지: %s"
 
-#: crates/core/src/engine_model/session.rs:278
+#: crates/core/src/engine_model/session.rs:280
 msgid "Engine connection closed."
 msgstr "엔진 연결이 끊겼습니다."
 
-#: crates/core/src/engine_model/session.rs:280
+#: crates/core/src/engine_model/session.rs:282
 msgid "The engine stopped (%s)."
 msgstr "엔진이 멈췄습니다(%s)."
 
-#: crates/core/src/engine_model/session.rs:281
+#: crates/core/src/engine_model/session.rs:283
 msgid "The engine stopped."
 msgstr "엔진이 멈췄습니다."
 
@@ -124,91 +128,113 @@ msgstr "PATH에서 %s: %s"
 msgid "cannot start engine %s: %s"
 msgstr "엔진 %s을(를) 시작할 수 없음: %s"
 
-#: crates/egui/src/app.rs:321 crates/tui/src/lib.rs:678
+#: crates/egui/src/app.rs:325 crates/tui/src/lib.rs:697
 msgid "Engine: %s"
 msgstr "엔진: %s"
 
-#: crates/egui/src/app.rs:326 crates/tui/src/lib.rs:684
+#: crates/egui/src/app.rs:330 crates/tui/src/lib.rs:703
 msgid "Last engine output:"
 msgstr "마지막 엔진 출력:"
 
-#: crates/egui/src/app.rs:333
+#: crates/egui/src/app.rs:337
 msgid "Restart"
 msgstr "다시 시작"
 
-#: crates/egui/src/app.rs:347
+#: crates/egui/src/app.rs:351
 msgid "%s: %s (%d of %d)"
 msgstr "%s: %s (%d/%d)"
 
-#: crates/egui/src/app.rs:363
+#: crates/egui/src/app.rs:367
 msgid "Loading image"
 msgstr "불러오기 그림"
 
-#: crates/egui/src/app.rs:482
+#: crates/egui/src/app.rs:489
+
+#: crates/egui/src/app.rs:486
 msgid "Resize sidebar"
 msgstr "사이드바 크기 조절"
 
-#: crates/egui/src/app.rs:510 crates/egui/src/app.rs:521
+#: crates/egui/src/app.rs:518 crates/egui/src/app.rs:529
+
+#: crates/egui/src/app.rs:515 crates/egui/src/app.rs:526
 msgid "Client settings"
 msgstr "클라이언트 설정"
 
-#: crates/egui/src/app.rs:518 crates/egui/src/app/palette.rs:57
-#: crates/egui/src/app/palette.rs:103 crates/tui/src/lib.rs:858
-#: crates/tui/src/lib.rs:1027
+#: crates/egui/src/app.rs:526 crates/egui/src/app/palette.rs:57
+
+#: crates/egui/src/app.rs:523 crates/egui/src/app/palette.rs:57
+#: crates/egui/src/app/palette.rs:103 crates/tui/src/lib.rs:881
+#: crates/tui/src/lib.rs:1050
 msgid "Actions"
 msgstr "행동"
 
-#: crates/egui/src/app.rs:536 crates/tui/src/lib.rs:647
+#: crates/egui/src/app.rs:544 crates/tui/src/lib.rs:666
+
+#: crates/egui/src/app.rs:541 crates/tui/src/lib.rs:666
 msgid "Ready"
 msgstr "준비"
 
-#: crates/egui/src/app.rs:574
+#: crates/egui/src/app.rs:583
+
+#: crates/egui/src/app.rs:579
 msgid "Interrupt"
 msgstr "중단"
 
-#: crates/egui/src/app/component/form.rs:150 crates/egui/src/editor.rs:99
+#: crates/egui/src/app/component/form.rs:168 crates/egui/src/editor.rs:116
+
+#: crates/egui/src/app/component/form.rs:150 crates/egui/src/editor.rs:116
 msgid "Press the new key"
 msgstr "새 키를 누르세요"
 
-#: crates/egui/src/app/component/form.rs:172
+#: crates/egui/src/app/component/form.rs:190
 msgid "OK"
 msgstr "확인"
 
-#: crates/egui/src/app/component/overmap.rs:325
-#: crates/egui/src/app/component/overmap.rs:489 crates/egui/src/app/map.rs:211
-#: crates/tui/src/lib.rs:734
+#: crates/egui/src/app/component/overmap.rs:359
+#: crates/egui/src/app/component/overmap.rs:527 crates/egui/src/app/map.rs:269
+#: crates/tui/src/lib.rs:753
 msgid "Map"
 msgstr "지도"
 
-#: crates/egui/src/app/component/overmap.rs:331
+#: crates/egui/src/app/component/overmap.rs:365
 msgid "Centre"
 msgstr "가운데로"
 
-#: crates/egui/src/app/component/overmap.rs:336
+#: crates/egui/src/app/component/overmap.rs:370
 msgid "Travel and notes"
 msgstr "이동과 메모"
 
-#: crates/egui/src/app/map.rs:134 crates/tui/src/lib.rs:744
+#: crates/egui/src/app/map.rs:192 crates/tui/src/lib.rs:763
 msgid "No map loaded"
 msgstr "불러온 지도가 없습니다"
 
-#: crates/egui/src/app/map.rs:284
+#: crates/egui/src/app/map.rs:342
+
+#: crates/egui/src/app/map.rs:346
 msgid "Player at (%d, %d). Cursor (%d, %d)."
 msgstr "플레이어 (%d, %d). 커서 (%d, %d)."
 
-#: crates/egui/src/app/map.rs:287
+#: crates/egui/src/app/map.rs:345
+
+#: crates/egui/src/app/map.rs:349
 msgid "Player at (%d, %d). Cursor (%d, %d): %s."
 msgstr "플레이어 (%d, %d). 커서 (%d, %d): %s."
 
-#: crates/egui/src/app/map.rs:584
+#: crates/egui/src/app/map.rs:642
+
+#: crates/egui/src/app/map.rs:646
 msgid "Map actions"
 msgstr "지도 행동"
 
-#: crates/egui/src/app/menu.rs:257
+#: crates/egui/src/app/menu.rs:251
+
+#: crates/egui/src/app/menu.rs:258
 msgid "Space or Enter closes this popup"
 msgstr "Space나 Enter로 이 창을 닫습니다"
 
-#: crates/egui/src/app/menu.rs:285
+#: crates/egui/src/app/menu.rs:279
+
+#: crates/egui/src/app/menu.rs:286
 msgid "Load more (%d of %d)"
 msgstr "더 불러오기 (%d/%d)"
 
@@ -220,37 +246,54 @@ msgstr "찾기"
 msgid "Search actions"
 msgstr "행동 찾기"
 
-#: crates/egui/src/app/sidebar.rs:54
+#: crates/egui/src/app/sidebar.rs:71
 msgid "Resize message log"
 msgstr "메시지 기록 크기 조절"
 
-#: crates/egui/src/display.rs:521
+#: crates/egui/src/display.rs:523
 msgid "No tileset found in the game's gfx folder."
 msgstr "게임의 gfx 폴더에 타일셋이 없습니다."
 
-#: crates/egui/src/display.rs:680
+#: crates/egui/src/display.rs:685
+
+#: crates/egui/src/display.rs:687
 msgid "Tiles"
 msgstr "타일"
 
-#: crates/egui/src/display.rs:689
+#: crates/egui/src/display.rs:694
+
+#: crates/egui/src/display.rs:696
 msgid "First person"
 msgstr "1인칭"
 
-#: crates/egui/src/display.rs:703
+#: crates/egui/src/display.rs:708
+
+#: crates/egui/src/display.rs:710
 msgid "none"
 msgstr "없음"
 
-#: crates/egui/src/display.rs:706
+#: crates/egui/src/display.rs:711
+
+#: crates/egui/src/display.rs:713
 msgid "Tileset"
 msgstr "타일셋"
 
-#: crates/egui/src/display.rs:722
+#: crates/egui/src/display.rs:727
+
+#: crates/egui/src/display.rs:729
 msgid "Tileset unavailable: %s"
 msgstr "타일셋을 쓸 수 없습니다: %s"
 
-#: crates/egui/src/display.rs:726
+#: crates/egui/src/display.rs:731
+
+#: crates/egui/src/display.rs:733
 msgid "Reduced motion"
 msgstr "움직임 줄이기"
+
+#. TRANSLATORS: the mark of north on the compass of the 3D map.
+#: crates/egui/src/iso/mod.rs:190
+msgid "N"
+msgstr "북"
 
 #: crates/egui/src/main.rs:32 crates/egui/src/main.rs:100
 msgid "Cataclysm: Bright Nights client"
@@ -272,11 +315,39 @@ msgstr "사용"
 msgid "%s is not an executable file"
 msgstr "%s은(는) 실행 파일이 아닙니다"
 
-#: crates/tui/src/lib.rs:649
+#: crates/egui/src/windows.rs:293
+msgid "Close window"
+msgstr "창 닫기"
+
+#: crates/egui/src/windows.rs:301
+msgid "Restore"
+msgstr "이전 크기로"
+
+#: crates/egui/src/windows.rs:303
+msgid "Maximize"
+msgstr "최대화"
+
+#: crates/egui/src/windows.rs:322
+msgid "Expand"
+msgstr "펼치기"
+
+#: crates/egui/src/windows.rs:324
+msgid "Minimize"
+msgstr "최소화"
+
+#: crates/egui/src/windows.rs:441
+msgid "Move window"
+msgstr "창 옮기기"
+
+#: crates/egui/src/windows.rs:472
+msgid "Resize window"
+msgstr "창 크기 조절"
+
+#: crates/tui/src/lib.rs:668
 msgid "%s [Esc: interrupt]"
 msgstr "%s [Esc: 중단]"
 
-#: crates/tui/src/lib.rs:688
+#: crates/tui/src/lib.rs:707
 msgid "R: restart the engine    Ctrl-C: quit"
 msgstr "R: 엔진 다시 시작    Ctrl-C: 종료"
 
