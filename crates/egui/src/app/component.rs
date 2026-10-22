@@ -5,6 +5,7 @@
 //! calls the interaction core (`bn_client_core::interaction`), which decides what is sent.
 
 mod detail;
+mod drag;
 mod footer;
 mod form;
 mod list;
@@ -24,9 +25,9 @@ use crate::{a11y, editor, text};
 use bn_client_core::interaction::{self, ArgKind, InvokeError};
 use bn_client_core::protocol::{
     Affordance, AffordanceRole, CanvasComponent, Component, Editor, EditorValue, FieldKind, Form,
-    FormField, Grid, GridRole, InvokeArgs, List, MapComponent, MapMode, OvermapTile, OvermapWire,
-    PanelStat, Relation, Row, Screen, ScreenDock, ScreenRole, Selection, SidebarSide, Split, Text,
-    TextBlock, TextRole, Tone, WorldPos,
+    FormField, Grid, GridDrag, GridRole, InvokeArgs, List, MapComponent, MapMode, OvermapTile,
+    OvermapWire, PanelStat, Relation, Row, Screen, ScreenDock, ScreenRole, Selection, SidebarSide,
+    Split, Text, TextBlock, TextRole, Tone, WorldPos,
 };
 use bn_client_core::{Cell, GameModel, Pos, Rgb, markup};
 use eframe::egui::{self, WidgetInfo, WidgetType};
@@ -39,7 +40,7 @@ use overmap::*;
 pub(super) use panel::PANELS;
 use placement::*;
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use target::*;
 
 /// The margin around each pane of a split, on every side.
@@ -75,6 +76,16 @@ pub(super) struct Screens {
     reach: Option<String>,
     /// The most rows the lists drawn now show before they scroll, when fewer than their room holds.
     list_rows: std::cell::Cell<Option<usize>>,
+    /// The squares a drag crossed that the engine has not taken yet: it holds few commands at once.
+    paints: VecDeque<Paint>,
+}
+
+/// A square of a canvas grid a drag runs its affordance on.
+struct Paint {
+    component: String,
+    /// The square's row; none for the affordance that opens or closes a drag.
+    row: Option<String>,
+    affordance: String,
 }
 
 /// What a window kept off the cursor holds while its screen is open: its side, and the pass it was last shown in.
@@ -111,6 +122,8 @@ enum Intent {
         count: u64,
     },
     Run(String),
+    /// A drag crossed a square of a canvas grid.
+    Paint(Paint),
     /// Runs the affordance that puts the cursor on a square.
     Move {
         affordance: String,
@@ -286,6 +299,32 @@ impl<M: GameModel> App<M> {
         self.paint_icons();
         self.paint_overmap(ctx);
         out.into_iter().for_each(|intent| self.apply(intent));
+        self.send_paints(ctx);
+    }
+
+    /// Runs the squares a drag crossed in order, as many as the engine takes now; the rest wait for a later frame.
+    fn send_paints(&mut self, ctx: &egui::Context) {
+        while let Some(paint) = self.screens.paints.front() {
+            let Some(top) = interaction::described(self.model.screens()) else {
+                return self.screens.paints.clear();
+            };
+            let interaction = &mut self.screens.interaction;
+            if let Some(row) = &paint.row {
+                interaction.focus_row(&paint.component, row);
+            }
+            let out = interaction.activate(top, &paint.affordance);
+            self.screens.denial = out.note();
+            if let Some((id, args)) = out.invoke {
+                match self.model.invoke_affordance(&id, args) {
+                    Err(InvokeError::Busy) => return ctx.request_repaint(),
+                    Err(InvokeError::Disabled(denial)) => {
+                        self.screens.denial = denial.as_ref().map(Text::shown);
+                    }
+                    _ => {}
+                }
+            }
+            self.screens.paints.pop_front();
+        }
     }
 
     /// Paints the items of the list rows drawn, now that their window is drawn.
@@ -390,6 +429,7 @@ impl<M: GameModel> App<M> {
                 return self.apply(confirm);
             }
             Intent::Run(id) => interaction.activate(top, &id),
+            Intent::Paint(paint) => return self.screens.paints.push_back(paint),
             Intent::Move { affordance, at } => {
                 let args = InvokeArgs {
                     pos: Some(at),
@@ -921,18 +961,35 @@ impl<M: GameModel> App<M> {
         };
         let size = egui::vec2(cell, cell);
         let glyph_size = egui::TextStyle::Monospace.resolve(ui.style()).size * cell / GRID_CELL;
+        let mut squares = HashMap::new();
         if canvas {
+            // The wheel scrolls it; a middle-button drag pans it, while the primary drag is left to painting.
+            let pan = ui.input(|i| i.pointer.middle_down().then(|| i.pointer.delta()));
             let shown = egui::ScrollArea::both()
                 .id_salt(("grid", &grid.head.id))
                 .auto_shrink([true, true])
-                .show(ui, |ui| self.grid_cells(ui, grid, size, glyph_size, out));
+                .scroll_source(egui::scroll_area::ScrollSource {
+                    drag: egui::scroll_area::DragScroll::Never,
+                    mouse_wheel: true,
+                    scroll_bar: true,
+                })
+                .show(ui, |ui| {
+                    if let Some(pan) = pan.filter(|_| ui.rect_contains_pointer(ui.clip_rect())) {
+                        ui.scroll_with_delta(pan);
+                    }
+                    let cells = GridCells { size, glyph_size };
+                    self.grid_cells(ui, grid, cells, &mut squares, out)
+                });
             let delta = ui.input(|i| i.zoom_delta());
             if delta != 1.0 && ui.rect_contains_pointer(shown.inner_rect) {
                 let zoom = (zoom * delta).clamp(GRID_ZOOM.0, GRID_ZOOM.1);
                 ui.data_mut(|d| d.insert_temp(zoom_key, zoom));
             }
         } else {
-            self.grid_cells(ui, grid, size, glyph_size, out);
+            self.grid_cells(ui, grid, GridCells { size, glyph_size }, &mut squares, out);
+        }
+        if let Some(mode) = grid.drag {
+            self.drag_squares(ui, grid, mode, &squares, out);
         }
     }
 
@@ -941,8 +998,8 @@ impl<M: GameModel> App<M> {
         &self,
         ui: &mut egui::Ui,
         grid: &Grid,
-        size: egui::Vec2,
-        glyph_size: f32,
+        GridCells { size, glyph_size }: GridCells,
+        squares: &mut HashMap<drag::Square, (egui::Rect, String, String)>,
         out: &mut Vec<Intent>,
     ) {
         let (xs, ys) = drawn_span(grid);
@@ -1002,6 +1059,13 @@ impl<M: GameModel> App<M> {
                             egui::Button::new(shown).min_size(size).selected(marked),
                         );
                         queue(ui, button.rect);
+                        if let (true, Some(id), Some(a)) =
+                            (cell.enabled, &cell.id, &cell.affordance)
+                        {
+                            // Only the part of the square in view takes a drag.
+                            let seen = button.rect.intersect(ui.clip_rect());
+                            squares.insert((x, y), (seen, id.clone(), a.clone()));
+                        }
                         button.widget_info(|| {
                             WidgetInfo::labeled(
                                 WidgetType::Button,
@@ -1016,9 +1080,14 @@ impl<M: GameModel> App<M> {
                             (_, Some(_)) => button.on_hover_text(markup::plain(&name)),
                             _ => button,
                         };
-                        if let (true, Some(id), Some(a)) =
-                            (button.clicked(), &cell.id, &cell.affordance)
-                        {
+                        // A pointer click on a draggable canvas is the drag's press and release.
+                        let pointer_click =
+                            grid.drag.is_some() && ui.input(|i| i.pointer.any_released());
+                        if let (true, Some(id), Some(a)) = (
+                            button.clicked() && !pointer_click,
+                            &cell.id,
+                            &cell.affordance,
+                        ) {
                             out.push(Intent::Focus {
                                 component: grid.head.id.clone(),
                                 row: id.clone(),
@@ -1030,6 +1099,78 @@ impl<M: GameModel> App<M> {
             }
         });
     }
+
+    /// Runs the affordance of the squares a pointer drag over `squares` crosses.
+    fn drag_squares(
+        &self,
+        ui: &egui::Ui,
+        grid: &Grid,
+        mode: GridDrag,
+        squares: &HashMap<drag::Square, (egui::Rect, String, String)>,
+        out: &mut Vec<Intent>,
+    ) {
+        let key = egui::Id::new(("grid-drag", &grid.head.id));
+        let mut held = ui.data(|d| d.get_temp::<Option<drag::Drag>>(key)).flatten();
+        let pointer = ui.input(|i| {
+            let at = i.pointer.interact_pos();
+            drag::Pointer {
+                over: at
+                    .and_then(|at| {
+                        squares
+                            .iter()
+                            .find(|(_, s)| s.0.contains(at) && ui.clip_rect().contains(at))
+                    })
+                    .map(|(&at, _)| at),
+                pressed: i.pointer.button_pressed(egui::PointerButton::Primary),
+                down: i.pointer.primary_down(),
+                released: i.pointer.button_released(egui::PointerButton::Primary),
+            }
+        });
+        let on_top = ui
+            .ctx()
+            .layer_id_at(ui.input(|i| i.pointer.interact_pos()).unwrap_or_default())
+            == Some(ui.layer_id());
+        let was_held = held.is_some();
+        let run = drag::advance(
+            mode,
+            &mut held,
+            drag::Pointer {
+                pressed: pointer.pressed && on_top,
+                ..pointer
+            },
+        );
+        let marker = |affordance: &Option<String>| {
+            affordance.clone().map(|affordance| {
+                Intent::Paint(Paint {
+                    component: grid.head.id.clone(),
+                    row: None,
+                    affordance,
+                })
+            })
+        };
+        // A drag begins on the press and ends on the frame that lets go of it.
+        out.extend(marker(&grid.drag_begin).filter(|_| !was_held && held.is_some()));
+        for at in run {
+            let Some((_, row, affordance)) = squares.get(&at) else {
+                continue;
+            };
+            out.push(Intent::Paint(Paint {
+                component: grid.head.id.clone(),
+                row: Some(row.clone()),
+                affordance: affordance.clone(),
+            }));
+        }
+        out.extend(marker(&grid.drag_end).filter(|_| was_held && held.is_none()));
+        ui.data_mut(|d| d.insert_temp(key, held));
+    }
+}
+
+/// The sizes a grid's cells are drawn at.
+#[derive(Clone, Copy)]
+struct GridCells {
+    size: egui::Vec2,
+    /// Side of the glyphs.
+    glyph_size: f32,
 }
 
 /// The columns and rows of `grid` from its first to its last cell or cursor: the empty edges around them draw
