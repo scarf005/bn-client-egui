@@ -2323,6 +2323,16 @@ pub struct MapComponent {
     pub item_lists: Vec<ItemList>,
 }
 
+/// A place the cursor of a target screen can jump to: a creature in sight, or a square.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+pub struct TargetCandidate {
+    pub id: String,
+    pub label: Text,
+    pub position: WorldPos,
+    #[serde(default)]
+    pub creature: bool,
+}
+
 /// Squares a screen highlights on the map besides its cursor: every square, or the rectangle with both corners.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(try_from = "ScreenMarkWire")]
@@ -2400,6 +2410,22 @@ impl MapComponent {
         let marks = marks.and_then(Value::as_array).into_iter().flatten();
         marks
             .filter_map(|m| serde_json::from_value(m.clone()).ok())
+            .collect()
+    }
+
+    /// The squares and creatures the cursor can jump to, in the engine's order; the first is where it is.
+    pub fn candidates(&self) -> Vec<TargetCandidate> {
+        let list = self.target.as_ref().map(|t| &t["candidates"]);
+        let list = list.and_then(Value::as_array).into_iter().flatten();
+        list.filter_map(|c| serde_json::from_value(c.clone()).ok())
+            .collect()
+    }
+
+    /// The squares the line of fire crosses from the avatar to the cursor, as the engine draws it.
+    pub fn trajectory(&self) -> Vec<WorldPos> {
+        let line = self.target.as_ref().map(|t| &t["trajectory"]);
+        let line = line.and_then(Value::as_array).into_iter().flatten();
+        line.filter_map(|p| serde_json::from_value(p.clone()).ok())
             .collect()
     }
 

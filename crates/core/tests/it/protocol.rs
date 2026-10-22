@@ -165,3 +165,28 @@ fn an_overmap_window_keeps_the_cursor_inside_and_marks_a_target_beyond_its_edge(
         "a target inside the window is drawn, not marked"
     );
 }
+
+#[test]
+fn a_target_map_lists_its_candidates_and_the_squares_of_its_line_of_fire_in_the_engines_order() {
+    let at = |x: i32| json!({"dim": "", "x": x, "y": 5, "z": 0});
+    let map = |target: Value| -> protocol::MapComponent {
+        serde_json::from_value(
+            json!({"id": "target:map", "kind": "map", "mode": "world", "target": target}),
+        )
+        .unwrap()
+    };
+    let aimed = map(json!({
+        "candidates": [{"id": "b", "label": "the zombie", "position": at(9), "creature": true},
+            {"id": "a", "label": "Current cursor tile", "position": at(2)}],
+        "trajectory": [at(3), at(4), at(5)],
+    }));
+    let ids = aimed.candidates().into_iter().map(|c| (c.id, c.creature));
+    assert_eq!(
+        ids.collect::<Vec<_>>(),
+        [("b".into(), true), ("a".into(), false)]
+    );
+    let line = aimed.trajectory().into_iter().map(|p| p.x);
+    assert_eq!(line.collect::<Vec<_>>(), [3, 4, 5]);
+    let looking = map(json!({"candidates": []}));
+    assert!(looking.candidates().is_empty() && looking.trajectory().is_empty());
+}
