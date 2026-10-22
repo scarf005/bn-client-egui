@@ -45,7 +45,7 @@ fn texts(shapes: &[epaint::ClippedShape]) -> Vec<(egui::Rect, &epaint::TextShape
 }
 
 /// Lines of text in `area` painted partly outside their clip rectangle: shown in part, so neither read nor known
-/// to be hidden. A line wholly outside its clip is scrolled out of view and not counted.
+/// to be hidden. A line wholly outside its clip, or only touching its edge, is scrolled out of view and not counted.
 pub fn cut_text(shapes: &[epaint::ClippedShape], area: egui::Rect) -> Vec<String> {
     texts(shapes)
         .into_iter()
@@ -53,7 +53,7 @@ pub fn cut_text(shapes: &[epaint::ClippedShape], area: egui::Rect) -> Vec<String
         .flat_map(|(clip, text)| {
             text.galley.rows.iter().filter_map(move |row| {
                 let at = row.rect().translate(text.pos.to_vec2());
-                (clip.intersects(at) && !clip.expand(1.0).contains_rect(at))
+                (clip.intersect(at).is_positive() && !clip.expand(1.0).contains_rect(at))
                     .then(|| format!("{:?} at {at:?} in {clip:?}", row.text()))
             })
         })

@@ -1,10 +1,8 @@
 //! A section of a window: its title on a band across its width, its body under it (Factorio's subheader frame),
 //! and facts as a grid of weak labels beside their values.
 
-use eframe::egui::{self, Color32, RichText};
-
-/// The band behind a section's title.
-pub const BAND: Color32 = Color32::from_rgb(0x1c, 0x1c, 0x1c);
+use super::tokens::{BAND, WEAK};
+use eframe::egui::{self, RichText};
 
 /// The room around a section's body (Factorio's frame padding), as wide at the sides as the title's on its band,
 /// so the two line up.
@@ -69,8 +67,7 @@ pub fn facts(ui: &mut egui::Ui, id: egui::Id, facts: &[Fact]) {
             for fact in facts {
                 match &fact.value {
                     Some(value) => {
-                        let weak = ui.visuals().weak_text_color();
-                        ui.label(fact.label.clone().color(weak));
+                        ui.label(fact.label.clone().color(WEAK));
                         ui.label(value.clone());
                     }
                     None => {

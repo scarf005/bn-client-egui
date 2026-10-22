@@ -1,4 +1,4 @@
-//! A list component: its rows as a `kit::table`, its count editors and the description of the focused row.
+//! A list component: its rows as a `kit::table` and its count editors.
 
 use super::*;
 use crate::kit::table;
@@ -6,8 +6,8 @@ use crate::kit::table;
 /// Rows left below the last one shown before the next page is asked for.
 const PREFETCH: usize = 20;
 
-/// Height the description under a list may take.
-const DESCRIPTION_HEIGHT: f32 = 96.0;
+/// The fewest rows a list keeps room for, however little the window has left.
+const MIN_ROWS: f32 = 3.0;
 
 /// A list row's item and the square it is drawn in.
 pub(super) struct RowIcon {
@@ -26,20 +26,16 @@ struct RowLayout<'a> {
 }
 
 impl<M: GameModel> App<M> {
-    /// The room a list has here: what the window has left, less the description, the refusal and the buttons
-    /// it draws under itself. Room is kept only for what some row or the list has, so a list with none of
-    /// them reaches the bottom.
-    fn list_height(ui: &egui::Ui, rows: &[&Row], buttons: bool) -> f32 {
+    /// The room a list has here: what the window has left, less the `below` lines it draws under itself (the
+    /// refusal and the buttons), and no more than `list_rows` rows of `step` when the list is drawn so.
+    fn list_height(&self, ui: &egui::Ui, step: f32, below: usize) -> f32 {
         let spacing = ui.spacing();
         let line = spacing.interact_size.y + spacing.item_spacing.y;
-        let described = rows.iter().any(|r| !r.description.shown().is_empty());
-        let refused = rows
-            .iter()
-            .any(|r| !r.enabled && !r.denial.shown().is_empty());
-        let below = f32::from(u8::from(described)) * (DESCRIPTION_HEIGHT + spacing.item_spacing.y)
-            + f32::from(u8::from(refused)) * line
-            + f32::from(u8::from(buttons)) * 2.0 * line;
-        (ui.available_height() - below).max(DESCRIPTION_HEIGHT)
+        let room = (ui.available_height() - below as f32 * line).max(MIN_ROWS * line);
+        self.screens
+            .list_rows
+            .get()
+            .map_or(room, |rows| room.min(rows as f32 * step))
     }
 
     /// The row's label in its colour.
@@ -117,10 +113,17 @@ impl<M: GameModel> App<M> {
             // The rows run the list's `activate`, on a double click or Enter.
             .filter(|a| list.activate.as_deref() != Some(a.id.as_str()))
             .collect::<Vec<_>>();
-        let list_height = Self::list_height(ui, &rows, own.iter().any(|a| drawn_button(a)))
-            - header.map_or(0.0, |h| h + spacing.y);
+        let step = height + spacing.y;
+        // Room is kept for a refusal and the buttons only when some row or the list has them, so a list with
+        // neither reaches the bottom.
+        let refused = rows
+            .iter()
+            .any(|r| !r.enabled && !r.denial.shown().is_empty());
+        let buttons = own.iter().any(|a| drawn_button(a));
+        let below = usize::from(refused) + 2 * usize::from(buttons);
+        let list_height = self.list_height(ui, step, below) - header.map_or(0.0, |h| h + spacing.y);
         // A page is the rows the list has room for.
-        let page = ((list_height + spacing.y) / (height + spacing.y)) as usize;
+        let page = ((list_height + spacing.y) / step) as usize;
         self.screens
             .list_pages
             .borrow_mut()
@@ -214,9 +217,6 @@ impl<M: GameModel> App<M> {
         scrolls.entry(slot).or_default().top = scrolled.state.offset.y;
         drop(scrolls);
         let shown = cursor.and_then(|c| rows.iter().find(|r| r.id == c));
-        if let Some(row) = shown {
-            self.row_description(ui, id, row);
-        }
         self.affordance_buttons(ui, &own, shown.copied(), out);
     }
 
@@ -413,20 +413,6 @@ impl<M: GameModel> App<M> {
     /// Whether the rows draw their items in squares: some row has an item and the map is drawn in tiles.
     pub(super) fn squares(&self, rows: &[&Row]) -> bool {
         self.display.tiles() && rows.iter().any(|r| r.look.is_some())
-    }
-
-    /// The focused row's description under the list, and why it is refused when it is.
-    fn row_description(&self, ui: &mut egui::Ui, list_id: &str, row: &Row) {
-        let description = row.description.shown();
-        if !description.is_empty() {
-            egui::ScrollArea::vertical()
-                .id_salt(("description", list_id))
-                .max_height(DESCRIPTION_HEIGHT)
-                .show(ui, |ui| ui.label(self.rich(ui, &description)));
-        }
-        if !row.enabled && !row.denial.shown().is_empty() {
-            ui.colored_label(BAD, markup::plain(&row.denial.shown()));
-        }
     }
 }
 

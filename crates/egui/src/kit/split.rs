@@ -72,3 +72,45 @@ pub fn gaps(count: usize, gap: f32) -> f32 {
 pub fn overflows(widths: &[f32], room: f32, gap: f32) -> bool {
     widths.iter().sum::<f32>() + gaps(widths.len(), gap) > room + 0.5
 }
+
+/// The share of the room the first pane of a detail split, the list the others describe, takes at least.
+const MASTER_SHARE: f32 = 0.4;
+
+/// The widths of a detail split: the first pane, the list, takes `MASTER_SHARE` of the room and at least its
+/// natural width; the panes that describe it share the remainder. Never below a pane's minimum; a list with
+/// nothing to describe it is a split of one.
+pub fn detail_widths(parts: &[Extent], room: f32, gap: f32) -> Vec<f32> {
+    let Some((master, rest @ [_, ..])) = parts.split_first() else {
+        return split_widths(parts, room, gap);
+    };
+    let rest_min = rest.iter().map(|p| p.min).sum::<f32>() + gaps(parts.len(), gap);
+    let width = (room * MASTER_SHARE)
+        .max(master.natural)
+        .min(room - rest_min)
+        .max(master.min);
+    std::iter::once(width)
+        .chain(split_widths(rest, room - width - gap, gap))
+        .collect()
+}
+
+/// The widths of peers of which `prose` is the only running text: the others take up to their natural
+/// widths, the prose the rest, and never less than an equal share of the room while its lines are longer.
+pub fn prose_widths(parts: &[Extent], prose: usize, room: f32, gap: f32) -> Vec<f32> {
+    let others = parts
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| *i != prose)
+        .map(|(_, p)| Extent { grows: false, ..*p })
+        .collect::<Vec<_>>();
+    let inner = room - gaps(parts.len(), gap);
+    let text = parts[prose];
+    let fair = inner / parts.len() as f32;
+    let spare = inner - others.iter().map(|p| p.natural).sum::<f32>();
+    let width = spare
+        .max(fair.min(text.natural))
+        .min(inner - others.iter().map(|p| p.min).sum::<f32>())
+        .max(text.min);
+    let mut widths = split_widths(&others, room - width - gap, gap);
+    widths.insert(prose, width);
+    widths
+}

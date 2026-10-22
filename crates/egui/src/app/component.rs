@@ -4,6 +4,7 @@
 //! Drawing reads the engine's data and collects what the player did as `Intent`s. Applying an intent only
 //! calls the interaction core (`bn_client_core::interaction`), which decides what is sent.
 
+mod detail;
 mod footer;
 mod form;
 mod list;
@@ -40,6 +41,8 @@ use std::collections::{HashMap, HashSet};
 
 /// The margin around each pane of a split, on every side.
 const PANE_MARGIN: i8 = 2;
+/// The most rows a list in a peer pane shows before it scrolls.
+const PEER_ROWS: usize = 12;
 /// Side of a grid cell in points.
 const GRID_CELL: f32 = 26.0;
 /// The largest a grid's cell grows to when the room allows.
@@ -63,6 +66,8 @@ pub(super) struct Screens {
     overmap: RefCell<Vec<OvermapPaint>>,
     /// A panel window is being drawn: its screen takes no command, so its tabs and rows only move its focus.
     pub(super) passive: bool,
+    /// The most rows the lists drawn now show before they scroll, when fewer than their room holds.
+    list_rows: std::cell::Cell<Option<usize>>,
 }
 
 /// A list's scroll offset in the last frame, and the row of the focus it last brought into sight.
@@ -114,6 +119,24 @@ enum Intent {
 
 fn find<'a>(screen: &'a Screen, id: &str) -> Option<&'a Affordance> {
     screen.affordances.iter().find(|a| a.id == id)
+}
+
+/// Whether `c` is running text: a text block, or a panel holding only one.
+fn prose(c: &Component) -> bool {
+    match c {
+        Component::Text(t) => t.role.is_none(),
+        Component::Panel(p) => {
+            p.stats.as_ref().is_none_or(Vec::is_empty) && p.child.as_deref().is_some_and(prose)
+        }
+        _ => false,
+    }
+}
+
+/// Whether `c` holds a list with columns.
+fn tabled(c: &Component) -> bool {
+    c.nested()
+        .into_iter()
+        .any(|c| matches!(c, Component::List(l) if !l.columns.is_empty()))
 }
 
 /// Whether the rows of one of the screen's lists run the affordance, on a double click or Enter.
@@ -456,7 +479,7 @@ impl<M: GameModel> App<M> {
             ui.label(egui::RichText::new(markup::plain(&label.shown())).strong());
         }
         match c {
-            Component::List(list) => self.list(ui, screen, list, out),
+            Component::List(list) => self.described_list(ui, screen, c, list, out),
             Component::Tabs(tabs) => {
                 let select = tabs.select.as_deref().and_then(|id| find(screen, id));
                 ui.horizontal_wrapped(|ui| {
@@ -528,9 +551,13 @@ impl<M: GameModel> App<M> {
         }
     }
 
-    /// The panes side by side, each as wide as its content needs (`split::split_widths`). Peers whose minimums
-    /// do not fit go on to further lines (`split::wrap_lines`); a line whose minimums still do not fit, and a
-    /// list beside its detail, scroll sideways instead of breaking words.
+    /// The panes side by side, each as wide as its content needs (`split::split_widths`), the only prose of
+    /// peers as wide as the rest (`split::prose_widths`) and a list beside its detail at least two fifths of the
+    /// room (`split::detail_widths`). Peers whose minimums do not fit go on to further lines
+    /// (`split::wrap_lines`); a line whose minimums still do not fit scrolls sideways instead of breaking words.
+    /// Peers on more than one line are as tall as what they hold, a list up to `PEER_ROWS` rows, and scroll
+    /// down together; one line of panes, peers around a map or a canvas, and a list beside its detail share the
+    /// height they have.
     fn split(
         &self,
         ui: &mut egui::Ui,
@@ -541,61 +568,150 @@ impl<M: GameModel> App<M> {
     ) {
         let gap = ui.spacing().item_spacing.x;
         let room = ui.available_width();
-        let extents = parts
-            .iter()
-            .map(|c| with_margin(self.extent(ui, c, room)))
+        let texts = (0..parts.len())
+            .filter(|&i| prose(parts[i]))
             .collect::<Vec<_>>();
-        let lines = match split.relation {
-            Relation::Peers => split::wrap_lines(&extents, room, gap),
-            Relation::Detail => std::iter::once(0..parts.len()).collect(),
+        let prose_at = match (split.relation, texts.as_slice()) {
+            (Relation::Peers, [at]) => Some(*at),
+            _ => None,
         };
-        let count = lines.len();
-        for (n, line) in lines.into_iter().enumerate() {
-            let widths = split::split_widths(&extents[line.clone()], room, gap);
-            // Each line gets its share of the height left, so a list in one does not push the next out; past a
-            // line taller than its share, a line still gets a few rows, and the window scrolls to them.
-            let floor = 4.0 * ui.text_style_height(&egui::TextStyle::Body);
-            let height = (ui.available_height() / (count - n) as f32).max(floor);
-            let mut panes = |ui: &mut egui::Ui| {
-                ui.horizontal_top(|ui| {
-                    for (child, width) in parts[line.clone()].iter().zip(&widths) {
-                        let stroke = if split.active.as_deref() == Some(child.id()) {
-                            ui.visuals().selection.stroke
-                        } else {
-                            egui::Stroke::NONE
-                        };
-                        let size = egui::vec2(*width, height);
-                        let rect = egui::Rect::from_min_size(ui.cursor().min, size);
-                        let down = egui::Layout::top_down(egui::Align::Min);
-                        let mut pane =
-                            ui.new_child(egui::UiBuilder::new().max_rect(rect).layout(down));
-                        pane.shrink_clip_rect(egui::Rect::from_x_y_ranges(
-                            rect.x_range(),
-                            ui.clip_rect().y_range(),
-                        ));
-                        // The active pane's stroke is inside its width too.
-                        let frame = egui::Frame::NONE.stroke(stroke).inner_margin(PANE_MARGIN);
-                        frame.show(&mut pane, |ui| {
-                            ui.set_width(width - frame.total_margin().sum().x);
-                            self.component(ui, screen, child, out)
-                        });
-                        // The pane takes its width and no more, whatever its content draws: wider, it would
-                        // widen the window that the next frame's room comes from, every frame.
-                        let drawn = egui::vec2(*width, pane.min_rect().height());
-                        ui.allocate_exact_size(drawn, egui::Sense::hover());
-                    }
-                });
+        let measure = |ui: &egui::Ui, panes: &[&Component], room: f32| {
+            panes
+                .iter()
+                .map(|c| with_margin(self.extent(ui, c, room)))
+                .collect::<Vec<_>>()
+        };
+        let laid = |ui: &egui::Ui, room: f32| {
+            let extents = measure(ui, parts, room);
+            let lines = match split.relation {
+                Relation::Peers => split::wrap_lines(&extents, room, gap),
+                Relation::Detail => std::iter::once(0..parts.len()).collect(),
             };
-            match split::overflows(&widths, room, gap) {
-                true => {
-                    egui::ScrollArea::horizontal()
-                        .id_salt(("split", &split.head.id, n))
-                        .auto_shrink([false, true])
-                        .show(ui, panes);
-                }
-                false => panes(ui),
-            }
+            (extents, lines)
+        };
+        let (mut extents, mut lines) = laid(ui, room);
+        let fills = parts
+            .iter()
+            .flat_map(|c| c.nested())
+            .any(|c| matches!(c, Component::Map(_) | Component::Canvas(_)));
+        let natural = split.relation == Relation::Peers && !fills && lines.len() > 1;
+        // Peers that scroll down keep room beside them for the scroll bar.
+        let room = match natural {
+            true => room - ui.spacing().scroll.allocated_width(),
+            false => room,
+        };
+        if natural {
+            (extents, lines) = laid(ui, room);
         }
+        let count = lines.len();
+        let mut draw = |ui: &mut egui::Ui| {
+            for (n, line) in lines.iter().enumerate() {
+                let panes = &parts[line.clone()];
+                let fit = &extents[line.clone()];
+                let widths = match (split.relation, prose_at.filter(|at| line.contains(at))) {
+                    (Relation::Detail, _) if !matches!(panes.first(), Some(Component::Text(_))) => {
+                        split::detail_widths(fit, room, gap)
+                    }
+                    // Beside the prose, which takes at least an equal share, the panes are offered the rest; a
+                    // table among them keeps its natural width.
+                    (Relation::Peers, Some(at)) => {
+                        let offered = room - room / panes.len() as f32;
+                        let beside = measure(ui, panes, offered)
+                            .into_iter()
+                            .zip(panes)
+                            .map(|(fit, c)| match tabled(c) {
+                                true => Extent {
+                                    min: fit.natural.max(fit.min),
+                                    ..fit
+                                },
+                                false => fit,
+                            })
+                            .collect::<Vec<_>>();
+                        split::prose_widths(&beside, at - line.start, room, gap)
+                    }
+                    _ => split::split_widths(fit, room, gap),
+                };
+                // Peers as tall as they hold have no bottom; sharing the height, each line gets its share of
+                // what is left, past a few rows.
+                let floor = 4.0 * ui.text_style_height(&egui::TextStyle::Body);
+                let height = match natural {
+                    true => f32::INFINITY,
+                    false => (ui.available_height() / (count - n) as f32).max(floor),
+                };
+                // Inside a peer, a pane that shares its height still has none to share.
+                let rows = match natural {
+                    true => Some(PEER_ROWS),
+                    false => self.screens.list_rows.get(),
+                };
+                let mut line_ui = |ui: &mut egui::Ui| {
+                    let mut active = None;
+                    let drawn = ui.horizontal_top(|ui| {
+                        for (child, width) in panes.iter().zip(&widths) {
+                            let size = egui::vec2(*width, height);
+                            let rect = egui::Rect::from_min_size(ui.cursor().min, size);
+                            let down = egui::Layout::top_down(egui::Align::Min);
+                            let mut pane =
+                                ui.new_child(egui::UiBuilder::new().max_rect(rect).layout(down));
+                            pane.shrink_clip_rect(egui::Rect::from_x_y_ranges(
+                                rect.x_range(),
+                                ui.clip_rect().y_range(),
+                            ));
+                            // The margin keeps room inside the pane's width for the active outline.
+                            let frame = egui::Frame::NONE.inner_margin(PANE_MARGIN);
+                            frame.show(&mut pane, |ui| {
+                                ui.set_width(width - frame.total_margin().sum().x);
+                                self.with_list_rows(rows, || self.component(ui, screen, child, out))
+                            });
+                            // The pane takes its width and no more, whatever its content draws: wider, it
+                            // would widen the window that the next frame's room comes from, every frame.
+                            let drawn = egui::vec2(*width, pane.min_rect().height());
+                            let (slot, _) = ui.allocate_exact_size(drawn, egui::Sense::hover());
+                            if split.active.as_deref() == Some(child.id()) && !self.empty(child) {
+                                active = Some(slot.x_range());
+                            }
+                        }
+                    });
+                    // The active pane is outlined over its whole slot, as tall as its line.
+                    if let Some(x) = active {
+                        let rect = egui::Rect::from_x_y_ranges(x, drawn.response.rect.y_range());
+                        let stroke = ui.visuals().selection.stroke;
+                        ui.painter()
+                            .rect_stroke(rect, 0, stroke, egui::StrokeKind::Inside);
+                    }
+                };
+                match split::overflows(&widths, room, gap) {
+                    true => {
+                        egui::ScrollArea::horizontal()
+                            .id_salt(("split", &split.head.id, n))
+                            .auto_shrink([false, true])
+                            .show(ui, line_ui);
+                    }
+                    false => line_ui(ui),
+                }
+            }
+        };
+        match natural {
+            true => {
+                egui::ScrollArea::vertical()
+                    .id_salt(("split-lines", &split.head.id))
+                    .auto_shrink([false, true])
+                    .show(ui, draw);
+            }
+            false => draw(ui),
+        }
+    }
+
+    /// Draws with lists showing at most `rows` rows before they scroll, or as many as their room holds.
+    fn with_list_rows<R>(&self, rows: Option<usize>, draw: impl FnOnce() -> R) -> R {
+        let was = self.screens.list_rows.replace(rows);
+        let drawn = draw();
+        self.screens.list_rows.set(was);
+        drawn
+    }
+
+    /// Whether `c` shows nothing: a list without rows.
+    fn empty(&self, c: &Component) -> bool {
+        matches!(c, Component::List(list) if self.known_rows(list).is_empty())
     }
 
     /// The panel's stats as facts: label and value, or a stat without a value as its label in its tone.

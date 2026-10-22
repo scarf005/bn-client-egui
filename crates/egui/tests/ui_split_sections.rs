@@ -1,7 +1,7 @@
 //! Splits and descriptions as a player reads them over the map: rows of peer panes painted whole, the only
 //! prose of a split as wide as the panes beside it, the active outline only around a pane that holds something, and the focused row's description in a pane of its own instead of a strip under the list.
 mod common;
-use bn_client_egui::kit::section;
+use bn_client_egui::kit::tokens;
 use bn_client_egui::{App, EngineModel};
 use eframe::egui::{self, epaint};
 use egui_kittest::Harness;
@@ -101,12 +101,39 @@ fn the_character_sheets_stat_rows_are_painted_whole_at_1280() {
     }
 }
 
-#[test]
-fn the_npc_dialogue_is_at_least_as_wide_as_the_responses_at_1280() {
-    let h = shown(
-        example("npctalk", "NPC talk screen"),
-        egui::vec2(1280.0, 800.0),
+/// The NPC talk screen, its dialogue `lines` longer than the example's greeting.
+fn talk(lines: usize) -> Value {
+    let mut screen = example("npctalk", "NPC talk screen");
+    let text = &mut screen["root"]["children"][0]["child"]["markup"];
+    let said = "You: \"What happened to the people who lived here before the refugees came?\"";
+    *text = Value::from(
+        std::iter::once(text.as_str().unwrap().to_string())
+            .chain(std::iter::repeat_n(said.to_string(), lines))
+            .collect::<Vec<_>>()
+            .join("\n"),
     );
+    screen
+}
+
+#[test]
+fn a_short_npc_dialogue_is_one_line_beside_the_responses() {
+    let h = shown(talk(0), egui::vec2(1280.0, 800.0));
+    let shapes = &h.output().shapes;
+    let (_, greeting) = texts(shapes)
+        .into_iter()
+        .find(|(_, t)| t.galley.text().contains("Welcome"))
+        .unwrap();
+    assert_eq!(
+        greeting.galley.rows.len(),
+        1,
+        "{:?}",
+        greeting.galley.text()
+    );
+}
+
+#[test]
+fn a_long_npc_dialogue_is_at_least_as_wide_as_the_responses_at_1280() {
+    let h = shown(talk(6), egui::vec2(1280.0, 800.0));
     let window = h
         .query_all_by_role(egui::accesskit::Role::Window)
         .find(|w| {
@@ -136,7 +163,7 @@ fn the_active_outline_is_drawn_only_around_a_pane_that_holds_something() {
     assert!(drawn[0].contains_rect(left), "{drawn:?} around {left:?}");
     // The active pane's outline frames its whole slot, not a strip of it.
     let rows = h
-        .query_all_by_label("Worn Items")
+        .query_all_by_label("Inventory")
         .map(|n| n.rect())
         .min_by(|a, b| a.left().total_cmp(&b.left()))
         .unwrap();
@@ -165,14 +192,32 @@ fn the_focused_items_description_is_whole_beside_the_list_at_1920() {
 }
 
 #[test]
-fn the_focused_items_description_is_whole_at_1280() {
+fn the_focused_items_description_fills_the_height_under_the_list_in_whole_lines_at_1280() {
     let h = shown(
         example("inventory", "drop selector screen"),
         egui::vec2(1280.0, 800.0),
     );
+    let shapes = &h.output().shapes;
+    let (clip, text) = texts(shapes)
+        .into_iter()
+        .find(|(_, t)| t.galley.text().contains("A rock the size of a baseball"))
+        .unwrap();
+    let rows = text
+        .galley
+        .rows
+        .iter()
+        .map(|row| row.rect().translate(text.pos.to_vec2()))
+        .collect::<Vec<_>>();
+    let cut = rows
+        .iter()
+        .filter(|r| clip.intersect(**r).is_positive() && !clip.expand(1.0).contains_rect(**r))
+        .collect::<Vec<_>>();
+    assert!(cut.is_empty(), "lines cut by {clip:?}: {cut:?}");
+    let shown = rows.iter().filter(|r| clip.contains_rect(**r)).count();
+    // The strip under the list held five lines.
     assert!(
-        whole(&h, "A rock the size of a baseball").is_some(),
-        "the description is cut"
+        shown > 10,
+        "{shown} lines of the description shown in {clip:?}"
     );
 }
 
@@ -214,7 +259,7 @@ fn a_panels_title_sits_on_a_band_across_its_section() {
         .shapes
         .iter()
         .filter_map(|s| match &s.shape {
-            egui::Shape::Rect(r) if r.fill == section::BAND => Some(r.rect),
+            egui::Shape::Rect(r) if r.fill == tokens::BAND => Some(r.rect),
             _ => None,
         })
         .collect::<Vec<_>>();

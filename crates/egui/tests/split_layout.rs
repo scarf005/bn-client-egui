@@ -1,5 +1,7 @@
 //! The width rule of split panes: content-sized, never below the minimum, the rest to the panes that grow.
-use bn_client_egui::kit::split::{Extent, gaps, overflows, split_widths, wrap_lines};
+use bn_client_egui::kit::split::{
+    Extent, detail_widths, gaps, overflows, prose_widths, split_widths, wrap_lines,
+};
 
 const GAP: f32 = 8.0;
 
@@ -86,4 +88,52 @@ fn panes_whose_minimums_fit_stay_on_one_line_and_the_rest_wrap_by_natural_width(
         pane(80.0, 100.0, false),
     ];
     assert_eq!(wrap_lines(&wide, 300.0, GAP), vec![0..1, 1..3]);
+}
+
+#[test]
+fn a_list_beside_its_detail_takes_two_fifths_of_the_room_or_its_natural_width() {
+    let detail = pane(50.0, 300.0, true);
+    let narrow = detail_widths(&[pane(80.0, 120.0, true), detail], 1000.0, GAP);
+    assert_eq!(narrow, vec![400.0, 1000.0 - 400.0 - GAP]);
+    let wide = detail_widths(&[pane(80.0, 520.0, true), detail], 1000.0, GAP);
+    assert_eq!(wide, vec![520.0, 1000.0 - 520.0 - GAP]);
+}
+
+#[test]
+fn a_list_beside_its_detail_leaves_the_detail_its_minimum() {
+    let widths = detail_widths(
+        &[pane(80.0, 900.0, true), pane(150.0, 300.0, true)],
+        1000.0,
+        GAP,
+    );
+    assert_eq!(widths, vec![1000.0 - 150.0 - GAP, 150.0]);
+    assert_eq!(
+        detail_widths(&[pane(80.0, 120.0, true)], 600.0, GAP),
+        vec![600.0]
+    );
+}
+
+#[test]
+fn the_only_prose_takes_what_the_other_panes_leave_of_their_natural_widths() {
+    let parts = [pane(100.0, 900.0, true), pane(100.0, 200.0, true)];
+    let widths = prose_widths(&parts, 0, 1000.0, GAP);
+    assert_eq!(widths, vec![1000.0 - GAP - 200.0, 200.0]);
+}
+
+#[test]
+fn the_only_prose_longer_than_an_equal_share_gets_one() {
+    let parts = [pane(100.0, 900.0, true), pane(100.0, 500.0, true)];
+    let widths = prose_widths(&parts, 0, 600.0 + GAP, GAP);
+    assert_eq!(widths, vec![300.0, 300.0]);
+    // A short text is no wider than its line, whatever share it could have.
+    let short = [pane(100.0, 900.0, true), pane(50.0, 120.0, true)];
+    let widths = prose_widths(&short, 1, 600.0 + GAP, GAP);
+    assert_eq!(widths, vec![600.0 - 120.0, 120.0]);
+}
+
+#[test]
+fn the_only_prose_never_takes_the_other_panes_below_their_minimums() {
+    let parts = [pane(400.0, 500.0, true), pane(100.0, 900.0, true)];
+    let widths = prose_widths(&parts, 1, 600.0 + GAP, GAP);
+    assert_eq!(widths, vec![400.0, 200.0]);
 }
