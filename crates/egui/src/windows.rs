@@ -181,18 +181,27 @@ impl Grip {
 
     /// `rect` with the edges of this handle moved by `delta`, no smaller than `LEAST` and inside `bounds`.
     fn drag(self, rect: egui::Rect, delta: egui::Vec2, bounds: egui::Rect) -> egui::Rect {
+        // Not clamps: by the screen's edge, a window already smaller than `LEAST` has the two bounds crossed.
         let mut out = rect;
         if self.left {
-            out.min.x = (rect.min.x + delta.x).clamp(bounds.min.x, rect.max.x - LEAST.x);
+            out.min.x = (rect.min.x + delta.x)
+                .min(rect.max.x - LEAST.x)
+                .max(bounds.min.x);
         }
         if self.right {
-            out.max.x = (rect.max.x + delta.x).clamp(rect.min.x + LEAST.x, bounds.max.x);
+            out.max.x = (rect.max.x + delta.x)
+                .max(rect.min.x + LEAST.x)
+                .min(bounds.max.x);
         }
         if self.top {
-            out.min.y = (rect.min.y + delta.y).clamp(bounds.min.y, rect.max.y - LEAST.y);
+            out.min.y = (rect.min.y + delta.y)
+                .min(rect.max.y - LEAST.y)
+                .max(bounds.min.y);
         }
         if self.bottom {
-            out.max.y = (rect.max.y + delta.y).clamp(rect.min.y + LEAST.y, bounds.max.y);
+            out.max.y = (rect.max.y + delta.y)
+                .max(rect.min.y + LEAST.y)
+                .min(bounds.max.y);
         }
         out
     }
