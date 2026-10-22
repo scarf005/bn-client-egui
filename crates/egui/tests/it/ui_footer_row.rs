@@ -202,7 +202,11 @@ fn a_back_action_in_the_footer_sits_leftmost() {
     {
         row.as_object_mut().unwrap().remove("affordance");
     }
-    let h = shown(&screen, LARGE);
+    // Alone, as the title screen shows it, where an untitled window has no bar to hold the cancel.
+    let (app, _) = crate::common::staged(json!([screen]));
+    let mut h = crate::common::themed_harness(LARGE, app);
+    h.run_steps(5);
+    crate::common::settle_windows(&mut h);
     // The footer comes after the list, whose rows read the same.
     let footer = |label| *buttons(&h, label).last().unwrap();
     let (no, yes, confirm) = (footer("No"), footer("Yes"), footer("Confirm Choice"));

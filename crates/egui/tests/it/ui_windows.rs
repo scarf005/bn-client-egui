@@ -469,6 +469,7 @@ fn only_window(h: &H) -> egui::Rect {
 /// action palette and the client's settings.
 fn every_window_kind<'a>() -> Vec<(&'static str, H<'a>)> {
     let (menu, _) = menu_window(&settings("rules-menu"), true);
+    let (untitled, _) = menu_window_titled(&settings("rules-untitled"), true, "");
     let (screen, _) = inventory_window(&settings("rules-screen"));
     let (t, _) = session();
     let mut palette = Harness::builder()
@@ -491,6 +492,7 @@ fn every_window_kind<'a>() -> Vec<(&'static str, H<'a>)> {
     crate::common::open_client_settings(&mut options);
     vec![
         ("menu", menu),
+        ("untitled menu", untitled),
         ("screen", screen),
         ("palette", palette),
         ("client settings", options),

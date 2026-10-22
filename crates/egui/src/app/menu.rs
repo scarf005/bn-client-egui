@@ -55,7 +55,6 @@ impl<M: GameModel> App<M> {
         let max_width = (ctx.content_rect().width() * 0.8).max(520.0);
         let kind = self.model.screens().last().and_then(super::screen_kind);
         let spec = WindowSpec {
-            title_bar: !title.is_empty(),
             closable: menu.can_cancel && !menu.acknowledges(),
             width: Some(max_width + frame.total_margin().sum().x),
             frame: Some(frame),

@@ -53,7 +53,8 @@ impl<M: GameModel> App<M> {
             width: None,
             scrolls: true,
             frame: None,
-            title_bar: !title.is_empty(),
+            // Over the game every window has one; the title screen's untitled menu is the home they open from.
+            title_bar: !title.is_empty() || !interaction::titled(self.model.screens()),
             closable: false,
             help: None,
         }
