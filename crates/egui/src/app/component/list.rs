@@ -138,18 +138,37 @@ impl<M: GameModel> App<M> {
                 false => height,
             })
             .collect::<Vec<_>>();
+        let starts = heights
+            .iter()
+            .scan(0.0, |y, h| {
+                let start = *y;
+                *y += h + spacing.y;
+                Some(start)
+            })
+            .collect::<Vec<_>>();
+        // The viewport is a whole number of rows tall: the most rows from the top that fit. An empty list, or one
+        // whose first row does not fit, keeps its room.
+        let list_height = starts
+            .iter()
+            .zip(&heights)
+            .map(|(start, h)| start + h)
+            .take_while(|end| *end <= list_height)
+            .last()
+            .unwrap_or(list_height);
         // A focus new to the list and out of its sight scrolls the focused row to the middle, with the rows
-        // around it in view.
+        // around it in view, the top row whole.
         let focus = cursor.map(str::to_string);
         let mut offset = None;
         if let Some(i) = at {
             let mut scrolls = self.screens.list_scroll.borrow_mut();
             let scroll = scrolls.entry(slot.clone()).or_default();
-            let y = heights[..i].iter().map(|h| h + spacing.y).sum::<f32>();
+            let y = starts[i];
             let step = heights[i] + spacing.y;
             let seen = y >= scroll.top && y + step <= scroll.top + list_height;
             if scroll.shown != focus && !seen {
-                offset = Some((y - (list_height - step) / 2.0).max(0.0));
+                let middle = y - (list_height - step) / 2.0;
+                let top = starts.iter().copied().take_while(|s| *s <= middle).last();
+                offset = Some(top.unwrap_or(0.0));
             }
             scroll.shown = focus;
         }
