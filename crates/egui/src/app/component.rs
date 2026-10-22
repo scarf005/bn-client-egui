@@ -5,6 +5,7 @@
 //! calls the interaction core (`bn_client_core::interaction`), which decides what is sent.
 
 mod detail;
+mod drag;
 mod footer;
 mod form;
 mod list;
@@ -23,9 +24,9 @@ use crate::{a11y, editor, text};
 use bn_client_core::interaction::{self, ArgKind, InvokeError};
 use bn_client_core::protocol::{
     Affordance, AffordanceRole, CanvasComponent, Component, Editor, EditorValue, FieldKind, Form,
-    FormField, Grid, GridRole, InvokeArgs, List, MapComponent, MapMode, OvermapTile, OvermapWire,
-    PanelStat, Relation, Row, Screen, ScreenDock, ScreenRole, Selection, SidebarSide, Split, Text,
-    TextBlock, TextRole, Tone, WorldPos,
+    FormField, Grid, GridDrag, GridRole, InvokeArgs, List, MapComponent, MapMode, OvermapTile,
+    OvermapWire, PanelStat, Relation, Row, Screen, ScreenDock, ScreenRole, Selection, SidebarSide,
+    Split, Text, TextBlock, TextRole, Tone, WorldPos,
 };
 use bn_client_core::{Cell, GameModel, Pos, Rgb, markup};
 use eframe::egui::{self, WidgetInfo, WidgetType};
@@ -38,7 +39,7 @@ use overmap::*;
 pub(super) use panel::PANELS;
 use placement::*;
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 /// The margin around each pane of a split, on every side.
 const PANE_MARGIN: i8 = 2;
@@ -71,6 +72,15 @@ pub(super) struct Screens {
     reach: Option<String>,
     /// The most rows the lists drawn now show before they scroll, when fewer than their room holds.
     list_rows: std::cell::Cell<Option<usize>>,
+    /// The squares a drag crossed that the engine has not taken yet: it holds few commands at once.
+    paints: VecDeque<Paint>,
+}
+
+/// A square of a canvas grid a drag runs its affordance on.
+struct Paint {
+    component: String,
+    row: String,
+    affordance: String,
 }
 
 /// A list's scroll offset in the last frame, and the row of the focus it last brought into sight.
@@ -100,6 +110,8 @@ enum Intent {
         count: u64,
     },
     Run(String),
+    /// A drag crossed a square of a canvas grid.
+    Paint(Paint),
     /// Runs the affordance that puts the cursor on a square.
     Move {
         affordance: String,
@@ -274,6 +286,30 @@ impl<M: GameModel> App<M> {
         self.paint_icons();
         self.paint_overmap(ctx);
         out.into_iter().for_each(|intent| self.apply(intent));
+        self.send_paints(ctx);
+    }
+
+    /// Runs the squares a drag crossed in order, as many as the engine takes now; the rest wait for a later frame.
+    fn send_paints(&mut self, ctx: &egui::Context) {
+        while let Some(paint) = self.screens.paints.front() {
+            let Some(top) = interaction::described(self.model.screens()) else {
+                return self.screens.paints.clear();
+            };
+            let interaction = &mut self.screens.interaction;
+            interaction.focus_row(&paint.component, &paint.row);
+            let out = interaction.activate(top, &paint.affordance);
+            self.screens.denial = out.note();
+            if let Some((id, args)) = out.invoke {
+                match self.model.invoke_affordance(&id, args) {
+                    Err(InvokeError::Busy) => return ctx.request_repaint(),
+                    Err(InvokeError::Disabled(denial)) => {
+                        self.screens.denial = denial.as_ref().map(Text::shown);
+                    }
+                    _ => {}
+                }
+            }
+            self.screens.paints.pop_front();
+        }
     }
 
     /// Paints the items of the list rows drawn, now that their window is drawn.
@@ -378,6 +414,7 @@ impl<M: GameModel> App<M> {
                 return self.apply(confirm);
             }
             Intent::Run(id) => interaction.activate(top, &id),
+            Intent::Paint(paint) => return self.screens.paints.push_back(paint),
             Intent::Move { affordance, at } => {
                 let args = InvokeArgs {
                     pos: Some(at),
@@ -878,6 +915,7 @@ impl<M: GameModel> App<M> {
         let cell = fit.clamp(GRID_CELL, GRID_MAX_CELL);
         let size = egui::vec2(cell, cell);
         let glyph_size = egui::TextStyle::Monospace.resolve(ui.style()).size * cell / GRID_CELL;
+        let mut squares = HashMap::new();
         ui.scope(|ui| {
             ui.spacing_mut().item_spacing = egui::Vec2::ZERO;
             for y in ys {
@@ -934,6 +972,11 @@ impl<M: GameModel> App<M> {
                             egui::Button::new(shown).min_size(size).selected(marked),
                         );
                         queue(ui, button.rect);
+                        if let (true, Some(id), Some(a)) =
+                            (cell.enabled, &cell.id, &cell.affordance)
+                        {
+                            squares.insert((x, y), (button.rect, id.clone(), a.clone()));
+                        }
                         button.widget_info(|| {
                             WidgetInfo::labeled(
                                 WidgetType::Button,
@@ -947,9 +990,14 @@ impl<M: GameModel> App<M> {
                             }
                             _ => button,
                         };
-                        if let (true, Some(id), Some(a)) =
-                            (button.clicked(), &cell.id, &cell.affordance)
-                        {
+                        // A pointer click on a draggable canvas is the drag's press and release.
+                        let pointer_click =
+                            grid.drag.is_some() && ui.input(|i| i.pointer.any_released());
+                        if let (true, Some(id), Some(a)) = (
+                            button.clicked() && !pointer_click,
+                            &cell.id,
+                            &cell.affordance,
+                        ) {
                             out.push(Intent::Focus {
                                 component: grid.head.id.clone(),
                                 row: id.clone(),
@@ -960,6 +1008,55 @@ impl<M: GameModel> App<M> {
                 });
             }
         });
+        if let Some(mode) = grid.drag {
+            self.drag_squares(ui, grid, mode, &squares, out);
+        }
+    }
+
+    /// Runs the affordance of the squares a pointer drag over `squares` crosses.
+    fn drag_squares(
+        &self,
+        ui: &egui::Ui,
+        grid: &Grid,
+        mode: GridDrag,
+        squares: &HashMap<drag::Square, (egui::Rect, String, String)>,
+        out: &mut Vec<Intent>,
+    ) {
+        let key = egui::Id::new(("grid-drag", &grid.head.id));
+        let mut held = ui.data(|d| d.get_temp::<Option<drag::Drag>>(key)).flatten();
+        let pointer = ui.input(|i| {
+            let at = i.pointer.interact_pos();
+            drag::Pointer {
+                over: at
+                    .and_then(|at| squares.iter().find(|(_, s)| s.0.contains(at)))
+                    .map(|(&at, _)| at),
+                pressed: i.pointer.button_pressed(egui::PointerButton::Primary),
+                down: i.pointer.primary_down(),
+                released: i.pointer.button_released(egui::PointerButton::Primary),
+            }
+        });
+        let on_top = ui
+            .ctx()
+            .layer_id_at(ui.input(|i| i.pointer.interact_pos()).unwrap_or_default())
+            == Some(ui.layer_id());
+        for at in drag::advance(
+            mode,
+            &mut held,
+            drag::Pointer {
+                pressed: pointer.pressed && on_top,
+                ..pointer
+            },
+        ) {
+            let Some((_, row, affordance)) = squares.get(&at) else {
+                continue;
+            };
+            out.push(Intent::Paint(Paint {
+                component: grid.head.id.clone(),
+                row: row.clone(),
+                affordance: affordance.clone(),
+            }));
+        }
+        ui.data_mut(|d| d.insert_temp(key, held));
     }
 }
 

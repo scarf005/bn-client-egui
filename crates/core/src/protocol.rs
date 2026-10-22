@@ -2261,6 +2261,18 @@ pub struct Grid {
     pub looks: Vec<Look>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub role: Option<GridRole>,
+    /// How a pointer drag over the cells runs their affordance; none: only a click does.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub drag: Option<GridDrag>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GridDrag {
+    /// Every square the pointer crosses runs it, from the press on.
+    Trail,
+    /// The squares under the press and under the release run it.
+    Span,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
