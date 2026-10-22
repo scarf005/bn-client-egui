@@ -23,7 +23,7 @@ struct RowLayout<'a> {
     wraps: bool,
     /// The table's body, which a category row's band spans.
     across: egui::Rect,
-    /// The list is the one of a dialog with no detail beside it, whose rows a single click answers.
+    /// The list is the one of a screen with no detail beside it, whose rows a single click answers.
     answers: bool,
     /// The screen is a list filter's prompt: a row it shows is a result, and a click on one confirms the text and
     /// then chooses that row of the list.
@@ -196,7 +196,7 @@ impl<M: GameModel> App<M> {
                 widths: &widths,
                 wraps,
                 across: body.max_rect(),
-                answers: screen.role == ScreenRole::Dialog && Self::asks(screen),
+                answers: Self::asks(screen),
                 filter: form::filter_submit(screen).is_some(),
             };
             body.heterogeneous_rows(heights.iter().copied(), |row| {
