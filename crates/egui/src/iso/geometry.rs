@@ -501,8 +501,8 @@ struct Cuboid {
     tiled: bool,
 }
 
-/// The faces of `c` in the square with its north-west corner at `corner`: its top and the sides `covered` does not
-/// leave out, south, east, north and west.
+/// The faces of `c` in the square with its north-west corner at `corner`: its top and its sides, south, east, north
+/// and west, but those on an edge of the square `covered` leaves out.
 fn cuboid(
     m: &Metrics,
     p: &Placement,
@@ -582,8 +582,10 @@ fn cuboid(
         ],
         flags,
     )];
+    // A side on the edge of the square is hidden where `covered` says the next square's solid covers that edge.
+    let on_edge = [hi.y >= 1.0, hi.x >= 1.0, lo.y <= 0.0, lo.x <= 0.0];
     for (n, (origin, along, inward)) in sides.into_iter().enumerate() {
-        if p.covered[n] && c.tiled {
+        if p.covered[n] && on_edge[n] {
             continue;
         }
         if c.tiled {
@@ -784,21 +786,9 @@ pub fn place(m: &Metrics, p: &Placement) -> Vec<Instance> {
             let flags = [flags[0] | glow, flags[1], flags[2]];
             match form {
                 Form::Plant | Form::Fire => crossed(corner, block, s, flags),
-                // A pane in the line of the walls: the window in it is the sprite's own.
                 _ => built(form, block, p.turn, p.joined)
                     .iter()
-                    .flat_map(|c| {
-                        cuboid(
-                            m,
-                            &Placement {
-                                covered: [false; 4],
-                                ..*p
-                            },
-                            (corner, block),
-                            c,
-                            flags,
-                        )
-                    })
+                    .flat_map(|c| cuboid(m, p, (corner, block), c, flags))
                     .collect(),
             }
         }
@@ -846,14 +836,9 @@ pub fn place(m: &Metrics, p: &Placement) -> Vec<Instance> {
                 hi: pane.1,
                 tiled: true,
             };
-            let open = Placement {
-                covered: [false; 4],
-                ..*p
-            };
-            [whole(0.0, sill), whole(lintel, top)]
+            [whole(0.0, sill), pane, whole(lintel, top)]
                 .iter()
                 .flat_map(|c| cuboid(m, p, (corner, block), c, flags))
-                .chain(cuboid(m, &open, (corner, block), &pane, flags))
                 .collect()
         }
         Shape::Box { top, bottom } => {
@@ -1642,6 +1627,33 @@ mod tests {
             size.x < 0.2 && (size.y - 1.0).abs() < 1e-4 && (lo.x - 3.0).abs() < 1e-4,
             "{size} {lo}"
         );
+    }
+
+    #[test]
+    fn a_shut_door_between_walls_hides_the_ends_against_them_and_keeps_its_faces_inside_the_square()
+    {
+        let (m, s) = block_sprite();
+        let p = Placement {
+            joined: [false, true, false, true],
+            covered: [false, true, false, true],
+            ..formed(&s, Form::Door { open: false })
+        };
+        let quads = place(&m, &p);
+        // The square spans x 3 to 4: nothing upright lies in its east or west edge.
+        let upright = |i: &&Instance| i.b[2] < 0.0 && i.a[0] == 0.0;
+        assert!(
+            quads
+                .iter()
+                .filter(upright)
+                .all(|i| i.origin[0] > 3.0 + 1e-4 && i.origin[0] < 4.0 - 1e-4),
+            "{quads:?}"
+        );
+        // The leaf's faces along the wall stay, though the walls cover the square's other edges.
+        let along = quads
+            .iter()
+            .filter(|i| i.b[2] < 0.0 && i.a[1] == 0.0 && i.origin[2] <= 2.0 + 1e-4)
+            .count();
+        assert_eq!(along, 2 * 2, "two faces of two blocks: {quads:?}");
     }
 
     #[test]
