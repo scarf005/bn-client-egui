@@ -290,6 +290,16 @@ pub fn shape(m: &Metrics, sprite: &SpriteSource, kind: Kind) -> Shape {
     }
 }
 
+/// The heights from the ground of the blocks of wall a window or a door of a tileset drawn from above stands in.
+pub fn wall_bands(_m: &Metrics, _kind: Kind) -> Vec<(f32, f32)> {
+    vec![]
+}
+
+/// A whole block of the square from `low` to `high`, painted with `p`'s sprite as a wall is.
+pub fn band(_m: &Metrics, _p: &Placement, (_low, _high): (f32, f32)) -> Vec<Instance> {
+    vec![]
+}
+
 /// One quad of the scene, as the shader reads it.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Pod, Zeroable)]
@@ -1085,11 +1095,8 @@ mod tests {
             assert_eq!(shape(&flat, &tall, kind), Shape::Board);
             assert_eq!(shape(&flat, &wide, kind), Shape::Board);
         }
-        // A creature inside its square is thick, one that reaches out of it stands.
-        assert_eq!(
-            shape(&flat, &small, Kind::Creature),
-            Shape::Extrude { top: CREATURE }
-        );
+        // A creature stands, inside its square or reaching out of it.
+        assert_eq!(shape(&flat, &small, Kind::Creature), Shape::Board);
         assert_eq!(shape(&flat, &tall, Kind::Creature), Shape::Board);
     }
 
@@ -1128,13 +1135,14 @@ mod tests {
     }
 
     #[test]
-    fn items_and_creatures_drawn_from_above_are_thick_with_sides_only_on_the_opaque_edges() {
+    fn items_drawn_from_above_lie_a_pixel_of_a_block_game_thick_with_sides_only_on_the_opaque_edges() {
         let flat = Metrics::new((32, 32), false, None);
         let whole = sprite((32.0, 32.0), (0.0, 0.0));
         let reach = sprite((32.0, 64.0), (0.0, -32.0));
         // An L of the top and left halves: six straight edges.
         let l = Outline::of([32, 32], |x, y| x < 16 || y < 16);
-        for (kind, thick) in [(Kind::Item, ITEM), (Kind::Creature, CREATURE)] {
+        // As thick as a pixel of a block game's sixteen-pixel item.
+        for (kind, thick) in [(Kind::Item, 1.0 / 16.0)] {
             assert_eq!(shape(&flat, &whole, kind), Shape::Extrude { top: thick });
             // What reaches out of its square was drawn standing.
             assert_eq!(shape(&flat, &reach, kind), Shape::Board);
@@ -1694,29 +1702,61 @@ mod tests {
             .iter()
             .filter(|i| i.b[2] < 0.0 && i.a[1] == 0.0 && i.origin[2] <= 2.0 + 1e-4)
             .count();
-        assert_eq!(along, 2 * 2, "two faces of two blocks: {quads:?}");
+        assert_eq!(along, 2, "two faces, each the whole sprite: {quads:?}");
     }
 
     #[test]
-    fn a_window_drawn_from_above_is_a_block_under_its_pane_and_one_over_it() {
+    fn a_window_drawn_from_above_is_its_pane_between_blocks_of_its_wall() {
         let (m, s) = block_sprite();
         let p = Placement {
             joined: [false, true, false, true],
             ..square(&s, Kind::Window)
         };
-        let quads = place(&m, &p);
-        let (lo, hi) = bounds(&quads);
-        assert_eq!((lo.z, hi.z), (0.0, 3.0));
-        // The pane between the blocks is thin and along the wall.
-        let pane = quads
-            .iter()
-            .filter(|q| q.origin[2] > 1.0 + 1e-4 && q.origin[2] <= 2.0 + 1e-4)
-            .copied()
-            .collect::<Vec<_>>();
+        // The window's sprite is only the pane: thin, along the wall, from its sill to its lintel.
+        let pane = place(&m, &p);
         let (lo, hi) = bounds(&pane);
         assert!(
             (hi.x - lo.x - 1.0).abs() < 1e-4 && hi.y - lo.y < 0.1,
             "{lo} {hi}"
+        );
+        assert_eq!((lo.z, hi.z), (1.0, 2.0));
+        // Under the sill and over the lintel, whole blocks painted with the wall beside it.
+        assert_eq!(wall_bands(&m, Kind::Window), vec![(0.0, 1.0), (2.0, 3.0)]);
+        let wall = SpriteSource {
+            at: Vec2::new(64.0, 0.0),
+            ..s
+        };
+        let blocks = wall_bands(&m, Kind::Window)
+            .into_iter()
+            .flat_map(|b| band(&m, &Placement { sprite: &wall, ..p }, b))
+            .collect::<Vec<_>>();
+        assert_eq!(bounds(&blocks).0.z, 0.0);
+        assert_eq!(bounds(&blocks).1.z, 3.0);
+        assert!(blocks.iter().all(|q| q.uv[0] >= 64.0), "{blocks:?}");
+    }
+
+    #[test]
+    fn a_door_drawn_from_above_shows_its_whole_sprite_once_up_its_leaf_under_a_lintel_of_its_wall() {
+        let (m, s) = block_sprite();
+        let p = Placement {
+            joined: [false, true, false, true],
+            ..formed(&s, Form::Door { open: false })
+        };
+        let quads = place(&m, &p);
+        assert!(bounds(&quads).1.z <= 2.0 + 1e-4, "the lintel is the wall's");
+        // Each face along the wall is the sprite once, two blocks tall.
+        let faces = quads
+            .iter()
+            .filter(|q| q.b[2] < 0.0 && q.a[1] == 0.0)
+            .collect::<Vec<_>>();
+        assert_eq!(faces.len(), 2, "{faces:?}");
+        for q in faces {
+            assert_eq!(q.b[2], -2.0);
+            assert!((Vec2::from(q.uv_b).y - 32.0).abs() < 0.1, "{q:?}");
+        }
+        assert_eq!(
+            wall_bands(&m, Kind::Formed(Form::Door { open: false })),
+            vec![(2.0, 3.0)]
         );
     }
 
