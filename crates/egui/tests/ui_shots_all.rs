@@ -27,6 +27,7 @@ const TITLE_FLOW: &[&str] = &[
 /// finding. A fixed one must leave the list.
 #[rustfmt::skip]
 const KNOWN: &[(&str, Kind, &str)] = &[
+    ("aim/advanced inventory screen@1280x800", Kind::Cut, "F6"),
     ("aim/advanced inventory screen@1920x1080", Kind::Cut, "F6"),
     ("armor/armor layers screen of the torso@1280x800", Kind::Cut, "F1"),
     ("character/character sheet@1280x800", Kind::Cut, "F6"),
