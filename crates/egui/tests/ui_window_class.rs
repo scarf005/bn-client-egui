@@ -201,6 +201,63 @@ fn a_full_screen_reaches_every_edge_of_the_map_region() {
     assert!(wrong.is_empty(), "{wrong:#?}");
 }
 
+/// The direction prompt as the engine publishes it: its question over the compass of the squares around the
+/// avatar, each running the prompt's choose.
+fn direction_prompt() -> Value {
+    let names = [["NW", "N", "NE"], ["W", "CE", "E"], ["SW", "S", "SE"]];
+    let cells = (0..3)
+        .flat_map(|y| (0..3).map(move |x| (x, y)))
+        .map(|(x, y)| {
+            json!({"x": x, "y": y, "id": format!("direction:{x}:{y}"), "glyph": names[y][x],
+                "label": names[y][x], "affordance": "direction:choose", "enabled": true})
+        })
+        .collect::<Vec<_>>();
+    let prompt =
+        json!({"id": "text:message", "kind": "text", "markup": "Close where?", "role": "prompt"});
+    let compass = json!({"id": "direction:compass", "kind": "grid", "affordances": ["direction:choose"],
+        "cols": 3, "rows": 3, "cells": cells});
+    let choose = json!({"id": "direction:choose", "label": "Choose direction", "keys": [], "enabled": true,
+        "args": {"row": {"component_id": "direction:compass"}}, "expect": "boundary"});
+    let cancel = json!({"id": "bn:cancel", "label": "Cancel", "keys": ["ESC"], "enabled": true,
+        "role": "cancel", "expect": "screen"});
+    json!({"screen_id": "screen:77", "role": "dialog", "kind": "direction", "title": "Choose direction",
+        "root": {"id": "direction", "kind": "split", "relation": "peers", "children": [prompt, compass]},
+        "affordances": [choose, cancel], "focus": {"component_id": "direction:compass"}})
+}
+
+/// A grid the player picks one square of is no canvas, even where it names the affordance its cells run: the
+/// direction prompt is a dialog of its size and the advanced inventory sits where it does without the name; the
+/// map editor, whose canvas the engine marks, fills the region.
+#[test]
+fn only_a_grid_the_engine_marks_as_a_canvas_fills_the_region() {
+    let aim = example("aim", "advanced inventory screen");
+    let mut named = aim.clone();
+    for pane in named["root"]["children"].as_array_mut().unwrap() {
+        pane["child"]["children"][0]["affordances"] = json!(["aim:set_area"]);
+    }
+    for size in SIZES {
+        let (h, _) = playing(size, direction_prompt(), None);
+        let window = window_of(&h, "direction");
+        assert!(!fills(&h, window), "{size:?}: {window:?} fills the region");
+        assert!(
+            window.height() < region(&h).height() / 2.0,
+            "{size:?}: {window:?} taller than its compass"
+        );
+        let [plain, named] = [&aim, &named].map(|screen| {
+            let (h, _) = playing(size, screen.clone(), None);
+            window_of(&h, "advanced_inventory")
+        });
+        assert_eq!(plain, named, "{size:?}");
+        let editor = example("editor", "map editor with a drawn room and a new mapping");
+        let (h, _) = playing(size, editor, None);
+        let window = window_of(&h, "editor");
+        assert!(
+            fills(&h, window),
+            "{size:?}: {window:?} does not fill the region"
+        );
+    }
+}
+
 /// The region grows when the sidebar narrows or the window widens; a full screen grows with it rather than
 /// leaving a strip of map before the sidebar.
 #[test]
@@ -378,4 +435,14 @@ fn a_side_window_kept_narrow_by_a_last_run_is_still_wide_enough_for_its_footer()
         row.iter().all(|b| (b.top() - row[0].top()).abs() < 1.0),
         "footer of {window:?} on more than one row: {row:?}"
     );
+}
+
+/// Writes the direction prompt over the map at both sizes to `$SHOT_DIR/<width>x<height>/direction.png`.
+#[test]
+#[ignore = "needs a Vulkan adapter and SHOT_DIR"]
+fn direction_shots() {
+    for size in SIZES {
+        let name = format!("{}x{}/direction.png", size.x, size.y);
+        common::shot_stack(common::over_map(direction_prompt()), size, &name);
+    }
 }
