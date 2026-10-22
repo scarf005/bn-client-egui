@@ -53,32 +53,33 @@ fn an_isometric_tileset_on_the_flat_map_and_the_layers_it_cannot_draw() {
     let size = m.size();
     let (tileset, _) = h.state().display().tileset().expect("a tileset");
     let season = m.season();
-    let mut bare = BTreeMap::<String, (usize, Vec<String>, char, bool, bool)>::new();
+    // The layers with no tile: those drawn as a stand-in and those drawn as the glyph text, by id.
+    let mut stood = BTreeMap::<String, (usize, char)>::new();
+    let mut bare = BTreeMap::<String, (usize, char)>::new();
+    let mut deep = 0;
     for y in 0..size.y {
         for x in 0..size.x {
-            for l in &m.cell(bn_client_egui::Pos { x, y }).layers {
+            let cell = m.cell(bn_client_egui::Pos { x, y });
+            deep += usize::from(cell.depth > 0);
+            for l in &cell.layers {
                 let q = bn_client_egui::display::query(l, season.as_deref());
-                if l.glyph != '\0'
-                    && tileset
-                        .choose_or_stand_in(&q, l.glyph, l.color_index)
-                        .is_none()
-                {
-                    let e = bare.entry(l.id.clone()).or_insert((
-                        0,
-                        l.fallbacks.clone(),
-                        l.glyph,
-                        l.terrain,
-                        l.creature,
-                    ));
-                    e.0 += 1;
+                if l.glyph == '\0' || tileset.choose(&q).is_some() {
+                    continue;
                 }
+                let drawn = tileset.choose_or_stand_in(&q, l.glyph, l.color_index);
+                let list = if drawn.is_some() {
+                    &mut stood
+                } else {
+                    &mut bare
+                };
+                list.entry(l.id.clone()).or_insert((0, l.glyph)).0 += 1;
             }
         }
     }
-    println!("LIVE model {}x{}", size.x, size.y);
-    for (id, (n, fallbacks, glyph, terrain, creature)) in &bare {
-        println!(
-            "LIVE bare {id} x{n} glyph {glyph:?} terrain {terrain} creature {creature} fallbacks {fallbacks:?}"
-        );
-    }
+    println!(
+        "LIVE model {}x{}, {deep} squares seen through open air",
+        size.x, size.y
+    );
+    println!("LIVE stand-ins {stood:?}");
+    println!("LIVE bare {bare:?}");
 }
