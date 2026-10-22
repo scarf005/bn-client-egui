@@ -6,6 +6,8 @@ msgstr ""
 "Project-Id-Version: bn-client\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-10-23 04:21+0900\n"
+
+"POT-Creation-Date: 2026-10-23 03:04+0900\n"
 "PO-Revision-Date: 2026-10-18 09:30+0900\n"
 "Language-Team: Japanese\n"
 "Language: ja\n"
@@ -33,6 +35,8 @@ msgstr "右クリック"
 
 #: crates/core/src/engine_model/commands.rs:141
 #: crates/egui/src/app/component/form.rs:193 crates/egui/src/app/menu.rs:67
+
+#: crates/egui/src/app/component/form.rs:175 crates/egui/src/app/menu.rs:74
 msgid "Cancel"
 msgstr "取消"
 
@@ -145,28 +149,40 @@ msgid "Loading image"
 msgstr "読み込み画像"
 
 #: crates/egui/src/app.rs:489
+
+#: crates/egui/src/app.rs:486
 msgid "Resize sidebar"
 msgstr "サイドバーのサイズ変更"
 
 #: crates/egui/src/app.rs:518 crates/egui/src/app.rs:529
+
+#: crates/egui/src/app.rs:515 crates/egui/src/app.rs:526
 msgid "Client settings"
 msgstr "クライアント設定"
 
 #: crates/egui/src/app.rs:526 crates/egui/src/app/palette.rs:57
+
+#: crates/egui/src/app.rs:523 crates/egui/src/app/palette.rs:57
 #: crates/egui/src/app/palette.rs:103 crates/tui/src/lib.rs:881
 #: crates/tui/src/lib.rs:1050
 msgid "Actions"
 msgstr "行動"
 
 #: crates/egui/src/app.rs:544 crates/tui/src/lib.rs:666
+
+#: crates/egui/src/app.rs:541 crates/tui/src/lib.rs:666
 msgid "Ready"
 msgstr "待機中"
 
 #: crates/egui/src/app.rs:583
+
+#: crates/egui/src/app.rs:579
 msgid "Interrupt"
 msgstr "中断"
 
 #: crates/egui/src/app/component/form.rs:168 crates/egui/src/editor.rs:116
+
+#: crates/egui/src/app/component/form.rs:150 crates/egui/src/editor.rs:116
 msgid "Press the new key"
 msgstr "新しいキーを押してください"
 
@@ -193,22 +209,32 @@ msgid "No map loaded"
 msgstr "地図が読み込まれていません"
 
 #: crates/egui/src/app/map.rs:342
+
+#: crates/egui/src/app/map.rs:346
 msgid "Player at (%d, %d). Cursor (%d, %d)."
 msgstr "プレイヤー (%d, %d)。カーソル (%d, %d)。"
 
 #: crates/egui/src/app/map.rs:345
+
+#: crates/egui/src/app/map.rs:349
 msgid "Player at (%d, %d). Cursor (%d, %d): %s."
 msgstr "プレイヤー (%d, %d)。カーソル (%d, %d): %s。"
 
 #: crates/egui/src/app/map.rs:642
+
+#: crates/egui/src/app/map.rs:646
 msgid "Map actions"
 msgstr "地図の行動"
 
 #: crates/egui/src/app/menu.rs:251
+
+#: crates/egui/src/app/menu.rs:258
 msgid "Space or Enter closes this popup"
 msgstr "SpaceかEnterでこのポップアップを閉じます"
 
 #: crates/egui/src/app/menu.rs:279
+
+#: crates/egui/src/app/menu.rs:286
 msgid "Load more (%d of %d)"
 msgstr "さらに読み込む (%d/%d)"
 
@@ -224,33 +250,50 @@ msgstr "行動を検索"
 msgid "Resize message log"
 msgstr "メッセージログのサイズ変更"
 
-#: crates/egui/src/display.rs:521
+#: crates/egui/src/display.rs:523
 msgid "No tileset found in the game's gfx folder."
 msgstr "ゲームのgfxフォルダにタイルセットがありません。"
 
 #: crates/egui/src/display.rs:685
+
+#: crates/egui/src/display.rs:687
 msgid "Tiles"
 msgstr "タイル"
 
 #: crates/egui/src/display.rs:694
+
+#: crates/egui/src/display.rs:696
 msgid "First person"
 msgstr "一人称"
 
 #: crates/egui/src/display.rs:708
+
+#: crates/egui/src/display.rs:710
 msgid "none"
 msgstr "なし"
 
 #: crates/egui/src/display.rs:711
+
+#: crates/egui/src/display.rs:713
 msgid "Tileset"
 msgstr "タイルセット"
 
 #: crates/egui/src/display.rs:727
+
+#: crates/egui/src/display.rs:729
 msgid "Tileset unavailable: %s"
 msgstr "タイルセットを使えません: %s"
 
 #: crates/egui/src/display.rs:731
+
+#: crates/egui/src/display.rs:733
 msgid "Reduced motion"
 msgstr "動きを減らす"
+
+#. TRANSLATORS: the mark of north on the compass of the 3D map.
+#: crates/egui/src/iso/mod.rs:190
+msgid "N"
+msgstr "北"
 
 #: crates/egui/src/main.rs:32 crates/egui/src/main.rs:100
 msgid "Cataclysm: Bright Nights client"

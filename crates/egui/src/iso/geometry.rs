@@ -57,12 +57,12 @@ const LEVEL: f32 = 3.0;
 const LAYER_BIAS: f32 = 0.002;
 /// A vehicle part of a tileset drawn from above stands this many squares tall: a person in it shows from the chest.
 const VEHICLE: f32 = 0.5;
-/// A person of a tileset drawn from above stands as an upright board as tall as the tile: one square. What covers
-/// some of a person stands that share of it.
-const PERSON: f32 = 1.0;
-/// The sill and the lintel of a window of a tileset drawn from above, as shares of the level its wall rises.
-const SILL: f32 = 0.3;
-const LINTEL: f32 = 0.2;
+/// The blocks a wall of a tileset drawn from above stacks to a level: a storey is 3 m, a block 1 m.
+const LEVEL_BLOCKS: f32 = 3.0;
+/// The sill and the lintel of a window of a tileset drawn from above, as shares of the level its wall rises: a
+/// block each.
+const SILL: f32 = 1.0 / LEVEL_BLOCKS;
+const LINTEL: f32 = 1.0 / LEVEL_BLOCKS;
 
 impl Metrics {
     pub fn new(tile: (u32, u32), iso: bool, zlevel_height: Option<f32>) -> Self {
@@ -103,6 +103,11 @@ pub enum Shape {
     Window { sill: f32, lintel: f32, top: f32 },
     /// An upright board that faces the eye.
     Board,
+    /// Blocks of a sprite drawn from above stacked from the ground to a height, as a block game stacks them: each
+    /// face of each block the whole sprite.
+    Blocks { top: f32 },
+    /// A thing the engine names the form of, built from blocks, slabs and crossed boards in a block's size.
+    Built { form: Form, block: f32 },
 }
 
 impl Shape {
@@ -110,7 +115,14 @@ impl Shape {
     pub fn solid(&self) -> Option<(f32, f32)> {
         match *self {
             Shape::Box { top, bottom } => Some((bottom, top)),
-            Shape::Extrude { top } | Shape::Window { top, .. } => Some((0.0, top)),
+            Shape::Extrude { top } | Shape::Window { top, .. } | Shape::Blocks { top } => {
+                Some((0.0, top))
+            }
+            Shape::Built { form, block } => match form {
+                Form::Door { .. } => Some((0.0, LEVEL_BLOCKS * block)),
+                Form::Fence | Form::Plant | Form::Fire | Form::Gas => None,
+                Form::Seat | Form::Bed | Form::Table => Some((0.0, block * 0.8)),
+            },
             Shape::Floor { .. } | Shape::Board => None,
         }
     }
@@ -200,6 +212,24 @@ pub enum Kind {
     /// Terrain that is not a wall, or anything else that is not a creature or a vehicle part, as a tileset drawn from
     /// above shows it, covering the given percent of a person.
     Standing { coverage: u8 },
+    /// What the engine says stands in a form of its own, as a tileset drawn from above shows it.
+    Formed(Form),
+}
+
+/// What a thing the engine names the form of is built as from a sprite drawn from above.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Form {
+    /// A door, swung open into its square or shut in the line of the walls.
+    Door {
+        open: bool,
+    },
+    Fence,
+    Plant,
+    Seat,
+    Table,
+    Bed,
+    Fire,
+    Gas,
 }
 
 /// What `sprite` is drawn as. Terrain whose sprite is as wide as the tile is the ground when it hardly rises over
@@ -213,17 +243,20 @@ pub fn shape(m: &Metrics, sprite: &SpriteSource, kind: Kind) -> Shape {
     if !m.iso {
         let inside = sprite.offset.cmpgt(Vec2::splat(-0.5)).all()
             && (sprite.offset + size).cmplt(m.tile + 0.5).all();
+        let block = m.level / LEVEL_BLOCKS;
         return match (kind, inside) {
+            (Kind::Formed(form), _) => Shape::Built { form, block },
             (Kind::Creature, _) | (_, false) => Shape::Board,
-            (Kind::Wall { .. }, true) => Shape::Extrude { top: m.level },
+            (Kind::Wall { .. }, true) => Shape::Blocks { top: m.level },
             (Kind::Window, true) => Shape::Window {
                 sill: SILL * m.level,
                 lintel: (1.0 - LINTEL) * m.level,
                 top: m.level,
             },
             (Kind::Vehicle, true) => Shape::Extrude { top: VEHICLE },
-            (Kind::Standing { coverage }, true) => Shape::Extrude {
-                top: PERSON * f32::from(coverage.min(100)) / 100.0,
+            // A person is two blocks tall.
+            (Kind::Standing { coverage }, true) => Shape::Blocks {
+                top: 2.0 * block * f32::from(coverage.min(100)) / 100.0,
             },
             _ => Shape::Floor { z: 0.0 },
         };
@@ -269,9 +302,12 @@ pub struct Instance {
     pub flags: [u32; 3],
 }
 
-/// Flag bits of an instance's first word: a board, and a board pushed to the near edge of its square.
+/// Flag bits of an instance's first word: a board, a board pushed to the near edge of its square, what gives light
+/// (never shaded, casting no shadow) and what is seen through (every other pixel drawn, casting no shadow).
 pub const BOARD: u32 = 1;
 pub const EDGE: u32 = 2;
+pub const GLOW: u32 = 4;
+pub const SHEER: u32 = 8;
 
 /// How far an upright sprite of an isometric tileset stands toward the eye from the middle of its square: to the
 /// square's near edge, whatever the camera's yaw. `toward` is the horizontal unit vector from target to eye; the
@@ -301,6 +337,9 @@ pub struct Placement<'a> {
     pub covered: [bool; 4],
     /// For a sprite pushed up from the ground: the outline of its opaque pixels, none for the whole sprite.
     pub outline: Option<&'a Outline>,
+    /// Which of the squares to the south, east, north and west stand in a line of walls: a wall, a window, a door or
+    /// a fence. A door, a window pane or a fence stands along that line.
+    pub joined: [bool; 4],
 }
 
 /// How much of a quad's sprite span is cut off at each edge, so that a pixel centre on an edge samples the
@@ -420,7 +459,7 @@ fn border(m: &Metrics, square: Vec2, side: &Side) -> Option<usize> {
 /// for a sprite pushed up from the ground those it is opaque all along.
 pub fn borders(m: &Metrics, p: &Placement) -> [bool; 4] {
     match shape(m, p.sprite, p.kind) {
-        Shape::Box { .. } => [true; 4],
+        Shape::Box { .. } | Shape::Blocks { .. } => [true; 4],
         Shape::Extrude { .. } => {
             let square = Vec2::new(p.square.0 as f32, p.square.1 as f32);
             let mut length = [0.0; 4];
@@ -432,7 +471,240 @@ pub fn borders(m: &Metrics, p: &Placement) -> [bool; 4] {
             length.map(|l| l > 1.0 - m.across.max(m.up))
         }
         // What is seen through the opening of a window is not hidden by it.
-        Shape::Floor { .. } | Shape::Window { .. } | Shape::Board => [false; 4],
+        Shape::Floor { .. } | Shape::Window { .. } | Shape::Board | Shape::Built { .. } => {
+            [false; 4]
+        }
+    }
+}
+
+/// Where a point of its square, from its north-west corner, is in the page of a sprite drawn from above laid there as
+/// `turn` turns its picture.
+fn page_point(m: &Metrics, s: &SpriteSource, turn: Turn, q: Vec2) -> Vec2 {
+    let q = match turn {
+        Turn::None => q,
+        Turn::Left => Vec2::new(1.0 - q.y, q.x),
+        Turn::Right => Vec2::new(q.y, 1.0 - q.x),
+        Turn::Half => Vec2::ONE - q,
+        Turn::Mirror => Vec2::new(1.0 - q.x, q.y),
+    };
+    let px = (q * m.tile - s.offset).clamp(Vec2::ZERO, s.size());
+    s.at + px / s.scale
+}
+
+/// A box from `lo` to `hi` in a square, of world units over its ground, and how its faces are painted.
+#[derive(Clone, Copy)]
+struct Cuboid {
+    lo: glam::Vec3,
+    hi: glam::Vec3,
+    /// Each face is the whole sprite per block it spans, as a block game paints a block; otherwise each face shows
+    /// the sprite where the box stands in the square, its sides the pixels inward from their edge.
+    tiled: bool,
+}
+
+/// The faces of `c` in the square with its north-west corner at `corner`: its top and the sides `covered` does not
+/// leave out, south, east, north and west.
+fn cuboid(
+    m: &Metrics,
+    p: &Placement,
+    (corner, block): (glam::Vec3, f32),
+    c: &Cuboid,
+    flags: [u32; 3],
+) -> Vec<Instance> {
+    let s = p.sprite;
+    let at = |q: Vec2| page_point(m, s, p.turn, q);
+    let (lo, hi) = (c.lo, c.hi);
+    let world = |x: f32, y: f32, z: f32| (corner + glam::Vec3::new(x, y, z)).to_array();
+    // The whole sprite per block across `along` and down `down`, a part of it for a part of a block.
+    let tiled = |origin: glam::Vec3, along: glam::Vec3, down: glam::Vec3| -> Vec<Instance> {
+        let (wide, tall) = (along.length() / block, down.length() / block);
+        let (a, d) = (
+            along.normalize_or_zero() * block,
+            down.normalize_or_zero() * block,
+        );
+        let mut quads = vec![];
+        let mut row = 0.0;
+        while row < tall - 1e-4 {
+            let h = (tall - row).min(1.0);
+            let mut column = 0.0;
+            while column < wide - 1e-4 {
+                let w = (wide - column).min(1.0);
+                let o = origin + a * column + d * row;
+                quads.push(instance(
+                    (corner + o).to_array(),
+                    ((a * w).to_array(), (d * h).to_array()),
+                    [
+                        s.at,
+                        Vec2::new(s.src.x * w, 0.0),
+                        Vec2::new(0.0, s.src.y * h),
+                    ],
+                    flags,
+                ));
+                column += 1.0;
+            }
+            row += 1.0;
+        }
+        quads
+    };
+    let height = hi.z - lo.z;
+    let down = glam::Vec3::new(0.0, 0.0, -height);
+    // From the outside: the top left corner of each side, the way across it, and the way inward from its edge.
+    let sides = [
+        (
+            glam::Vec3::new(lo.x, hi.y, hi.z),
+            glam::Vec3::X * (hi.x - lo.x),
+            Vec2::NEG_Y,
+        ),
+        (
+            glam::Vec3::new(hi.x, hi.y, hi.z),
+            glam::Vec3::NEG_Y * (hi.y - lo.y),
+            Vec2::NEG_X,
+        ),
+        (
+            glam::Vec3::new(hi.x, lo.y, hi.z),
+            glam::Vec3::NEG_X * (hi.x - lo.x),
+            Vec2::Y,
+        ),
+        (
+            glam::Vec3::new(lo.x, lo.y, hi.z),
+            glam::Vec3::Y * (hi.y - lo.y),
+            Vec2::X,
+        ),
+    ];
+    // The top shows the sprite where the box stands in the square.
+    let o = at(lo.truncate());
+    let mut quads = vec![instance(
+        world(lo.x, lo.y, hi.z),
+        ([hi.x - lo.x, 0.0, 0.0], [0.0, hi.y - lo.y, 0.0]),
+        [
+            o,
+            at(Vec2::new(hi.x, lo.y)) - o,
+            at(Vec2::new(lo.x, hi.y)) - o,
+        ],
+        flags,
+    )];
+    for (n, (origin, along, inward)) in sides.into_iter().enumerate() {
+        if p.covered[n] && c.tiled {
+            continue;
+        }
+        if c.tiled {
+            quads.extend(tiled(origin, along, down));
+            continue;
+        }
+        let start = origin.truncate();
+        let o = at(start);
+        let deep = (start + inward * height).clamp(Vec2::ZERO, Vec2::ONE);
+        quads.push(instance(
+            (corner + origin).to_array(),
+            (along.to_array(), down.to_array()),
+            [o, at(start + along.truncate()) - o, at(deep) - o],
+            flags,
+        ));
+    }
+    quads
+}
+
+/// Two boards crossed through the diagonals of a square, `top` tall, each the whole sprite, as a block game draws a
+/// plant.
+fn crossed(corner: glam::Vec3, top: f32, s: &SpriteSource, flags: [u32; 3]) -> Vec<Instance> {
+    let uv = [s.at, Vec2::new(s.src.x, 0.0), Vec2::new(0.0, s.src.y)];
+    let down = [0.0, 0.0, -top];
+    [
+        (glam::Vec3::new(0.0, 1.0, top), [1.0, -1.0, 0.0]),
+        (glam::Vec3::new(0.0, 0.0, top), [1.0, 1.0, 0.0]),
+    ]
+    .into_iter()
+    .map(|(o, a)| instance((corner + o).to_array(), (a, down), uv, flags))
+    .collect()
+}
+
+/// The boxes a thing of `form` is built of in its square, `block` a block's size: a door and its lintel, a fence, a
+/// gas's volume, the legs, seat and back of a seat, the legs and top of a table, a bed's frame. A door and a fence
+/// stand along the line of walls `joined` says, east to west unless only the north or the south one joins it; a
+/// seat's back is at the top of its sprite, as the sprite turns.
+fn built(form: Form, block: f32, turn: Turn, joined: [bool; 4]) -> Vec<Cuboid> {
+    use glam::Vec3;
+    let along_x = joined[1] || joined[3] || !(joined[0] || joined[2]);
+    // A slab `thick` across the middle of the square along the line, from `low` to `high`.
+    let slab = |thick: f32, low: f32, high: f32| {
+        let (a, b) = (0.5 - thick / 2.0, 0.5 + thick / 2.0);
+        match along_x {
+            true => (Vec3::new(0.0, a, low), Vec3::new(1.0, b, high)),
+            false => (Vec3::new(a, 0.0, low), Vec3::new(b, 1.0, high)),
+        }
+    };
+    let boxed = |(lo, hi): (Vec3, Vec3), tiled: bool| Cuboid { lo, hi, tiled };
+    let legs = |inset: f32, side: f32, high: f32| {
+        [(0, 0), (1, 0), (0, 1), (1, 1)].map(|(i, j)| {
+            let x = if i == 0 { inset } else { 1.0 - inset - side };
+            let y = if j == 0 { inset } else { 1.0 - inset - side };
+            boxed(
+                (Vec3::new(x, y, 0.0), Vec3::new(x + side, y + side, high)),
+                false,
+            )
+        })
+    };
+    let door = 2.0 * block;
+    let lintel = boxed(
+        (
+            Vec3::new(0.0, 0.0, door),
+            Vec3::new(1.0, 1.0, LEVEL_BLOCKS * block),
+        ),
+        true,
+    );
+    match form {
+        Form::Door { open: false } => vec![boxed(slab(0.12, 0.0, door), true), lintel],
+        // Swung open against the west or the north edge of its square.
+        Form::Door { open: true } => {
+            let leaf = match along_x {
+                true => (Vec3::new(0.0, 0.0, 0.0), Vec3::new(0.12, 1.0, door)),
+                false => (Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, 0.12, door)),
+            };
+            vec![boxed(leaf, true), lintel]
+        }
+        Form::Fence => vec![boxed(slab(0.12, 0.0, block), true)],
+        Form::Gas => vec![boxed((Vec3::ZERO, Vec3::new(1.0, 1.0, block)), true)],
+        Form::Seat => {
+            let seat = 0.45 * block;
+            // The back along the sprite's top edge, wherever its turn brings that edge.
+            let (lo, hi) = match turn {
+                Turn::None | Turn::Mirror => {
+                    (Vec3::new(0.1, 0.1, seat), Vec3::new(0.9, 0.22, block))
+                }
+                Turn::Half => (Vec3::new(0.1, 0.78, seat), Vec3::new(0.9, 0.9, block)),
+                Turn::Left => (Vec3::new(0.1, 0.1, seat), Vec3::new(0.22, 0.9, block)),
+                Turn::Right => (Vec3::new(0.78, 0.1, seat), Vec3::new(0.9, 0.9, block)),
+            };
+            let mut parts = legs(0.12, 0.08, seat).to_vec();
+            parts.push(boxed(
+                (
+                    Vec3::new(0.1, 0.1, seat),
+                    Vec3::new(0.9, 0.9, seat + 0.1 * block),
+                ),
+                false,
+            ));
+            parts.push(boxed((lo, hi), false));
+            parts
+        }
+        Form::Table => {
+            let top = 0.72 * block;
+            let mut parts = legs(0.06, 0.09, top).to_vec();
+            parts.push(boxed(
+                (
+                    Vec3::new(0.02, 0.02, top),
+                    Vec3::new(0.98, 0.98, top + 0.1 * block),
+                ),
+                false,
+            ));
+            parts
+        }
+        Form::Bed => vec![boxed(
+            (
+                Vec3::new(0.03, 0.03, 0.0),
+                Vec3::new(0.97, 0.97, 0.45 * block),
+            ),
+            false,
+        )],
+        Form::Plant | Form::Fire => vec![],
     }
 }
 
@@ -492,7 +764,44 @@ pub fn place(m: &Metrics, p: &Placement) -> Vec<Instance> {
             .chain(std::iter::once(lying(bottom)))
             .collect()
     };
+    let corner = glam::Vec3::new(x, y, p.floor + LAYER_BIAS * p.order as f32);
     match shape(m, s, p.kind) {
+        Shape::Blocks { top } => {
+            let block = m.level / LEVEL_BLOCKS;
+            let all = Cuboid {
+                lo: glam::Vec3::ZERO,
+                hi: glam::Vec3::new(1.0, 1.0, top),
+                tiled: true,
+            };
+            cuboid(m, p, (corner, block), &all, flags)
+        }
+        Shape::Built { form, block } => {
+            let glow = match form {
+                Form::Fire => GLOW,
+                Form::Gas => SHEER,
+                _ => 0,
+            };
+            let flags = [flags[0] | glow, flags[1], flags[2]];
+            match form {
+                Form::Plant | Form::Fire => crossed(corner, block, s, flags),
+                // A pane in the line of the walls: the window in it is the sprite's own.
+                _ => built(form, block, p.turn, p.joined)
+                    .iter()
+                    .flat_map(|c| {
+                        cuboid(
+                            m,
+                            &Placement {
+                                covered: [false; 4],
+                                ..*p
+                            },
+                            (corner, block),
+                            c,
+                            flags,
+                        )
+                    })
+                    .collect(),
+            }
+        }
         Shape::Floor { z } => {
             let z = p.floor + z;
             match m.iso {
@@ -512,10 +821,40 @@ pub fn place(m: &Metrics, p: &Placement) -> Vec<Instance> {
             }
         }
         Shape::Extrude { top } => pushed(0.0, top),
+        // A block under the sill and over the lintel, and between them the sprite as a pane in the line of the walls.
         Shape::Window { sill, lintel, top } => {
-            let mut quads = pushed(0.0, sill);
-            quads.extend(pushed(lintel, top));
-            quads
+            let block = m.level / LEVEL_BLOCKS;
+            let whole = |low: f32, high: f32| Cuboid {
+                lo: glam::Vec3::new(0.0, 0.0, low),
+                hi: glam::Vec3::new(1.0, 1.0, high),
+                tiled: true,
+            };
+            let along_x = p.joined[1] || p.joined[3] || !(p.joined[0] || p.joined[2]);
+            let (a, b) = (0.47, 0.53);
+            let pane = match along_x {
+                true => (
+                    glam::Vec3::new(0.0, a, sill),
+                    glam::Vec3::new(1.0, b, lintel),
+                ),
+                false => (
+                    glam::Vec3::new(a, 0.0, sill),
+                    glam::Vec3::new(b, 1.0, lintel),
+                ),
+            };
+            let pane = Cuboid {
+                lo: pane.0,
+                hi: pane.1,
+                tiled: true,
+            };
+            let open = Placement {
+                covered: [false; 4],
+                ..*p
+            };
+            [whole(0.0, sill), whole(lintel, top)]
+                .iter()
+                .flat_map(|c| cuboid(m, p, (corner, block), c, flags))
+                .chain(cuboid(m, &open, (corner, block), &pane, flags))
+                .collect()
         }
         Shape::Box { top, bottom } => {
             let (w, h, t) = (size.x, size.y, m.diamond);
@@ -604,6 +943,7 @@ mod tests {
             order: 0,
             covered: [false; 4],
             outline: None,
+            joined: [false; 4],
         }
     }
 
@@ -762,7 +1102,7 @@ mod tests {
         let flat = Metrics::new((32, 32), false, None);
         let whole = sprite((32.0, 32.0), (0.0, 0.0));
         let wall = Kind::Wall { joined: false };
-        assert_eq!(shape(&flat, &whole, wall), Shape::Extrude { top: 3.0 });
+        assert_eq!(shape(&flat, &whole, wall), Shape::Blocks { top: 3.0 });
         assert_eq!(
             shape(&flat, &whole, Kind::Vehicle),
             Shape::Extrude { top: VEHICLE }
@@ -773,11 +1113,11 @@ mod tests {
         // The top comes first and the bottom lies on the ground: four sides between them, however tall it is.
         let p = Placement {
             floor: 1.0,
-            ..square(&whole, wall)
+            ..square(&whole, Kind::Vehicle)
         };
         let layers = place(&flat, &p);
         assert_eq!(layers.len(), 6);
-        assert_eq!(layers[0].origin, [3.0, 5.0, 4.0]);
+        assert_eq!(layers[0].origin, [3.0, 5.0, 1.0 + VEHICLE]);
         assert_eq!(layers[layers.len() - 1].origin, [3.0, 5.0, 1.0]);
         // An isometric wall is a box only where the tileset joined it: a lone rock stands.
         let m = ultica();
@@ -817,7 +1157,7 @@ mod tests {
     fn a_side_of_a_turned_sprite_drawn_from_above_shows_the_edge_its_turn_brings_there() {
         let flat = Metrics::new((32, 32), false, None);
         let whole = sprite((32.0, 32.0), (0.0, 0.0));
-        let mut p = square(&whole, Kind::Wall { joined: false });
+        let mut p = square(&whole, Kind::Vehicle);
         p.turn = Turn::Left;
         let faces = place(&flat, &p);
         assert_eq!(faces.len(), 6);
@@ -901,7 +1241,7 @@ mod tests {
         let flat = Metrics::new((32, 32), false, None);
         // The top half of the square, cut to its opaque pixels.
         let half = sprite((32.0, 16.0), (0.0, 0.0));
-        let p = square(&half, Kind::Wall { joined: false });
+        let p = square(&half, Kind::Vehicle);
         assert_eq!(borders(&flat, &p), [false, false, true, false]);
         let outline = Outline::of([32, 16], |x, _| x < 31);
         let p = Placement {
@@ -1191,5 +1531,170 @@ mod tests {
         assert_eq!(faces[2].origin[0], 3.0);
         p.covered = [true; 4];
         assert_eq!(place(&m, &p).len(), 1, "only the lid");
+    }
+
+    /// A sprite of a tileset drawn from above filling its 32 pixel tile, in a square of 1 m blocks.
+    fn block_sprite() -> (Metrics, SpriteSource) {
+        (
+            Metrics::new((32, 32), false, None),
+            sprite((32.0, 32.0), (0.0, 0.0)),
+        )
+    }
+
+    fn formed(s: &SpriteSource, form: Form) -> Placement<'_> {
+        square(s, Kind::Formed(form))
+    }
+
+    /// The lowest and highest corner of the quads.
+    fn bounds(quads: &[Instance]) -> (glam::Vec3, glam::Vec3) {
+        quads
+            .iter()
+            .flat_map(|i| {
+                let (o, a, b) = (
+                    glam::Vec3::from(i.origin),
+                    glam::Vec3::from(i.a),
+                    glam::Vec3::from(i.b),
+                );
+                [o, o + a, o + b, o + a + b]
+            })
+            .fold((glam::Vec3::MAX, glam::Vec3::MIN), |(lo, hi), p| {
+                (lo.min(p), hi.max(p))
+            })
+    }
+
+    #[test]
+    fn a_wall_drawn_from_above_is_three_blocks_each_face_the_whole_sprite_at_its_own_aspect() {
+        let (m, s) = block_sprite();
+        let quads = place(&m, &square(&s, Kind::Wall { joined: true }));
+        // The top, and four sides of three blocks.
+        assert_eq!(quads.len(), 1 + 4 * 3);
+        for side in quads.iter().filter(|i| i.b[2] < 0.0) {
+            let (a, b) = (glam::Vec3::from(side.a), glam::Vec3::from(side.b));
+            assert!((a.length() - 1.0).abs() < 1e-5 && (b.length() - 1.0).abs() < 1e-5);
+            // The whole sprite, as many pixels across as down: no pixel is stretched.
+            let (ua, ub) = (
+                Vec2::from(side.uv_a).length(),
+                Vec2::from(side.uv_b).length(),
+            );
+            assert!(
+                (ua - 32.0).abs() < 0.1 && (ub - 32.0).abs() < 0.1,
+                "{ua} {ub}"
+            );
+        }
+        let (lo, hi) = bounds(&quads);
+        assert_eq!((lo.z, hi.z), (0.0, 3.0));
+        // Walls on every side leave only the top.
+        let shut = Placement {
+            covered: [true; 4],
+            ..square(&s, Kind::Wall { joined: true })
+        };
+        assert_eq!(place(&m, &shut).len(), 1);
+    }
+
+    #[test]
+    fn a_plant_and_a_fire_stand_as_two_crossed_boards_and_fire_and_gas_cast_no_shadow() {
+        let (m, s) = block_sprite();
+        for form in [Form::Plant, Form::Fire] {
+            let quads = place(&m, &formed(&s, form));
+            assert_eq!(quads.len(), 2, "{form:?}");
+            for q in &quads {
+                // Upright through a diagonal of the square, a block tall.
+                assert_eq!(q.b, [0.0, 0.0, -1.0]);
+                assert!((q.a[0].abs() - 1.0).abs() < 1e-6 && (q.a[1].abs() - 1.0).abs() < 1e-6);
+                assert_eq!(q.flags[0] & GLOW != 0, form == Form::Fire);
+            }
+        }
+        let gas = place(&m, &formed(&s, Form::Gas));
+        assert!(gas.iter().all(|q| q.flags[0] & SHEER != 0));
+        assert_eq!(bounds(&gas).1.z, 1.0);
+        // Nothing of a plant's is solid.
+        assert_eq!(shape(&m, &s, Kind::Formed(Form::Plant)).solid(), None);
+    }
+
+    #[test]
+    fn a_shut_door_stands_as_a_slab_along_the_line_of_its_walls_and_an_open_one_across_it() {
+        let (m, s) = block_sprite();
+        let door = |open: bool, joined: [bool; 4]| {
+            let p = Placement {
+                joined,
+                ..formed(&s, Form::Door { open })
+            };
+            // Below the lintel.
+            let quads = place(&m, &p)
+                .into_iter()
+                .filter(|q| q.origin[2] <= 2.0 + 1e-4 && q.b[2] < 0.0)
+                .collect::<Vec<_>>();
+            let (lo, hi) = bounds(&quads);
+            (hi - lo, lo)
+        };
+        let east_west = [false, true, false, true];
+        let north_south = [true, false, true, false];
+        let (size, _) = door(false, east_west);
+        assert!(
+            (size.x - 1.0).abs() < 1e-4 && size.y < 0.2 && (size.z - 2.0).abs() < 1e-4,
+            "{size}"
+        );
+        let (size, _) = door(false, north_south);
+        assert!(size.x < 0.2 && (size.y - 1.0).abs() < 1e-4, "{size}");
+        // Open, it lies against the west edge of a door in an east-west wall.
+        let (size, lo) = door(true, east_west);
+        assert!(
+            size.x < 0.2 && (size.y - 1.0).abs() < 1e-4 && (lo.x - 3.0).abs() < 1e-4,
+            "{size} {lo}"
+        );
+    }
+
+    #[test]
+    fn a_window_drawn_from_above_is_a_block_under_its_pane_and_one_over_it() {
+        let (m, s) = block_sprite();
+        let p = Placement {
+            joined: [false, true, false, true],
+            ..square(&s, Kind::Window)
+        };
+        let quads = place(&m, &p);
+        let (lo, hi) = bounds(&quads);
+        assert_eq!((lo.z, hi.z), (0.0, 3.0));
+        // The pane between the blocks is thin and along the wall.
+        let pane = quads
+            .iter()
+            .filter(|q| q.origin[2] > 1.0 + 1e-4 && q.origin[2] <= 2.0 + 1e-4)
+            .copied()
+            .collect::<Vec<_>>();
+        let (lo, hi) = bounds(&pane);
+        assert!(
+            (hi.x - lo.x - 1.0).abs() < 1e-4 && hi.y - lo.y < 0.1,
+            "{lo} {hi}"
+        );
+    }
+
+    #[test]
+    fn a_seat_has_legs_a_seat_and_a_back_at_the_top_of_its_sprite_and_a_table_a_top_on_legs() {
+        let (m, s) = block_sprite();
+        let back = |turn: Turn| {
+            let p = Placement {
+                turn,
+                ..formed(&s, Form::Seat)
+            };
+            let quads = place(&m, &p);
+            let (lo, hi) = bounds(&quads);
+            assert!((hi.z - 1.0).abs() < 1e-3 && lo.z.abs() < 1e-3);
+            // Where the parts over the seat stand.
+            let high = quads
+                .iter()
+                .filter(|q| q.origin[2] > 0.6)
+                .copied()
+                .collect::<Vec<_>>();
+            let (lo, hi) = bounds(&high);
+            (lo.truncate() + hi.truncate()) / 2.0 - Vec2::new(3.0, 5.0)
+        };
+        assert!(back(Turn::None).y < 0.3, "north");
+        assert!(back(Turn::Half).y > 0.7, "south");
+        assert!(back(Turn::Left).x < 0.3, "west");
+        assert!(back(Turn::Right).x > 0.7, "east");
+        let table = place(&m, &formed(&s, Form::Table));
+        let (_, hi) = bounds(&table);
+        assert!((hi.z - 0.82).abs() < 1e-3, "{hi}");
+        // Four legs and a top, five faces each.
+        assert_eq!(table.len(), 5 * 5);
     }
 }

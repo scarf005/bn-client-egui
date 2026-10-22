@@ -84,9 +84,14 @@ fn vs_shadow(q: Quad) -> Varying {
     return vertex(q, camera.light, camera.sun.xyz);
 }
 
+// Flag bits of an instance's first word, as `geometry` names them.
+const GLOW: u32 = 4u;
+const SHEER: u32 = 8u;
+
 @fragment
 fn fs_shadow(v: Varying) {
-    if textureSampleLevel(sheet, pixels, v.uv, 0.0).a < 0.5 {
+    // What gives light or is seen through casts no shadow.
+    if textureSampleLevel(sheet, pixels, v.uv, 0.0).a < 0.5 || (v.flags.x & (GLOW | SHEER)) != 0u {
         discard;
     }
 }
@@ -121,12 +126,17 @@ fn fs_main(v: Varying) -> @location(0) vec4<f32> {
     if texel.a < 0.5 {
         discard;
     }
+    // What is seen through draws every other pixel, so what is behind it shows between them.
+    let cell = vec2<u32>(v.position.xy);
+    if (v.flags.x & SHEER) != 0u && ((cell.x + cell.y) & 1u) == 0u {
+        discard;
+    }
     let filtered_rgb = filtered((v.flags.x >> 8u) & 255u, round(texel.rgb * 255.0)) / 255.0;
     // Coloured light adds its colour, times the sprite's own, as the game draws it.
     let light = unpack4x8unorm(v.flags.z).rgb;
     let seen = min(filtered_rgb + filtered_rgb * light, vec3<f32>(1.0));
     // Only what is plainly in sight lies in the light's shadows.
-    let shade = select(1.0, lit(v.light), ((v.flags.x >> 8u) & 255u) == 0u);
+    let shade = select(1.0, lit(v.light), ((v.flags.x >> 8u) & 255u) == 0u && (v.flags.x & GLOW) == 0u);
     // A level seen through open air is hazed toward cyan, more the deeper it is.
     let haze = f32(v.flags.y) / 255.0;
     return vec4<f32>(mix(seen * shade, vec3<f32>(128.0, 255.0, 255.0) / 255.0, haze), 1.0);

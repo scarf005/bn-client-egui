@@ -961,6 +961,10 @@ impl GameModel for EngineModel {
         self.replica.environment()?.season.clone()
     }
 
+    fn sky(&self) -> Option<protocol::Sky> {
+        self.replica.environment()?.sky.clone()
+    }
+
     fn mod_tilesets(&self) -> &[ModTileset] {
         self.replica
             .environment()
@@ -991,6 +995,14 @@ impl GameModel for EngineModel {
 
     fn inventory_cells(&self) -> &[Cell] {
         &self.inventory_cells
+    }
+
+    fn wielded_cell(&self) -> Option<Cell> {
+        let carried = self.replica.avatar()?.inventory.as_ref()?;
+        let held = carried
+            .iter()
+            .find(|i| i.slot.as_deref() == Some("wielded"))?;
+        Some(self.item_cell(&held.look))
     }
 
     fn ground_ids(&self) -> Vec<String> {

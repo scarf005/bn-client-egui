@@ -611,3 +611,42 @@ fn a_hurt_creature_has_its_health_bar_under_it_on_the_3d_map() {
     assert!(track.rect.top() > feet.y, "{track:?} {feet:?}");
     assert!((part.rect.width() / track.rect.width() - 0.4).abs() < 0.01);
 }
+
+fn steps_sent(script: &ScriptHandle) -> Vec<String> {
+    script
+        .sent()
+        .into_iter()
+        .filter_map(|m| {
+            m["params"]["operation"]["action_id"]
+                .as_str()
+                .map(str::to_owned)
+        })
+        .collect()
+}
+
+#[test]
+fn a_step_key_goes_the_way_it_points_on_the_turned_3d_map_and_wasd_follows_the_first_person_look() {
+    // The engine is busy with a step until it is done, so each case is a client of its own.
+    let cases = [
+        ("2D", "k", "UP"),
+        ("3D", "k", "RIGHT"),
+        ("3D", "h", "UP"),
+        ("First person", "w", "RIGHT"),
+        ("First person", "a", "UP"),
+        ("First person", "d", "DOWN"),
+    ];
+    for (n, (view, key, step)) in cases.into_iter().enumerate() {
+        let root = iso_root(&format!("screen-steps-{n}"));
+        let (mut h, script) = harness(&root, &root.join("settings.json"), true);
+        settle(&mut h);
+        open_client_settings(&mut h);
+        h.get_by_label(view).click();
+        h.run_steps(3);
+        // Turned to look east from the west: up the screen is east, its left north. The flat map does not turn.
+        for _ in (0..3).filter(|_| view != "2D") {
+            alt(&mut h, egui::Key::ArrowLeft);
+        }
+        press(&mut h, key);
+        assert_eq!(steps_sent(&script), [step], "{view} {key}");
+    }
+}

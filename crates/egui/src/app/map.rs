@@ -7,6 +7,7 @@ use crate::display::health_bar;
 use crate::iso::{self, camera::Viewport, pages::Pages, scene::Scene};
 use bn_client_core::localise::{Value as Arg, tr, tr_format};
 use bn_client_core::markup;
+use bn_client_core::protocol::Precipitation;
 use bn_client_core::{Cell, GameModel, MapMark, MarkRole, Pos, Rgb};
 use eframe::egui::{self, accesskit};
 use std::sync::Arc;
@@ -16,6 +17,8 @@ const TILTED_REACH: i32 = 121;
 
 /// The widest a square's tooltip text gets before its lines wrap; the tooltip's frame adds its margins.
 const TOOLTIP_WIDTH: f32 = 420.0;
+/// The share of the shorter side of the first-person view the wielded item takes.
+const HELD: f32 = 0.3;
 
 /// Where the squares of the map were drawn in the last frame, to place a window off the cursor.
 #[derive(Clone, Copy)]
@@ -377,11 +380,15 @@ impl<M: GameModel> App<M> {
     fn map_viewport(&mut self, ui: &egui::Ui, cell_px: f32, (three, tilted): (bool, bool)) -> f64 {
         // The room left for the map, in whole cells.
         let room = ui.available_size();
+        // The 3D map asks for the squares across the room's diagonal, so a turned camera finds none missing.
+        let scale = self
+            .display
+            .tileset()
+            .map_or(cell_px, |(t, _)| iso::scene::world_scale(t, cell_px));
+        let reach =
+            ((room.length() / scale).ceil() as i32 + 2).clamp(iso::REACH, iso::MAX_REACH) | 1;
         self.model.set_viewport(match (three, tilted) {
-            (true, _) => Pos {
-                x: iso::REACH,
-                y: iso::REACH,
-            },
+            (true, _) => Pos { x: reach, y: reach },
             // The squares that reach the corners of the room: as many as it holds diagonally, from its middle.
             (_, true) => {
                 let around = ((room.x + 2.0 * room.y) / cell_px).ceil() as i32 + 3;
@@ -744,8 +751,42 @@ impl<M: GameModel> App<M> {
             if let Some(shown) = shown {
                 let stats = self.iso.stats.clone();
                 let scene = shown.0.clone();
-                painter.add(iso::callback(canvas.rect, v, target, shown, stats));
+                // The first-person view looks into the sky the engine describes; looking down, there is none.
+                let sky = self.model.sky().filter(|_| v.camera.first_person);
+                let colour = sky.as_ref().map_or(egui::Color32::BLACK, iso::sky_color);
+                painter.add(iso::callback(
+                    canvas.rect,
+                    v,
+                    target,
+                    shown,
+                    (stats, colour),
+                ));
                 iso::paint_glyphs(painter, canvas.rect, v, &scene, canvas.cell_px);
+                if let Some(sky) = &sky {
+                    // With reduced motion what falls stands still.
+                    let still = self.display.reduced_motion();
+                    let time = if still {
+                        0.0
+                    } else {
+                        painter.ctx().input(|i| i.time)
+                    };
+                    iso::paint_weather(painter, canvas.rect, sky, time);
+                    if sky.precipitation != Precipitation::None && !still {
+                        painter
+                            .ctx()
+                            .request_repaint_after(std::time::Duration::from_millis(33));
+                    }
+                }
+                iso::paint_bearings(painter, canvas.rect, v, &scene);
+                if v.camera.first_person
+                    && let Some(held) = self.model.wielded_cell()
+                {
+                    // The right hand holds it low, so the bottom edge cuts it.
+                    let side = canvas.rect.size().min_elem() * HELD;
+                    let corner = canvas.rect.right_bottom() + egui::vec2(-1.5 * side, -0.8 * side);
+                    let rect = egui::Rect::from_min_size(corner, egui::Vec2::splat(side));
+                    super::sidebar::paint_cell(painter, rect, &mut self.display, &held, season);
+                }
             }
             return;
         }

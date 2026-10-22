@@ -24,9 +24,11 @@ pub(crate) const STRIP: u32 = 4096;
 /// Remembered squares draw darkened, squares in low light slightly less.
 const MEMORY: Color32 = Color32::from_gray(100);
 const SHADOW: Color32 = Color32::from_gray(170);
-/// Each zoom step scales the map squares by this much, for at most this many steps either way.
+/// Each zoom step scales the map squares by this much, for at most this many steps out and in: out until the
+/// squares the engine sends no longer fill the view, in until a few squares do.
 const ZOOM_STEP: f32 = 1.25;
-const ZOOM_STEPS: i8 = 4;
+const ZOOM_OUT: i8 = 8;
+const ZOOM_IN: i8 = 8;
 
 /// The choice that survives a restart.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -654,7 +656,7 @@ impl Display {
     /// Zooms the map by `steps` (positive is closer), within bounds, and keeps it.
     pub fn zoom_by(&mut self, steps: i8) {
         let zoom = self.settings.zoom.saturating_add(steps);
-        let zoom = zoom.clamp(-ZOOM_STEPS, ZOOM_STEPS);
+        let zoom = zoom.clamp(-ZOOM_OUT, ZOOM_IN);
         if zoom != self.settings.zoom {
             self.settings.zoom = zoom;
             self.save();

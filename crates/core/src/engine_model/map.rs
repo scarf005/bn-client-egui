@@ -98,6 +98,7 @@ impl EngineModel {
             wall: look.wall,
             window: look.window,
             coverage: look.coverage,
+            form: look.form,
             vehicle: look.kind == "vehicle_part",
             seed,
             tint_bg: paint(look, |t| t.bg.as_deref()),
@@ -218,6 +219,7 @@ impl EngineModel {
                     fifths: h.fifths,
                     color: self.colors.resolve(&h.color).0,
                 }),
+                hostile: e.attitude.as_deref() == Some("hostile"),
                 depth: below.unwrap_or(0),
                 ..self.styled(look, desc)
             };

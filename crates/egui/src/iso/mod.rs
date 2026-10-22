@@ -9,6 +9,8 @@ pub mod scene;
 
 use crate::display::{Display, glyph_color, health_bar};
 use bn_client_core::GameModel;
+use bn_client_core::localise::tr;
+use bn_client_core::protocol::{Precipitation, Sky};
 use camera::{Camera, Viewport};
 use eframe::egui;
 use egui_wgpu::wgpu::TextureFormat;
@@ -17,8 +19,10 @@ use pages::Pages;
 use scene::Scene;
 use std::sync::Arc;
 
-/// The squares of the map the 3D view asks the model for: this many across and down, around the avatar.
+/// The squares of the map the 3D view asks the model for: at least and at most this many across and down, around
+/// the avatar, as many as the view's diagonal holds.
 pub const REACH: i32 = 61;
+pub const MAX_REACH: i32 = 151;
 /// Radians a key press turns the camera.
 pub const TURN: f32 = 15.0 * std::f32::consts::PI / 180.0;
 /// Radians per point of right-button drag.
@@ -134,13 +138,13 @@ impl View3d {
     }
 }
 
-/// The paint callback that draws `scene` into `rect`.
+/// The paint callback that draws `scene` into `rect` against `sky`.
 pub fn callback(
     rect: egui::Rect,
     view: &Viewport,
     target: TextureFormat,
     (scene, pages): (Arc<Scene>, Arc<Pages>),
-    stats: Arc<gpu::Stats>,
+    (stats, sky): (Arc<gpu::Stats>, egui::Color32),
 ) -> egui::Shape {
     let light = camera::light_view_proj(scene.width as f32, scene.height as f32, scene.heights);
     egui::Shape::Callback(egui_wgpu::Callback::new_paint_callback(
@@ -152,8 +156,122 @@ pub fn callback(
             size: rect.size(),
             target,
             stats,
+            sky,
         },
     ))
+}
+
+/// The colour of the sky the first-person view looks into: blue by day and dark by night as the daylight says,
+/// greyed by as much light as the weather takes away.
+pub fn sky_color(sky: &Sky) -> egui::Color32 {
+    let mix = |a: [f32; 3], b: [f32; 3], t: f32| {
+        std::array::from_fn::<_, 3, _>(|n| a[n] + (b[n] - a[n]) * t)
+    };
+    let cloud = (sky.dimming as f32 / 40.0).clamp(0.0, 1.0);
+    let day = mix([110.0, 165.0, 225.0], [140.0, 145.0, 150.0], 0.85 * cloud);
+    let [r, g, b] = mix(
+        [8.0, 12.0, 28.0],
+        day,
+        f32::from(sky.daylight.min(100)) / 100.0,
+    );
+    egui::Color32::from_rgb(r as u8, g as u8, b as u8)
+}
+
+/// What falls from `sky` over the first-person view at `time` seconds: streaks of rain or flakes of snow, as many as
+/// it lets fall; none when nothing falls.
+pub fn paint_weather(painter: &egui::Painter, rect: egui::Rect, sky: &Sky, time: f64) {
+    let count = match sky.precipitation {
+        Precipitation::None => return,
+        Precipitation::VeryLight => 40,
+        Precipitation::Light => 90,
+        Precipitation::Medium => 180,
+        Precipitation::Heavy => 320,
+    };
+    // A fixed scatter of points that falls through the view and comes round again.
+    let scatter = |n: u32, salt: u32| {
+        let h =
+            (n.wrapping_mul(2_654_435_761) ^ salt.wrapping_mul(40_503)).wrapping_mul(2_246_822_519);
+        (h >> 8) as f32 / (1 << 24) as f32
+    };
+    let (speed, colour) = match sky.rain {
+        true => (
+            900.0,
+            egui::Color32::from_rgba_unmultiplied(170, 190, 220, 150),
+        ),
+        false => (
+            90.0,
+            egui::Color32::from_rgba_unmultiplied(240, 240, 245, 220),
+        ),
+    };
+    for n in 0..count {
+        let x = rect.left() + scatter(n, 1) * rect.width();
+        let fall = (scatter(n, 2) * rect.height()
+            + time as f32 * speed * (0.8 + 0.4 * scatter(n, 3)))
+        .rem_euclid(rect.height());
+        let at = egui::pos2(x, rect.top() + fall);
+        match sky.rain {
+            true => painter.line_segment(
+                [at, at + egui::vec2(-3.0, 14.0)],
+                egui::Stroke::new(1.0, colour),
+            ),
+            false => painter.circle_filled(at, 1.5, colour),
+        };
+    }
+}
+
+/// Where a way on the map points on the screen, x right and y down, as the camera's yaw turns it: up is away from
+/// the eye, as the steps go (`Camera::screen_step`).
+pub fn on_screen(camera: &Camera, way: Vec2) -> egui::Vec2 {
+    let toward = Vec2::new(camera.yaw.cos(), camera.yaw.sin());
+    egui::vec2(way.dot(Vec2::new(toward.y, -toward.x)), way.dot(toward))
+}
+
+/// The compass in the top right corner of the 3D map, its red needle to the north of the map, and a red mark at
+/// the edge of the view toward each hostile creature it does not show.
+pub fn paint_bearings(painter: &egui::Painter, rect: egui::Rect, view: &Viewport, scene: &Scene) {
+    let radius = 18.0;
+    let centre = rect.right_top() + egui::vec2(-radius - 18.0, radius + 18.0);
+    let north = on_screen(&view.camera, Vec2::NEG_Y);
+    let red = egui::Color32::from_rgb(220, 40, 40);
+    let gray = egui::Color32::from_gray(170);
+    painter.circle_stroke(centre, radius, egui::Stroke::new(1.0, gray));
+    painter.line_segment(
+        [centre - north * radius, centre],
+        egui::Stroke::new(2.0, gray),
+    );
+    painter.line_segment(
+        [centre, centre + north * radius],
+        egui::Stroke::new(2.0, red),
+    );
+    painter.text(
+        centre + north * (radius + 9.0),
+        egui::Align2::CENTER_CENTER,
+        // TRANSLATORS: the mark of north on the compass of the 3D map.
+        tr("N"),
+        egui::FontId::proportional(13.0),
+        red,
+    );
+    let inner = rect.shrink(14.0);
+    let eye = view.target.truncate();
+    for &((x, y), floor) in &scene.hostile {
+        let at = Vec3::new(x as f32 + 0.5, y as f32 + 0.5, floor + 0.5);
+        let shown = view
+            .project(at)
+            .is_some_and(|p| inner.contains(rect.min + egui::vec2(p.x, p.y)));
+        let way = on_screen(&view.camera, at.truncate() - eye).normalized();
+        if shown || !way.is_finite() {
+            continue;
+        }
+        let half = inner.size() / 2.0;
+        let tip = inner.center() + way * (half.x / way.x.abs()).min(half.y / way.y.abs());
+        let side = way.rot90() * 7.0;
+        let back = tip - way * 14.0;
+        painter.add(egui::Shape::convex_polygon(
+            vec![tip, back + side, back - side],
+            red,
+            egui::Stroke::new(1.0, egui::Color32::BLACK),
+        ));
+    }
 }
 
 /// Draws the glyphs of what the tileset has no sprite for, each on its square, as the flat map draws them: the
@@ -214,5 +332,59 @@ pub fn paint_glyphs(
             egui::pos2(foot.x + cell_px / 2.0, bottom),
         );
         health_bar(painter, track, hurt.health);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_sky_is_blue_by_day_dark_by_night_and_grey_under_clouds() {
+        let sky = |daylight: u8, dimming: u32| {
+            sky_color(&Sky {
+                daylight,
+                dimming,
+                ..Sky::default()
+            })
+        };
+        let brightness = |c: egui::Color32| u32::from(c.r()) + u32::from(c.g()) + u32::from(c.b());
+        let (day, night, cloudy) = (sky(100, 0), sky(0, 0), sky(100, 40));
+        assert!(day.b() > day.r() + 60, "{day:?}");
+        assert!(brightness(night) < brightness(day) / 4, "{night:?}");
+        // As light, and nearly as grey as blue.
+        assert!(cloudy.b() - cloudy.r() < 30, "{cloudy:?}");
+        assert!(
+            brightness(sky(50, 0)) < brightness(day) && brightness(sky(50, 0)) > brightness(night)
+        );
+    }
+
+    #[test]
+    fn the_compass_points_north_where_the_up_step_goes() {
+        // Looking north from the south, north is up the screen; from the west, it is left.
+        let from = |yaw: f32| Camera {
+            yaw: yaw.to_radians(),
+            ..Camera::default()
+        };
+        let north = on_screen(&from(90.0), Vec2::NEG_Y);
+        assert!((north - egui::vec2(0.0, -1.0)).length() < 1e-5, "{north:?}");
+        let north = on_screen(&from(180.0), Vec2::NEG_Y);
+        assert!((north - egui::vec2(-1.0, 0.0)).length() < 1e-5, "{north:?}");
+        // At every yaw the step up the screen goes the way the compass says up is.
+        for yaw in (0..360).step_by(15).map(|d| d as f32) {
+            let camera = from(yaw);
+            let up = match camera.screen_step("UP").unwrap() {
+                "UP" => Vec2::new(0.0, -1.0),
+                "RIGHTUP" => Vec2::new(1.0, -1.0),
+                "RIGHT" => Vec2::new(1.0, 0.0),
+                "RIGHTDOWN" => Vec2::new(1.0, 1.0),
+                "DOWN" => Vec2::new(0.0, 1.0),
+                "LEFTDOWN" => Vec2::new(-1.0, 1.0),
+                "LEFT" => Vec2::new(-1.0, 0.0),
+                _ => Vec2::new(-1.0, -1.0),
+            };
+            let shown = on_screen(&camera, up.normalize());
+            assert!(shown.y < -0.9, "yaw {yaw}: {shown:?}");
+        }
     }
 }

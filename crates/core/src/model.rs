@@ -63,6 +63,8 @@ pub struct Layer {
     pub window: bool,
     /// How much of a person the thing covers, in percent, which a 3D view raises it by; 0 when it lies flat.
     pub coverage: u8,
+    /// What the thing stands as, which a 3D view builds it in.
+    pub form: crate::protocol::LookForm,
     /// Whether the thing is a part of a vehicle.
     pub vehicle: bool,
     /// Picks between the weighted variants of a sprite, like the game's per-tile seed.
@@ -114,6 +116,8 @@ pub struct Cell {
     pub glow: Option<Glow>,
     /// The creature drawn here is hurt.
     pub health: Option<Health>,
+    /// The creature drawn here regards the avatar as hostile.
+    pub hostile: bool,
     /// How many levels down the layers lie, seen through open air; 0 on the avatar's own level.
     pub depth: u8,
     /// The game's per-square seed for weighted sprite variants, also for squares nothing is known about.
@@ -742,6 +746,10 @@ pub trait GameModel: MenuModel {
     fn season(&self) -> Option<String> {
         None
     }
+    /// The sky over the avatar, as the engine last said.
+    fn sky(&self) -> Option<crate::protocol::Sky> {
+        None
+    }
     fn size(&self) -> Pos;
     fn cell(&self, at: Pos) -> Cell;
     fn player(&self) -> Pos;
@@ -754,6 +762,10 @@ pub trait GameModel: MenuModel {
     /// The same for the rows of `inventory`.
     fn inventory_cells(&self) -> &[Cell] {
         &[]
+    }
+    /// How the item the avatar wields is drawn; none when its hands are empty or the model has no looks.
+    fn wielded_cell(&self) -> Option<Cell> {
+        None
     }
     /// The engine's id of each `ground` row, empty where it names none; pickup and drop name a row by it, so a
     /// list that changed since the player chose still takes the chosen item.
