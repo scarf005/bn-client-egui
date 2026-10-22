@@ -98,7 +98,7 @@ impl EngineModel {
             wall: look.wall,
             window: look.window,
             coverage: look.coverage,
-            form: crate::protocol::LookForm::None,
+            form: look.form,
             vehicle: look.kind == "vehicle_part",
             seed,
             tint_bg: paint(look, |t| t.bg.as_deref()),
