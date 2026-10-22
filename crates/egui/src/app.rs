@@ -416,6 +416,9 @@ impl<M: GameModel> App<M> {
             .then(|| self.pending_since.unwrap_or_else(|| self.clock.now()));
         if !self.images {
             egui_extras::install_image_loaders(ui.ctx());
+            // A steady text cursor: nothing moves that the player did not move.
+            ui.ctx()
+                .all_styles_mut(|s| s.visuals.text_cursor.blink = false);
             self.images = true;
         }
         if let Some(failure) = self.model.failure() {
@@ -569,10 +572,11 @@ impl<M: GameModel> App<M> {
         }
         // Stops a wait or other activity, like the native interrupt key.
         if self.model.busy() {
-            // Still, the activity is told by the status text above; only the motion goes.
-            if self.display.reduced_motion() {
+            // Still, the activity is told by the status text above; only the motion goes, and a command
+            // too short to show is no motion at all.
+            if self.settled() && self.display.reduced_motion() {
                 ui.label("…");
-            } else {
+            } else if self.settled() {
                 ui.spinner();
             }
             if ui.button(tr("Interrupt")).clicked() {
