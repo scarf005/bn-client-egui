@@ -406,8 +406,9 @@ pub fn show<R>(
         }
         _ => inside(geometry.rect, screen),
     };
-    // Whole points, so that the text in the window is laid out on the same pixels whatever the room.
-    geometry.rect = egui::Rect::from_min_max(geometry.rect.min.round(), geometry.rect.max.round());
+    // Shown on whole points, so that the text in the window is laid out on the same pixels whatever the room;
+    // kept as it is, so that a window maximized on a screen of fractional points is still the screen.
+    let whole = egui::Rect::from_min_max(geometry.rect.min.round(), geometry.rect.max.round());
     let side = ctx
         .fonts_mut(|f| f.row_height(&egui::TextStyle::Heading.resolve(&style)))
         .ceil();
@@ -417,11 +418,10 @@ pub fn show<R>(
         0.0
     };
     let shown_rect = match geometry.minimized {
-        true => egui::Rect::from_min_size(
-            geometry.rect.min,
-            egui::vec2(geometry.rect.width(), margin.sum().y + bar),
-        ),
-        false => geometry.rect,
+        true => {
+            egui::Rect::from_min_size(whole.min, egui::vec2(whole.width(), margin.sum().y + bar))
+        }
+        false => whole,
     };
     let (mut pressed, mut moved, mut dragged, mut inner) =
         (Pressed::default(), egui::Vec2::ZERO, None, None);
