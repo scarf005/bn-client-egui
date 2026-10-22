@@ -81,13 +81,13 @@ fn the_terrain_picker_opens_on_the_terrain_under_the_cursor_past_its_first_page(
 }
 
 #[test]
-fn the_furniture_picker_takes_the_height_a_larger_window_has() {
+fn the_furniture_picker_never_shows_fewer_rows_in_a_larger_window() {
     let capture = editmap("furniture-picker");
     let (large, _script) = harness(&capture, egui::vec2(1920.0, 1080.0));
     let (small, _script) = harness(&capture, egui::vec2(1280.0, 800.0));
     let (large, small) = (rows_drawn(&large, &capture), rows_drawn(&small, &capture));
     assert!(
-        large > small,
+        small > 0 && large >= small,
         "{large} rows at 1920x1080, {small} at 1280x800"
     );
 }

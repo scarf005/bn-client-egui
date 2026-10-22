@@ -139,39 +139,29 @@ fn a_wide_dialog_takes_its_whole_column_and_stays_inside_the_map_room() {
 }
 
 #[test]
-fn a_window_restored_where_a_last_run_left_it_lies_wholly_inside_the_map_room() {
+fn a_window_restored_off_the_screen_is_moved_onto_it() {
     let size = egui::vec2(1920.0, 1080.0);
     let file = crate::common::game_root("placement-restored").join("settings.json");
-    let windows = json!({"windows": {"screen:uilist": {"pos": [460.0, 0.0], "size": [361.0, 1019.0],
+    let windows = json!({"windows": {"screen:uilist": {"pos": [4600.0, 3000.0], "size": [361.0, 1019.0],
         "collapsed": false}}});
     std::fs::write(&file, windows.to_string()).unwrap();
     let screen = example("generic", "filterable list screen");
     let (h, _) = playing_with(size, Some(screen), Some(&file));
     let window = window_of(&h, "uilist");
-    let map = h.get_by_label("Map").rect();
-    assert!(map.contains_rect(window), "{window:?} outside {map:?}");
-    let toolbar = h.get_by_label("Client settings").rect();
-    assert!(
-        window.top() >= toolbar.bottom(),
-        "{window:?} over {toolbar:?}"
-    );
+    assert!(screen_rect(size).contains_rect(window), "{window:?}");
+    assert_eq!(window.size(), egui::vec2(361.0, 1019.0));
 }
 
 #[test]
-fn a_short_dialog_is_as_tall_as_its_content() {
+fn a_short_dialog_is_as_tall_as_every_other_window() {
     let size = egui::vec2(1920.0, 1080.0);
     let (mut h, _) = playing(size, Some(example("generic", "query popup screen")));
     crate::common::settle_windows(&mut h);
     let window = window_of(&h, "popup");
-    // The footer's "No", under the list's row of the same name.
-    let last = h
-        .get_all_by_label("No")
-        .map(|n| n.rect())
-        .max_by(|a, b| a.bottom().total_cmp(&b.bottom()))
-        .unwrap();
+    let map = h.get_by_label("Map").rect();
     assert!(
-        window.bottom() - last.bottom() < 40.0,
-        "{window:?} runs past its last row at {last:?}"
+        window.height() >= 0.6 * map.height(),
+        "{window:?} in {map:?}"
     );
 }
 

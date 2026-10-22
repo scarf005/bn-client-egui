@@ -393,19 +393,6 @@ impl<M: GameModel> App<M> {
             .iter()
             .filter(|a| !named.contains(a.id.as_str()))
             .collect::<Vec<_>>();
-        // A window is as wide as its content and its footer on one row, as its class allows.
-        let width = screen.root.as_ref().and_then(|root| {
-            let builder = egui::UiBuilder::new().max_rect(region);
-            let ui = egui::Ui::new(ctx.clone(), egui::Id::new("measure"), builder);
-            let margin = frame.total_margin().sum().x + ui.spacing().window_margin.sum().x;
-            let content = self.extent(&ui, screen, root, placement.widest() - margin);
-            let content = Extent {
-                min: content.min + margin,
-                natural: content.natural + margin,
-                ..content
-            };
-            placement.width(content, footer_width(&ui, &rest, title_bar) + margin)
-        });
         // The help sits in the title bar, or last in the footer of a window that has none.
         let titled = interaction::with_role(screen, AffordanceRole::Help)
             .filter(|a| a.enabled && base.title_bar);
@@ -414,7 +401,8 @@ impl<M: GameModel> App<M> {
             frame: Some(frame),
             place: Some(place),
             movable: !keeps_off_cursor(screen) && placement.class != Class::Full,
-            width,
+            width: placement.first_width(),
+            scrolls: false,
             help: titled.map(|a| windows::TitleHelp {
                 label: markup::plain(&a.label.shown()),
                 tip: glyph_tip(a),
@@ -556,8 +544,9 @@ impl<M: GameModel> App<M> {
 
     /// The panes side by side, each as wide as its content needs (`split::split_widths`), the only prose of
     /// peers as wide as the rest (`split::prose_widths`) and a list beside its detail at least two fifths of the
-    /// room (`split::detail_widths`). Peers whose minimums do not fit go on to further lines
-    /// (`split::wrap_lines`); a line whose minimums still do not fit scrolls sideways instead of breaking words.
+    /// room (`split::detail_widths`). Panes whose minimums do not fit go on to further lines
+    /// (`split::wrap_lines`), a detail under its list; a line whose minimums still do not fit scrolls sideways
+    /// instead of breaking words.
     /// Peers on more than one line are as tall as what they hold, a list up to `PEER_ROWS` rows, and scroll
     /// down together; one line of panes, peers around a map or a canvas, and a list beside its detail share the
     /// height they have.
@@ -586,10 +575,7 @@ impl<M: GameModel> App<M> {
         };
         let laid = |ui: &egui::Ui, room: f32| {
             let extents = measure(ui, parts, room);
-            let lines = match split.relation {
-                Relation::Peers => split::wrap_lines(&extents, room, gap),
-                Relation::Detail => std::iter::once(0..parts.len()).collect(),
-            };
+            let lines = split::wrap_lines(&extents, room, gap);
             (extents, lines)
         };
         let (mut extents, mut lines) = laid(ui, room);

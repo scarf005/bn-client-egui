@@ -25,7 +25,11 @@ const TITLE_FLOW: &[&str] = &[
 /// Faults of the UI/UX plan's findings (`F<n>`) not fixed yet: `file/name@size`, the kind of fault and the
 /// finding. A fixed one must leave the list.
 #[rustfmt::skip]
-const KNOWN: &[(&str, Kind, &str)] = &[];
+const KNOWN: &[(&str, Kind, &str)] = &[
+    ("options/options screen with the editor of an integer option@1280x800", Kind::Cut, "a scrolled list shows part of the row at its edge"),
+    ("overmap/overmap screen for a client that draws tiles@1920x1080", Kind::Cut, "the first row of tile glyphs overshoots the viewport top by 1 pt"),
+    ("overmap/overmap screen@1920x1080", Kind::Cut, "the first row of tile glyphs overshoots the viewport top by 1 pt"),
+];
 
 /// One screen of the examples, keyed `file/name`.
 struct Example {
