@@ -1039,6 +1039,14 @@ impl GameModel for EngineModel {
         Some(self.item_cell(look))
     }
 
+    fn looks_cell(&self, looks: &[Look], seed: u32) -> Option<Cell> {
+        let top = looks.last()?;
+        Some(Cell {
+            layers: looks.iter().map(|l| self.layer(l, seed)).collect(),
+            ..self.styled(top, look_name(top))
+        })
+    }
+
     fn sidebar_layout(&self) -> Option<crate::sidebar::Layout> {
         let avatar = self.replica.avatar()?;
         crate::sidebar::layout(avatar, &self.colors, |look| self.item_cell(look))

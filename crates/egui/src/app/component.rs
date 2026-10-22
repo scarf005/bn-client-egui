@@ -701,6 +701,16 @@ impl<M: GameModel> App<M> {
                         };
                         let glyph = cell.glyph.clone().unwrap_or_else(|| " ".into());
                         let name = cell.label.as_ref().map_or(glyph.clone(), Text::shown);
+                        // With a tileset the cell is its sprites, drawn over it once its window is drawn.
+                        let looks = cell
+                            .looks
+                            .iter()
+                            .filter_map(|&i| grid.looks.get(i).cloned())
+                            .collect::<Vec<_>>();
+                        let sprite = (self.display.tiles() && !looks.is_empty())
+                            .then(|| self.model.looks_cell(&looks, x | y << 16))
+                            .flatten();
+                        let glyph = if sprite.is_some() { " ".into() } else { glyph };
                         let color = cell.color.as_deref().map(|c| self.tint(c));
                         let at_cursor = grid
                             .cursor
@@ -711,18 +721,31 @@ impl<M: GameModel> App<M> {
                             shown = shown.color(color);
                         }
                         let marked = cell.selected == Some(true) || at_cursor;
+                        // A marked cell keeps a rim of its highlight around the sprite.
+                        let queue = |ui: &egui::Ui, rect: egui::Rect| {
+                            if let Some(cell) = sprite.clone() {
+                                let rect = rect.shrink(if marked { 3.0 } else { 0.0 });
+                                self.screens.icons.borrow_mut().push(RowIcon {
+                                    painter: ui.painter_at(rect),
+                                    rect,
+                                    cell,
+                                });
+                            }
+                        };
                         if !actionable {
                             let shown = match marked {
                                 true => shown.background_color(crate::theme::SELECTION),
                                 false => shown,
                             };
-                            ui.add_sized(size, egui::Label::new(shown));
+                            let label = ui.add_sized(size, egui::Label::new(shown));
+                            queue(ui, label.rect);
                             continue;
                         }
                         let button = ui.add_enabled(
                             cell.enabled,
                             egui::Button::new(shown).min_size(size).selected(marked),
                         );
+                        queue(ui, button.rect);
                         button.widget_info(|| {
                             WidgetInfo::labeled(
                                 WidgetType::Button,

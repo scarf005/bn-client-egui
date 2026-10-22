@@ -2191,7 +2191,7 @@ pub struct TextBlock {
     pub role: Option<TextRole>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Grid {
     #[serde(flatten)]
     pub head: Head,
@@ -2200,6 +2200,9 @@ pub struct Grid {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cursor: Option<GridCursor>,
     pub cells: Vec<GridCell>,
+    /// The looks the cells name, each once.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub looks: Vec<Look>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -2228,6 +2231,10 @@ pub struct GridCell {
     pub denial: Option<Text>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub selected: Option<bool>,
+    /// What the cell shows from the bottom up, as indexes into the grid's `looks`, for a client that draws
+    /// sprites; `glyph` stands for it otherwise.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub looks: Vec<usize>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]

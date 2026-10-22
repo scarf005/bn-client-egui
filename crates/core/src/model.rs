@@ -770,6 +770,11 @@ pub trait GameModel: MenuModel {
     fn look_cell(&self, _look: &Look) -> Option<Cell> {
         None
     }
+    /// How a grid cell's looks are drawn, bottom first, with `seed` picking sprite variants; none for a model
+    /// without looks or a cell without any.
+    fn looks_cell(&self, _looks: &[Look], _seed: u32) -> Option<Cell> {
+        None
+    }
     /// What the avatar is busy with, as the engine names it; none when it is not busy.
     fn activity(&self) -> Option<crate::protocol::Activity> {
         None

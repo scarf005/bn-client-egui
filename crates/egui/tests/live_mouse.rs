@@ -321,13 +321,15 @@ fn press(h: &mut H, from: egui::Pos2, to: egui::Pos2, down: bool) {
     h.run_steps(2);
 }
 
-/// Chooses the entry of the menu on top whose label contains `label`, once the menu lists it.
+/// Chooses the entry of the menu on top labelled `label`, else the first whose label contains it, once the menu
+/// lists it.
 fn pick(h: &mut H, label: &str) {
     let listed = |h: &H| {
-        h.state()
-            .model
-            .menu()
-            .and_then(|m| m.choices.into_iter().find(|c| c.label.contains(label)))
+        h.state().model.menu().and_then(|m| {
+            let exact = m.choices.iter().position(|c| c.label == label);
+            let at = exact.or_else(|| m.choices.iter().position(|c| c.label.contains(label)))?;
+            m.choices.into_iter().nth(at)
+        })
     };
     run_until(h, label, 120, |h| {
         !h.state().model.busy() && listed(h).is_some()
@@ -444,4 +446,46 @@ fn the_square_menu_on_a_person_and_on_vehicle_controls_beside_the_avatar() {
         actions.iter().any(|a| a == "control_vehicle"),
         "the controls beside the avatar are used from their square: {actions:?}"
     );
+}
+
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn the_vehicle_screen_draws_its_parts_with_the_tileset() {
+    let mut h = start("new_game:play_now_default");
+    assert!(h.state_mut().model.invoke_action("debug"));
+    pick(&mut h, "Spawning");
+    pick(&mut h, "Spawn a vehicle");
+    pick(&mut h, "(bicycle)");
+    pick(&mut h, "Undamaged");
+    let field = h
+        .state()
+        .model
+        .menu()
+        .and_then(|m| m.field)
+        .expect("the direction prompt");
+    h.state_mut().model.fill(&field.id, "0", true);
+    run_until(&mut h, "the bicycle", 120, |h| {
+        h.state().model.menu().is_none() && !h.state().model.busy()
+    });
+    dismiss_popups(&mut h);
+    // The bicycle is two squares long; the square east of the avatar is a part of it.
+    assert!(h.state_mut().model.invoke_action("examine"));
+    pick(&mut h, "East");
+    pick(&mut h, "Examine vehicle");
+    let grid = |h: &H| {
+        h.state().model.screens().last().and_then(|s| {
+            match s.root.as_ref()?.find("vehicle:grid")? {
+                Component::Grid(g) => Some(g.clone()),
+                _ => None,
+            }
+        })
+    };
+    run_until(&mut h, "the vehicle screen", 120, |h| grid(h).is_some());
+    settle(&mut h);
+    let grid = grid(&h).expect("the vehicle grid");
+    assert!(
+        grid.cells.iter().all(|c| !c.looks.is_empty()),
+        "each square names its parts by look"
+    );
+    save(&mut h, "vehicle-sprites.png");
 }
