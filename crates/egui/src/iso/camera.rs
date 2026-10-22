@@ -12,9 +12,9 @@ pub const PITCH_ISO: f32 = 0.615_479_7;
 pub const YAW_ISO: f32 = 3.0 * std::f32::consts::FRAC_PI_4;
 /// How far the eye sits from the target; orthographic, so it only has to clear the scene.
 const EYE_DISTANCE: f32 = 200.0;
-/// How high the eye of the first-person view sits over the avatar's floor, in squares of a metre: low enough that a
-/// one-square corridor does not look down on its walls.
-pub const EYE_HEIGHT: f32 = 1.2;
+/// How high the eye of the first-person view sits over the avatar's floor, in squares of a metre: at the face of a
+/// creature standing a square tall, as the avatar's own sprite stands.
+pub const EYE_HEIGHT: f32 = 0.85;
 /// The vertical field of view of the first-person view.
 const FOV: f32 = 70.0 * std::f32::consts::PI / 180.0;
 /// The part of the orbit's tilt the first-person eye looks down by, so tilting the camera tilts the look too.
