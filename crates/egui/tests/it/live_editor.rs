@@ -148,9 +148,8 @@ fn field(h: &H, form: &str, id: &str) -> String {
         .unwrap_or_else(|| panic!("no field {id}"))
 }
 
-#[test]
-#[ignore = "requires BN_ENGINE pointing at an engine binary"]
-fn the_map_editor_opens_draws_and_discards() {
+/// The client at the engine's main menu in English, with the game root and the scratch directory it uses.
+fn at_main_menu() -> (H<'static>, std::path::PathBuf, std::path::PathBuf) {
     let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
     let root =
         game_root(engine.as_ref(), std::env::var_os("BN_ROOT").map(Into::into)).expect("game root");
@@ -183,6 +182,13 @@ fn the_map_editor_opens_draws_and_discards() {
         invoke(&mut h, "bn:choose:list:choices", row("entry:0"));
         run_until(&mut h, "the language", 60, |h| !asks_language(h));
     }
+    (h, root, dir)
+}
+
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn the_map_editor_opens_draws_and_discards() {
+    let (mut h, root, dir) = at_main_menu();
     invoke(&mut h, "menu:tab", row("new_game"));
     invoke(&mut h, "menu:entry", row("new_game:play_now_default"));
     run_until(&mut h, "the map", 900, |h| h.state().model.size().x > 0);
@@ -235,6 +241,40 @@ fn the_map_editor_opens_draws_and_discards() {
     assert_ne!(drawn, opened);
     save(&mut h, "editor-drawn");
 
+    // Each shape tool is one step, and the history goes back to any of them.
+    invoke(&mut h, "editor:tool", row("tool:line"));
+    invoke(&mut h, "editor:paint", row("square:1,12"));
+    invoke(&mut h, "editor:paint", row("square:8,12"));
+    let lined = glyphs(&h, "editor:canvas");
+    assert_eq!(
+        lined[12].chars().skip(1).take(8).collect::<String>(),
+        "########"
+    );
+    let inside = rows(&h, "editor:legend")[0].replace("symbol:", "");
+    invoke(&mut h, "editor:inside", row(&format!("symbol:{inside}")));
+    invoke(&mut h, "editor:tool", row("tool:room"));
+    invoke(&mut h, "editor:paint", row("square:12,14"));
+    invoke(&mut h, "editor:paint", row("square:20,20"));
+    let roomed = glyphs(&h, "editor:canvas");
+    assert_eq!(roomed[14].chars().nth(12), Some('#'));
+    assert_eq!(roomed[16].chars().nth(14).map(String::from), Some(inside));
+    save(&mut h, "editor-room");
+    let steps = rows(&h, "editor:history");
+    assert_eq!(steps, ["step:0", "step:1", "step:2", "step:3"]);
+    invoke(&mut h, "editor:jump", row("step:1"));
+    assert_eq!(glyphs(&h, "editor:canvas"), drawn);
+    save(&mut h, "editor-history");
+    invoke(&mut h, "editor:jump", row("step:3"));
+    assert_eq!(glyphs(&h, "editor:canvas"), roomed);
+    let top = h.state().model.screens().last().unwrap();
+    let keys = |id: &str| {
+        top.affordances
+            .iter()
+            .find(|a| a.id == id)
+            .map(|a| a.keys.clone())
+    };
+    assert_eq!(keys("editor:undo"), Some(vec!["CTRL+Z".to_string()]));
+
     // The game's own generation of the edited entry, with the rectangle in it.
     invoke(
         &mut h,
@@ -265,6 +305,20 @@ fn the_map_editor_opens_draws_and_discards() {
     );
     save(&mut h, "editor-catalog");
 
+    // The entry applied to the game, stamped over the avatar's square, and tested there.
+    invoke(&mut h, "editor:apply", InvokeArgs::default());
+    invoke(&mut h, "editor:stamp", InvokeArgs::default());
+    save(&mut h, "editor-stamped");
+    invoke(&mut h, "editor:test", InvokeArgs::default());
+    run_until(&mut h, "the map", 60, |h| {
+        !h.state().model.busy() && top_kind(h).as_deref() != Some("editor")
+    });
+    save(&mut h, "map-tested");
+    // The editor comes back to the document it was left with.
+    assert!(h.state_mut().model.invoke_action("editor"));
+    wait_kind(&mut h, "editor");
+    assert_eq!(glyphs(&h, "editor:canvas"), roomed);
+
     // Leaving with the change unsaved asks to save, discard or stay.
     invoke(&mut h, "QUIT", InvokeArgs::default());
     run_until(&mut h, "the leave menu", 60, |h| {
@@ -287,4 +341,76 @@ fn the_map_editor_opens_draws_and_discards() {
         !h.state().model.busy() && top_kind(h).as_deref() != Some("editor")
     });
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Presses a key with the modifiers and waits for the engine to take what it runs.
+fn press(h: &mut H, mods: egui::Modifiers, key: egui::Key) {
+    h.key_press_modifiers(mods, key);
+    h.run_steps(3);
+    run_until(h, "the key", 120, |h| !h.state().model.busy());
+    settle(h);
+}
+
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn the_main_menu_map_editor_draws_with_keys_browses_and_stamps() {
+    let (mut h, root, dir) = at_main_menu();
+    invoke(&mut h, "menu:tab", row("editor"));
+    invoke(&mut h, "menu:entry", row("editor:map"));
+    wait_kind(&mut h, "editor");
+    save(&mut h, "menu-editor-empty");
+
+    // The browser lists the data files; its filter finds one and opens it.
+    assert_eq!(rows(&h, "editor:browser").len(), 50);
+    invoke(&mut h, "editor:browser_filter", text("house/2story01.json"));
+    let found = rows(&h, "editor:browser");
+    assert_eq!(found.len(), 1);
+    save(&mut h, "menu-editor-browser");
+    invoke(&mut h, "editor:browser_open", row(&found[0]));
+    let opened = glyphs(&h, "editor:canvas");
+    assert_eq!((opened.len(), opened[0].chars().count()), (24, 24));
+
+    // Ctrl+Z and Ctrl+Y undo and redo one stroke.
+    invoke(&mut h, "editor:symbol", row("symbol:#"));
+    invoke(&mut h, "editor:tool", row("tool:rect_filled"));
+    invoke(&mut h, "editor:paint", row("square:3,3"));
+    invoke(&mut h, "editor:paint", row("square:9,9"));
+    let drawn = glyphs(&h, "editor:canvas");
+    assert_ne!(drawn, opened);
+    press(&mut h, egui::Modifiers::CTRL, egui::Key::Z);
+    assert_eq!(glyphs(&h, "editor:canvas"), opened);
+    press(&mut h, egui::Modifiers::CTRL, egui::Key::Y);
+    assert_eq!(glyphs(&h, "editor:canvas"), drawn);
+
+    // A brush of two with the mirror on draws the square and its twin across the middle column.
+    invoke(&mut h, "editor:tool", row("tool:point"));
+    invoke(
+        &mut h,
+        "editor:brush",
+        InvokeArgs {
+            count: Some(2),
+            ..Default::default()
+        },
+    );
+    invoke(&mut h, "editor:mirror_x", InvokeArgs::default());
+    invoke(&mut h, "editor:paint", row("square:2,15"));
+    let mirrored = glyphs(&h, "editor:canvas");
+    assert_eq!(mirrored[15].chars().nth(2), Some('#'));
+    assert_eq!(mirrored[16].chars().nth(21), Some('#'));
+    save(&mut h, "menu-editor-brush");
+
+    // Applied to the game, stamped over the avatar's square, tested there, and the editor comes back.
+    invoke(&mut h, "editor:apply", InvokeArgs::default());
+    invoke(&mut h, "editor:stamp", InvokeArgs::default());
+    save(&mut h, "menu-editor-stamped");
+    invoke(&mut h, "editor:test", InvokeArgs::default());
+    run_until(&mut h, "the map", 60, |h| {
+        !h.state().model.busy() && top_kind(h).as_deref() != Some("editor")
+    });
+    save(&mut h, "menu-map-tested");
+    assert!(h.state_mut().model.invoke_action("editor"));
+    wait_kind(&mut h, "editor");
+    assert_eq!(glyphs(&h, "editor:canvas"), mirrored);
+    let _ = std::fs::remove_dir_all(&dir);
+    let _ = root;
 }
