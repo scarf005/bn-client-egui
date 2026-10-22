@@ -13,8 +13,8 @@ mod panel;
 mod placement;
 
 use super::{App, sidebar};
+use crate::kit::split::{self, Extent};
 use crate::kit::tokens::{self, BAD, GOOD};
-use crate::layout::{self, Extent};
 use crate::windows::{self, Place, Shown, WindowSpec};
 use crate::{a11y, editor, text};
 use bn_client_core::interaction::{self, ArgKind, InvokeError};
@@ -530,8 +530,8 @@ impl<M: GameModel> App<M> {
         }
     }
 
-    /// The panes side by side, each as wide as its content needs (`layout::split_widths`). Peers whose minimums
-    /// do not fit go on to further lines (`layout::wrap_lines`); a line whose minimums still do not fit, and a
+    /// The panes side by side, each as wide as its content needs (`split::split_widths`). Peers whose minimums
+    /// do not fit go on to further lines (`split::wrap_lines`); a line whose minimums still do not fit, and a
     /// list beside its detail, scroll sideways instead of breaking words.
     fn split(
         &self,
@@ -548,12 +548,12 @@ impl<M: GameModel> App<M> {
             .map(|c| with_margin(self.extent(ui, c, room)))
             .collect::<Vec<_>>();
         let lines = match split.relation {
-            Relation::Peers => layout::wrap_lines(&extents, room, gap),
+            Relation::Peers => split::wrap_lines(&extents, room, gap),
             Relation::Detail => std::iter::once(0..parts.len()).collect(),
         };
         let count = lines.len();
         for (n, line) in lines.into_iter().enumerate() {
-            let widths = layout::split_widths(&extents[line.clone()], room, gap);
+            let widths = split::split_widths(&extents[line.clone()], room, gap);
             // Each line gets its share of the height left, so a list in one does not push the next out; past a
             // line taller than its share, a line still gets a few rows, and the window scrolls to them.
             let floor = 4.0 * ui.text_style_height(&egui::TextStyle::Body);
@@ -588,7 +588,7 @@ impl<M: GameModel> App<M> {
                     }
                 });
             };
-            match layout::overflows(&widths, room, gap) {
+            match split::overflows(&widths, room, gap) {
                 true => {
                     egui::ScrollArea::horizontal()
                         .id_salt(("split", &split.head.id, n))

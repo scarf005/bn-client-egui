@@ -113,13 +113,13 @@ impl<M: GameModel> App<M> {
                 let min = match split.relation {
                     Relation::Peers => parts.iter().map(|p| p.min).fold(0.0, f32::max),
                     Relation::Detail => {
-                        parts.iter().map(|p| p.min).sum::<f32>() + layout::gaps(parts.len(), gap)
+                        parts.iter().map(|p| p.min).sum::<f32>() + split::gaps(parts.len(), gap)
                     }
                 };
                 Extent {
                     min,
                     natural: parts.iter().map(|p| p.natural).sum::<f32>()
-                        + layout::gaps(parts.len(), gap),
+                        + split::gaps(parts.len(), gap),
                     grows: parts.iter().any(|p| p.grows),
                 }
             }
@@ -220,7 +220,7 @@ impl<M: GameModel> App<M> {
             let check = Self::row_check(list, row, false).map(|_| table::CHECK);
             let marks = Self::row_marks(row).map(|m| plain(&m));
             let parts = [check, marks].into_iter().flatten().collect::<Vec<_>>();
-            parts.iter().sum::<f32>() + layout::gaps(parts.len(), spacing.item_spacing.x)
+            parts.iter().sum::<f32>() + split::gaps(parts.len(), spacing.item_spacing.x)
         }));
         let item = match self.squares(rows) {
             true => tokens::ITEM,

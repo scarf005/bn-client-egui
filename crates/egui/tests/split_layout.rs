@@ -1,5 +1,5 @@
 //! The width rule of split panes: content-sized, never below the minimum, the rest to the panes that grow.
-use bn_client_egui::layout::{Extent, gaps, overflows, split_widths, wrap_lines};
+use bn_client_egui::kit::split::{Extent, gaps, overflows, split_widths, wrap_lines};
 
 const GAP: f32 = 8.0;
 
