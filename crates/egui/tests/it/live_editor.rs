@@ -275,6 +275,20 @@ fn the_map_editor_opens_draws_and_discards() {
     };
     assert_eq!(keys("editor:undo"), Some(vec!["CTRL+Z".to_string()]));
 
+    // A region selected, copied, turned a quarter and pasted is one more step of the history.
+    invoke(&mut h, "editor:tool", row("tool:select"));
+    invoke(&mut h, "editor:paint", row("square:2,2"));
+    invoke(&mut h, "editor:paint", row("square:9,4"));
+    invoke(&mut h, "editor:copy", InvokeArgs::default());
+    invoke(&mut h, "editor:rotate", InvokeArgs::default());
+    invoke(&mut h, "editor:tool", row("tool:paste"));
+    invoke(&mut h, "editor:paint", row("square:14,2"));
+    assert_ne!(glyphs(&h, "editor:canvas"), roomed);
+    assert_eq!(rows(&h, "editor:history").len(), 5);
+    save(&mut h, "editor-pasted");
+    invoke(&mut h, "editor:jump", row("step:3"));
+    assert_eq!(glyphs(&h, "editor:canvas"), roomed);
+
     // The game's own generation of the edited entry, with the rectangle in it.
     invoke(
         &mut h,
