@@ -63,6 +63,8 @@ pub struct Layer {
     pub window: bool,
     /// How much of a person the thing covers, in percent, which a 3D view raises it by; 0 when it lies flat.
     pub coverage: u8,
+    /// What the thing stands as, which a 3D view builds it in.
+    pub form: crate::protocol::LookForm,
     /// Whether the thing is a part of a vehicle.
     pub vehicle: bool,
     /// Picks between the weighted variants of a sprite, like the game's per-tile seed.

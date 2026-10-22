@@ -1064,7 +1064,8 @@ fn tiled_session() -> EngineModel {
                 "tile": "vp_roof", "tint": {"fg": "#f7fbf5"}}}),
         json!({"at": {"dim": "", "x": 11, "y": 8, "z": 0}, "known": "visible", "light": 3,
             "fields": [{"look": {"kind": "field", "id": "fd_acid_water", "glyph": "~", "color": "green",
-                "tint": {"bg": "#00aa00", "fg": "#00aa00"}}, "intensity": 1}]}),
+                "tint": {"bg": "#00aa00", "fg": "#00aa00"}, "form": "a_form_of_a_later_engine"},
+                "intensity": 1}]}),
         json!({"at": {"dim": "", "x": 9, "y": 6, "z": 0}, "known": "visible", "below": 1}),
         json!({"at": {"dim": "", "x": 10, "y": 6, "z": 0}, "known": "visible", "below": 1}),
         json!({"at": {"dim": "", "x": 9, "y": 5, "z": 0}, "known": "visible", "below": 1}),
@@ -1077,7 +1078,7 @@ fn tiled_session() -> EngineModel {
         json!({"at": {"dim": "", "x": 14, "y": 6, "z": 0}, "known": "visible", "below": 2}),
         json!({"at": {"dim": "", "x": 14, "y": 6, "z": -1}, "known": "visible", "light": 2,
             "fields": [{"look": {"kind": "field", "id": "fd_smoke", "name": "smoke", "glyph": "8",
-                "color": "c_dark_gray"}, "intensity": 1, "hides_items": true}]}),
+                "color": "c_dark_gray", "form": "gas"}, "intensity": 1, "hides_items": true}]}),
         json!({"at": {"dim": "", "x": 14, "y": 6, "z": -2}, "known": "visible", "light": 3,
             "terrain": {"kind": "terrain", "id": "t_rock_floor", "glyph": ".", "color": "light_gray"}}),
         json!({"at": {"dim": "", "x": 13, "y": 6, "z": -1}, "known": "visible", "light": 3,
@@ -1088,7 +1089,7 @@ fn tiled_session() -> EngineModel {
             "memory": {"terrain": {"kind": "terrain", "id": "t_grass", "glyph": "\"", "color": "green",
                 "subtile": "center", "rotation": 0},
                 "overlay": {"kind": "furniture", "id": "f_bench", "glyph": "H", "color": "brown",
-                "subtile": "unconnected", "rotation": 2}}}),
+                "subtile": "unconnected", "rotation": 2, "form": "seat"}}}),
     ]);
     let (t, _) = ScriptedTransport::new();
     connected(t.on("bn.hello", vec![fixture("hello_result")]).on(
@@ -3232,4 +3233,29 @@ fn a_shot_after_a_multishot_ends_it_and_a_single_shot_plays_alone() {
     assert_eq!(pellets(&effects[1]), [vec![(4, 6)]]);
     assert_eq!(flown(&effects[2]), [(4, 7), (4, 8)], "as today");
     assert!(matches!(effects[3].shape, Shape::Text { .. }));
+}
+
+#[test]
+fn a_layer_keeps_the_form_its_look_stands_as_and_none_for_one_it_does_not_know() {
+    use bn_client_core::protocol::LookForm as Form;
+    let m = tiled_session();
+    let at = |x: i32, y: i32| {
+        let origin = m.origin();
+        m.cell(Pos {
+            x: x - origin.x,
+            y: y - origin.y,
+        })
+    };
+    let form = |x: i32, y: i32, id: &str| {
+        at(x, y)
+            .layers
+            .iter()
+            .find(|l| l.id == id)
+            .map(|l| l.form)
+            .unwrap_or_else(|| panic!("{id} at {x},{y}"))
+    };
+    assert_eq!(form(14, 6, "fd_smoke"), Form::Gas);
+    assert_eq!(form(9, 7, "f_bench"), Form::Seat);
+    assert_eq!(form(9, 7, "t_grass"), Form::None);
+    assert_eq!(form(11, 8, "fd_acid_water"), Form::None);
 }

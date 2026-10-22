@@ -68,6 +68,9 @@ pub struct Look {
     /// How much of a person standing behind it the terrain or furniture covers, in percent; 0 when none.
     #[serde(default, skip_serializing_if = "is_default")]
     pub coverage: u8,
+    /// What terrain, furniture or a field stands as, from its game data.
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub form: LookForm,
     /// Paint of a vehicle part, as `#rrggbb`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tint: Option<Tint>,
@@ -129,6 +132,24 @@ pub struct Tint {
     pub bg: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fg: Option<String>,
+}
+
+/// What terrain, furniture or a field stands as, which a 3D view builds it in; `None` for anything else, also for
+/// a form a newer engine names.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LookForm {
+    Door,
+    Fence,
+    Plant,
+    Seat,
+    Table,
+    Bed,
+    Fire,
+    Gas,
+    #[default]
+    #[serde(other)]
+    None,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
