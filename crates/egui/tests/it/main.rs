@@ -99,6 +99,7 @@ mod ui_tile_seams;
 mod ui_tiles;
 mod ui_title_vehicle;
 mod ui_toolbar;
+mod ui_vehicle_editor_layout;
 mod ui_window_class;
 mod ui_window_class_shots;
 mod ui_windows;
