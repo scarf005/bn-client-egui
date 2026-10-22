@@ -538,6 +538,17 @@ fn fields_traps_and_furniture_drawn_from_above_are_not_thick_and_an_item_keeps_i
         walled,
     ]);
     let scene = flat_scene_of(&m, "flat-not-thick");
+    // What is built in a square may start on its far edges.
+    let within = |abs: (i32, i32)| {
+        let (x, y) = square(&m, abs);
+        let (x, y) = (x as f32, y as f32);
+        all(&scene)
+            .into_iter()
+            .filter(|i| {
+                (x..=x + 1.0).contains(&i.origin[0]) && (y..=y + 1.0).contains(&i.origin[1])
+            })
+            .collect::<Vec<_>>()
+    };
     // A trap, blood and furniture without a form lie on the grass.
     for x in [4, 5, 6] {
         let quads = at(&scene, &m, (x, 4));
@@ -545,23 +556,16 @@ fn fields_traps_and_furniture_drawn_from_above_are_not_thick_and_an_item_keeps_i
         assert!(quads.iter().all(|i| i.origin[2] < 0.01), "{x}: {quads:?}");
     }
     // A fire is two crossed boards that give light, a gas is seen through.
-    let fire = at(&scene, &m, (7, 4))
+    let fire = within((7, 4))
         .into_iter()
         .filter(|i| i.flags[0] & GLOW != 0)
         .collect::<Vec<_>>();
     assert_eq!(fire.len(), 2, "{fire:?}");
     assert!(fire.iter().all(|i| i.b == [0.0, 0.0, -1.0]), "{fire:?}");
-    assert!(
-        at(&scene, &m, (8, 4))
-            .iter()
-            .any(|i| i.flags[0] & SHEER != 0)
-    );
+    assert!(within((8, 4)).iter().any(|i| i.flags[0] & SHEER != 0));
     // A seat is built as one: its back reaches a block up.
-    let (x, y) = square(&m, (9, 4));
-    let seat = all(&scene)
+    let seat = within((9, 4))
         .into_iter()
-        .filter(|i| (x as f32..=x as f32 + 1.0).contains(&i.origin[0]))
-        .filter(|i| (y as f32..=y as f32 + 1.0).contains(&i.origin[1]))
         .map(|i| i.origin[2])
         .fold(f32::MIN, f32::max);
     assert!((seat - 1.0).abs() < 0.01, "{seat}");

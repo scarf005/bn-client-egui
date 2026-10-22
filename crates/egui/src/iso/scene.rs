@@ -268,7 +268,8 @@ pub fn build(
                     _ if layer.coverage > 0 && !m.iso => Kind::Standing {
                         coverage: layer.coverage,
                     },
-                    (false, _) => Kind::Item,
+                    (false, _) if layer.item => Kind::Item,
+                    (false, _) => Kind::Thing,
                     (true, false) => Kind::Terrain,
                     (true, true) => Kind::Joined,
                 };
@@ -323,7 +324,10 @@ pub fn build(
                         };
                     }
                     let form = shape(&m, &sprite, kind);
-                    if let Some((low, high)) = form.solid() {
+                    // The tallest solid of the square is its column's: an item does not take a wall's place.
+                    if let Some((low, high)) = form.solid()
+                        && column.solid.is_none_or(|(_, top)| floor + high > top)
+                    {
                         column.solid = Some((floor + low, floor + high));
                     }
                     let outline = match form {
@@ -361,11 +365,12 @@ pub fn build(
         let inside = (0..width).contains(&x) && (0..height).contains(&y);
         inside.then(|| (y * width + x) as usize)
     };
-    // Which edges of its square the solid of each square covers whole, as its column's solid is the last one.
+    // Which edges of its square the solid of each square covers whole, by the item whose solid is its column's.
     let mut edges = vec![[false; 4]; columns.len()];
     for item in &items {
-        if item.form.solid().is_some()
+        if let Some((low, high)) = item.form.solid()
             && let Some(n) = index(item.square.0, item.square.1)
+            && columns[n].and_then(|c| c.solid) == Some((item.floor + low, item.floor + high))
         {
             edges[n] = borders(&m, &item.placement([false; 4], [false; 4]));
         }

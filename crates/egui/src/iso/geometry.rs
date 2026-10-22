@@ -57,8 +57,8 @@ const LEVEL: f32 = 3.0;
 const LAYER_BIAS: f32 = 0.002;
 /// A vehicle part of a tileset drawn from above stands this many squares tall: a person in it shows from the chest.
 const VEHICLE: f32 = 0.5;
-/// An item or a field lying on the ground of a tileset drawn from above is this many squares thick, a creature this many
-/// tall: the sprite's opaque pixels pushed up that far.
+/// An item lying on the ground of a tileset drawn from above is this many squares thick, a creature this many tall:
+/// the sprite's opaque pixels pushed up that far.
 const ITEM: f32 = 0.1;
 const CREATURE: f32 = 0.4;
 /// The blocks a wall of a tileset drawn from above stacks to a level: a storey is 3 m, a block 1 m.
@@ -201,7 +201,7 @@ fn runs(len: i32, side: impl Fn(i32) -> Option<bool>) -> Vec<(i32, i32, bool)> {
 pub enum Kind {
     /// Anything that is not a square's terrain, a creature or a vehicle part.
     Thing,
-    /// An item or a field lying on the ground.
+    /// An item lying on the ground.
     Item,
     /// A monster, a person or the avatar.
     Creature,
