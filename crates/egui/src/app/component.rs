@@ -77,10 +77,11 @@ pub(super) struct Screens {
     list_rows: std::cell::Cell<Option<usize>>,
 }
 
-/// What a window kept off the cursor holds while its screen is open: its side.
+/// What a window kept off the cursor holds while its screen is open: its side, and the pass it was last shown in.
 #[derive(Clone, Copy)]
 struct Anchor {
     left: bool,
+    pass: u64,
 }
 
 /// A list's scroll offset in the last frame, and the row of the focus it last brought into sight.
@@ -435,9 +436,11 @@ impl<M: GameModel> App<M> {
         // A window kept off the cursor holds its side while its screen is open; its size is the player's.
         let anchored = keeps_off_cursor(screen);
         let anchor_key = egui::Id::new(("anchored", &screen.screen_id));
+        // One not shown in the last pass belongs to an earlier opening of the screen.
+        let pass = ctx.cumulative_pass_nr();
         let anchor = ctx
             .data(|d| d.get_temp::<Anchor>(anchor_key))
-            .filter(|_| anchored);
+            .filter(|a| anchored && a.pass + 1 >= pass);
         let room = Room {
             region,
             sidebar: self.sidebar,
@@ -530,7 +533,7 @@ impl<M: GameModel> App<M> {
             }
         });
         if let (true, Some(left)) = (anchored, at_left(place)) {
-            ctx.data_mut(|d| d.insert_temp(anchor_key, Anchor { left }));
+            ctx.data_mut(|d| d.insert_temp(anchor_key, Anchor { left, pass }));
         }
         if let Some(a) = titled.filter(|_| shown.help) {
             out.push(Intent::Run(a.id.clone()));
