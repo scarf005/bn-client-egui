@@ -1,0 +1,176 @@
+//! Splits and descriptions as a player reads them over the map: rows of peer panes painted whole, the only
+//! prose of a split as wide as the panes beside it, the active outline only around a pane that holds something, and the focused row's description in a pane of its own instead of a strip under the list.
+mod common;
+use bn_client_egui::{App, EngineModel};
+use eframe::egui::{self, epaint};
+use egui_kittest::Harness;
+use egui_kittest::kittest::{NodeT, Queryable};
+use serde_json::Value;
+
+type H<'a> = Harness<'a, App<EngineModel>>;
+
+/// The screen named `name` in the engine's 0.2 example file `file`.
+fn example(file: &str, name: &str) -> Value {
+    let path = format!(
+        "{}/../core/tests/fixtures/0.2.examples/{file}.json",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    let all = serde_json::from_str::<Value>(&std::fs::read_to_string(path).unwrap()).unwrap();
+    all["valid"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["name"] == name)
+        .unwrap()["value"]
+        .clone()
+}
+
+/// `screen` over the map in a themed window of `size`, on its first settled frame.
+fn shown<'a>(screen: Value, size: egui::Vec2) -> H<'a> {
+    let (app, _) = common::staged(common::over_map(screen));
+    let mut h = common::themed_harness(size, app);
+    h.run_steps(6);
+    common::settle_windows(&mut h);
+    h
+}
+
+/// Every painted text with the clip rectangle it is painted in.
+fn texts(shapes: &[epaint::ClippedShape]) -> Vec<(egui::Rect, &epaint::TextShape)> {
+    fn walk<'a>(
+        clip: egui::Rect,
+        shape: &'a egui::Shape,
+        out: &mut Vec<(egui::Rect, &'a epaint::TextShape)>,
+    ) {
+        match shape {
+            egui::Shape::Text(text) => out.push((clip, text)),
+            egui::Shape::Vec(shapes) => shapes.iter().for_each(|s| walk(clip, s, out)),
+            _ => {}
+        }
+    }
+    let mut out = Vec::new();
+    shapes
+        .iter()
+        .for_each(|s| walk(s.clip_rect, &s.shape, &mut out));
+    out
+}
+
+/// The rectangle of the text holding `part`, when every one of its lines is painted inside its clip.
+fn whole(h: &H, part: &str) -> Option<egui::Rect> {
+    let shapes = &h.output().shapes;
+    texts(shapes).into_iter().find_map(|(clip, text)| {
+        let rect = text.visual_bounding_rect();
+        let inside = text.galley.rows.iter().all(|row| {
+            clip.expand(1.0)
+                .contains_rect(row.rect().translate(text.pos.to_vec2()))
+        });
+        (text.galley.text().contains(part) && inside).then_some(rect)
+    })
+}
+
+/// The outlines drawn around panes: rectangles stroked in the selection's colour and not filled.
+fn outlines(h: &H) -> Vec<egui::Rect> {
+    let stroke = h.ctx.global_style().visuals.selection.stroke.color;
+    fn walk(shape: &egui::Shape, stroke: egui::Color32, out: &mut Vec<egui::Rect>) {
+        match shape {
+            egui::Shape::Rect(r)
+                if r.stroke.color == stroke && r.fill == egui::Color32::TRANSPARENT =>
+            {
+                out.push(r.rect)
+            }
+            egui::Shape::Vec(shapes) => shapes.iter().for_each(|s| walk(s, stroke, out)),
+            _ => {}
+        }
+    }
+    let mut out = Vec::new();
+    h.output()
+        .shapes
+        .iter()
+        .for_each(|s| walk(&s.shape, stroke, &mut out));
+    out
+}
+
+#[test]
+fn the_character_sheets_stat_rows_are_painted_whole_at_1280() {
+    let h = shown(
+        example("character", "character sheet"),
+        egui::vec2(1280.0, 800.0),
+    );
+    for name in ["Strength:", "Dexterity:", "Intelligence:", "Perception:"] {
+        assert!(whole(&h, name).is_some(), "{name} is not painted whole");
+    }
+}
+
+#[test]
+fn the_npc_dialogue_is_at_least_as_wide_as_the_responses_at_1280() {
+    let h = shown(
+        example("npctalk", "NPC talk screen"),
+        egui::vec2(1280.0, 800.0),
+    );
+    let window = h
+        .query_all_by_role(egui::accesskit::Role::Window)
+        .find(|w| {
+            w.accesskit_node()
+                .label()
+                .is_some_and(|l| l.contains("Daniel Arevalo"))
+        })
+        .unwrap()
+        .rect();
+    let replies = h.get_by_label("Your response:").rect();
+    assert!(
+        replies.left() >= window.center().x - 8.0,
+        "the responses start at {} in {window:?}: the dialogue is narrower",
+        replies.left()
+    );
+}
+
+#[test]
+fn the_active_outline_is_drawn_only_around_a_pane_that_holds_something() {
+    let h = shown(
+        example("aim", "advanced inventory screen"),
+        egui::vec2(1280.0, 800.0),
+    );
+    let left = h.get_by_label("Left pane").rect();
+    let drawn = outlines(&h);
+    assert_eq!(drawn.len(), 1, "{drawn:?}");
+    assert!(drawn[0].contains_rect(left), "{drawn:?} around {left:?}");
+    // The active pane's outline frames its whole slot, not a strip of it.
+    let rows = h
+        .query_all_by_label("Worn Items")
+        .map(|n| n.rect())
+        .min_by(|a, b| a.left().total_cmp(&b.left()))
+        .unwrap();
+    assert!(
+        drawn[0].bottom() >= rows.bottom(),
+        "{drawn:?} over {rows:?}"
+    );
+}
+
+#[test]
+fn the_focused_items_description_is_whole_beside_the_list_at_1920() {
+    let h = shown(
+        example("inventory", "drop selector screen"),
+        egui::vec2(1920.0, 1080.0),
+    );
+    let text = whole(&h, "A rock the size of a baseball").expect("the description is cut");
+    let row = h.get_by_label("rock (1)").rect();
+    assert!(
+        text.left() >= row.right(),
+        "{text:?} is not beside the row {row:?}"
+    );
+    assert!(
+        text.top() < row.bottom() + 40.0,
+        "{text:?} starts under the row {row:?}"
+    );
+}
+
+#[test]
+fn the_focused_items_description_is_whole_at_1280() {
+    let h = shown(
+        example("inventory", "drop selector screen"),
+        egui::vec2(1280.0, 800.0),
+    );
+    assert!(
+        whole(&h, "A rock the size of a baseball").is_some(),
+        "the description is cut"
+    );
+}
