@@ -181,18 +181,27 @@ impl Grip {
 
     /// `rect` with the edges of this handle moved by `delta`, no smaller than `LEAST` and inside `bounds`.
     fn drag(self, rect: egui::Rect, delta: egui::Vec2, bounds: egui::Rect) -> egui::Rect {
+        // Not clamps: by the screen's edge, a window already smaller than `LEAST` has the two bounds crossed.
         let mut out = rect;
         if self.left {
-            out.min.x = (rect.min.x + delta.x).clamp(bounds.min.x, rect.max.x - LEAST.x);
+            out.min.x = (rect.min.x + delta.x)
+                .min(rect.max.x - LEAST.x)
+                .max(bounds.min.x);
         }
         if self.right {
-            out.max.x = (rect.max.x + delta.x).clamp(rect.min.x + LEAST.x, bounds.max.x);
+            out.max.x = (rect.max.x + delta.x)
+                .max(rect.min.x + LEAST.x)
+                .min(bounds.max.x);
         }
         if self.top {
-            out.min.y = (rect.min.y + delta.y).clamp(bounds.min.y, rect.max.y - LEAST.y);
+            out.min.y = (rect.min.y + delta.y)
+                .min(rect.max.y - LEAST.y)
+                .max(bounds.min.y);
         }
         if self.bottom {
-            out.max.y = (rect.max.y + delta.y).clamp(rect.min.y + LEAST.y, bounds.max.y);
+            out.max.y = (rect.max.y + delta.y)
+                .max(rect.min.y + LEAST.y)
+                .min(bounds.max.y);
         }
         out
     }
@@ -201,11 +210,9 @@ impl Grip {
 /// `rect` moved, if need be, to lie in `bounds`, and no larger than them.
 fn inside(rect: egui::Rect, bounds: egui::Rect) -> egui::Rect {
     let size = rect.size().min(bounds.size());
-    let min = egui::pos2(
-        rect.min.x.clamp(bounds.min.x, bounds.max.x - size.x),
-        rect.min.y.clamp(bounds.min.y, bounds.max.y - size.y),
-    );
-    egui::Rect::from_min_size(min, size)
+    // A room's far edge less its own width can round to just before its near edge.
+    let far = (bounds.max - size).max(bounds.min);
+    egui::Rect::from_min_size(rect.min.clamp(bounds.min, far), size)
 }
 
 /// The corner a window of `size` has when `pivot` of it sits at `pos`.
@@ -399,8 +406,9 @@ pub fn show<R>(
         }
         _ => inside(geometry.rect, screen),
     };
-    // Whole points, so that the text in the window is laid out on the same pixels whatever the room.
-    geometry.rect = egui::Rect::from_min_max(geometry.rect.min.round(), geometry.rect.max.round());
+    // Shown on whole points, so that the text in the window is laid out on the same pixels whatever the room;
+    // kept as it is, so that a window maximized on a screen of fractional points is still the screen.
+    let whole = egui::Rect::from_min_max(geometry.rect.min.round(), geometry.rect.max.round());
     let side = ctx
         .fonts_mut(|f| f.row_height(&egui::TextStyle::Heading.resolve(&style)))
         .ceil();
@@ -410,11 +418,10 @@ pub fn show<R>(
         0.0
     };
     let shown_rect = match geometry.minimized {
-        true => egui::Rect::from_min_size(
-            geometry.rect.min,
-            egui::vec2(geometry.rect.width(), margin.sum().y + bar),
-        ),
-        false => geometry.rect,
+        true => {
+            egui::Rect::from_min_size(whole.min, egui::vec2(whole.width(), margin.sum().y + bar))
+        }
+        false => whole,
     };
     let (mut pressed, mut moved, mut dragged, mut inner) =
         (Pressed::default(), egui::Vec2::ZERO, None, None);

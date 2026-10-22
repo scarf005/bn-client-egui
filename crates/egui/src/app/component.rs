@@ -233,12 +233,13 @@ impl<M: GameModel> App<M> {
     }
 
     /// Chooses the row a filter's result click named once the prompt is gone and the list has it; a list that
-    /// lacks it, or is not a list, ends the wait.
+    /// lacks it, a screen that is not a list, or one that is not described ends the wait.
     fn reach_row(&mut self) {
         let Some(row) = self.screens.reach.clone() else {
             return;
         };
         let Some(top) = interaction::described(self.model.screens()) else {
+            self.screens.reach = None;
             return;
         };
         if form::filter_submit(top).is_some() {

@@ -257,6 +257,23 @@ fn a_click_on_a_result_of_a_prompt_whose_filter_matches_nothing_chooses_nothing(
 }
 
 #[test]
+fn a_filter_result_click_whose_prompt_gives_way_to_the_map_chooses_nothing_in_a_later_list() {
+    let (mut h, script) = harness(example("filter prompt after typing"));
+    h.get_by_label("Teleport…").click();
+    h.run_steps(3);
+    let map = json!({"screen_id": "screen:map", "kind": "map", "role": "map", "root": null,
+        "affordances": []});
+    script.push(screen_event(map, 32));
+    finish(&script, 1, "c:5");
+    h.run_steps(4);
+    let mut list = example("filterable list screen");
+    list["screen_id"] = "screen:13".into();
+    script.push(screen_event(list, 33));
+    h.run_steps(4);
+    assert_eq!(operations(&script).len(), 1, "{:?}", operations(&script));
+}
+
+#[test]
 fn typing_in_the_prompt_fills_the_field_and_enter_submits_it() {
     let (mut h, script) = harness(example("filter prompt before typing"));
     field(&h).focus();
