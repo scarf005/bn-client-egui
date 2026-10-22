@@ -5,7 +5,7 @@
 use crate::common::live::{H, english_transport, new_game, pick, root, run_until, save, settle};
 use bn_client_egui::App;
 use bn_client_egui::EngineModel;
-use bn_client_egui::protocol::InvokeArgs;
+use bn_client_egui::protocol::{InvokeArgs, ScreenRole};
 use bn_client_egui::{GameModel, MenuModel};
 use eframe::egui;
 use egui_kittest::kittest::{NodeT, Queryable};
@@ -214,5 +214,51 @@ fn the_debug_windows_are_saved_as_pictures() {
         run_until(&mut h, "the filter prompt", 60, |h| !h.state().model.busy());
         settle(&mut h);
         save(&mut h, &format!("wish-filter-{width}.png"));
+    }
+}
+
+/// The windows a first session opens, saved at each size as `<name>-<width>.png`: the map with its sidebar, the
+/// client's settings, and the engine's own screens, each closed again before the next opens.
+#[test]
+#[ignore = "needs BN_ENGINE and a Vulkan adapter"]
+fn the_windows_of_a_session_are_saved_as_pictures() {
+    for size in SIZES {
+        let mut h = client(size);
+        new_game(&mut h, "new_game:play_now_default");
+        let width = size.0 as u32;
+        settle(&mut h);
+        save(&mut h, &format!("map-{width}.png"));
+        h.get_by_label("Client settings").click();
+        settle(&mut h);
+        save(&mut h, &format!("settings-{width}.png"));
+        h.get_by_label("Close window").click();
+        h.run_steps(3);
+        for action in [
+            "inventory",
+            "wait",
+            "player_data",
+            "craft",
+            "open_options",
+            "messages",
+            "help",
+        ] {
+            if !h.state_mut().model.invoke_action(action) {
+                println!("no action {action}");
+                continue;
+            }
+            run_until(&mut h, action, 60, |h| !h.state().model.busy());
+            settle(&mut h);
+            save(&mut h, &format!("{action}-{width}.png"));
+            h.key_press(egui::Key::Escape);
+            run_until(&mut h, "the map", 60, |h| {
+                h.state()
+                    .model
+                    .screens()
+                    .last()
+                    .is_some_and(|s| s.role == ScreenRole::Map)
+                    && !h.state().model.busy()
+            });
+            h.run_steps(3);
+        }
     }
 }
