@@ -66,7 +66,7 @@ impl<M: GameModel> App<M> {
             let builder = egui::UiBuilder::new().max_rect(region);
             let ui = egui::Ui::new(ctx.clone(), egui::Id::new("measure"), builder);
             let margin = ui.spacing().window_margin.sum().x;
-            let content = self.extent(&ui, root, placement.widest() - margin);
+            let content = self.extent(&ui, screen, root, placement.widest() - margin);
             let content = Extent {
                 min: content.min + margin,
                 natural: content.natural + margin,

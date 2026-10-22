@@ -398,7 +398,7 @@ impl<M: GameModel> App<M> {
             let builder = egui::UiBuilder::new().max_rect(region);
             let ui = egui::Ui::new(ctx.clone(), egui::Id::new("measure"), builder);
             let margin = frame.total_margin().sum().x + ui.spacing().window_margin.sum().x;
-            let content = self.extent(&ui, root, placement.widest() - margin);
+            let content = self.extent(&ui, screen, root, placement.widest() - margin);
             let content = Extent {
                 min: content.min + margin,
                 natural: content.natural + margin,
@@ -580,7 +580,7 @@ impl<M: GameModel> App<M> {
         let measure = |ui: &egui::Ui, panes: &[&Component], room: f32| {
             panes
                 .iter()
-                .map(|c| with_margin(self.extent(ui, c, room)))
+                .map(|c| with_margin(self.extent(ui, screen, c, room)))
                 .collect::<Vec<_>>()
         };
         let laid = |ui: &egui::Ui, room: f32| {

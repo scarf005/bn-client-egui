@@ -46,7 +46,7 @@ impl<M: GameModel> App<M> {
             natural: 0.0,
             grows: true,
         };
-        let widths = split::detail_widths(&[self.extent(ui, c, room), detail], room, gap);
+        let widths = split::detail_widths(&[self.extent(ui, screen, c, room), detail], room, gap);
         let height = ui.available_height();
         ui.horizontal_top(|ui| {
             let pane = |ui: &mut egui::Ui, width: f32, draw: &mut dyn FnMut(&mut egui::Ui)| {

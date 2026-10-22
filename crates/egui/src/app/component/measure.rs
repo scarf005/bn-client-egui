@@ -53,7 +53,13 @@ pub(super) fn stat_text(stat: &PanelStat) -> String {
 
 impl<M: GameModel> App<M> {
     /// What `c` needs in width, measured without laying it out: `room` is what its surroundings offer.
-    pub(super) fn extent(&self, ui: &egui::Ui, c: &Component, room: f32) -> Extent {
+    pub(super) fn extent(
+        &self,
+        ui: &egui::Ui,
+        screen: &Screen,
+        c: &Component,
+        room: f32,
+    ) -> Extent {
         let gap = ui.spacing().item_spacing.x;
         let font = egui::TextStyle::Body.resolve(ui.style());
         let stacked = |a: Extent, b: Extent| Extent {
@@ -72,7 +78,9 @@ impl<M: GameModel> App<M> {
             grows: false,
         };
         let inside = |child: &Option<Box<Component>>| {
-            child.as_ref().map(|child| self.extent(ui, child, room))
+            child
+                .as_ref()
+                .map(|child| self.extent(ui, screen, child, room))
         };
         let own = match c {
             Component::List(list) => {
@@ -108,7 +116,7 @@ impl<M: GameModel> App<M> {
                     split.children.iter().partition::<Vec<_>, _>(|c| heading(c));
                 let parts = parts
                     .into_iter()
-                    .map(|c| with_margin(self.extent(ui, c, room)))
+                    .map(|c| with_margin(self.extent(ui, screen, c, room)))
                     .collect::<Vec<_>>();
                 // Peers wrap onto further lines, so they need only the room of their widest.
                 let min = match split.relation {
@@ -125,7 +133,7 @@ impl<M: GameModel> App<M> {
                 };
                 headings
                     .into_iter()
-                    .map(|c| self.extent(ui, c, room))
+                    .map(|c| self.extent(ui, screen, c, room))
                     .fold(beside, stacked)
             }
             Component::Panel(panel) => {
@@ -234,6 +242,19 @@ impl<M: GameModel> App<M> {
                 }
             }
         };
+        // Its buttons sit side by side, none broken over lines, and wrap to further rows when they do not fit.
+        let buttons = own_buttons(screen, c)
+            .into_iter()
+            .map(|a| button_width(ui, a))
+            .collect::<Vec<_>>();
+        let own = stacked(
+            own,
+            Extent {
+                min: buttons.iter().copied().fold(0.0, f32::max),
+                natural: buttons.iter().sum::<f32>() + split::gaps(buttons.len(), gap),
+                grows: false,
+            },
+        );
         // Every part but a panel draws its heading over itself, on one line.
         match (&c.head().label, c) {
             (_, Component::Panel(_)) | (None, _) => own,
