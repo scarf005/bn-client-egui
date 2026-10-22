@@ -29,24 +29,12 @@ fn editor(drag: Option<&str>) -> Value {
     canvas["cols"] = json!(12);
     canvas["rows"] = json!(12);
     canvas["drag"] = json!(drag);
-    if drag == Some("trail") {
-        canvas["drag_begin"] = json!("editor:stroke_begin");
-        canvas["drag_end"] = json!("editor:stroke_end");
-    }
+    let strokes = drag == Some("trail");
+    canvas["drag_begin"] = json!(strokes.then_some("editor:stroke_begin"));
+    canvas["drag_end"] = json!(strokes.then_some("editor:stroke_end"));
     canvas["cells"] = (0..12)
         .flat_map(|y| (0..12).map(move |x| json!({ "x": x, "y": y, "id": format!("square:{x},{y}"), "glyph": ".", "affordance": "editor:paint", "enabled": true })))
         .collect();
-    let affordances = screen["affordances"].as_array_mut().unwrap();
-    for id in ["editor:stroke_begin", "editor:stroke_end"] {
-        let mut stroke = affordances
-            .iter()
-            .find(|a| a["id"] == "editor:paint")
-            .unwrap()
-            .clone();
-        stroke["id"] = json!(id);
-        stroke["args"] = json!({});
-        affordances.push(stroke);
-    }
     screen
 }
 

@@ -718,6 +718,13 @@
             "expect": "screen"
           },
           {
+            "id": "editor:vehicle",
+            "label": "Vehicle editor",
+            "keys": [],
+            "enabled": true,
+            "expect": "screen"
+          },
+          {
             "id": "QUIT",
             "label": "Exit screen",
             "keys": [
@@ -1197,7 +1204,10 @@
                     "subtile": "center"
                   }
                 ],
-                "role": "canvas"
+                "role": "canvas",
+                "drag": "trail",
+                "drag_begin": "editor:stroke_begin",
+                "drag_end": "editor:stroke_end"
               }
             },
             {
@@ -3305,6 +3315,13 @@
             "expect": "screen"
           },
           {
+            "id": "editor:vehicle",
+            "label": "Vehicle editor",
+            "keys": [],
+            "enabled": true,
+            "expect": "screen"
+          },
+          {
             "id": "editor:object",
             "label": "Edit",
             "keys": [],
@@ -3493,6 +3510,20 @@
               }
             },
             "expect": "boundary"
+          },
+          {
+            "id": "editor:stroke_begin",
+            "label": "Begin stroke",
+            "keys": [],
+            "enabled": true,
+            "expect": "screen"
+          },
+          {
+            "id": "editor:stroke_end",
+            "label": "End stroke",
+            "keys": [],
+            "enabled": true,
+            "expect": "screen"
           },
           {
             "id": "editor:catalog_kind",
@@ -4176,7 +4207,8 @@
                     "subtile": "center"
                   }
                 ],
-                "role": "canvas"
+                "role": "canvas",
+                "drag": "span"
               }
             },
             {
@@ -6300,6 +6332,13 @@
             "expect": "screen"
           },
           {
+            "id": "editor:vehicle",
+            "label": "Vehicle editor",
+            "keys": [],
+            "enabled": true,
+            "expect": "screen"
+          },
+          {
             "id": "editor:object",
             "label": "Edit",
             "keys": [],
@@ -6486,6 +6525,20 @@
               }
             },
             "expect": "boundary"
+          },
+          {
+            "id": "editor:stroke_begin",
+            "label": "Begin stroke",
+            "keys": [],
+            "enabled": true,
+            "expect": "screen"
+          },
+          {
+            "id": "editor:stroke_end",
+            "label": "End stroke",
+            "keys": [],
+            "enabled": true,
+            "expect": "screen"
           },
           {
             "id": "editor:catalog_kind",
@@ -7043,7 +7096,8 @@
                     "subtile": "center"
                   }
                 ],
-                "role": "canvas"
+                "role": "canvas",
+                "drag": "span"
               }
             },
             {
@@ -9174,6 +9228,13 @@
             "expect": "screen"
           },
           {
+            "id": "editor:vehicle",
+            "label": "Vehicle editor",
+            "keys": [],
+            "enabled": true,
+            "expect": "screen"
+          },
+          {
             "id": "editor:object",
             "label": "Edit",
             "keys": [],
@@ -9379,6 +9440,20 @@
               }
             },
             "expect": "boundary"
+          },
+          {
+            "id": "editor:stroke_begin",
+            "label": "Begin stroke",
+            "keys": [],
+            "enabled": true,
+            "expect": "screen"
+          },
+          {
+            "id": "editor:stroke_end",
+            "label": "End stroke",
+            "keys": [],
+            "enabled": true,
+            "expect": "screen"
           },
           {
             "id": "editor:catalog_kind",
