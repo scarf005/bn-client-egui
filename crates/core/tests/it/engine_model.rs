@@ -3259,3 +3259,36 @@ fn a_layer_keeps_the_form_its_look_stands_as_and_none_for_one_it_does_not_know()
     assert_eq!(form(9, 7, "t_grass"), Form::None);
     assert_eq!(form(11, 8, "fd_acid_water"), Form::None);
 }
+
+#[test]
+fn the_sky_the_engine_sends_is_the_models_and_an_older_engine_sends_none() {
+    use bn_client_core::protocol::{Precipitation, Sky};
+    let session = |sky: Option<serde_json::Value>| {
+        let mut subscribe = fixture("subscribe_result");
+        if let Some(sky) = sky {
+            subscribe["result"]["environment"]["sky"] = sky;
+        }
+        let (t, _) = ScriptedTransport::new();
+        connected(t.on("bn.hello", vec![fixture("hello_result")]).on(
+            "bn.subscribe",
+            vec![
+                subscribe,
+                fixture("snapshot_part_0"),
+                fixture("snapshot_part_1"),
+            ],
+        ))
+    };
+    let m = session(Some(
+        json!({"daylight": 40, "precipitation": "heavy", "rain": true, "dimming": 40}),
+    ));
+    assert_eq!(
+        m.sky(),
+        Some(Sky {
+            daylight: 40,
+            precipitation: Precipitation::Heavy,
+            rain: true,
+            dimming: 40
+        })
+    );
+    assert_eq!(session(None).sky(), None);
+}

@@ -744,6 +744,10 @@ pub trait GameModel: MenuModel {
     fn season(&self) -> Option<String> {
         None
     }
+    /// The sky over the avatar, as the engine last said.
+    fn sky(&self) -> Option<crate::protocol::Sky> {
+        None
+    }
     fn size(&self) -> Pos;
     fn cell(&self, at: Pos) -> Cell;
     fn player(&self) -> Pos;

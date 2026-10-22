@@ -463,6 +463,36 @@ pub struct Environment {
     /// The files of game data that add sprites to tilesets, in the engine's load order.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub mod_tilesets: Vec<ModTileset>,
+    /// The sky over the avatar; absent from older engines.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sky: Option<Sky>,
+}
+
+/// The sky over the avatar: how much daylight there is and what the weather lets fall.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Sky {
+    /// The daylight now, in percent of full day.
+    pub daylight: u8,
+    pub precipitation: Precipitation,
+    /// What falls is rain, not snow.
+    #[serde(default)]
+    pub rain: bool,
+    /// How much ambient light the weather takes away, in the game's light points.
+    #[serde(default)]
+    pub dimming: u32,
+}
+
+/// How much falls from the sky; `None` also for an amount a newer engine names.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Precipitation {
+    VeryLight,
+    Light,
+    Medium,
+    Heavy,
+    #[default]
+    #[serde(other)]
+    None,
 }
 
 /// A file of game data that adds sprites to the tilesets its `compatibility` names.
