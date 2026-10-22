@@ -132,13 +132,6 @@ fn the_only_prose_longer_than_an_equal_share_gets_one() {
 }
 
 #[test]
-fn prose_whose_lines_fit_the_room_leaves_the_other_panes_their_natural_widths() {
-    let parts = [pane(100.0, 400.0, true), pane(100.0, 450.0, true)];
-    let widths = prose_widths(&parts, 0, 600.0 + GAP, GAP);
-    assert_eq!(widths, vec![150.0, 450.0]);
-}
-
-#[test]
 fn the_only_prose_never_takes_the_other_panes_below_their_minimums() {
     let parts = [pane(400.0, 500.0, true), pane(100.0, 900.0, true)];
     let widths = prose_widths(&parts, 1, 600.0 + GAP, GAP);

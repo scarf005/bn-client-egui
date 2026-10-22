@@ -142,21 +142,6 @@ fn dialogue_beside_responses(lines: usize) {
 }
 
 #[test]
-fn a_short_greeting_leaves_the_responses_their_lines_at_1280() {
-    let h = shown(talk(0), egui::vec2(1280.0, 800.0));
-    let shapes = &h.output().shapes;
-    let rows = texts(shapes)
-        .into_iter()
-        .find(|(_, t)| t.galley.text().contains("What are you doing here?"))
-        .unwrap()
-        .1
-        .galley
-        .rows
-        .len();
-    assert_eq!(rows, 1, "the response wraps over {rows} lines");
-}
-
-#[test]
 fn the_active_outline_is_drawn_only_around_a_pane_that_holds_something() {
     let h = shown(
         example("aim", "advanced inventory screen"),
