@@ -78,7 +78,11 @@ impl Camera {
     /// The step that goes the way the step `key` points on the screen, up being away from the eye: the nearest of
     /// the eight to that way on the map. None for what is not a step.
     pub fn screen_step(&self, key: &str) -> Option<&'static str> {
-        STEPS.iter().find(|(id, _)| *id == key).map(|_| None)?
+        let (_, (right, down)) = STEPS.iter().find(|(id, _)| *id == key)?;
+        let toward = Vec2::new(self.yaw.cos(), self.yaw.sin());
+        let way = Vec2::new(toward.y, -toward.x) * *right as f32 + toward * *down as f32;
+        let eighth = (way.y.atan2(way.x) / std::f32::consts::FRAC_PI_4).round() as i32;
+        Some(STEPS[eighth.rem_euclid(8) as usize].0)
     }
 
     /// Turns the camera by `yaw` around the target and tilts it by `pitch`, radians.

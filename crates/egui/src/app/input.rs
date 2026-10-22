@@ -102,7 +102,7 @@ impl<M: GameModel> App<M> {
 
     /// Runs the keys that work the client's own view, and returns the rest. Zoom is the client's: the keys the
     /// engine binds to its zoom actions never reach it. In the 3D map Alt+Left and Alt+Right turn the camera,
-    /// unless the engine binds those keys. With a menu open, every key is the menu's.
+    /// unless the engine binds those keys, and steps turn with the camera. With a menu open, every key is the menu's.
     fn client_keys(&mut self, keys: Vec<FrameKey>, menu: Option<&Menu>) -> Vec<FrameKey> {
         if menu.is_some() {
             return keys;
@@ -145,9 +145,32 @@ impl<M: GameModel> App<M> {
         let opened = keys.iter().filter_map(window).collect::<Vec<_>>();
         let zooms = keys.iter().filter_map(zoom).sum();
         let turns = keys.iter().filter_map(turn).sum::<f32>();
+        // In the 3D map a step goes the way its key points on the screen, and in first person W, A, S and D step
+        // ahead, left, back and right of the look; each is sent as a key of the step it becomes.
+        let first = self.display.first_person();
+        let camera = self.iso.camera;
+        let bound = |token: &str| {
+            let action = |token: &str| actions.iter().find(|a| a.keys.iter().any(|k| k == token));
+            action(token).or_else(|| action(&keys::numpad(token)?))
+        };
+        let screen_step = |k: &FrameKey| {
+            let id = match (k.token.as_str(), k.key) {
+                ("w", None) if first => "UP",
+                ("a", None) if first => "LEFT",
+                ("s", None) if first => "DOWN",
+                ("d", None) if first => "RIGHT",
+                (token, _) => bound(token)?.id.as_str(),
+            };
+            let step = camera.screen_step(id)?;
+            actions.iter().find(|a| a.id == step)?.keys.first().cloned()
+        };
         let rest = keys
             .into_iter()
             .filter(|k| zoom(k).is_none() && turn(k).is_none() && window(k).is_none())
+            .map(|k| match turning.then(|| screen_step(&k)).flatten() {
+                Some(token) => FrameKey { token, ..k },
+                None => k,
+            })
             .collect();
         for id in opened {
             if !self.toggle_panel(id) {
