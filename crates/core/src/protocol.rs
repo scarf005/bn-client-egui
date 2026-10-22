@@ -2370,6 +2370,14 @@ impl MapComponent {
             .collect()
     }
 
+    /// The squares the line of fire crosses from the avatar to the cursor, as the engine draws it.
+    pub fn trajectory(&self) -> Vec<WorldPos> {
+        let line = self.target.as_ref().map(|t| &t["trajectory"]);
+        let line = line.and_then(Value::as_array).into_iter().flatten();
+        line.filter_map(|p| serde_json::from_value(p.clone()).ok())
+            .collect()
+    }
+
     /// What the engine says of the cursor's square: the screen's status in words, then each fact it prints of
     /// the square with what more it says of it, as markup lines.
     pub fn cursor_lines(&self) -> Vec<String> {
