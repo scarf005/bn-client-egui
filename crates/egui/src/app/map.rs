@@ -13,6 +13,8 @@ use std::sync::Arc;
 
 /// The widest a square's tooltip text gets before its lines wrap; the tooltip's frame adds its margins.
 const TOOLTIP_WIDTH: f32 = 420.0;
+/// The share of the shorter side of the first-person view the wielded item takes.
+const HELD: f32 = 0.3;
 
 /// The 3D scene of the map and the pages it samples.
 type Scene3d = (Arc<Scene>, Arc<Pages>);
@@ -693,6 +695,15 @@ impl<M: GameModel> App<M> {
                     }
                 }
                 iso::paint_bearings(painter, canvas.rect, v, &scene);
+                if v.camera.first_person
+                    && let Some(held) = self.model.wielded_cell()
+                {
+                    // The right hand holds it low, so the bottom edge cuts it.
+                    let side = canvas.rect.size().min_elem() * HELD;
+                    let corner = canvas.rect.right_bottom() + egui::vec2(-1.5 * side, -0.8 * side);
+                    let rect = egui::Rect::from_min_size(corner, egui::Vec2::splat(side));
+                    super::sidebar::paint_cell(painter, rect, &mut self.display, &held, season);
+                }
             }
             return;
         }
