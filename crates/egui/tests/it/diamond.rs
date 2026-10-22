@@ -89,14 +89,28 @@ fn a_diamonds_middle_and_nearby_points_pick_its_square() {
 #[test]
 fn squares_are_drawn_from_the_top_of_the_screen_down_and_left_to_right() {
     let d = diamond();
-    let order = d.order(Pos { x: 21, y: 21 });
-    assert_eq!(order.len(), 21 * 21);
-    let tops = order
-        .iter()
-        .map(|p| (d.tile(*p).top(), d.tile(*p).left()))
-        .collect::<Vec<_>>();
-    assert!(
-        tops.windows(2)
-            .all(|w| w[0].0 < w[1].0 || (w[0].0 == w[1].0 && w[0].1 < w[1].1))
-    );
+    // A square view, one wider than tall and one taller than wide.
+    for (x, y) in [(21, 21), (7, 4), (3, 9), (1, 1)] {
+        let order = d.order(Pos { x, y });
+        let mut seen = order.clone();
+        seen.sort_by_key(|p| (p.y, p.x));
+        seen.dedup();
+        assert_eq!(
+            (order.len(), seen.len()),
+            ((x * y) as usize, (x * y) as usize)
+        );
+        let tops = order
+            .iter()
+            .map(|p| (d.tile(*p).top(), d.tile(*p).left()))
+            .collect::<Vec<_>>();
+        assert!(
+            tops.windows(2)
+                .all(|w| w[0].0 < w[1].0 || (w[0].0 == w[1].0 && w[0].1 < w[1].1))
+        );
+        assert!(
+            order
+                .iter()
+                .all(|p| (0..x).contains(&p.x) && (0..y).contains(&p.y))
+        );
+    }
 }
