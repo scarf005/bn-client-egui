@@ -241,7 +241,7 @@ pub(super) fn own_buttons<'a>(screen: &'a Screen, component: &Component) -> Vec<
         .collect()
 }
 
-/// Whether `a` is drawn as a button: picking, moving and digits run from their rows and keys instead, and what
+/// Whether `a` is drawn as a button: picking, moving, digits and text edits run from their rows and keys instead, and what
 /// only rearranges the native window changes nothing here.
 pub(super) fn drawn_button(a: &Affordance) -> bool {
     !matches!(
@@ -251,6 +251,7 @@ pub(super) fn drawn_button(a: &Affordance) -> bool {
                 | AffordanceRole::Navigate
                 | AffordanceRole::Digit
                 | AffordanceRole::Layout
+                | AffordanceRole::Edit
         )
     )
 }

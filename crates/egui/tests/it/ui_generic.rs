@@ -141,6 +141,14 @@ fn the_filter_prompt_shows_the_rows_the_text_leaves() {
 }
 
 #[test]
+fn the_filter_prompt_has_no_buttons_for_the_keys_that_edit_its_text() {
+    let (h, _) = harness(example("filter prompt before typing"));
+    assert!(h.query_by_label_contains("Remove previous").is_none());
+    assert!(h.query_by_label_contains("Remove current").is_none());
+    assert!(h.query_by_label_contains("Clear text").is_none());
+}
+
+#[test]
 fn the_filter_prompt_is_the_window_of_the_list_it_filters_with_its_box_above_the_results() {
     let (mut h, script) = harness(example("filterable list screen"));
     let window = |h: &H| h.get_by_role(egui::accesskit::Role::Window).rect();
