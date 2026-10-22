@@ -2,7 +2,7 @@
 //! the windows of a play session are saved as pictures at 1280x800 and 1920x1080.
 //!
 //! `BN_ENGINE=<engine> SHOT_DIR=<dir> cargo test -p bn-client-egui --test it live_beta_ui:: -- --ignored --nocapture`
-use crate::common::live::{H, english_transport, new_game, root, run_until, save, settle};
+use crate::common::live::{H, english_transport, new_game, pick, root, run_until, save, settle};
 use bn_client_egui::App;
 use bn_client_egui::EngineModel;
 use bn_client_egui::protocol::InvokeArgs;
@@ -189,5 +189,30 @@ fn a_message_log_in_a_narrow_sidebar_stays_still() {
         );
         save(&mut h, &format!("log-narrow-{width}.png"));
         assert_eq!(changing, 0, "the log moved at +{width}");
+    }
+}
+
+/// The debug menu and its item spawner, saved at each size as `<name>-<width>.png`.
+#[test]
+#[ignore = "needs BN_ENGINE and a Vulkan adapter"]
+fn the_debug_windows_are_saved_as_pictures() {
+    for size in SIZES {
+        let mut h = client(size);
+        new_game(&mut h, "new_game:play_now_default");
+        let width = size.0 as u32;
+        assert!(h.state_mut().model.invoke_action("debug"));
+        pick(&mut h, "Spawning");
+        pick(&mut h, "Spawn an item");
+        settle(&mut h);
+        save(&mut h, &format!("wish-{width}.png"));
+        assert!(
+            h.state_mut()
+                .model
+                .invoke_affordance("FILTER", Default::default())
+                .is_ok()
+        );
+        run_until(&mut h, "the filter prompt", 60, |h| !h.state().model.busy());
+        settle(&mut h);
+        save(&mut h, &format!("wish-filter-{width}.png"));
     }
 }

@@ -140,7 +140,8 @@ pub(super) fn placement(screen: &Screen, room: &Room) -> Placement {
             .components()
             .into_iter()
             .any(|c| matches!(c, Component::List(list) if !list.columns.is_empty())),
-        panes: screen.components().into_iter().any(|c| {
+        panes: form::filter_submit(screen).is_none()
+            && screen.components().into_iter().any(|c| {
             matches!(c, Component::Split(split) if split.children.iter().filter(|c| !heading(c)).count() > 1)
         }),
     }

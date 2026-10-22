@@ -243,6 +243,17 @@ impl<M: GameModel> App<M> {
         }
     }
 
+    /// What the window of `screen` is remembered as: a list filter's prompt is the window of the screen it filters,
+    /// so typing in it neither moves nor resizes that window.
+    fn window_kind(&self, screen: &Screen) -> Option<String> {
+        let stack = self.model.screens();
+        let below = stack.len().checked_sub(2).and_then(|at| stack.get(at));
+        match (form::filter_submit(screen), below) {
+            (Some(_), Some(below)) => super::screen_kind(below),
+            _ => super::screen_kind(screen),
+        }
+    }
+
     /// The screen on top drawn from its components when the engine describes it so, else the 0.1 menu.
     pub(super) fn menu_or_screen(&mut self, ctx: &egui::Context) {
         self.sync_screens();
@@ -251,7 +262,7 @@ impl<M: GameModel> App<M> {
         };
         let mut out = vec![];
         let cancel = interaction::with_role(top, AffordanceRole::Cancel).map(|a| a.id.clone());
-        let kind = super::screen_kind(top);
+        let kind = self.window_kind(top);
         // Only the lists drawn this frame have a page.
         self.screens.list_pages.borrow_mut().clear();
         let shown = self.screen_window(ctx, top, &mut out);
@@ -424,7 +435,7 @@ impl<M: GameModel> App<M> {
         };
         let placement = placement(screen, &room);
         let place = placement.place;
-        let base = self.window_spec(ctx, super::screen_kind(screen).as_deref(), &title);
+        let base = self.window_spec(ctx, self.window_kind(screen).as_deref(), &title);
         let title_bar = base.title_bar;
         let named = screen.root.as_ref().map_or_else(HashSet::new, claimed);
         let rest = screen
@@ -597,6 +608,12 @@ impl<M: GameModel> App<M> {
         parts: &[&Component],
         out: &mut Vec<Intent>,
     ) {
+        // A list filter's box is above the results it filters.
+        if form::filter_submit(screen).is_some() {
+            return parts
+                .iter()
+                .for_each(|child| self.component(ui, screen, child, out));
+        }
         let gap = ui.spacing().item_spacing.x;
         let room = ui.available_width();
         let texts = (0..parts.len())

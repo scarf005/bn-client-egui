@@ -141,6 +141,44 @@ fn the_filter_prompt_shows_the_rows_the_text_leaves() {
 }
 
 #[test]
+fn the_filter_prompt_is_the_window_of_the_list_it_filters_with_its_box_above_the_results() {
+    let (mut h, script) = harness(example("filterable list screen"));
+    let window = |h: &H| h.get_by_role(egui::accesskit::Role::Window).rect();
+    // The player shrinks the window by its bottom edge.
+    let bottom = window(&h).center_bottom() - egui::vec2(0.0, 2.0);
+    for (at, pressed) in [(bottom, true), (bottom - egui::vec2(0.0, 120.0), false)] {
+        h.hover_at(at);
+        h.run_steps(2);
+        h.event(egui::Event::PointerButton {
+            pos: at,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        });
+        h.run_steps(2);
+    }
+    let before = window(&h);
+    assert!(before.height() < 680.0, "{before:?}");
+    let mut prompt = example("filter prompt after typing");
+    prompt["screen_id"] = "screen:13".into();
+    let mut stacked = boundary(example("filterable list screen"), 32);
+    stacked["stack"].as_array_mut().unwrap().push(prompt);
+    script.push(
+        json!({"jsonrpc": "2.0", "method": "bn.events", "params": {"epoch": "e7f3", "events": [{
+        "sequence": "41", "revision": "32", "type": "interaction.changed",
+        "changes": {"interaction": stacked}}]}}),
+    );
+    h.run_steps(4);
+    assert_eq!(
+        window(&h),
+        before,
+        "typing a filter keeps the window as it was"
+    );
+    let result = h.get_by_label("Teleport…").rect();
+    assert!(field(&h).rect().bottom() <= result.top());
+}
+
+#[test]
 fn a_click_on_a_filter_result_confirms_the_text_and_then_chooses_that_row() {
     let (mut h, script) = harness(example("filter prompt after typing"));
     h.get_by_label("Teleport…").click();
