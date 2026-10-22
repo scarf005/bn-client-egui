@@ -1644,6 +1644,30 @@ fn a_query_popup_draws_its_confirm_once_and_its_rows_run_the_choose() {
 }
 
 #[test]
+fn a_query_popup_offers_each_choice_once_on_its_row_under_its_prompt() {
+    let (h, _) = harness(example("generic.json", "query popup screen"));
+    // The rows name the registered YES and NO, so neither is a footer button again.
+    for label in ["Yes", "No"] {
+        assert_eq!(h.query_all_by_label(label).count(), 1, "{label}");
+    }
+    let prompt = h.get_by_label("Save and quit? (Case Sensitive)").rect();
+    let yes = h.get_by_label("Yes").rect();
+    assert!(prompt.bottom() <= yes.top(), "{prompt:?} beside {yes:?}");
+    assert!(
+        prompt.left() <= yes.left() + 1.0,
+        "{prompt:?} right of {yes:?}"
+    );
+}
+
+#[test]
+fn a_toggle_of_the_native_layout_is_no_button() {
+    let (h, _) = harness(example("info.json", "message log"));
+    for label in ["Toggle wide display", "Toggle full height display"] {
+        assert!(h.query_by_label_contains(label).is_none(), "{label}");
+    }
+}
+
+#[test]
 fn the_look_screen_draws_no_button_for_the_move_its_map_clicks_make() {
     let (h, _) = harness(example("look.json", "look-around screen"));
     assert_eq!(h.query_all_by_label("Select").count(), 0);
