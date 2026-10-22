@@ -180,6 +180,29 @@ fn a_cursor_screen_gives_up_its_side_only_when_the_cursor_comes_under_it() {
 }
 
 #[test]
+fn a_cursor_screen_opened_again_takes_its_side_afresh() {
+    let size = egui::vec2(1280.0, 800.0);
+    let (mut h, script) = playing(size, Some(example("look", "look-around screen")));
+    crate::common::settle_windows(&mut h);
+    let first = window_of(&h, "look");
+    look_moved(&h, &script, 0, -8, 10);
+    h.run_steps(8);
+    let map = fixture("subscribe_result")["result"]["interaction"]["stack"][0].clone();
+    script.push(
+        json!({"jsonrpc": "2.0", "method": "bn.events", "params": {"epoch": "e7f3", "events": [{
+        "sequence": "44", "revision": "35", "type": "interaction.changed", "changes": {"interaction": {
+        "boundary_id": "b:61",
+        "readiness": {"phase": "playing", "game_ready": true, "accepts_interaction_commands": true,
+            "accepts_registered_actions": true},
+        "actions": [], "interaction": null, "stack": [map]}}}]}}),
+    );
+    h.run_steps(8);
+    look_moved(&h, &script, 2, 0, 10);
+    h.run_steps(8);
+    assert_eq!(window_of(&h, "look"), first);
+}
+
+#[test]
 fn a_wide_dialog_takes_its_whole_column_and_stays_inside_the_map_room() {
     let size = egui::vec2(1280.0, 800.0);
     let (h, _) = playing(size, Some(example("character", "character sheet")));
