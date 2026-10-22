@@ -188,6 +188,7 @@ impl<M: GameModel> App<M> {
                 self.list_row(row, list, rows[at], cursor, &layout, out);
             });
         };
+        let top = ui.cursor().top();
         let scrolled = ui
             .scope(|ui| {
                 table::row_style(ui);
@@ -210,6 +211,16 @@ impl<M: GameModel> App<M> {
                 }
             })
             .inner;
+        // A list with no rows keeps its pane, outlined, as tall as its rows would have been.
+        if rows.is_empty() {
+            let pane = egui::Rect::from_x_y_ranges(
+                scrolled.inner_rect.x_range(),
+                top..=scrolled.inner_rect.bottom(),
+            );
+            let stroke = egui::Stroke::new(1.0, tokens::BORDER);
+            ui.painter()
+                .rect_stroke(pane, 0, stroke, egui::StrokeKind::Inside);
+        }
         if drawn + PREFETCH >= rows.len() {
             out.push(Intent::More(id.clone()));
         }
