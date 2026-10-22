@@ -29,7 +29,6 @@ const TITLE_FLOW: &[&str] = &[
 const KNOWN: &[(&str, Kind, &str)] = &[
     ("aim/advanced inventory screen@1920x1080", Kind::Cut, "F6"),
     ("armor/armor layers screen of the torso@1280x800", Kind::Cut, "F1"),
-    ("armor/armor layers screen@1280x800", Kind::Cut, "F1"),
     ("character/character sheet@1280x800", Kind::Cut, "F6"),
     ("colors/colour manager with a custom colour set@1280x800", Kind::Cut, "F1"),
     ("colors/colour manager@1280x800", Kind::Cut, "F1"),
