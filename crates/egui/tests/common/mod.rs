@@ -413,7 +413,7 @@ pub fn double_click<S>(h: &mut egui_kittest::Harness<'_, S>, at: eframe::egui::P
 pub fn settle_windows<S>(h: &mut egui_kittest::Harness<'_, S>) {
     use egui_kittest::kittest::Queryable;
     let windows = |h: &egui_kittest::Harness<'_, S>| {
-        h.get_all_by_role(eframe::egui::accesskit::Role::Window)
+        h.query_all_by_role(eframe::egui::accesskit::Role::Window)
             .map(|n| n.rect())
             .collect::<Vec<_>>()
     };
@@ -431,15 +431,29 @@ pub fn shot_harness<'a>(
     size: eframe::egui::Vec2,
     app: bn_client_egui::App<EngineModel>,
 ) -> egui_kittest::Harness<'a, bn_client_egui::App<EngineModel>> {
-    let h = egui_kittest::Harness::builder()
-        .with_size(size)
-        .wgpu()
-        .build_ui_state(
-            |ui, app: &mut bn_client_egui::App<EngineModel>| app.show(ui),
-            app,
-        );
+    themed(egui_kittest::Harness::builder().with_size(size).wgpu(), app)
+}
+
+/// The app on a harness of `size` without a renderer, in the client's own theme and bundled fonts: the layout
+/// and text of `shot_harness` without its pixels.
+pub fn themed_harness<'a>(
+    size: eframe::egui::Vec2,
+    app: bn_client_egui::App<EngineModel>,
+) -> egui_kittest::Harness<'a, bn_client_egui::App<EngineModel>> {
+    themed(egui_kittest::Harness::builder().with_size(size), app)
+}
+
+fn themed<'a>(
+    builder: egui_kittest::HarnessBuilder<bn_client_egui::App<EngineModel>>,
+    app: bn_client_egui::App<EngineModel>,
+) -> egui_kittest::Harness<'a, bn_client_egui::App<EngineModel>> {
+    let h = builder.build_ui_state(
+        |ui, app: &mut bn_client_egui::App<EngineModel>| app.show(ui),
+        app,
+    );
     bn_client_egui::theme::apply(&h.ctx);
     bn_client_egui::fonts::install_bundled(&h.ctx);
     h
 }
+pub mod legible;
 pub mod live;
