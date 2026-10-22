@@ -121,3 +121,19 @@ fn every_field_shows_its_whole_value() {
     assert!(cut.is_empty(), "{cut:#?}");
 }
 
+/// A grid that only shows squares, which none of its squares run, is no canvas: the vehicle screen stays a window
+/// beside the map.
+#[test]
+fn a_screen_of_a_grid_the_player_does_not_draw_on_leaves_the_map_visible() {
+    for size in SIZES {
+        let full = overmap_window(size);
+        let h = shown(&example("vehicle", "vehicle screen"), size);
+        let window = h
+            .get_by_role_and_label(egui::accesskit::Role::Window, "Bicycle")
+            .rect();
+        assert!(
+            window.height() < full.height() - 1.0,
+            "{size:?}: {window:?} fills the region as {full:?}"
+        );
+    }
+}

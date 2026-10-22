@@ -158,12 +158,22 @@ impl Placement {
     }
 }
 
-/// A screen that holds a map or a canvas of its own, which take whatever room they get.
+/// A screen that holds a map or a canvas of its own, which take whatever room they get. A grid the player draws
+/// on, whose squares run the grid's own affordance (the map editor's), is such a canvas whatever its size; a grid
+/// that only shows squares (a vehicle's) is not.
 fn draws_world(screen: &Screen) -> bool {
-    screen
-        .components()
-        .into_iter()
-        .any(|c| matches!(c, Component::Map(_) | Component::Canvas(_)))
+    let drawn_on = |grid: &Grid| {
+        grid.cells.iter().any(|cell| {
+            cell.affordance
+                .as_ref()
+                .is_some_and(|a| grid.head.affordances.contains(a))
+        })
+    };
+    screen.components().into_iter().any(|c| match c {
+        Component::Map(_) | Component::Canvas(_) => true,
+        Component::Grid(grid) => drawn_on(grid),
+        _ => false,
+    })
 }
 
 /// A screen that puts a cursor on the map (look, aim), or asks to sit away from it, must not hide what the
