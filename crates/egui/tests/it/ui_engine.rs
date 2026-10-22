@@ -612,12 +612,18 @@ fn escape_interrupts_the_running_command_but_does_nothing_when_idle() {
 }
 
 #[test]
-fn status_line_offers_interrupt_only_while_a_command_runs() {
+fn status_line_offers_interrupt_only_once_a_command_has_run_long_enough_to_show() {
     let (mut h, script) = harness();
     h.run_steps(3);
     assert!(h.query_by_label("Interrupt").is_none());
     open_palette(&mut h);
     h.get_by_label("Move left (LEFT, h)").click();
+    h.run_steps(2);
+    assert!(
+        h.query_by_label("Interrupt").is_none(),
+        "a command that has just started is too short to show"
+    );
+    h.state().clock().advance(SETTLE);
     h.run_steps(2);
     h.get_by_label("Interrupt").click();
     h.run_steps(2);
