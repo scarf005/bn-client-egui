@@ -1,6 +1,7 @@
 #![recursion_limit = "512"]
 mod animated_tiles;
 mod common;
+mod diamond;
 mod fonts;
 mod input_queue;
 mod iso_scene;

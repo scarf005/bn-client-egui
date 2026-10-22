@@ -2,6 +2,7 @@
 //! right-click menu, and its paint.
 
 use super::{App, CELL, menu_item, rgb};
+use crate::diamond::Diamond;
 use crate::display::health_bar;
 use crate::iso::{self, camera::Viewport, pages::Pages, scene::Scene};
 use bn_client_core::localise::{Value as Arg, tr, tr_format};
@@ -12,6 +13,29 @@ use std::sync::Arc;
 
 /// The widest a square's tooltip text gets before its lines wrap; the tooltip's frame adds its margins.
 const TOOLTIP_WIDTH: f32 = 420.0;
+
+/// Where the squares of the map were drawn in the last frame, to place a window off the cursor.
+#[derive(Clone, Copy)]
+pub(super) struct MapView {
+    /// The map canvas's top left corner.
+    pub(super) origin: egui::Pos2,
+    /// A square's side in points.
+    pub(super) cell: f32,
+    pub(super) diamond: Option<Diamond>,
+}
+
+impl MapView {
+    /// The screen rectangle of a view square.
+    pub(super) fn square(&self, at: Pos) -> egui::Rect {
+        match self.diamond {
+            Some(d) => d.tile(at),
+            None => egui::Rect::from_min_size(
+                self.origin + egui::vec2(at.x as f32, at.y as f32) * self.cell,
+                egui::Vec2::splat(self.cell),
+            ),
+        }
+    }
+}
 
 /// The 3D scene of the map and the pages it samples.
 type Scene3d = (Arc<Scene>, Arc<Pages>);
@@ -26,11 +50,17 @@ struct Canvas {
     size: Pos,
     /// The camera of the 3D map; none on the flat one.
     view: Option<Viewport>,
+    /// Where the squares of the flat map of an isometric tileset lie; none on a square grid.
+    diamond: Option<Diamond>,
 }
 
 impl Canvas {
-    /// A square on the screen: its rectangle on the flat map, the diamond of its ground in the 3D one.
+    /// A square on the screen: its rectangle on the flat map, the diamond of its ground in the 3D one and the
+    /// box around the diamond on the isometric flat one.
     fn rect(&self, p: Pos) -> egui::Rect {
+        if let Some(d) = &self.diamond {
+            return d.tile(p);
+        }
         match &self.view {
             Some(v) => ground_point(v, self.rect, p, (0.5, 0.5), 0.5)
                 .map_or(egui::Rect::NOTHING, |at| {
@@ -57,6 +87,14 @@ impl Canvas {
     }
 
     fn fill(&self, painter: &egui::Painter, p: Pos, color: egui::Color32) {
+        if let Some(d) = &self.diamond {
+            painter.add(egui::Shape::convex_polygon(
+                d.corners(p).to_vec(),
+                color,
+                egui::Stroke::NONE,
+            ));
+            return;
+        }
         match &self.view {
             Some(v) => {
                 if let Some(corners) = self.corners(v, p) {
@@ -74,6 +112,10 @@ impl Canvas {
     }
 
     fn outline(&self, painter: &egui::Painter, p: Pos, stroke: egui::Stroke) {
+        if let Some(d) = &self.diamond {
+            painter.add(egui::Shape::closed_line(d.corners(p).to_vec(), stroke));
+            return;
+        }
         match &self.view {
             Some(v) => {
                 if let Some(corners) = self.corners(v, p) {
@@ -88,6 +130,9 @@ impl Canvas {
 
     /// The screen point of the ground at (`x`, `y`) in view squares; none behind the eye.
     fn ground(&self, x: f32, y: f32) -> Option<egui::Pos2> {
+        if let Some(d) = &self.diamond {
+            return Some(d.ground(x, y));
+        }
         match &self.view {
             Some(v) => v
                 .project(glam::Vec3::new(x, y, 0.0))
@@ -140,6 +185,13 @@ impl Canvas {
 
     /// The view square under the screen point `p`.
     fn square_at(&self, p: egui::Pos2, scene: Option<&Scene>) -> Pos {
+        if let Some(d) = &self.diamond {
+            let at = d.square_at(p);
+            return Pos {
+                x: at.x.clamp(0, self.size.x - 1),
+                y: at.y.clamp(0, self.size.y - 1),
+            };
+        }
         let at = match &self.view {
             // The square the ray under the pointer meets first, else the ground of the avatar's level.
             Some(v) => {
@@ -186,7 +238,10 @@ impl<M: GameModel> App<M> {
         self.map_view = None;
         self.display.begin();
         let three = self.iso.active(&self.display);
-        let now = self.map_viewport(ui, cell_px, three);
+        // An isometric tileset on the flat map lays its diamonds out as the game's tile view does.
+        let tilted =
+            !three && self.display.tiles() && self.display.tileset().is_some_and(|(t, _)| t.iso);
+        let now = self.map_viewport(ui, cell_px, three || tilted);
         let size = self.model.size();
         if size.x <= 0 || size.y <= 0 {
             ui.label(tr("No map loaded"));
@@ -226,6 +281,7 @@ impl<M: GameModel> App<M> {
         // The 3D map fills the room and turns with the right button; the flat one is its squares.
         let (extent, sense) = match three {
             true => (ui.available_size(), egui::Sense::click_and_drag()),
+            false if tilted => (ui.available_size(), egui::Sense::click()),
             false => (
                 egui::vec2(size.x as f32 * cell_px, size.y as f32 * cell_px),
                 egui::Sense::click(),
@@ -245,11 +301,22 @@ impl<M: GameModel> App<M> {
             self.iso
                 .viewport(player, scale, response.rect.size(), first)
         });
+        let diamond = self
+            .display
+            .tileset()
+            .filter(|_| tilted)
+            .map(|(t, _)| Diamond {
+                centre: response.rect.center(),
+                at: self.model.player(),
+                width: cell_px,
+                ratio: t.tile.1 as f32 / t.tile.0 as f32,
+            });
         let canvas = Canvas {
             rect: response.rect,
             cell_px,
             size,
             view,
+            diamond,
         };
         let season = self.model.season();
         // The scene is built before the pointer is read: picking casts its ray into it.
@@ -268,7 +335,11 @@ impl<M: GameModel> App<M> {
         response
             .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Other, true, tr("Map")));
         self.map_wheel(ui, &response);
-        self.map_view = Some((response.rect.min, cell_px));
+        self.map_view = Some(MapView {
+            origin: response.rect.min,
+            cell: cell_px,
+            diamond,
+        });
         let scene = shown.as_ref().map(|(scene, _)| scene.as_ref());
         let input = self.map_pointer(ui, &response, &canvas, scene, cursor);
         let cursor = input.cursor;
@@ -300,10 +371,10 @@ impl<M: GameModel> App<M> {
 
     /// Asks the engine for as many squares as the room holds, and takes the animation facts; returns the time
     /// they are played from.
-    fn map_viewport(&mut self, ui: &egui::Ui, cell_px: f32, three: bool) -> f64 {
+    fn map_viewport(&mut self, ui: &egui::Ui, cell_px: f32, reach: bool) -> f64 {
         // The room left for the map, in whole cells.
         let room = ui.available_size();
-        self.model.set_viewport(match three {
+        self.model.set_viewport(match reach {
             true => Pos {
                 x: iso::REACH,
                 y: iso::REACH,
@@ -603,6 +674,7 @@ impl<M: GameModel> App<M> {
             match canvas.view {
                 // The 3D scene has no square grid to place the menu on; it opens at the map's centre.
                 Some(_) => response.rect.center(),
+                None if canvas.diamond.is_some() => canvas.rect(at).left_top(),
                 None => response.rect.min + egui::vec2(at.x as f32, at.y as f32) * canvas.cell_px,
             },
             egui::Vec2::splat(canvas.cell_px),
@@ -666,30 +738,48 @@ impl<M: GameModel> App<M> {
             }
             return;
         }
-        let font = egui::FontId::monospace(canvas.cell_px - 2.0);
-        for y in 0..canvas.size.y {
-            for x in 0..canvas.size.x {
-                let cell = self.model.cell(Pos { x, y });
-                let square = canvas.flat_rect(Pos { x, y });
-                if !(tiles && self.display.paint(painter, square, &cell, season)) {
-                    if let Some(bg) = cell.bg {
-                        painter.rect_filled(square, 0.0, rgb(bg));
-                    }
-                    painter.text(
-                        square.center(),
-                        egui::Align2::CENTER_CENTER,
-                        cell.glyph,
-                        font.clone(),
-                        rgb(cell.color),
-                    );
+        let squares = match &canvas.diamond {
+            // The game's order: row by row down the screen, so what stands lower covers what stands behind it.
+            // Sprites reach up above their square, so squares just below the canvas are drawn too.
+            Some(d) => {
+                let reach = egui::Rect::from_min_max(
+                    canvas.rect.min - egui::vec2(canvas.cell_px, 0.0),
+                    canvas.rect.max + egui::vec2(canvas.cell_px, 2.0 * canvas.cell_px),
+                );
+                d.order(canvas.size)
+                    .into_iter()
+                    .filter(|p| reach.intersects(d.tile(*p)))
+                    .collect::<Vec<_>>()
+            }
+            None => (0..canvas.size.y)
+                .flat_map(|y| (0..canvas.size.x).map(move |x| Pos { x, y }))
+                .collect(),
+        };
+        let font = egui::FontId::monospace(match canvas.diamond {
+            Some(_) => canvas.cell_px / 2.0 - 2.0,
+            None => canvas.cell_px - 2.0,
+        });
+        for p in squares {
+            let cell = self.model.cell(p);
+            let square = canvas.rect(p);
+            if !(tiles && self.display.paint(painter, square, &cell, season)) {
+                if let Some(bg) = cell.bg {
+                    painter.rect_filled(square, 0.0, rgb(bg));
                 }
-                if let Some(health) = cell.health {
-                    let track = egui::Rect::from_min_max(
-                        egui::pos2(square.left(), square.bottom() - 2.0),
-                        square.right_bottom(),
-                    );
-                    health_bar(painter, track, health);
-                }
+                painter.text(
+                    square.center(),
+                    egui::Align2::CENTER_CENTER,
+                    cell.glyph,
+                    font.clone(),
+                    rgb(cell.color),
+                );
+            }
+            if let Some(health) = cell.health {
+                let track = egui::Rect::from_min_max(
+                    egui::pos2(square.left(), square.bottom() - 2.0),
+                    square.right_bottom(),
+                );
+                health_bar(painter, track, health);
             }
         }
     }

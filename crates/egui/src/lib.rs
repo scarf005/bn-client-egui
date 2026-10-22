@@ -1,6 +1,7 @@
 mod a11y;
 pub mod app;
 pub mod audio;
+pub mod diamond;
 pub mod display;
 pub mod editor;
 mod effects;

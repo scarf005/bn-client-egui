@@ -362,14 +362,8 @@ impl<M: GameModel> App<M> {
         let frame = super::menu::list_frame(ctx);
         let region = self.region.unwrap_or_else(|| ctx.content_rect());
         // The squares to keep clear: the engine's cursor and the avatar, a square around each.
-        let avoid = self.map_view.map_or(vec![], |(origin, cell)| {
-            let square = |at: Pos| {
-                egui::Rect::from_min_size(
-                    origin + egui::vec2(at.x as f32, at.y as f32) * cell,
-                    egui::Vec2::splat(cell),
-                )
-                .expand(KEEP_CLEAR * cell)
-            };
+        let avoid = self.map_view.map_or(vec![], |view| {
+            let square = |at: Pos| view.square(at).expand(KEEP_CLEAR * view.cell);
             self.model
                 .focus()
                 .into_iter()

@@ -2,6 +2,7 @@
 //! egui client against the wire the flat map uses. The pictures of the scene itself are in `ui_iso3d_shots`.
 use crate::common::{fixture, game_root, iso_root, open_client_settings};
 use bn_client_egui::app::CELL;
+use bn_client_egui::diamond::Diamond;
 use bn_client_egui::iso::camera::{PITCH_MAX, PITCH_MIN, Viewport};
 use bn_client_egui::iso::scene::world_scale;
 use bn_client_egui::transport::{ScriptHandle, ScriptedTransport};
@@ -341,10 +342,15 @@ fn a_click_on_a_3d_square_sends_what_a_click_on_that_square_sends_in_the_flat_ma
     let rect = flat.get_by_label("Map").rect();
     let cell =
         flat.state().display().cell(bn_client_egui::app::CELL) * flat.state().display().zoom();
-    click(
-        &mut flat,
-        rect.min + egui::vec2(target.x as f32 + 0.5, target.y as f32 + 0.5) * cell,
-    );
+    // An isometric tileset lies on the flat map as diamonds around the avatar's square, in the middle.
+    let tile = flat.state().display().tileset().unwrap().0.tile;
+    let diamond = Diamond {
+        centre: rect.center(),
+        at: me,
+        width: cell,
+        ratio: tile.1 as f32 / tile.0 as f32,
+    };
+    click(&mut flat, diamond.tile(target).center());
     let expected = travels(&script);
     assert_eq!(expected.len(), 1, "{:?}", script.sent());
 
@@ -394,6 +400,54 @@ fn hovering_a_3d_square_asks_the_engine_to_describe_that_square() {
         described["params"]["pos"],
         json!({"dim": "", "x": 4, "y": 4, "z": 0})
     );
+}
+
+#[test]
+fn hovering_just_inside_any_corner_of_a_flat_isometric_square_describes_that_square() {
+    let root = iso_root("flat-corners");
+    let (mut h, script) = harness(&root, &root.join("settings.json"), true);
+    settle(&mut h);
+    pick_2d(&mut h);
+    let me = h.state().model.player();
+    let target = Pos {
+        x: me.x + 1,
+        y: me.y,
+    };
+    let cell = h.state().display().cell(CELL) * h.state().display().zoom();
+    let tile = h.state().display().tileset().unwrap().0.tile;
+    let diamond = Diamond {
+        centre: h.get_by_label("Map").rect().center(),
+        at: me,
+        width: cell,
+        ratio: tile.1 as f32 / tile.0 as f32,
+    };
+    let described = |h: &mut H, script: &ScriptHandle, at: egui::Pos2| {
+        // A far hover first, so the engine is asked again for the square.
+        h.hover_at(egui::pos2(at.x, at.y + 3000.0));
+        h.run_steps(4);
+        h.hover_at(at);
+        h.run_steps(4);
+        script
+            .sent()
+            .into_iter()
+            .rfind(|m| m["method"] == "bn.world.describe")
+            .expect("asked")["params"]["pos"]
+            .clone()
+    };
+    let middle = diamond.tile(target).center();
+    let expected = described(&mut h, &script, middle);
+    let next = Pos {
+        x: target.x + 1,
+        y: target.y,
+    };
+    assert_ne!(
+        described(&mut h, &script, diamond.tile(next).center()),
+        expected
+    );
+    for corner in diamond.corners(target) {
+        let at = middle + (corner - middle) * 0.8;
+        assert_eq!(described(&mut h, &script, at), expected, "near {corner:?}");
+    }
 }
 
 /// How wide a map square's diamond is on the screen of the 3D map: the horizontal distance between the middles

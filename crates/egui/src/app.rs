@@ -8,6 +8,7 @@ use bn_client_core::localise::{Value as Arg, tr, tr_format};
 use bn_client_core::protocol::{PanelKind, SidebarSide};
 use bn_client_core::{CommandStatus, Failure, GameModel, Loading, Pos, interaction};
 use eframe::egui::{self, accesskit};
+use map::MapView;
 
 mod component;
 mod input;
@@ -178,7 +179,7 @@ pub struct App<M: GameModel> {
     /// The room the map panel took in the last frame: where screens and dialogs sit.
     region: Option<egui::Rect>,
     /// The map canvas's top left corner and a square's side in the last frame, to place a window off the cursor.
-    map_view: Option<(egui::Pos2, f32)>,
+    map_view: Option<MapView>,
     /// The engine's selected row of the open menu, to keep it in view when the wheel moves it.
     menu_cursor: Option<String>,
     /// The text prompt that already took the keyboard focus when it opened.
