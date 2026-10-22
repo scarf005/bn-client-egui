@@ -1,11 +1,13 @@
 //! The scene of the 3D map: what the model shows in each square, as quads grouped by the page they sample.
 
 use super::geometry::{
-    Instance, Kind, Metrics, Outline, PageId, Placement, Shape, SpriteSource, borders, place, shape,
+    Form, Instance, Kind, Metrics, Outline, PageId, Placement, Shape, SpriteSource, borders, place,
+    shape,
 };
 use super::pages::Pages;
 use crate::display::{Fx, STRIP, light, query, resolve_layer};
 use crate::tileset::{Query, Tileset, Turn};
+use bn_client_core::protocol::LookForm;
 use bn_client_core::{GameModel, Health, Layer, Pos};
 use glam::Vec2;
 use std::collections::BTreeMap;
@@ -93,7 +95,7 @@ struct Item {
 }
 
 impl Item {
-    fn placement(&self, covered: [bool; 4]) -> Placement<'_> {
+    fn placement(&self, covered: [bool; 4], joined: [bool; 4]) -> Placement<'_> {
         Placement {
             square: self.square,
             floor: self.floor,
@@ -106,12 +108,28 @@ impl Item {
             order: self.order,
             covered,
             outline: self.outline.as_deref(),
+            joined,
         }
     }
 }
 
 /// The directions of the faces of a solid, in the order `Placement::covered` lists them: south, east, north, west.
 const FACES: [(i32, i32); 4] = [(0, 1), (1, 0), (0, -1), (-1, 0)];
+
+/// What a layer the engine names the form of is built as; none for one without a form.
+fn built_form(layer: &Layer) -> Option<Form> {
+    Some(match layer.form {
+        LookForm::Door => Form::Door { open: !layer.wall },
+        LookForm::Fence => Form::Fence,
+        LookForm::Plant => Form::Plant,
+        LookForm::Seat => Form::Seat,
+        LookForm::Table => Form::Table,
+        LookForm::Bed => Form::Bed,
+        LookForm::Fire => Form::Fire,
+        LookForm::Gas => Form::Gas,
+        LookForm::None => return None,
+    })
+}
 
 /// Where sprite number `sprite` of the tileset is: its page and the place in it.
 pub fn source(tileset: &Tileset, sprite: u32) -> Option<SpriteSource> {
@@ -178,6 +196,8 @@ pub fn build(
     let size = model.size();
     let (width, height) = (size.x.max(0), size.y.max(0));
     let mut columns = vec![None; (width * height) as usize];
+    // The squares that stand in a line of walls: a wall, a window, a door or a fence.
+    let mut lined = vec![false; (width * height) as usize];
     let mut items = vec![];
     let mut glyphs = vec![];
     let mut hurt = vec![];
@@ -232,9 +252,16 @@ pub fn build(
                     ..query(&layer, season)
                 });
                 animated |= chosen.as_ref().is_some_and(|c| c.animated);
+                lined[(y * width + x) as usize] |= layer.wall
+                    || layer.window
+                    || matches!(layer.form, LookForm::Door | LookForm::Fence);
                 let kind = match (layer.terrain, chosen.as_ref().is_some_and(|c| c.joined)) {
                     (false, _) if layer.creature => Kind::Creature,
                     (false, _) if layer.vehicle => Kind::Vehicle,
+                    // A tileset drawn from above builds what the engine names the form of in that form.
+                    _ if !m.iso && built_form(&layer).is_some() => {
+                        Kind::Formed(built_form(&layer).expect("a form"))
+                    }
                     (true, _) if layer.window && !m.iso => Kind::Window,
                     (true, joined) if layer.wall => Kind::Wall { joined },
                     // A tileset drawn from above shows what covers some of a person as tall as that.
@@ -255,7 +282,10 @@ pub fn build(
                     // The background under a wall, a window, a vehicle part or what stands is its ground.
                     let kind = match (kind, under) {
                         (Kind::Wall { .. } | Kind::Window, true) => Kind::Terrain,
-                        (Kind::Standing { .. }, true) if layer.terrain => Kind::Terrain,
+                        (Kind::Standing { .. } | Kind::Formed(_), true) if layer.terrain => {
+                            Kind::Terrain
+                        }
+                        (Kind::Formed(_), true) => Kind::Thing,
                         (Kind::Vehicle | Kind::Standing { .. }, true) => Kind::Thing,
                         (kind, _) => kind,
                     };
@@ -278,7 +308,15 @@ pub fn build(
                             (true, _) => pages.trimmed(narrowed(&m, pages, sprite)),
                             (false, Turn::None) => match pages.cropped(sprite) {
                                 None => continue,
-                                Some(cut) if shape(&m, &cut, kind) != Shape::Board => cut,
+                                // What is built as blocks keeps its whole sprite, each face of a block the tile.
+                                Some(cut)
+                                    if matches!(
+                                        shape(&m, &cut, kind),
+                                        Shape::Floor { .. } | Shape::Extrude { .. }
+                                    ) =>
+                                {
+                                    cut
+                                }
                                 Some(_) => sprite,
                             },
                             (false, _) => sprite,
@@ -289,9 +327,7 @@ pub fn build(
                         column.solid = Some((floor + low, floor + high));
                     }
                     let outline = match form {
-                        Shape::Extrude { .. } | Shape::Window { .. } => {
-                            pages.and_then(|p| p.outline(&sprite))
-                        }
+                        Shape::Extrude { .. } => pages.and_then(|p| p.outline(&sprite)),
                         _ => None,
                     };
                     items.push(Item {
@@ -331,7 +367,7 @@ pub fn build(
         if item.form.solid().is_some()
             && let Some(n) = index(item.square.0, item.square.1)
         {
-            edges[n] = borders(&m, &item.placement([false; 4]));
+            edges[n] = borders(&m, &item.placement([false; 4], [false; 4]));
         }
     }
     let mut pages = BTreeMap::<PageId, Vec<Instance>>::new();
@@ -349,10 +385,14 @@ pub fn build(
             }),
             None => [false; 4],
         };
+        let joined = std::array::from_fn(|face| {
+            let (dx, dy) = FACES[face];
+            index(item.square.0 + dx, item.square.1 + dy).is_some_and(|n| lined[n])
+        });
         pages
             .entry(item.sprite.page)
             .or_default()
-            .extend(place(&m, &item.placement(covered)));
+            .extend(place(&m, &item.placement(covered, joined)));
     }
     let (low, high) = items.iter().fold((0.0f32, 0.0f32), |(low, high), i| {
         (i.floor.min(low), i.floor.max(high))
