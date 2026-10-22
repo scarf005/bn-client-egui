@@ -34,6 +34,41 @@ pub fn subscribe_reply() -> Vec<Value> {
         .to_vec()
 }
 
+/// The stack of a running game with `screen` open: the fixture's map under it, as a player sees it.
+pub fn over_map(screen: Value) -> Value {
+    let map = fixture("subscribe_result")["result"]["interaction"]["stack"][0].clone();
+    json!([map, screen])
+}
+
+/// The client on a manual clock, connected to the fixture session whose interaction stack is `stack`.
+pub fn staged(stack: Value) -> (bn_client_egui::App<EngineModel>, ScriptHandle) {
+    let mut reply = subscribe_reply();
+    reply[0]["result"]["interaction"]["stack"] = stack;
+    let (t, script) = ScriptedTransport::new();
+    let t = t
+        .on("bn.hello", vec![fixture("hello_result")])
+        .on("bn.subscribe", reply.clone())
+        .on("bn.subscribe", reply);
+    let clock = bn_client_egui::Clock::manual();
+    let model = EngineModel::open(Box::new(t), bn_client_egui::ConnectOptions::default())
+        .with_clock(clock.clone());
+    (bn_client_egui::App::new(model).with_clock(clock), script)
+}
+
+/// Writes a PNG of `stack` in a window of `size` to `$SHOT_DIR/name`.
+pub fn shot_stack(stack: Value, size: eframe::egui::Vec2, name: &str) {
+    let mut h = shot_harness(size, staged(stack).0);
+    h.run_steps(6);
+    save_shot(&mut h, name);
+}
+
+/// Writes the harness's frame as a PNG to `$SHOT_DIR/name`, making the directories it needs.
+pub fn save_shot(h: &mut egui_kittest::Harness<'_, bn_client_egui::App<EngineModel>>, name: &str) {
+    let path = std::path::PathBuf::from(std::env::var("SHOT_DIR").expect("SHOT_DIR")).join(name);
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    h.render().expect("renders").save(path).unwrap();
+}
+
 /// Answers hello and subscribe with the fixture session; extra replies can be chained. A second subscribe
 /// is answered too: the client subscribes again after telling the engine it draws tiles.
 pub fn session() -> (ScriptedTransport, ScriptHandle) {

@@ -2,11 +2,8 @@
 //! `$SHOT_DIR` for a person to look at. Needs a Vulkan adapter, so it only runs when asked:
 //! `cargo test --test ui_shots_s12 -- --ignored`.
 mod common;
-use bn_client_egui::transport::ScriptedTransport;
-use bn_client_egui::{App, Clock, ConnectOptions, EngineModel};
-use common::fixture;
 use eframe::egui;
-use serde_json::{Value, json};
+use serde_json::Value;
 
 fn example(name: &str) -> Value {
     let path = concat!(
@@ -24,25 +21,7 @@ fn example(name: &str) -> Value {
 }
 
 fn shot(screen: Value, name: &str) {
-    let mut subscribe = fixture("subscribe_result");
-    subscribe["result"]["interaction"]["stack"] = json!([screen]);
-    let reply = vec![
-        subscribe,
-        fixture("snapshot_part_0"),
-        fixture("snapshot_part_1"),
-    ];
-    let (t, _script) = ScriptedTransport::new();
-    let t = t
-        .on("bn.hello", vec![fixture("hello_result")])
-        .on("bn.subscribe", reply.clone())
-        .on("bn.subscribe", reply);
-    let clock = Clock::manual();
-    let model = EngineModel::open(Box::new(t), ConnectOptions::default()).with_clock(clock.clone());
-    let mut h = common::shot_harness(egui::vec2(1100.0, 700.0), App::new(model).with_clock(clock));
-    h.run_steps(6);
-    let dir = std::path::PathBuf::from(std::env::var("SHOT_DIR").expect("SHOT_DIR"));
-    std::fs::create_dir_all(&dir).unwrap();
-    h.render().expect("renders").save(dir.join(name)).unwrap();
+    common::shot_stack(common::over_map(screen), egui::vec2(1100.0, 700.0), name);
 }
 
 #[test]
