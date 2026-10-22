@@ -255,3 +255,37 @@ fn the_wheel_with_ctrl_zooms_the_canvas_and_a_middle_drag_pans_it() {
         "{big:?} {panned:?}"
     );
 }
+
+/// Replaces the engine's screen stack, as the engine's next event.
+fn restack(script: &ScriptHandle, sequence: u64, stack: Vec<Value>) {
+    script.push(
+        json!({"jsonrpc": "2.0", "method": "bn.events", "params": {"epoch": "e7f3", "events": [{
+        "sequence": sequence.to_string(), "revision": (sequence - 9).to_string(),
+        "type": "interaction.changed", "changes": {"interaction": {
+        "boundary_id": "b:60",
+        "readiness": {"phase": "playing", "game_ready": true, "accepts_interaction_commands": true,
+            "accepts_registered_actions": true},
+        "actions": [], "interaction": null, "stack": stack}}}]}}),
+    );
+}
+
+#[test]
+fn a_drag_left_open_by_a_closed_editor_sends_nothing_into_its_next_showing() {
+    let screen = editor(Some("trail"));
+    let (mut h, script) = open(screen.clone());
+    let at = square(&h, 1, 2);
+    h.hover_at(at);
+    h.run_steps(2);
+    button(&mut h, at, true);
+    let begun = sent(&script);
+    assert_eq!(begun, ["editor:stroke_begin", "editor:paint"]);
+
+    let map = fixture("subscribe_result")["result"]["interaction"]["stack"][0].clone();
+    restack(&script, 41, vec![map]);
+    h.run_steps(6);
+    restack(&script, 42, vec![screen]);
+    h.run_steps(6);
+    button(&mut h, at, false);
+    h.run_steps(4);
+    assert_eq!(sent(&script), begun);
+}
