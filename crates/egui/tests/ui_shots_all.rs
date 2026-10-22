@@ -27,11 +27,8 @@ const TITLE_FLOW: &[&str] = &[
 /// finding. A fixed one must leave the list.
 #[rustfmt::skip]
 const KNOWN: &[(&str, Kind, &str)] = &[
-    ("armor/armor layers screen of the torso@1280x800", Kind::Cut, "F1"),
-    ("character/character sheet@1280x800", Kind::Cut, "F6"),
     ("colors/colour manager with a custom colour set@1280x800", Kind::Cut, "F1"),
     ("colors/colour manager@1280x800", Kind::Cut, "F1"),
-    ("newgame/character creation on the overview page@1280x800", Kind::Cut, "F6"),
 ];
 
 /// One screen of the examples, keyed `file/name`.
