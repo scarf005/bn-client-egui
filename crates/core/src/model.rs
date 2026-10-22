@@ -67,6 +67,8 @@ pub struct Layer {
     pub form: crate::protocol::LookForm,
     /// Whether the thing is a part of a vehicle.
     pub vehicle: bool,
+    /// Whether the thing is an item lying on the ground.
+    pub item: bool,
     /// Picks between the weighted variants of a sprite, like the game's per-tile seed.
     pub seed: u32,
     /// Paint the tileset blends into the background and the foreground sprite.
