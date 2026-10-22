@@ -674,3 +674,18 @@ fn a_placed_window_first_as_wide_as_a_room_with_a_fractional_edge_opens() {
     let shown = h.get_by_role(egui::accesskit::Role::Window).rect();
     assert!((shown.width() - room.width()).abs() < 1.0, "{shown:?}");
 }
+
+#[test]
+fn a_window_smaller_than_the_least_size_is_dragged_by_a_corner_at_the_screens_corner() {
+    let saved = WindowState {
+        pos: [0.0, 0.0],
+        size: [100.0, 60.0],
+        collapsed: false,
+    };
+    let mut h = bare_window(egui::vec2(1100.0, 800.0), move || {
+        bare_spec(Some(saved), None, None)
+    });
+    drag(&mut h, egui::pos2(3.0, 3.0), egui::pos2(1.0, 1.0));
+    let kept = (*h.state()).expect("a free window is kept");
+    assert!(kept.pos[0] >= 0.0 && kept.pos[1] >= 0.0, "{kept:?}");
+}
