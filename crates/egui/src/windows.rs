@@ -201,11 +201,9 @@ impl Grip {
 /// `rect` moved, if need be, to lie in `bounds`, and no larger than them.
 fn inside(rect: egui::Rect, bounds: egui::Rect) -> egui::Rect {
     let size = rect.size().min(bounds.size());
-    let min = egui::pos2(
-        rect.min.x.clamp(bounds.min.x, bounds.max.x - size.x),
-        rect.min.y.clamp(bounds.min.y, bounds.max.y - size.y),
-    );
-    egui::Rect::from_min_size(min, size)
+    // A room's far edge less its own width can round to just before its near edge.
+    let far = (bounds.max - size).max(bounds.min);
+    egui::Rect::from_min_size(rect.min.clamp(bounds.min, far), size)
 }
 
 /// The corner a window of `size` has when `pivot` of it sits at `pos`.

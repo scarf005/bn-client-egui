@@ -671,6 +671,6 @@ fn a_placed_window_first_as_wide_as_a_room_with_a_fractional_edge_opens() {
     let h = bare_window(egui::vec2(1092.8, 614.4), move || {
         bare_spec(None, Some(Place::Center(room)), Some(room.width()))
     });
-    let shown = h.get_by_role(egui::accesskit::Role::Dialog).rect();
+    let shown = h.get_by_role(egui::accesskit::Role::Window).rect();
     assert!((shown.width() - room.width()).abs() < 1.0, "{shown:?}");
 }
