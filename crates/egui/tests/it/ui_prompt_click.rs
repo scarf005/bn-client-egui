@@ -8,10 +8,10 @@ use egui_kittest::Harness;
 use egui_kittest::kittest::Queryable;
 use serde_json::{Value, json};
 
-type H<'a> = Harness<'a, App<EngineModel>>;
+pub(crate) type H<'a> = Harness<'a, App<EngineModel>>;
 
 /// The engine's example screens that hold a list with an `activate`, with their role.
-fn screens() -> Vec<(String, Value)> {
+pub(crate) fn screens() -> Vec<(String, Value)> {
     let dir = concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../core/tests/fixtures/0.2.examples"
@@ -36,7 +36,18 @@ fn screens() -> Vec<(String, Value)> {
     found
 }
 
-fn showing<'a>(screen: Value) -> (H<'a>, ScriptHandle) {
+/// Puts `screen` on top of the map at event `sequence`.
+pub(crate) fn push_screen(script: &ScriptHandle, sequence: u32, screen: Value) {
+    let map = fixture("subscribe_result")["result"]["interaction"]["stack"][0].clone();
+    script.push(json!({"jsonrpc": "2.0", "method": "bn.events", "params": {"epoch": "e7f3", "events": [{
+        "sequence": sequence.to_string(), "revision": (sequence - 9).to_string(), "type": "interaction.changed", "changes": {"interaction": {
+        "boundary_id": "b:60",
+        "readiness": {"phase": "playing", "game_ready": true, "accepts_interaction_commands": true,
+            "accepts_registered_actions": true},
+        "actions": [], "interaction": null, "stack": [map, screen]}}}]}}));
+}
+
+pub(crate) fn showing<'a>(screen: Value) -> (H<'a>, ScriptHandle) {
     let (t, script) = session();
     let mut h = Harness::builder()
         .with_size(egui::vec2(1600.0, 1000.0))
@@ -45,19 +56,13 @@ fn showing<'a>(screen: Value) -> (H<'a>, ScriptHandle) {
             App::new(EngineModel::new(Box::new(t))),
         );
     h.run_steps(3);
-    let map = fixture("subscribe_result")["result"]["interaction"]["stack"][0].clone();
-    script.push(json!({"jsonrpc": "2.0", "method": "bn.events", "params": {"epoch": "e7f3", "events": [{
-        "sequence": "41", "revision": "32", "type": "interaction.changed", "changes": {"interaction": {
-        "boundary_id": "b:60",
-        "readiness": {"phase": "playing", "game_ready": true, "accepts_interaction_commands": true,
-            "accepts_registered_actions": true},
-        "actions": [], "interaction": null, "stack": [map, screen]}}}]}}));
+    push_screen(&script, 41, screen);
     h.run_steps(8);
     (h, script)
 }
 
 /// The first list of `screen` and its first row that can be chosen: the list's `activate`, the row's id and label.
-fn first_choice(screen: &Value) -> Option<(String, String, String, usize)> {
+pub(crate) fn first_choice(screen: &Value) -> Option<(String, String, String, usize)> {
     fn lists<'a>(c: &'a Value, found: &mut Vec<&'a Value>) {
         if c["kind"] == "list" {
             found.push(c);
@@ -97,7 +102,7 @@ fn first_choice(screen: &Value) -> Option<(String, String, String, usize)> {
     ))
 }
 
-fn invoked(script: &ScriptHandle) -> Vec<(Value, Value)> {
+pub(crate) fn invoked(script: &ScriptHandle) -> Vec<(Value, Value)> {
     script
         .sent()
         .into_iter()
