@@ -132,13 +132,6 @@ fn prose(c: &Component) -> bool {
     }
 }
 
-/// Whether `c` holds a list with columns.
-fn tabled(c: &Component) -> bool {
-    c.nested()
-        .into_iter()
-        .any(|c| matches!(c, Component::List(l) if !l.columns.is_empty()))
-}
-
 /// Whether the rows of one of the screen's lists run the affordance, on a double click or Enter.
 fn run_by_rows(screen: &Screen, affordance: &Affordance) -> bool {
     let lists = screen.root.iter().flat_map(Component::nested);
@@ -612,22 +605,15 @@ impl<M: GameModel> App<M> {
                     (Relation::Detail, _) if !matches!(panes.first(), Some(Component::Text(_))) => {
                         split::detail_widths(fit, room, gap)
                     }
-                    // Beside the prose, which takes at least an equal share, the panes are offered the rest; a
-                    // table among them keeps its natural width.
+                    // Beside the prose, which takes at least an equal share, the panes are offered the rest.
                     (Relation::Peers, Some(at)) => {
                         let offered = room - room / panes.len() as f32;
-                        let beside = measure(ui, panes, offered)
-                            .into_iter()
-                            .zip(panes)
-                            .map(|(fit, c)| match tabled(c) {
-                                true => Extent {
-                                    min: fit.natural.max(fit.min),
-                                    ..fit
-                                },
-                                false => fit,
-                            })
-                            .collect::<Vec<_>>();
-                        split::prose_widths(&beside, at - line.start, room, gap)
+                        split::prose_widths(
+                            &measure(ui, panes, offered),
+                            at - line.start,
+                            room,
+                            gap,
+                        )
                     }
                     _ => split::split_widths(fit, room, gap),
                 };

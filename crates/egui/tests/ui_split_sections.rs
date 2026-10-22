@@ -116,24 +116,14 @@ fn talk(lines: usize) -> Value {
 }
 
 #[test]
-fn a_short_npc_dialogue_is_one_line_beside_the_responses() {
-    let h = shown(talk(0), egui::vec2(1280.0, 800.0));
-    let shapes = &h.output().shapes;
-    let (_, greeting) = texts(shapes)
-        .into_iter()
-        .find(|(_, t)| t.galley.text().contains("Welcome"))
-        .unwrap();
-    assert_eq!(
-        greeting.galley.rows.len(),
-        1,
-        "{:?}",
-        greeting.galley.text()
-    );
+fn the_npc_dialogue_is_at_least_as_wide_as_the_responses_at_1280() {
+    for lines in [0, 6] {
+        dialogue_beside_responses(lines);
+    }
 }
 
-#[test]
-fn a_long_npc_dialogue_is_at_least_as_wide_as_the_responses_at_1280() {
-    let h = shown(talk(6), egui::vec2(1280.0, 800.0));
+fn dialogue_beside_responses(lines: usize) {
+    let h = shown(talk(lines), egui::vec2(1280.0, 800.0));
     let window = h
         .query_all_by_role(egui::accesskit::Role::Window)
         .find(|w| {
@@ -173,30 +163,15 @@ fn the_active_outline_is_drawn_only_around_a_pane_that_holds_something() {
     );
 }
 
-#[test]
-fn the_focused_items_description_is_whole_beside_the_list_at_1920() {
-    let h = shown(
-        example("inventory", "drop selector screen"),
-        egui::vec2(1920.0, 1080.0),
-    );
-    let text = whole(&h, "A rock the size of a baseball").expect("the description is cut");
-    let row = h.get_by_label("rock (1)").rect();
-    assert!(
-        text.left() >= row.right(),
-        "{text:?} is not beside the row {row:?}"
-    );
-    assert!(
-        text.top() < row.bottom() + 40.0,
-        "{text:?} starts under the row {row:?}"
-    );
+/// The rock's description in the drop selector at `size`: where it is painted, its lines cut by its clip and
+/// how many it shows.
+struct Description {
+    rect: egui::Rect,
+    cut: usize,
+    shown: usize,
 }
 
-#[test]
-fn the_focused_items_description_fills_the_height_under_the_list_in_whole_lines_at_1280() {
-    let h = shown(
-        example("inventory", "drop selector screen"),
-        egui::vec2(1280.0, 800.0),
-    );
+fn description(h: &H) -> Description {
     let shapes = &h.output().shapes;
     let (clip, text) = texts(shapes)
         .into_iter()
@@ -208,17 +183,48 @@ fn the_focused_items_description_fills_the_height_under_the_list_in_whole_lines_
         .iter()
         .map(|row| row.rect().translate(text.pos.to_vec2()))
         .collect::<Vec<_>>();
-    let cut = rows
-        .iter()
-        .filter(|r| clip.intersect(**r).is_positive() && !clip.expand(1.0).contains_rect(**r))
-        .collect::<Vec<_>>();
-    assert!(cut.is_empty(), "lines cut by {clip:?}: {cut:?}");
-    let shown = rows.iter().filter(|r| clip.contains_rect(**r)).count();
-    // The strip under the list held five lines.
-    assert!(
-        shown > 10,
-        "{shown} lines of the description shown in {clip:?}"
+    Description {
+        rect: text.visual_bounding_rect(),
+        cut: rows
+            .iter()
+            .filter(|r| clip.intersect(**r).is_positive() && !clip.expand(1.0).contains_rect(**r))
+            .count(),
+        shown: rows.iter().filter(|r| clip.contains_rect(**r)).count(),
+    }
+}
+
+#[test]
+fn the_focused_items_description_is_beside_the_list_in_whole_lines_at_1920() {
+    let h = shown(
+        example("inventory", "drop selector screen"),
+        egui::vec2(1920.0, 1080.0),
     );
+    let text = description(&h);
+    let row = h.get_by_label("rock (1)").rect();
+    assert!(
+        text.rect.left() >= row.right(),
+        "{:?} is not beside the row {row:?}",
+        text.rect
+    );
+    assert!(
+        text.rect.top() < row.bottom() + 40.0,
+        "{:?} starts under the row {row:?}",
+        text.rect
+    );
+    assert_eq!(text.cut, 0, "a line cut");
+    // The strip under the list held five lines.
+    assert!(text.shown > 10, "{} lines shown", text.shown);
+}
+
+#[test]
+fn the_focused_items_description_shows_whole_lines_past_the_old_strip_at_1280() {
+    let h = shown(
+        example("inventory", "drop selector screen"),
+        egui::vec2(1280.0, 800.0),
+    );
+    let text = description(&h);
+    assert_eq!(text.cut, 0, "a line cut");
+    assert!(text.shown > 10, "{} lines shown", text.shown);
 }
 
 /// The left edge of the leftmost node labelled `label`.

@@ -1,6 +1,6 @@
 //! A list whose rows are described, with the focused row's description in a pane of its own: beside the list
-//! when the room holds both, in all the height it has; else under it, in what the list leaves of the window's
-//! height but no more than its own rows, so the window keeps room for its footer.
+//! when the room holds both, else under it; as tall as the height left allows, up to the list's height or as many
+//! lines as a list shows rows, so a long description scrolls instead of making its window cover the map.
 
 use super::*;
 
@@ -54,11 +54,18 @@ impl<M: GameModel> App<M> {
                 ui.allocate_ui_with_layout(egui::vec2(width, height), down, |ui| {
                     ui.set_width(width);
                     draw(ui)
-                });
+                })
+                .response
+                .rect
+                .height()
             };
-            pane(ui, widths[0], &mut |ui| self.list(ui, screen, list, out));
+            let rows = pane(ui, widths[0], &mut |ui| self.list(ui, screen, list, out));
+            // As tall as the list, and no shorter than a list over it: the description makes its window no
+            // taller than a few lines of it need.
+            let line = ui.text_style_height(&egui::TextStyle::Body);
+            let lines = (rows / line).floor().max(ROWS_OVER as f32);
             pane(ui, widths[1], &mut |ui| {
-                self.row_detail(ui, &list.head.id, focused, f32::INFINITY)
+                self.row_detail(ui, &list.head.id, focused, lines)
             });
         });
     }

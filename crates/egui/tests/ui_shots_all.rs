@@ -49,7 +49,6 @@ const KNOWN: &[(&str, Kind, &str)] = &[
     ("overmap/overmap screen for a client that draws tiles@1280x800", Kind::Cut, "F19"),
     ("overmap/overmap screen@1280x800", Kind::Cut, "F19"),
     ("title/title screen on the credits tab@1280x800", Kind::Cut, "F6"),
-    ("trade/trade screen@1280x800", Kind::Cut, "F5"),
 ];
 
 /// One screen of the examples, keyed `file/name`.
