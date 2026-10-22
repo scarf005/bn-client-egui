@@ -65,7 +65,7 @@ pub struct WindowSpec {
     /// A placed window is only first placed by its layout: the player moves and resizes it, and where they
     /// leave it is kept as for any other window.
     pub movable: bool,
-    /// The width a window first has; a window its layout places is not narrower, as `show` tells.
+    /// The width a window first has, and a window its layout places has again whenever it changes, as `show` tells.
     pub width: Option<f32>,
     pub height: Option<f32>,
     pub max_width: Option<f32>,
@@ -258,17 +258,26 @@ pub fn show<R>(
         }
     };
     // Where the player left a window it still fits the room its layout gives, whatever a last run kept, and
-    // no window its layout places leaves that room for the bars around it. Nor is it narrower than its layout
-    // makes it, however its content or room changed since egui first sized it: a window at a side never, any
-    // other unless the player left it narrower in a last run.
+    // no window its layout places leaves that room for the bars around it. A window at a side is never narrower
+    // than its layout makes it; any other the player did not leave in a last run takes the width its layout
+    // makes whenever its content or room changes that width, and keeps what the player makes of it in between.
     if let Some(place) = spec.place {
         window = window.constrain_to(place.bounds());
         if spec.movable {
             window = window.max_size(place.room());
         }
-        let sized = matches!(place, Place::Side { .. }) || placed.kept.is_none();
-        if let Some(width) = spec.width.filter(|_| sized) {
-            window = window.min_width(width);
+        let key = spec.id.with("laid out width");
+        let last = ctx.data_mut(|d| d.get_temp::<Option<f32>>(key).flatten());
+        ctx.data_mut(|d| d.insert_temp(key, spec.width));
+        let changed = spec
+            .width
+            .filter(|w| last.is_none_or(|l| (l - w).abs() > 0.5));
+        match (place, spec.width, changed) {
+            (Place::Side { .. }, Some(width), _) => window = window.min_width(width),
+            (_, _, Some(width)) if placed.kept.is_none() => {
+                window = window.min_width(width).max_width(width)
+            }
+            _ => {}
         }
     }
     if let Some(w) = spec.max_width {
