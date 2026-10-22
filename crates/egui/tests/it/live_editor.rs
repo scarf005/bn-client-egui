@@ -136,7 +136,7 @@ pub(crate) fn rows(h: &H, id: &str) -> Vec<String> {
 }
 
 /// The value of a field of a form of the editor.
-fn field(h: &H, form: &str, id: &str) -> String {
+pub(crate) fn field(h: &H, form: &str, id: &str) -> String {
     let top = h.state().model.screens().last().unwrap();
     let Some(Component::Form(form)) = top.root.as_ref().unwrap().find(form) else {
         panic!("no {form}");
