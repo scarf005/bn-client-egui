@@ -761,6 +761,10 @@ pub trait GameModel: MenuModel {
     fn inventory_cells(&self) -> &[Cell] {
         &[]
     }
+    /// How the item the avatar wields is drawn; none when its hands are empty or the model has no looks.
+    fn wielded_cell(&self) -> Option<Cell> {
+        None
+    }
     /// The engine's id of each `ground` row, empty where it names none; pickup and drop name a row by it, so a
     /// list that changed since the player chose still takes the chosen item.
     fn ground_ids(&self) -> Vec<String>;

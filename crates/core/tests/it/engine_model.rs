@@ -1403,6 +1403,28 @@ fn a_condition_marker_keeps_its_native_colour_and_every_row_has_its_own_look() {
 }
 
 #[test]
+fn the_wielded_item_is_drawn_with_its_own_look_and_empty_hands_draw_none() {
+    let (t, h) = session();
+    let mut m = connected(t);
+    let mut knife = item("combat knife", 1, Some("wielded"), "combat knife (wielded)");
+    knife["look"] = json!({"kind": "item", "id": "knife_combat", "tile": "knife_tile", "glyph": ";", "color": "light_gray"});
+    h.push(avatar_event(
+        json!([item("hammer", 1, Some("carried"), "hammer"), knife]),
+        json!([]),
+    ));
+    m.poll();
+    let held = m.wielded_cell().expect("a wielded item");
+    assert_eq!(held.layers[0].id, "knife_tile");
+    assert_eq!(held.glyph, ';');
+    h.push(avatar_event(
+        json!([item("hammer", 1, Some("carried"), "hammer")]),
+        json!([]),
+    ));
+    m.poll();
+    assert_eq!(m.wielded_cell(), None);
+}
+
+#[test]
 fn an_avatar_that_carries_nothing_empties_the_inventory_panel() {
     let (t, h) = session();
     let mut m = connected(t);
