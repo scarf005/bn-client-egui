@@ -57,16 +57,17 @@ const LEVEL: f32 = 3.0;
 const LAYER_BIAS: f32 = 0.002;
 /// A vehicle part of a tileset drawn from above stands this many squares tall: a person in it shows from the chest.
 const VEHICLE: f32 = 0.5;
-/// An item lying on the ground of a tileset drawn from above is this many squares thick, a creature this many tall:
-/// the sprite's opaque pixels pushed up that far.
-const ITEM: f32 = 0.1;
-const CREATURE: f32 = 0.4;
+/// An item lying on the ground of a tileset drawn from above is this many squares thick, a pixel of a block game's
+/// sixteen-pixel item: the sprite's opaque pixels pushed up that far.
+const ITEM: f32 = 1.0 / 16.0;
 /// The blocks a wall of a tileset drawn from above stacks to a level: a storey is 3 m, a block 1 m.
 const LEVEL_BLOCKS: f32 = 3.0;
 /// The sill and the lintel of a window of a tileset drawn from above, as shares of the level its wall rises: a
 /// block each.
 const SILL: f32 = 1.0 / LEVEL_BLOCKS;
 const LINTEL: f32 = 1.0 / LEVEL_BLOCKS;
+/// A door of a tileset drawn from above is this many blocks tall, its wall over it.
+const DOOR_BLOCKS: f32 = 2.0;
 
 impl Metrics {
     pub fn new(tile: (u32, u32), iso: bool, zlevel_height: Option<f32>) -> Self {
@@ -252,8 +253,8 @@ pub fn shape(m: &Metrics, sprite: &SpriteSource, kind: Kind) -> Shape {
         let block = m.level / LEVEL_BLOCKS;
         return match (kind, inside) {
             (Kind::Formed(form), _) => Shape::Built { form, block },
-            (_, false) => Shape::Board,
-            (Kind::Creature, true) => Shape::Extrude { top: CREATURE },
+            // A creature stands, as a block game's figure does.
+            (Kind::Creature, _) | (_, false) => Shape::Board,
             (Kind::Item, true) => Shape::Extrude { top: ITEM },
             (Kind::Wall { .. }, true) => Shape::Blocks { top: m.level },
             (Kind::Window, true) => Shape::Window {
@@ -288,6 +289,32 @@ pub fn shape(m: &Metrics, sprite: &SpriteSource, kind: Kind) -> Shape {
         }
         _ => Shape::Board,
     }
+}
+
+/// The heights from the ground of the blocks of wall a window or a door of a tileset drawn from above stands in:
+/// under the sill and over the lintel of a window, over a door.
+pub fn wall_bands(m: &Metrics, kind: Kind) -> Vec<(f32, f32)> {
+    let block = m.level / LEVEL_BLOCKS;
+    match kind {
+        Kind::Window if !m.iso => vec![(0.0, SILL * m.level), ((1.0 - LINTEL) * m.level, m.level)],
+        Kind::Formed(Form::Door { .. }) if !m.iso => vec![(DOOR_BLOCKS * block, m.level)],
+        _ => vec![],
+    }
+}
+
+/// A whole block of the square from `low` to `high`, painted with `p`'s sprite as a wall is.
+pub fn band(m: &Metrics, p: &Placement, (low, high): (f32, f32)) -> Vec<Instance> {
+    let corner = glam::Vec3::new(p.square.0 as f32, p.square.1 as f32, p.floor);
+    let whole = Cuboid {
+        lo: glam::Vec3::new(0.0, 0.0, low),
+        hi: glam::Vec3::new(1.0, 1.0, high),
+        paint: Paint::Blocks,
+    };
+    let flags = [p.filter << 8, u32::from(p.haze), {
+        let [r, g, b] = p.light;
+        u32::from_le_bytes([r, g, b, 0])
+    }];
+    cuboid(m, p, (corner, m.level / LEVEL_BLOCKS), &whole, flags)
 }
 
 /// One quad of the scene, as the shader reads it.
@@ -504,9 +531,18 @@ fn page_point(m: &Metrics, s: &SpriteSource, turn: Turn, q: Vec2) -> Vec2 {
 struct Cuboid {
     lo: glam::Vec3,
     hi: glam::Vec3,
-    /// Each face is the whole sprite per block it spans, as a block game paints a block; otherwise each face shows
-    /// the sprite where the box stands in the square, its sides the pixels inward from their edge.
-    tiled: bool,
+    paint: Paint,
+}
+
+/// How the faces of a box show its sprite.
+#[derive(Clone, Copy, PartialEq)]
+enum Paint {
+    /// The whole sprite per block a face spans, as a block game paints a block.
+    Blocks,
+    /// The whole sprite once over each side, as a door's leaf shows its picture.
+    Whole,
+    /// The sprite where the box stands in the square, its sides the pixels inward from their edge.
+    Cut,
 }
 
 /// The faces of `c` in the square with its north-west corner at `corner`: its top and its sides, south, east, north
@@ -596,9 +632,21 @@ fn cuboid(
         if p.covered[n] && on_edge[n] {
             continue;
         }
-        if c.tiled {
-            quads.extend(tiled(origin, along, down));
-            continue;
+        match c.paint {
+            Paint::Blocks => {
+                quads.extend(tiled(origin, along, down));
+                continue;
+            }
+            Paint::Whole => {
+                quads.push(instance(
+                    (corner + origin).to_array(),
+                    (along.to_array(), down.to_array()),
+                    [s.at, Vec2::new(s.src.x, 0.0), Vec2::new(0.0, s.src.y)],
+                    flags,
+                ));
+                continue;
+            }
+            Paint::Cut => {}
         }
         let start = origin.truncate();
         let o = at(start);
@@ -642,37 +690,34 @@ fn built(form: Form, block: f32, turn: Turn, joined: [bool; 4]) -> Vec<Cuboid> {
             false => (Vec3::new(a, 0.0, low), Vec3::new(b, 1.0, high)),
         }
     };
-    let boxed = |(lo, hi): (Vec3, Vec3), tiled: bool| Cuboid { lo, hi, tiled };
+    let boxed = |(lo, hi): (Vec3, Vec3), paint: Paint| Cuboid { lo, hi, paint };
     let legs = |inset: f32, side: f32, high: f32| {
         [(0, 0), (1, 0), (0, 1), (1, 1)].map(|(i, j)| {
             let x = if i == 0 { inset } else { 1.0 - inset - side };
             let y = if j == 0 { inset } else { 1.0 - inset - side };
             boxed(
                 (Vec3::new(x, y, 0.0), Vec3::new(x + side, y + side, high)),
-                false,
+                Paint::Cut,
             )
         })
     };
-    let door = 2.0 * block;
-    let lintel = boxed(
-        (
-            Vec3::new(0.0, 0.0, door),
-            Vec3::new(1.0, 1.0, LEVEL_BLOCKS * block),
-        ),
-        true,
-    );
+    // The wall over a door is its wall's: see `wall_bands`.
+    let door = DOOR_BLOCKS * block;
     match form {
-        Form::Door { open: false } => vec![boxed(slab(0.12, 0.0, door), true), lintel],
+        Form::Door { open: false } => vec![boxed(slab(0.12, 0.0, door), Paint::Whole)],
         // Swung open against the west or the north edge of its square.
         Form::Door { open: true } => {
             let leaf = match along_x {
                 true => (Vec3::new(0.0, 0.0, 0.0), Vec3::new(0.12, 1.0, door)),
                 false => (Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, 0.12, door)),
             };
-            vec![boxed(leaf, true), lintel]
+            vec![boxed(leaf, Paint::Whole)]
         }
-        Form::Fence => vec![boxed(slab(0.12, 0.0, block), true)],
-        Form::Gas => vec![boxed((Vec3::ZERO, Vec3::new(1.0, 1.0, block)), true)],
+        Form::Fence => vec![boxed(slab(0.12, 0.0, block), Paint::Blocks)],
+        Form::Gas => vec![boxed(
+            (Vec3::ZERO, Vec3::new(1.0, 1.0, block)),
+            Paint::Blocks,
+        )],
         Form::Seat => {
             let seat = 0.45 * block;
             // The back along the sprite's top edge, wherever its turn brings that edge.
@@ -690,9 +735,9 @@ fn built(form: Form, block: f32, turn: Turn, joined: [bool; 4]) -> Vec<Cuboid> {
                     Vec3::new(0.1, 0.1, seat),
                     Vec3::new(0.9, 0.9, seat + 0.1 * block),
                 ),
-                false,
+                Paint::Cut,
             ));
-            parts.push(boxed((lo, hi), false));
+            parts.push(boxed((lo, hi), Paint::Cut));
             parts
         }
         Form::Table => {
@@ -703,7 +748,7 @@ fn built(form: Form, block: f32, turn: Turn, joined: [bool; 4]) -> Vec<Cuboid> {
                     Vec3::new(0.02, 0.02, top),
                     Vec3::new(0.98, 0.98, top + 0.1 * block),
                 ),
-                false,
+                Paint::Cut,
             ));
             parts
         }
@@ -712,7 +757,7 @@ fn built(form: Form, block: f32, turn: Turn, joined: [bool; 4]) -> Vec<Cuboid> {
                 Vec3::new(0.03, 0.03, 0.0),
                 Vec3::new(0.97, 0.97, 0.45 * block),
             ),
-            false,
+            Paint::Cut,
         )],
         Form::Plant | Form::Fire => vec![],
     }
@@ -781,7 +826,7 @@ pub fn place(m: &Metrics, p: &Placement) -> Vec<Instance> {
             let all = Cuboid {
                 lo: glam::Vec3::ZERO,
                 hi: glam::Vec3::new(1.0, 1.0, top),
-                tiled: true,
+                paint: Paint::Blocks,
             };
             cuboid(m, p, (corner, block), &all, flags)
         }
@@ -819,17 +864,13 @@ pub fn place(m: &Metrics, p: &Placement) -> Vec<Instance> {
             }
         }
         Shape::Extrude { top } => pushed(0.0, top),
-        // A block under the sill and over the lintel, and between them the sprite as a pane in the line of the walls.
-        Shape::Window { sill, lintel, top } => {
+        // The sprite as a pane in the line of the walls, from the sill to the lintel; the blocks under and over it
+        // are its wall's: see `wall_bands`.
+        Shape::Window { sill, lintel, .. } => {
             let block = m.level / LEVEL_BLOCKS;
-            let whole = |low: f32, high: f32| Cuboid {
-                lo: glam::Vec3::new(0.0, 0.0, low),
-                hi: glam::Vec3::new(1.0, 1.0, high),
-                tiled: true,
-            };
             let along_x = p.joined[1] || p.joined[3] || !(p.joined[0] || p.joined[2]);
             let (a, b) = (0.47, 0.53);
-            let pane = match along_x {
+            let (lo, hi) = match along_x {
                 true => (
                     glam::Vec3::new(0.0, a, sill),
                     glam::Vec3::new(1.0, b, lintel),
@@ -840,14 +881,11 @@ pub fn place(m: &Metrics, p: &Placement) -> Vec<Instance> {
                 ),
             };
             let pane = Cuboid {
-                lo: pane.0,
-                hi: pane.1,
-                tiled: true,
+                lo,
+                hi,
+                paint: Paint::Blocks,
             };
-            [whole(0.0, sill), pane, whole(lintel, top)]
-                .iter()
-                .flat_map(|c| cuboid(m, p, (corner, block), c, flags))
-                .collect()
+            cuboid(m, p, (corner, block), &pane, flags)
         }
         Shape::Box { top, bottom } => {
             let (w, h, t) = (size.x, size.y, m.diamond);
@@ -1085,11 +1123,8 @@ mod tests {
             assert_eq!(shape(&flat, &tall, kind), Shape::Board);
             assert_eq!(shape(&flat, &wide, kind), Shape::Board);
         }
-        // A creature inside its square is thick, one that reaches out of it stands.
-        assert_eq!(
-            shape(&flat, &small, Kind::Creature),
-            Shape::Extrude { top: CREATURE }
-        );
+        // A creature stands, inside its square or reaching out of it.
+        assert_eq!(shape(&flat, &small, Kind::Creature), Shape::Board);
         assert_eq!(shape(&flat, &tall, Kind::Creature), Shape::Board);
     }
 
@@ -1128,13 +1163,15 @@ mod tests {
     }
 
     #[test]
-    fn items_and_creatures_drawn_from_above_are_thick_with_sides_only_on_the_opaque_edges() {
+    fn items_drawn_from_above_lie_a_pixel_of_a_block_game_thick_with_sides_only_on_the_opaque_edges()
+     {
         let flat = Metrics::new((32, 32), false, None);
         let whole = sprite((32.0, 32.0), (0.0, 0.0));
         let reach = sprite((32.0, 64.0), (0.0, -32.0));
         // An L of the top and left halves: six straight edges.
         let l = Outline::of([32, 32], |x, y| x < 16 || y < 16);
-        for (kind, thick) in [(Kind::Item, ITEM), (Kind::Creature, CREATURE)] {
+        // As thick as a pixel of a block game's sixteen-pixel item.
+        for (kind, thick) in [(Kind::Item, 1.0 / 16.0)] {
             assert_eq!(shape(&flat, &whole, kind), Shape::Extrude { top: thick });
             // What reaches out of its square was drawn standing.
             assert_eq!(shape(&flat, &reach, kind), Shape::Board);
@@ -1694,29 +1731,74 @@ mod tests {
             .iter()
             .filter(|i| i.b[2] < 0.0 && i.a[1] == 0.0 && i.origin[2] <= 2.0 + 1e-4)
             .count();
-        assert_eq!(along, 2 * 2, "two faces of two blocks: {quads:?}");
+        assert_eq!(along, 2, "two faces, each the whole sprite: {quads:?}");
     }
 
     #[test]
-    fn a_window_drawn_from_above_is_a_block_under_its_pane_and_one_over_it() {
+    fn a_window_drawn_from_above_is_its_pane_between_blocks_of_its_wall() {
         let (m, s) = block_sprite();
         let p = Placement {
             joined: [false, true, false, true],
             ..square(&s, Kind::Window)
         };
-        let quads = place(&m, &p);
-        let (lo, hi) = bounds(&quads);
-        assert_eq!((lo.z, hi.z), (0.0, 3.0));
-        // The pane between the blocks is thin and along the wall.
-        let pane = quads
-            .iter()
-            .filter(|q| q.origin[2] > 1.0 + 1e-4 && q.origin[2] <= 2.0 + 1e-4)
-            .copied()
-            .collect::<Vec<_>>();
+        // The window's sprite is only the pane: thin, along the wall, from its sill to its lintel.
+        let pane = place(&m, &p);
         let (lo, hi) = bounds(&pane);
         assert!(
             (hi.x - lo.x - 1.0).abs() < 1e-4 && hi.y - lo.y < 0.1,
             "{lo} {hi}"
+        );
+        assert!(
+            (lo.z - 1.0).abs() < 1e-4 && (hi.z - 2.0).abs() < 1e-4,
+            "{lo} {hi}"
+        );
+        // Under the sill and over the lintel, whole blocks painted with the wall beside it.
+        let bands = wall_bands(&m, Kind::Window);
+        let expected = [(0.0, 1.0), (2.0, 3.0)];
+        assert!(
+            bands.len() == 2
+                && bands
+                    .iter()
+                    .zip(expected)
+                    .all(|(b, e)| { (b.0 - e.0).abs() < 1e-4 && (b.1 - e.1).abs() < 1e-4 }),
+            "{bands:?}"
+        );
+        let wall = SpriteSource {
+            at: Vec2::new(64.0, 0.0),
+            ..s
+        };
+        let blocks = wall_bands(&m, Kind::Window)
+            .into_iter()
+            .flat_map(|b| band(&m, &Placement { sprite: &wall, ..p }, b))
+            .collect::<Vec<_>>();
+        let (lo, hi) = bounds(&blocks);
+        assert!(lo.z.abs() < 1e-4 && (hi.z - 3.0).abs() < 1e-4, "{lo} {hi}");
+        assert!(blocks.iter().all(|q| q.uv[0] >= 64.0), "{blocks:?}");
+    }
+
+    #[test]
+    fn a_door_drawn_from_above_shows_its_whole_sprite_once_up_its_leaf_under_a_lintel_of_its_wall()
+    {
+        let (m, s) = block_sprite();
+        let p = Placement {
+            joined: [false, true, false, true],
+            ..formed(&s, Form::Door { open: false })
+        };
+        let quads = place(&m, &p);
+        assert!(bounds(&quads).1.z <= 2.0 + 1e-4, "the lintel is the wall's");
+        // Each face along the wall is the sprite once, two blocks tall.
+        let faces = quads
+            .iter()
+            .filter(|q| q.b[2] < 0.0 && q.a[1] == 0.0)
+            .collect::<Vec<_>>();
+        assert_eq!(faces.len(), 2, "{faces:?}");
+        for q in faces {
+            assert_eq!(q.b[2], -2.0);
+            assert!((Vec2::from(q.uv_b).y - 32.0).abs() < 0.1, "{q:?}");
+        }
+        assert_eq!(
+            wall_bands(&m, Kind::Formed(Form::Door { open: false })),
+            vec![(2.0, 3.0)]
         );
     }
 

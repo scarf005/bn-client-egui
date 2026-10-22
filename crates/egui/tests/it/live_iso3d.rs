@@ -282,6 +282,19 @@ fn the_town_in_3d_from_every_side_and_what_a_frame_costs() {
     turn(&mut h, 12);
     save(&mut h, "town-first-person-turned.png");
     choose(&mut h, "3D");
+    // Close by, where the avatar and the creatures beside it stand.
+    for _ in 0..6 {
+        h.event(egui::Event::MouseWheel {
+            unit: egui::MouseWheelUnit::Line,
+            delta: egui::vec2(0.0, 1.0),
+            modifiers: egui::Modifiers::NONE,
+            phase: egui::TouchPhase::Move,
+        });
+        h.run_steps(2);
+    }
+    save(&mut h, "town-close.png");
+    turn(&mut h, 6);
+    save(&mut h, "town-close-turned.png");
 
     // Frame cost: the UI pass of a frame, and the whole frame with its GPU work, turning the camera.
     drag(&mut h, egui::vec2(0.0, -150.0));

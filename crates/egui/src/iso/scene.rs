@@ -1,8 +1,8 @@
 //! The scene of the 3D map: what the model shows in each square, as quads grouped by the page they sample.
 
 use super::geometry::{
-    Form, Instance, Kind, Metrics, Outline, PageId, Placement, Shape, SpriteSource, borders, place,
-    shape,
+    Form, Instance, Kind, Metrics, Outline, PageId, Placement, Shape, SpriteSource, band, borders,
+    place, shape, wall_bands,
 };
 use super::pages::Pages;
 use crate::display::{Fx, STRIP, light, query, resolve_layer};
@@ -375,6 +375,13 @@ pub fn build(
             edges[n] = borders(&m, &item.placement([false; 4], [false; 4]));
         }
     }
+    // The sprite of the wall in each square, which the wall around a window or over a door beside it is painted with.
+    let mut walls = vec![None; columns.len()];
+    for item in items.iter().filter(|i| matches!(i.kind, Kind::Wall { .. })) {
+        if let Some(n) = index(item.square.0, item.square.1) {
+            walls[n] = Some(item.sprite);
+        }
+    }
     let mut pages = BTreeMap::<PageId, Vec<Instance>>::new();
     for item in &items {
         // A face is not seen where the next square holds a solid at least as tall, down to at least as low, that
@@ -398,6 +405,26 @@ pub fn build(
             .entry(item.sprite.page)
             .or_default()
             .extend(place(&m, &item.placement(covered, joined)));
+        let bands = wall_bands(&m, item.kind);
+        if !bands.is_empty() {
+            // The wall it stands in, else its own sprite.
+            let wall = (0..4)
+                .filter(|&face| joined[face])
+                .find_map(|face| {
+                    let (dx, dy) = FACES[face];
+                    index(item.square.0 + dx, item.square.1 + dy).and_then(|n| walls[n])
+                })
+                .unwrap_or(item.sprite);
+            let p = Placement {
+                sprite: &wall,
+                turn: Turn::None,
+                ..item.placement(covered, joined)
+            };
+            pages
+                .entry(wall.page)
+                .or_default()
+                .extend(bands.into_iter().flat_map(|b| band(&m, &p, b)));
+        }
     }
     let (low, high) = items.iter().fold((0.0f32, 0.0f32), |(low, high), i| {
         (i.floor.min(low), i.floor.max(high))
