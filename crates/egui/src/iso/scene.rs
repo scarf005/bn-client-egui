@@ -33,6 +33,8 @@ pub struct Scene {
     pub glyphs: Vec<Mark>,
     /// The hurt creatures, whose health bars lie along the bottom of their squares.
     pub hurt: Vec<Hurt>,
+    /// The squares of the creatures hostile to the avatar, and their ground.
+    pub hostile: Vec<((i32, i32), f32)>,
     /// Whether a sprite of it changes with the animation frame.
     pub animated: bool,
 }
@@ -179,6 +181,7 @@ pub fn build(
     let mut items = vec![];
     let mut glyphs = vec![];
     let mut hurt = vec![];
+    let mut hostile = vec![];
     let mut squares = 0;
     let mut animated = false;
     for y in 0..height {
@@ -213,6 +216,9 @@ pub fn build(
                 floor,
                 health,
             }));
+            if cell.hostile {
+                hostile.push(((x, y), floor));
+            }
             let mut column = Column {
                 ground: floor,
                 solid: None,
@@ -364,6 +370,7 @@ pub fn build(
         columns,
         glyphs,
         hurt,
+        hostile,
         animated,
     }
 }

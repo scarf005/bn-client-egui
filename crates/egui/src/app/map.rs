@@ -667,6 +667,7 @@ impl<M: GameModel> App<M> {
                 let scene = shown.0.clone();
                 painter.add(iso::callback(canvas.rect, v, target, shown, stats));
                 iso::paint_glyphs(painter, canvas.rect, v, &scene, canvas.cell_px);
+                iso::paint_bearings(painter, canvas.rect, v, &scene);
             }
             return;
         }

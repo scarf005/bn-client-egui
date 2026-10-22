@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: bn-client\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-20 08:56+0900\n"
+"POT-Creation-Date: 2026-10-23 03:04+0900\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -18,13 +18,13 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
 
-#: crates/core/src/engine_model.rs:654
+#: crates/core/src/engine_model.rs:773
 msgid "The engine has not answered for %d second."
 msgid_plural "The engine has not answered for %d seconds."
 msgstr[0] ""
 msgstr[1] ""
 
-#: crates/core/src/engine_model.rs:779
+#: crates/core/src/engine_model.rs:899
 msgid "The engine could not be restarted: %s"
 msgstr ""
 
@@ -37,7 +37,7 @@ msgid "Right click"
 msgstr ""
 
 #: crates/core/src/engine_model/commands.rs:141
-#: crates/egui/src/app/component/form.rs:175 crates/egui/src/app/menu.rs:73
+#: crates/egui/src/app/component/form.rs:175 crates/egui/src/app/menu.rs:74
 msgid "Cancel"
 msgstr ""
 
@@ -45,23 +45,23 @@ msgstr ""
 msgid "Command"
 msgstr ""
 
-#: crates/core/src/engine_model/responses.rs:147
+#: crates/core/src/engine_model/responses.rs:148
 msgid "Bad snapshot: %s"
 msgstr ""
 
-#: crates/core/src/engine_model/session.rs:270
+#: crates/core/src/engine_model/session.rs:272
 msgid "Bad engine message: %s"
 msgstr ""
 
-#: crates/core/src/engine_model/session.rs:278
+#: crates/core/src/engine_model/session.rs:280
 msgid "Engine connection closed."
 msgstr ""
 
-#: crates/core/src/engine_model/session.rs:280
+#: crates/core/src/engine_model/session.rs:282
 msgid "The engine stopped (%s)."
 msgstr ""
 
-#: crates/core/src/engine_model/session.rs:281
+#: crates/core/src/engine_model/session.rs:283
 msgid "The engine stopped."
 msgstr ""
 
@@ -127,49 +127,49 @@ msgstr ""
 msgid "cannot start engine %s: %s"
 msgstr ""
 
-#: crates/egui/src/app.rs:321 crates/tui/src/lib.rs:678
+#: crates/egui/src/app.rs:325 crates/tui/src/lib.rs:697
 msgid "Engine: %s"
 msgstr ""
 
-#: crates/egui/src/app.rs:326 crates/tui/src/lib.rs:684
+#: crates/egui/src/app.rs:330 crates/tui/src/lib.rs:703
 msgid "Last engine output:"
 msgstr ""
 
-#: crates/egui/src/app.rs:333
+#: crates/egui/src/app.rs:337
 msgid "Restart"
 msgstr ""
 
-#: crates/egui/src/app.rs:347
+#: crates/egui/src/app.rs:351
 msgid "%s: %s (%d of %d)"
 msgstr ""
 
-#: crates/egui/src/app.rs:363
+#: crates/egui/src/app.rs:367
 msgid "Loading image"
 msgstr ""
 
-#: crates/egui/src/app.rs:482
+#: crates/egui/src/app.rs:486
 msgid "Resize sidebar"
 msgstr ""
 
-#: crates/egui/src/app.rs:510 crates/egui/src/app.rs:521
+#: crates/egui/src/app.rs:515 crates/egui/src/app.rs:526
 msgid "Client settings"
 msgstr ""
 
-#: crates/egui/src/app.rs:518 crates/egui/src/app/palette.rs:57
-#: crates/egui/src/app/palette.rs:103 crates/tui/src/lib.rs:858
-#: crates/tui/src/lib.rs:1027
+#: crates/egui/src/app.rs:523 crates/egui/src/app/palette.rs:57
+#: crates/egui/src/app/palette.rs:103 crates/tui/src/lib.rs:881
+#: crates/tui/src/lib.rs:1050
 msgid "Actions"
 msgstr ""
 
-#: crates/egui/src/app.rs:536 crates/tui/src/lib.rs:647
+#: crates/egui/src/app.rs:541 crates/tui/src/lib.rs:666
 msgid "Ready"
 msgstr ""
 
-#: crates/egui/src/app.rs:574
+#: crates/egui/src/app.rs:579
 msgid "Interrupt"
 msgstr ""
 
-#: crates/egui/src/app/component/form.rs:150 crates/egui/src/editor.rs:99
+#: crates/egui/src/app/component/form.rs:150 crates/egui/src/editor.rs:116
 msgid "Press the new key"
 msgstr ""
 
@@ -177,41 +177,41 @@ msgstr ""
 msgid "OK"
 msgstr ""
 
-#: crates/egui/src/app/component/overmap.rs:325
-#: crates/egui/src/app/component/overmap.rs:489 crates/egui/src/app/map.rs:211
-#: crates/tui/src/lib.rs:734
+#: crates/egui/src/app/component/overmap.rs:359
+#: crates/egui/src/app/component/overmap.rs:527 crates/egui/src/app/map.rs:269
+#: crates/tui/src/lib.rs:753
 msgid "Map"
 msgstr ""
 
-#: crates/egui/src/app/component/overmap.rs:331
+#: crates/egui/src/app/component/overmap.rs:365
 msgid "Centre"
 msgstr ""
 
-#: crates/egui/src/app/component/overmap.rs:336
+#: crates/egui/src/app/component/overmap.rs:370
 msgid "Travel and notes"
 msgstr ""
 
-#: crates/egui/src/app/map.rs:134 crates/tui/src/lib.rs:744
+#: crates/egui/src/app/map.rs:192 crates/tui/src/lib.rs:763
 msgid "No map loaded"
 msgstr ""
 
-#: crates/egui/src/app/map.rs:284
+#: crates/egui/src/app/map.rs:346
 msgid "Player at (%d, %d). Cursor (%d, %d)."
 msgstr ""
 
-#: crates/egui/src/app/map.rs:287
+#: crates/egui/src/app/map.rs:349
 msgid "Player at (%d, %d). Cursor (%d, %d): %s."
 msgstr ""
 
-#: crates/egui/src/app/map.rs:584
+#: crates/egui/src/app/map.rs:646
 msgid "Map actions"
 msgstr ""
 
-#: crates/egui/src/app/menu.rs:257
+#: crates/egui/src/app/menu.rs:258
 msgid "Space or Enter closes this popup"
 msgstr ""
 
-#: crates/egui/src/app/menu.rs:285
+#: crates/egui/src/app/menu.rs:286
 msgid "Load more (%d of %d)"
 msgstr ""
 
@@ -223,36 +223,41 @@ msgstr ""
 msgid "Search actions"
 msgstr ""
 
-#: crates/egui/src/app/sidebar.rs:54
+#: crates/egui/src/app/sidebar.rs:71
 msgid "Resize message log"
 msgstr ""
 
-#: crates/egui/src/display.rs:521
+#: crates/egui/src/display.rs:523
 msgid "No tileset found in the game's gfx folder."
 msgstr ""
 
-#: crates/egui/src/display.rs:680
+#: crates/egui/src/display.rs:687
 msgid "Tiles"
 msgstr ""
 
-#: crates/egui/src/display.rs:689
+#: crates/egui/src/display.rs:696
 msgid "First person"
 msgstr ""
 
-#: crates/egui/src/display.rs:703
+#: crates/egui/src/display.rs:710
 msgid "none"
 msgstr ""
 
-#: crates/egui/src/display.rs:706
+#: crates/egui/src/display.rs:713
 msgid "Tileset"
 msgstr ""
 
-#: crates/egui/src/display.rs:722
+#: crates/egui/src/display.rs:729
 msgid "Tileset unavailable: %s"
 msgstr ""
 
-#: crates/egui/src/display.rs:726
+#: crates/egui/src/display.rs:733
 msgid "Reduced motion"
+msgstr ""
+
+#. TRANSLATORS: the mark of north on the compass of the 3D map.
+#: crates/egui/src/iso/mod.rs:190
+msgid "N"
 msgstr ""
 
 #: crates/egui/src/main.rs:32 crates/egui/src/main.rs:100
@@ -275,11 +280,11 @@ msgstr ""
 msgid "%s is not an executable file"
 msgstr ""
 
-#: crates/tui/src/lib.rs:649
+#: crates/tui/src/lib.rs:668
 msgid "%s [Esc: interrupt]"
 msgstr ""
 
-#: crates/tui/src/lib.rs:688
+#: crates/tui/src/lib.rs:707
 msgid "R: restart the engine    Ctrl-C: quit"
 msgstr ""
 
