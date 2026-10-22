@@ -1,5 +1,6 @@
 //! A drag over the map editor's canvas runs its paint affordance on the squares it crosses: every one for a trail,
-//! the press and the release for a span, and nothing for a canvas that does not ask for drags.
+//! the press and the release for a span, and nothing for a canvas that does not ask for drags. Ctrl and the wheel
+//! zoom the canvas and a middle-button drag pans it.
 use crate::common::fixture;
 use bn_client_egui::transport::{ScriptHandle, ScriptedTransport};
 use bn_client_egui::{App, Clock, ConnectOptions, EngineModel};
@@ -162,4 +163,54 @@ fn a_canvas_without_drag_paints_a_click_and_ignores_the_drag() {
     assert!(painted(&script).is_empty());
     drag(&mut h, (5, 5), &[]);
     assert_eq!(painted(&script), ["square:5,5"]);
+}
+
+fn first_square(h: &H) -> egui::Rect {
+    h.get_all_by_label(".")
+        .map(|n| n.rect())
+        .min_by(|a, b| (a.min.y, a.min.x).partial_cmp(&(b.min.y, b.min.x)).unwrap())
+        .unwrap()
+}
+
+#[test]
+fn the_wheel_with_ctrl_zooms_the_canvas_and_a_middle_drag_pans_it() {
+    let (mut h, _script) = open(editor(Some("trail")));
+    let before = first_square(&h);
+    h.hover_at(before.center() + egui::vec2(100.0, 100.0));
+    h.run_steps(2);
+    h.event(egui::Event::Zoom(2.0));
+    h.run_steps(3);
+    let zoomed = first_square(&h);
+    assert!(
+        zoomed.width() > 1.9 * before.width(),
+        "{before:?} {zoomed:?}"
+    );
+
+    // Zoomed past its room the canvas scrolls: a middle drag moves the squares with the pointer.
+    h.event(egui::Event::Zoom(2.0));
+    h.run_steps(3);
+    let big = first_square(&h);
+    assert!(big.width() > 3.9 * before.width(), "{before:?} {big:?}");
+    let start = big.center() + egui::vec2(300.0, 0.0);
+    h.hover_at(start);
+    h.run_steps(2);
+    let middle = |pressed| egui::Event::PointerButton {
+        pos: start,
+        button: egui::PointerButton::Middle,
+        pressed,
+        modifiers: egui::Modifiers::NONE,
+    };
+    h.event(middle(true));
+    h.run_steps(2);
+    h.hover_at(start - egui::vec2(120.0, 0.0));
+    h.run_steps(3);
+    h.event(middle(false));
+    h.run_steps(2);
+    let panned = first_square(&h);
+    // The squares left of the view are not drawn: the first one shown is the next, a whole square further on.
+    let moved = (panned.min.x - big.min.x).rem_euclid(big.width());
+    assert!(
+        (moved - (big.width() - 120.0).rem_euclid(big.width())).abs() < 1.5,
+        "{big:?} {panned:?}"
+    );
 }

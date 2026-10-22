@@ -49,6 +49,8 @@ const PEER_ROWS: usize = 12;
 const GRID_CELL: f32 = 26.0;
 /// The largest a grid's cell grows to when the room allows.
 const GRID_MAX_CELL: f32 = 2.0 * GRID_CELL;
+/// The least and the most a canvas zooms, as a share of the cell size its room gives.
+const CANVAS_ZOOM: (f32, f32) = (0.25, 4.0);
 
 /// The client-local state of the top screen: what the interaction core keeps, and what the player is asked.
 #[derive(Default)]
@@ -912,102 +914,140 @@ impl<M: GameModel> App<M> {
         // The cells grow with the room the grid has, up to twice their size, their glyphs with them.
         let fit = (ui.available_width() / xs.len().max(1) as f32)
             .min(ui.available_height() / ys.len().max(1) as f32);
-        let cell = fit.clamp(GRID_CELL, GRID_MAX_CELL);
+        // A canvas also zooms with Ctrl and the wheel (the plain wheel scrolls the screen) and pans with the middle button.
+        let canvas = grid.role == Some(GridRole::Canvas);
+        let zoom_key = egui::Id::new(("grid-zoom", &grid.head.id));
+        let zoom = ui.data(|d| d.get_temp::<f32>(zoom_key)).unwrap_or(1.0);
+        let cell = (fit.clamp(GRID_CELL, GRID_MAX_CELL) * zoom).max(GRID_CELL * CANVAS_ZOOM.0);
         let size = egui::vec2(cell, cell);
         let glyph_size = egui::TextStyle::Monospace.resolve(ui.style()).size * cell / GRID_CELL;
         let mut squares = HashMap::new();
-        ui.scope(|ui| {
-            ui.spacing_mut().item_spacing = egui::Vec2::ZERO;
-            for y in ys {
-                ui.horizontal(|ui| {
-                    for x in xs.clone() {
-                        let Some(cell) = grid.cells.iter().find(|c| (c.x, c.y) == (x, y)) else {
-                            ui.allocate_space(size);
-                            continue;
-                        };
-                        let glyph = cell.glyph.clone().unwrap_or_else(|| " ".into());
-                        let name = cell.label.as_ref().map_or(glyph.clone(), Text::shown);
-                        // With a tileset the cell is its sprites, drawn over it once its window is drawn.
-                        let looks = cell
-                            .looks
-                            .iter()
-                            .filter_map(|&i| grid.looks.get(i).cloned())
-                            .collect::<Vec<_>>();
-                        let sprite = (self.display.tiles() && !looks.is_empty())
-                            .then(|| self.model.looks_cell(&looks, x | y << 16))
-                            .flatten();
-                        let glyph = if sprite.is_some() { " ".into() } else { glyph };
-                        let color = cell.color.as_deref().map(|c| self.tint(c));
-                        let at_cursor = grid
-                            .cursor
-                            .is_some_and(|c| (c.x, c.y) == (x as i32, y as i32));
-                        let actionable = cell.id.is_some() && cell.affordance.is_some();
-                        let mut shown = egui::RichText::new(&glyph).monospace().size(glyph_size);
-                        if let Some(color) = color {
-                            shown = shown.color(color);
-                        }
-                        let marked = cell.selected == Some(true) || at_cursor;
-                        // A marked cell keeps a rim of its highlight around the sprite.
-                        let queue = |ui: &egui::Ui, rect: egui::Rect| {
-                            if let Some(cell) = sprite.clone() {
-                                let rect = rect.shrink(if marked { 3.0 } else { 0.0 });
-                                self.screens.icons.borrow_mut().push(RowIcon {
-                                    painter: ui.painter_at(rect),
-                                    rect,
-                                    cell,
-                                });
-                            }
-                        };
-                        if !actionable {
-                            let shown = match marked {
-                                true => shown.background_color(tokens::SELECTION),
-                                false => shown,
+        let show = |ui: &mut egui::Ui| {
+            ui.scope(|ui| {
+                ui.spacing_mut().item_spacing = egui::Vec2::ZERO;
+                for y in ys {
+                    ui.horizontal(|ui| {
+                        for x in xs.clone() {
+                            let Some(cell) = grid.cells.iter().find(|c| (c.x, c.y) == (x, y))
+                            else {
+                                ui.allocate_space(size);
+                                continue;
                             };
-                            let label = ui.add_sized(size, egui::Label::new(shown));
-                            queue(ui, label.rect);
-                            continue;
-                        }
-                        let button = ui.add_enabled(
-                            cell.enabled,
-                            egui::Button::new(shown).min_size(size).selected(marked),
-                        );
-                        queue(ui, button.rect);
-                        if let (true, Some(id), Some(a)) =
-                            (cell.enabled, &cell.id, &cell.affordance)
-                        {
-                            squares.insert((x, y), (button.rect, id.clone(), a.clone()));
-                        }
-                        button.widget_info(|| {
-                            WidgetInfo::labeled(
-                                WidgetType::Button,
-                                button.enabled(),
-                                markup::plain(&name),
-                            )
-                        });
-                        let button = match &cell.denial {
-                            Some(why) if !cell.enabled => {
-                                button.on_disabled_hover_text(why.shown())
+                            let glyph = cell.glyph.clone().unwrap_or_else(|| " ".into());
+                            let name = cell.label.as_ref().map_or(glyph.clone(), Text::shown);
+                            // With a tileset the cell is its sprites, drawn over it once its window is drawn.
+                            let looks = cell
+                                .looks
+                                .iter()
+                                .filter_map(|&i| grid.looks.get(i).cloned())
+                                .collect::<Vec<_>>();
+                            let sprite = (self.display.tiles() && !looks.is_empty())
+                                .then(|| self.model.looks_cell(&looks, x | y << 16))
+                                .flatten();
+                            let glyph = if sprite.is_some() { " ".into() } else { glyph };
+                            let color = cell.color.as_deref().map(|c| self.tint(c));
+                            let at_cursor = grid
+                                .cursor
+                                .is_some_and(|c| (c.x, c.y) == (x as i32, y as i32));
+                            let actionable = cell.id.is_some() && cell.affordance.is_some();
+                            let mut shown =
+                                egui::RichText::new(&glyph).monospace().size(glyph_size);
+                            if let Some(color) = color {
+                                shown = shown.color(color);
                             }
-                            _ => button,
-                        };
-                        // A pointer click on a draggable canvas is the drag's press and release.
-                        let pointer_click =
-                            grid.drag.is_some() && ui.input(|i| i.pointer.any_released());
-                        if let (true, Some(id), Some(a)) = (
-                            button.clicked() && !pointer_click,
-                            &cell.id,
-                            &cell.affordance,
-                        ) {
-                            out.push(Intent::Focus {
-                                component: grid.head.id.clone(),
-                                row: id.clone(),
+                            let marked = cell.selected == Some(true) || at_cursor;
+                            // A marked cell keeps a rim of its highlight around the sprite.
+                            let queue = |ui: &egui::Ui, rect: egui::Rect| {
+                                if let Some(cell) = sprite.clone() {
+                                    let rect = rect.shrink(if marked { 3.0 } else { 0.0 });
+                                    self.screens.icons.borrow_mut().push(RowIcon {
+                                        painter: ui.painter_at(rect),
+                                        rect,
+                                        cell,
+                                    });
+                                }
+                            };
+                            if !actionable {
+                                let shown = match marked {
+                                    true => shown.background_color(tokens::SELECTION),
+                                    false => shown,
+                                };
+                                let label = ui.add_sized(size, egui::Label::new(shown));
+                                queue(ui, label.rect);
+                                continue;
+                            }
+                            let button = ui.add_enabled(
+                                cell.enabled,
+                                egui::Button::new(shown).min_size(size).selected(marked),
+                            );
+                            queue(ui, button.rect);
+                            if let (true, Some(id), Some(a)) =
+                                (cell.enabled, &cell.id, &cell.affordance)
+                            {
+                                squares.insert((x, y), (button.rect, id.clone(), a.clone()));
+                            }
+                            button.widget_info(|| {
+                                WidgetInfo::labeled(
+                                    WidgetType::Button,
+                                    button.enabled(),
+                                    markup::plain(&name),
+                                )
                             });
-                            out.push(Intent::Run(a.clone()));
+                            let button = match &cell.denial {
+                                Some(why) if !cell.enabled => {
+                                    button.on_disabled_hover_text(why.shown())
+                                }
+                                _ => button,
+                            };
+                            // A pointer click on a draggable canvas is the drag's press and release.
+                            let pointer_click =
+                                grid.drag.is_some() && ui.input(|i| i.pointer.any_released());
+                            if let (true, Some(id), Some(a)) = (
+                                button.clicked() && !pointer_click,
+                                &cell.id,
+                                &cell.affordance,
+                            ) {
+                                out.push(Intent::Focus {
+                                    component: grid.head.id.clone(),
+                                    row: id.clone(),
+                                });
+                                out.push(Intent::Run(a.clone()));
+                            }
                         }
+                    });
+                }
+            });
+        };
+        // Only a canvas zoomed in past its room scrolls: at its size it leaves the screen's scrolling alone.
+        if canvas && zoom > 1.0 {
+            let pan = ui.input(|i| i.pointer.middle_down().then(|| i.pointer.delta()));
+            egui::ScrollArea::both()
+                .id_salt(zoom_key)
+                .scroll_source(egui::scroll_area::ScrollSource {
+                    drag: egui::scroll_area::DragScroll::Never,
+                    mouse_wheel: false,
+                    scroll_bar: true,
+                })
+                .show(ui, |ui| {
+                    if let Some(pan) = pan.filter(|_| ui.rect_contains_pointer(ui.clip_rect())) {
+                        ui.scroll_with_delta(pan);
                     }
+                    show(ui)
                 });
+        } else {
+            show(ui);
+        }
+        if canvas {
+            let extent = squares
+                .values()
+                .fold(egui::Rect::NOTHING, |r, s| r.union(s.0));
+            let pinch = ui.input(|i| i.zoom_delta());
+            if pinch != 1.0 && ui.rect_contains_pointer(extent.intersect(ui.clip_rect())) {
+                let zoom = (zoom * pinch).clamp(CANVAS_ZOOM.0, CANVAS_ZOOM.1);
+                ui.data_mut(|d| d.insert_temp(zoom_key, zoom));
+                ui.ctx().request_repaint();
             }
-        });
+        }
         if let Some(mode) = grid.drag {
             self.drag_squares(ui, grid, mode, &squares, out);
         }
@@ -1028,7 +1068,11 @@ impl<M: GameModel> App<M> {
             let at = i.pointer.interact_pos();
             drag::Pointer {
                 over: at
-                    .and_then(|at| squares.iter().find(|(_, s)| s.0.contains(at)))
+                    .and_then(|at| {
+                        squares
+                            .iter()
+                            .find(|(_, s)| s.0.contains(at) && ui.clip_rect().contains(at))
+                    })
                     .map(|(&at, _)| at),
                 pressed: i.pointer.button_pressed(egui::PointerButton::Primary),
                 down: i.pointer.primary_down(),
