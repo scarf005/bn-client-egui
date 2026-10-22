@@ -958,6 +958,10 @@ fn the_interrupt_button_appearing_does_not_move_the_map_or_the_sidebar() {
     assert!(h.query_by_label("Interrupt").is_none());
     h.event(egui::Event::Text("k".into()));
     h.run_steps(3);
+    h.state()
+        .clock()
+        .advance(std::time::Duration::from_millis(200));
+    h.run_steps(3);
     assert!(
         h.query_by_label("Interrupt").is_some(),
         "a command is running"

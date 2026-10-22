@@ -572,13 +572,13 @@ impl<M: GameModel> App<M> {
                 ui.add(bar);
             }
         }
-        // Stops a wait or other activity, like the native interrupt key.
-        if self.model.busy() {
-            // Still, the activity is told by the status text above; only the motion goes, and a command
-            // too short to show is no motion at all.
-            if self.settled() && self.display.reduced_motion() {
+        // Stops a wait or other activity, like the native interrupt key; a command too short to show offers
+        // neither motion nor the button, and the key still interrupts it.
+        if self.settled() && self.model.busy() {
+            // Still, the activity is told by the status text above; only the motion goes.
+            if self.display.reduced_motion() {
                 ui.label("…");
-            } else if self.settled() {
+            } else {
                 ui.spinner();
             }
             if ui.button(tr("Interrupt")).clicked() {
