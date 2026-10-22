@@ -91,7 +91,7 @@ fn squares_are_drawn_from_the_top_of_the_screen_down_and_left_to_right() {
     let d = diamond();
     // A square view, one wider than tall and one taller than wide.
     for (x, y) in [(21, 21), (7, 4), (3, 9), (1, 1)] {
-        let order = d.order(Pos { x, y });
+        let order = d.order(Pos { x, y }).collect::<Vec<_>>();
         let mut seen = order.clone();
         seen.sort_by_key(|p| (p.y, p.x));
         seen.dedup();
