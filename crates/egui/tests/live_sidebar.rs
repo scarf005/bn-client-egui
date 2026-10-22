@@ -81,7 +81,8 @@ fn start<'a>() -> H<'a> {
     std::fs::create_dir_all(&dir).unwrap();
     let settings = dir.join("settings.json");
     std::fs::write(&settings, r#"{"tiles":false,"tileset":null}"#).unwrap();
-    let transport = common::live::english_transport();
+    // Seed 4 starts with ten open steps along the held directions; the default seed's start has seven.
+    let transport = common::live::english_transport_on("4");
     let app = App::new(EngineModel::new(Box::new(transport)))
         .with_settings(settings)
         .with_root(root.clone());
