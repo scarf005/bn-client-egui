@@ -626,7 +626,8 @@ impl<M: GameModel> App<M> {
                 };
                 // Peers as tall as they hold have no bottom; sharing the height, each line gets its share of
                 // what is left, past a few rows.
-                let floor = 4.0 * ui.text_style_height(&egui::TextStyle::Body);
+                let spacing = ui.spacing();
+                let floor = 4.0 * (spacing.interact_size.y + spacing.item_spacing.y);
                 let height = match natural {
                     true => f32::INFINITY,
                     false => (ui.available_height() / (count - n) as f32).max(floor),
