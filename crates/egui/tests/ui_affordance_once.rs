@@ -56,10 +56,9 @@ fn showing<'a>(screen: Value) -> H<'a> {
     h
 }
 
-/// The button an affordance is drawn as: its label and the first key bound to it.
-fn button_label(a: &Affordance) -> String {
-    let key = a.keys.first().map_or(String::new(), |k| format!(" [{k}]"));
-    format!("{}{key}", markup::plain(&a.label.shown()))
+/// The button an affordance is drawn as: its label, run by the first key bound to it.
+fn button_label(a: &Affordance) -> (String, Option<String>) {
+    (markup::plain(&a.label.shown()), a.keys.first().cloned())
 }
 
 /// The actions the rows of the screen's lists run.
@@ -79,7 +78,11 @@ fn no_list_screen_draws_a_row_action_or_a_second_cancel_as_a_button() {
         let h = showing(value);
         let buttons = h
             .get_all_by_role(egui::accesskit::Role::Button)
-            .filter_map(|b| b.accesskit_node().label())
+            .filter_map(|b| {
+                let node = b.accesskit_node();
+                let shortcut = node.data().keyboard_shortcut().map(str::to_string);
+                node.label().map(|l| (l.to_string(), shortcut))
+            })
             .collect::<Vec<_>>();
         let drawn = |a: &Affordance| buttons.iter().filter(|b| **b == button_label(a)).count();
         let mut rows = vec![];

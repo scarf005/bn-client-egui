@@ -71,7 +71,7 @@ fn the_terrain_picker_opens_on_the_terrain_under_the_cursor_past_its_first_page(
     for _ in 0..10 {
         h.run_steps(2);
     }
-    h.get_by_label("Filter [f]");
+    h.get_by_label("Filter");
     let row = h
         .query_by_label("white wall (t_wall_w)")
         .expect("the focused row is drawn");
@@ -107,7 +107,7 @@ fn restacked(stack: &[Value]) -> Value {
 fn closing_a_picker_does_not_move_the_cursor_to_the_pointer_left_where_it_was() {
     let capture = editmap("terrain-picker");
     let (mut h, script) = harness(&capture, egui::vec2(1280.0, 800.0));
-    let picker = h.get_by_label("Filter [f]").rect().center();
+    let picker = h.get_by_label("Filter").rect().center();
     h.event(egui::Event::PointerMoved(picker));
     h.run_steps(4);
     let editor = capture["stack"].as_array().unwrap()[..2].to_vec();

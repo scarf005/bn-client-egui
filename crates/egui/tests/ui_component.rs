@@ -728,7 +728,7 @@ fn a_key_only_a_disabled_affordance_binds_shows_its_denial_and_sends_nothing() {
     let off = json!({"id": "go", "label": "Go", "keys": ["g"], "enabled": false,
         "denial": "Nothing to go to.", "expect": "screen"});
     let (mut h, script) = harness(pick_list(vec![off]));
-    assert!(disabled(&h, "Go [g]"));
+    assert!(disabled(&h, "Go"));
     h.event(egui::Event::Text("g".into()));
     h.run_steps(3);
     h.get_by_label("Nothing to go to.");
@@ -1174,7 +1174,8 @@ fn a_body_part_tab_runs_the_armor_screens_part_pick_with_its_id() {
 #[test]
 fn an_action_of_the_item_examine_menu_runs_the_menus_run_with_the_action_id() {
     let (mut h, script) = harness(example("armor.json", "item examine menu"));
-    let at = h.get_by_label("Wield").rect().center();
+    // The menu's row, not the registered action's button of the same name under the list.
+    let at = h.get_all_by_label("Wield").next().unwrap().rect().center();
     common::double_click(&mut h, at);
     h.run_steps(3);
     assert_eq!(
@@ -1259,7 +1260,7 @@ fn top(h: &H<'_>, label: &str) -> f32 {
 }
 
 #[test]
-fn the_footer_has_the_confirm_first_and_no_navigation_cancel_or_help_chips() {
+fn the_footer_has_the_confirm_and_no_navigation_cancel_or_help_chips() {
     let (mut h, script) = harness(dialog(chrome_body(), chrome(2)));
     h.get_by_label("Act0");
     h.get_by_label("Act1");
@@ -1287,8 +1288,9 @@ fn a_screen_without_a_title_has_its_cancel_and_help_in_the_footer() {
     let (mut h, script) = harness(screen);
     assert!(top(&h, "Help") > top(&h, "body"));
     let at = |label| (top(&h, label), h.get_by_label(label).rect().left());
-    assert!(at("Quit") < at("Act0"), "the cancel follows the confirm");
+    assert!(at("Quit") < at("Act0"), "the cancel leads the row");
     assert!(at("Help") > at("Act1"), "the help follows the actions");
+    assert!(at("Confirm") > at("Help"), "the confirm ends the row");
     h.get_by_label("Help").click();
     h.run_steps(3);
     h.get_by_label("Quit").click();
@@ -1300,27 +1302,31 @@ fn a_screen_without_a_title_has_its_cancel_and_help_in_the_footer() {
 }
 
 #[test]
-fn the_footer_shows_at_most_six_buttons_and_puts_the_rest_in_a_menu() {
-    let (mut h, script) = harness(dialog(chrome_body(), chrome(9)));
-    let buttons = h
+fn the_footer_keeps_one_row_and_puts_the_actions_it_has_no_room_for_in_a_menu() {
+    let (mut h, script) = harness(dialog(chrome_body(), chrome(30)));
+    let tops = h
         .get_all_by_role(egui::accesskit::Role::Button)
         .filter(|n| {
-            n.accesskit_node()
-                .label()
-                .is_some_and(|l| l == "Confirm" || l.starts_with("Act"))
+            n.accesskit_node().label().is_some_and(|l| {
+                let act = l
+                    .strip_prefix("Act")
+                    .is_some_and(|n| n.parse::<u32>().is_ok());
+                l == "Confirm" || l == "⋯" || act
+            })
         })
-        .count();
-    assert!(buttons <= 6, "{buttons} buttons");
-    assert!(h.query_by_label("Act8").is_none(), "folded into the menu");
+        .map(|n| n.rect().top() as i32)
+        .collect::<std::collections::HashSet<_>>();
+    assert_eq!(tops.len(), 1, "{tops:?}");
+    assert!(h.query_by_label("Act29").is_none(), "folded into the menu");
     assert!(
         h.query_by_label("More").is_none(),
         "the client names nothing"
     );
     h.get_by_label("⋯").click();
     h.run_steps(3);
-    h.get_by_label_contains("Act8").click();
+    h.get_by_label("Act29").click();
     h.run_steps(3);
-    assert_eq!(submits(&script), [screen_invoke("A8")]);
+    assert_eq!(submits(&script), [screen_invoke("A29")]);
 }
 
 /// A list of `n` rows `{prefix}0`, `{prefix}1`, ... with the id `id`.
@@ -1629,8 +1635,12 @@ fn a_grid_with_room_to_spare_draws_its_cells_larger() {
 fn a_query_popup_draws_its_confirm_once_and_its_rows_run_the_choose() {
     let (h, _) = harness(example("generic.json", "query popup screen"));
     // The list's choose runs from its rows; the registered confirm is the one button that does the same.
-    assert_eq!(h.query_all_by_label("Confirm Choice").count(), 0);
-    assert_eq!(h.query_all_by_label("Confirm Choice [RETURN]").count(), 1);
+    let confirms = h.query_all_by_label("Confirm Choice").collect::<Vec<_>>();
+    assert_eq!(confirms.len(), 1);
+    assert_eq!(
+        confirms[0].accesskit_node().data().keyboard_shortcut(),
+        Some("RETURN")
+    );
 }
 
 #[test]

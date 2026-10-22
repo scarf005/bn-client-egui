@@ -113,7 +113,7 @@ fn field<'a>(h: &'a H) -> egui_kittest::Node<'a> {
 fn a_filterable_list_offers_the_engines_filter_and_the_click_runs_it() {
     let (mut h, script) = harness(example("filterable list screen"));
     h.get_by_label("Teleport…");
-    h.get_by_label("Filter [/]").click();
+    h.get_by_label("Filter").click();
     h.run_steps(3);
     assert_eq!(
         operations(&script),

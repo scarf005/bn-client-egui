@@ -56,6 +56,16 @@ pub fn named_button(ctx: &egui::Context, id: egui::Id, label: &str) {
     });
 }
 
+/// A button read as `label`, run by `key`, whatever else it draws.
+pub fn keyed_button(ctx: &egui::Context, id: egui::Id, label: &str, key: Option<&str>) {
+    ctx.accesskit_node_builder(id, |b| {
+        b.set_label(label);
+        if let Some(key) = key {
+            b.set_keyboard_shortcut(key);
+        }
+    });
+}
+
 /// Keeps Tab and Shift+Tab inside `ids` (a modal's controls, in order): focus wraps at either end
 /// and returns from outside; `arrows` also keeps the arrow keys from moving focus, for a modal whose
 /// arrows belong to the game. Call every frame the modal is open, before it is drawn. A text field

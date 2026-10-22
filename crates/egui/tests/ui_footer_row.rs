@@ -118,10 +118,11 @@ fn action_buttons(h: &Harness<'_, App<EngineModel>>, label: &str) -> Vec<egui::R
 }
 
 #[test]
-fn look_advanced_inventory_and_trade_footers_keep_one_row_inside_their_window() {
+fn look_advanced_inventory_drop_and_trade_footers_keep_one_row_inside_their_window() {
     let screens = [
         ("look", "look-around screen", "Look Around"),
         ("aim", "advanced inventory screen", "Advanced inventory"),
+        ("inventory", "drop selector screen", "Multidrop"),
         (
             "trade",
             "trade screen",
@@ -195,11 +196,9 @@ fn a_back_action_in_the_footer_sits_leftmost() {
         }
     }
     let h = shown(&screen, LARGE);
-    let (no, yes, confirm) = (
-        buttons(&h, "No")[0],
-        buttons(&h, "Yes")[0],
-        buttons(&h, "Confirm Choice")[0],
-    );
+    // The footer comes after the list, whose rows read the same.
+    let footer = |label| *buttons(&h, label).last().unwrap();
+    let (no, yes, confirm) = (footer("No"), footer("Yes"), footer("Confirm Choice"));
     assert!(no.right() < yes.left(), "{no:?} {yes:?}");
     assert!(yes.right() < confirm.left(), "{yes:?} {confirm:?}");
 }
@@ -244,9 +243,13 @@ fn a_footer_button_reads_the_engines_label_with_its_first_key_as_a_dim_caption_i
     };
     let (label, key) = (in_button("Confirm Choice"), in_button("RETURN"));
     let size = |t: &epaint::TextShape| t.galley.job.sections[0].format.font_id.size;
+    // A section without a colour of its own is painted in the shape's fallback colour.
     let color = |t: &epaint::TextShape| match t.override_text_color {
         Some(c) => c,
-        None => t.galley.job.sections[0].format.color,
+        None => match t.galley.job.sections[0].format.color {
+            egui::Color32::PLACEHOLDER => t.fallback_color,
+            c => c,
+        },
     };
     assert!(size(key) < size(label), "{} vs {}", size(key), size(label));
     assert!(
@@ -262,29 +265,8 @@ fn a_footer_button_reads_the_engines_label_with_its_first_key_as_a_dim_caption_i
 fn a_footer_button_lists_every_key_bound_to_it_on_hover() {
     let mut h = shown(&example("look", "look-around screen"), LARGE);
     h.get_by_label("Go Up").hover();
-    h.run_steps(3);
-    h.get_by(|n| {
-        n.label()
-            .is_some_and(|l| l.contains("PPAGE") && l.contains('<'))
-    });
-}
-
-/// The tops of the tabs of each strip, in drawing order: `counts` tabs per strip.
-fn strip_rows(h: &Harness<'_, App<EngineModel>>, counts: &[usize]) -> Vec<HashSet<i32>> {
-    let tabs = h
-        .query_all_by_role(egui::accesskit::Role::Tab)
-        .map(|t| t.rect().top() as i32)
-        .collect::<Vec<_>>();
-    assert_eq!(tabs.len(), counts.iter().sum::<usize>(), "{tabs:?}");
-    let mut at = 0;
-    counts
-        .iter()
-        .map(|n| {
-            let strip = tabs[at..at + n].iter().copied().collect();
-            at += n;
-            strip
-        })
-        .collect()
+    h.run_steps(6);
+    h.get_by(|n| n.value().as_deref() == Some("PPAGE, <"));
 }
 
 /// The number of tabs of every tab strip of `screen`, outermost first.
@@ -299,7 +281,7 @@ fn strip_counts(screen: &Value) -> Vec<usize> {
 }
 
 #[test]
-fn every_tab_strip_of_crafting_keeps_one_row() {
+fn every_tab_strip_of_crafting_keeps_one_row_inside_its_window() {
     let screens = [
         (example("crafting", "Crafting screen"), "Crafting"),
         (crafting_weapons(), "Crafting"),
@@ -309,18 +291,31 @@ fn every_tab_strip_of_crafting_keeps_one_row() {
         assert!(!counts.is_empty());
         for size in [SMALL, LARGE] {
             let h = shown(&screen, size);
-            let rows = strip_rows(&h, &counts);
-            assert!(rows.iter().all(|r| r.len() == 1), "{size:?}: {rows:?}");
             let window = window(&h, title);
-            let selected = h
+            let tabs = h
                 .query_all_by_role(egui::accesskit::Role::Tab)
-                .filter(|t| t.accesskit_node().is_selected() == Some(true))
-                .map(|t| t.rect())
+                .map(|t| (t.rect(), t.accesskit_node().is_selected() == Some(true)))
                 .collect::<Vec<_>>();
-            assert_eq!(selected.len(), counts.len(), "{selected:?}");
-            for r in selected {
+            let rows = tabs
+                .iter()
+                .map(|(r, _)| r.top() as i32)
+                .collect::<HashSet<_>>();
+            assert_eq!(rows.len(), counts.len(), "{size:?}: {tabs:?}");
+            let chosen = tabs.iter().filter(|(_, on)| *on).count();
+            assert_eq!(
+                chosen,
+                counts.len(),
+                "{size:?}: a strip hides its chosen tab"
+            );
+            if tabs.len() < counts.iter().sum::<usize>() {
                 assert!(
-                    window.contains_rect(r),
+                    !buttons(&h, MORE).is_empty(),
+                    "{size:?}: tabs neither drawn nor in {MORE}"
+                );
+            }
+            for (r, _) in &tabs {
+                assert!(
+                    window.contains_rect(*r),
                     "{size:?}: {r:?} outside {window:?}"
                 );
             }

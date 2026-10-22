@@ -165,7 +165,12 @@ fn a_short_dialog_is_as_tall_as_its_content() {
     let (mut h, _) = playing(size, Some(example("generic", "query popup screen")));
     common::settle_windows(&mut h);
     let window = window_of(&h, "popup");
-    let last = h.get_by_label("No [N]").rect();
+    // The footer's "No", under the list's row of the same name.
+    let last = h
+        .get_all_by_label("No")
+        .map(|n| n.rect())
+        .max_by(|a, b| a.bottom().total_cmp(&b.bottom()))
+        .unwrap();
     assert!(
         window.bottom() - last.bottom() < 40.0,
         "{window:?} runs past its last row at {last:?}"

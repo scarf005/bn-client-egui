@@ -12,6 +12,7 @@ mod measure;
 mod overmap;
 mod panel;
 mod placement;
+mod tabs;
 
 use super::{App, sidebar};
 use crate::kit::section::{self, Fact};
@@ -397,7 +398,7 @@ impl<M: GameModel> App<M> {
             width,
             help: titled.map(|a| windows::TitleHelp {
                 label: markup::plain(&a.label.shown()),
-                tip: format!("{}{}", markup::plain(&a.label.shown()), key_hint(a)),
+                tip: glyph_tip(a),
             }),
             ..base
         };
@@ -474,33 +475,7 @@ impl<M: GameModel> App<M> {
         match c {
             Component::List(list) => self.described_list(ui, screen, c, list, out),
             Component::Tabs(tabs) => {
-                let select = tabs.select.as_deref().and_then(|id| find(screen, id));
-                ui.horizontal_wrapped(|ui| {
-                    for tab in &tabs.tabs {
-                        let on = tab.enabled && select.map_or(self.screens.passive, |a| a.enabled);
-                        let marked = format!(
-                            "{}{}",
-                            tab.label.shown(),
-                            if tab.unread { " •" } else { "" }
-                        );
-                        let label = self.line(ui, &marked);
-                        let button = self.control(ui, label, &tab.id, on, tab.selected);
-                        let button = match (&tab.denial, on) {
-                            (Some(denial), false) => {
-                                button.on_disabled_hover_text(markup::plain(&denial.shown()))
-                            }
-                            _ => button,
-                        };
-                        a11y::tab(ui.ctx(), button.id, tab.selected);
-                        if button.clicked() {
-                            out.push(Intent::Focus {
-                                component: tabs.head.id.clone(),
-                                row: tab.id.clone(),
-                            });
-                            out.extend(select.map(|a| Intent::Run(a.id.clone())));
-                        }
-                    }
-                });
+                self.tab_strip(ui, screen, tabs, out);
                 if let Some(child) = &tabs.child {
                     self.component(ui, screen, child, out);
                 }

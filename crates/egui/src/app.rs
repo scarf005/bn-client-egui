@@ -596,10 +596,10 @@ impl<M: GameModel> App<M> {
 
     /// A button for a choice or action. Once a command has lasted a while, the pressed one is
     /// highlighted and the rest wait for the engine; the label never changes, so nothing re-lays out.
-    fn control(
+    fn control<'a>(
         &self,
         ui: &mut egui::Ui,
-        text: impl Into<egui::WidgetText>,
+        text: impl egui::IntoAtoms<'a>,
         id: &str,
         enabled: bool,
         highlighted: bool,

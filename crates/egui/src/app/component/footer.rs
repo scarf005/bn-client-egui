@@ -2,21 +2,23 @@
 
 use super::*;
 
-/// The most buttons a screen's footer shows; the rest of its actions go in a menu.
+/// The most buttons a screen's footer asks its window to be wide for; a row narrower than its buttons puts the
+/// rest of its actions in a menu.
 const FOOTER_BUTTONS: usize = 6;
-/// The button of the menu that holds the footer's further actions.
-const MORE: &str = "⋯";
+/// The button of the menu that holds the actions, or the tabs, a row has no room for.
+pub(super) const MORE: &str = "⋯";
 /// The footer's help button, in a window without a title bar.
 const HELP: &str = "?";
 
-/// The footer's buttons: the confirm and the cancel first, at most `FOOTER_BUTTONS` with the rest in a menu, and
-/// the help last. The navigation actions and a counting list's digits are the keys, the wheel and the clicks the
-/// client already maps, so they are not drawn; in a window with a `title_bar` the cancel is its close button and
-/// the help is there too.
+/// The footer's buttons on one row: the back first, the confirm last with the help before it, and the other
+/// actions between in the engine's order, as many as the row has room for and the rest in a menu. The navigation
+/// actions and a counting list's digits are the keys, the wheel and the clicks the client already maps, so they
+/// are not drawn; in a window with a `title_bar` the cancel is its close button and the help is there too.
 struct FooterButtons<'a> {
-    direct: Vec<&'a Affordance>,
-    more: Vec<&'a Affordance>,
+    back: Vec<&'a Affordance>,
+    rest: Vec<&'a Affordance>,
     help: Option<&'a Affordance>,
+    confirm: Vec<&'a Affordance>,
 }
 
 fn footer_buttons<'a>(affordances: &[&'a Affordance], title_bar: bool) -> FooterButtons<'a> {
@@ -27,37 +29,103 @@ fn footer_buttons<'a>(affordances: &[&'a Affordance], title_bar: bool) -> Footer
         _ => true,
     });
     let (help, actions): (Vec<_>, Vec<_>) = shown.partition(|a| role(a, AffordanceRole::Help));
-    let help = help.into_iter().find(|a| a.enabled);
-    let (first, rest): (Vec<_>, Vec<_>) = actions
+    let (back, actions): (Vec<_>, Vec<_>) = actions
         .into_iter()
-        .partition(|a| role(a, AffordanceRole::Confirm) || role(a, AffordanceRole::Cancel));
-    let mut direct = [first, rest].concat();
-    let slots = FOOTER_BUTTONS - usize::from(help.is_some());
-    let more = match direct.len() <= slots {
-        true => vec![],
-        false => direct.split_off(slots - 1),
-    };
-    FooterButtons { direct, more, help }
+        .partition(|a| role(a, AffordanceRole::Cancel));
+    let (confirm, rest) = actions
+        .into_iter()
+        .partition(|a| role(a, AffordanceRole::Confirm));
+    FooterButtons {
+        back,
+        rest,
+        help: help.into_iter().find(|a| a.enabled),
+        confirm,
+    }
 }
 
-/// The width of the screen's footer laid out on one row.
+impl FooterButtons<'_> {
+    /// The width of the row with the first `n` of the other actions and the menu button when some are left.
+    fn width(&self, ui: &egui::Ui, n: usize) -> f32 {
+        let glyph = |text: &str| glyph_width(ui, text);
+        let widths = self
+            .back
+            .iter()
+            .chain(&self.rest[..n])
+            .chain(&self.confirm)
+            .map(|a| button_width(ui, a))
+            .chain((n < self.rest.len()).then(|| glyph(MORE)))
+            .chain(self.help.map(|_| glyph(HELP)))
+            .collect::<Vec<_>>();
+        let gaps = widths.len().saturating_sub(1) as f32 * ui.spacing().item_spacing.x;
+        widths.iter().sum::<f32>() + gaps
+    }
+
+    /// The most of the other actions shown in the row that `fits`, none when not even the fixed buttons fit.
+    fn shown(&self, fits: impl Fn(usize) -> bool) -> usize {
+        (0..=self.rest.len()).rev().find(|n| fits(*n)).unwrap_or(0)
+    }
+}
+
+/// The width of the screen's footer on one row of at most `FOOTER_BUTTONS` buttons.
 pub(super) fn footer_width(ui: &egui::Ui, affordances: &[&Affordance], title_bar: bool) -> f32 {
-    let FooterButtons { direct, more, help } = footer_buttons(affordances, title_bar);
-    let font = egui::TextStyle::Button.resolve(ui.style());
-    let button = |text: &str| text_width(ui, text, &font) + 2.0 * ui.spacing().button_padding.x;
-    let labels = direct
-        .iter()
-        .map(|a| format!("{}{}", markup::plain(&a.label.shown()), key_hint(a)))
-        .chain((!more.is_empty()).then(|| MORE.to_string()))
-        .chain(help.map(|_| HELP.to_string()))
-        .collect::<Vec<_>>();
-    let gaps = labels.len().saturating_sub(1) as f32 * ui.spacing().item_spacing.x;
-    labels.iter().map(|l| button(l)).sum::<f32>() + gaps
+    let row = footer_buttons(affordances, title_bar);
+    let fixed = row.back.len() + row.confirm.len() + usize::from(row.help.is_some());
+    let n = row.shown(|n| fixed + n + usize::from(n < row.rest.len()) <= FOOTER_BUTTONS);
+    row.width(ui, n)
 }
 
-/// ` [key]` after an affordance's label, the first key the player has bound to it.
-pub(super) fn key_hint(a: &Affordance) -> String {
-    a.keys.first().map_or(String::new(), |k| format!(" [{k}]"))
+/// The width of a button holding only `text`.
+fn glyph_width(ui: &egui::Ui, text: &str) -> f32 {
+    let font = egui::TextStyle::Button.resolve(ui.style());
+    text_width(ui, text, &font) + 2.0 * ui.spacing().button_padding.x
+}
+
+/// The width of `a`'s button as `keyed` lays it out.
+fn button_width(ui: &egui::Ui, a: &Affordance) -> f32 {
+    let caption = egui::TextStyle::Small.resolve(ui.style());
+    let key = a.keys.first().map_or(0.0, |k| {
+        ui.spacing().icon_spacing + text_width(ui, k, &caption)
+    });
+    glyph_width(ui, &markup::plain(&a.label.shown())) + key
+}
+
+/// An affordance's button text: the engine's label, then the first key the player has bound to it as a dim
+/// caption.
+fn keyed(a: &Affordance) -> egui::Atoms<'static> {
+    let label = markup::plain(&a.label.shown());
+    match a.keys.first() {
+        Some(key) => egui::Atoms::new((label, egui::RichText::new(key).small().weak())),
+        None => egui::Atoms::new(label),
+    }
+}
+
+/// Every key the player has bound to `a`, for its button's hover text.
+fn key_list(a: &Affordance) -> String {
+    a.keys.join(", ")
+}
+
+/// The hover text of a button drawn as a glyph: the engine's label over every key bound to `a`.
+pub(super) fn glyph_tip(a: &Affordance) -> String {
+    let label = markup::plain(&a.label.shown());
+    match a.keys.is_empty() {
+        true => label,
+        false => format!("{label}\n{}", key_list(a)),
+    }
+}
+
+/// Names `a`'s button `button` by the engine's label alone, with its first key as the shortcut, and lists every
+/// key on hover.
+fn described(ctx: &egui::Context, button: egui::Response, a: &Affordance) -> egui::Response {
+    a11y::keyed_button(
+        ctx,
+        button.id,
+        &markup::plain(&a.label.shown()),
+        a.keys.first().map(String::as_str),
+    );
+    match a.keys.is_empty() {
+        true => button,
+        false => button.on_hover_text(key_list(a)),
+    }
 }
 
 impl<M: GameModel> App<M> {
@@ -90,8 +158,8 @@ impl<M: GameModel> App<M> {
     ) {
         let availability = interaction::row_availability(a, row);
         let (enabled, denial) = (availability.enabled, availability.denial.map(|d| d.shown()));
-        let label = format!("{}{}", markup::plain(&a.label.shown()), key_hint(a));
-        let button = self.control(ui, label, &a.id, enabled, false);
+        let button = self.control(ui, keyed(a), &a.id, enabled, false);
+        let button = described(ui.ctx(), button, a);
         let button = match (enabled, denial) {
             (false, Some(why)) => button.on_disabled_hover_text(why),
             _ => button,
@@ -101,7 +169,8 @@ impl<M: GameModel> App<M> {
         }
     }
 
-    /// The screen's own actions under its content, as `footer_buttons` picks them.
+    /// The screen's own actions under its content, as `footer_buttons` picks them, on one row as wide as the
+    /// room left to it.
     pub(super) fn footer(
         &self,
         ui: &mut egui::Ui,
@@ -109,37 +178,53 @@ impl<M: GameModel> App<M> {
         title_bar: bool,
         out: &mut Vec<Intent>,
     ) {
-        let FooterButtons { direct, more, help } = footer_buttons(affordances, title_bar);
-        if direct.is_empty() && help.is_none() {
+        let row = footer_buttons(affordances, title_bar);
+        if row.back.is_empty()
+            && row.rest.is_empty()
+            && row.confirm.is_empty()
+            && row.help.is_none()
+        {
             return;
         }
-        ui.horizontal_wrapped(|ui| {
-            for a in direct {
-                self.affordance_button(ui, a, None, out);
-            }
-            if !more.is_empty() {
-                ui.menu_button(MORE, |ui| {
-                    for a in more {
-                        let enabled = interaction::row_availability(a, None).enabled;
-                        let label = format!("{}{}", markup::plain(&a.label.shown()), key_hint(a));
-                        if ui.add_enabled(enabled, egui::Button::new(label)).clicked() {
-                            out.push(Intent::Run(a.id.clone()));
-                            ui.close();
-                        }
-                    }
-                });
-            }
-            if let Some(a) = help {
-                let label = markup::plain(&a.label.shown());
-                let button = ui
-                    .button(HELP)
-                    .on_hover_text(format!("{label}{}", key_hint(a)));
-                a11y::named_button(ui.ctx(), button.id, &label);
-                if button.clicked() {
-                    out.push(Intent::Run(a.id.clone()));
+        let room = ui.available_width();
+        let n = row.shown(|n| row.width(ui, n) <= room + 0.5);
+        let (direct, more) = row.rest.split_at(n);
+        let mut confirmed = vec![];
+        egui::Sides::new().show(
+            ui,
+            |ui| {
+                for a in row.back.iter().chain(direct) {
+                    self.affordance_button(ui, a, None, out);
                 }
-            }
-        });
+                if !more.is_empty() {
+                    ui.menu_button(MORE, |ui| {
+                        for a in more {
+                            let enabled = interaction::row_availability(a, None).enabled;
+                            let button = ui.add_enabled(enabled, egui::Button::new(keyed(a)));
+                            if described(ui.ctx(), button, a).clicked() {
+                                out.push(Intent::Run(a.id.clone()));
+                                ui.close();
+                            }
+                        }
+                    });
+                }
+            },
+            // Right to left: the confirm is the last button of the row.
+            |ui| {
+                for a in row.confirm.iter().rev() {
+                    self.affordance_button(ui, a, None, &mut confirmed);
+                }
+                if let Some(a) = row.help {
+                    let label = markup::plain(&a.label.shown());
+                    let button = ui.button(HELP).on_hover_text(glyph_tip(a));
+                    a11y::named_button(ui.ctx(), button.id, &label);
+                    if button.clicked() {
+                        confirmed.push(Intent::Run(a.id.clone()));
+                    }
+                }
+            },
+        );
+        out.extend(confirmed);
     }
 
     /// The affordances a component names that its own widgets do not run.
