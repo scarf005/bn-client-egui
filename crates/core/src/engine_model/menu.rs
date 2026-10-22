@@ -106,16 +106,11 @@ impl EngineModel {
         let tab = |c: &Choice| {
             c.pane_id.is_none() && (pane_of(&c.label).is_some() || (panes.is_empty() && paned))
         };
-        // The cursor travels as `compat.focus`; a popup row's description is its action id, for tools.
+        // The cursor travels as `compat.focus`.
         let focus = i
             .compat
             .as_ref()
             .and_then(|c| c["focus"]["choice_id"].as_str());
-        let actions = self.replica.boundary().map_or(&[][..], |b| &b.actions);
-        let described = |text: &str| match actions.iter().any(|a| a.id == text) {
-            true => String::new(),
-            false => text.to_string(),
-        };
         Menu {
             context: i.context.clone(),
             schema_id: i.schema_id.clone(),
@@ -127,10 +122,7 @@ impl EngineModel {
             category_mode: i.category_mode,
             total: i.choice_total as usize,
             choices: all()
-                .map(|c| MenuChoice {
-                    description: described(&c.description),
-                    ..row(c, tab(c), Some(c.id.as_str()) == focus)
-                })
+                .map(|c| row(c, tab(c), Some(c.id.as_str()) == focus))
                 .collect(),
             panes: panes.iter().filter_map(Pane::shown).collect(),
             can_cancel: i.allow_cancel,

@@ -76,7 +76,7 @@ fn popup(allow_cancel: bool, message: &str, ack: Value) -> Value {
 
 fn any_key_popup() -> Value {
     let mut ack = choice("acknowledge", "Press any key");
-    ack["description"] = "ANY_INPUT".into();
+    ack["action_id"] = "ANY_INPUT".into();
     let mut popup = popup(false, "You have nothing to wield.", ack);
     popup["any_key_choice_id"] = "acknowledge".into();
     popup
@@ -135,7 +135,7 @@ fn a_popup_shows_one_dismiss_control_and_no_context_name_as_title() {
     let (mut h, script) = harness();
     h.run_steps(3);
     let mut ack = choice("acknowledge", "Cancel popup");
-    ack["description"] = "QUIT".into();
+    ack["action_id"] = "QUIT".into();
     script.push(show(
         41,
         json!([{"id":"QUIT","name":"Cancel popup","keys":["ESC","SPACE","RETURN"]}]),
@@ -161,7 +161,7 @@ fn space_closes_a_cancel_popup_through_its_focused_button() {
     let (mut h, script) = harness();
     h.run_steps(3);
     let mut ack = choice("acknowledge", "Cancel popup");
-    ack["description"] = "QUIT".into();
+    ack["action_id"] = "QUIT".into();
     script.push(show(
         41,
         json!([{"id":"QUIT","name":"Cancel popup","keys":["ESC","SPACE","RETURN"]}]),
@@ -707,7 +707,7 @@ fn typing_in_a_text_prompt_runs_no_game_action() {
 
 fn popup_with(message: &str) -> Value {
     let mut ack = choice("acknowledge", "Cancel popup");
-    ack["description"] = "QUIT".into();
+    ack["action_id"] = "QUIT".into();
     popup(true, message, ack)
 }
 
@@ -788,12 +788,12 @@ fn choices_menu(choices: Vec<Value>) -> Value {
 }
 
 #[test]
-fn an_entry_described_only_by_its_action_name_shows_no_description_row() {
+fn an_entry_that_runs_an_action_shows_no_description_row() {
     let (mut h, script) = harness();
     h.run_steps(3);
     let mut no = choice("no", "No");
     no["selected"] = true.into();
-    no["description"] = "NO".into();
+    no["action_id"] = "NO".into();
     script.push(show(
         41,
         json!([]),
@@ -1079,7 +1079,7 @@ fn a_popups_dismiss_button_tells_screen_readers_which_keys_close_it() {
     let (mut h, script) = harness();
     h.run_steps(3);
     let mut ack = choice("acknowledge", "Cancel popup");
-    ack["description"] = "QUIT".into();
+    ack["action_id"] = "QUIT".into();
     script.push(show(
         41,
         json!([{"id":"QUIT","name":"Cancel popup","keys":["ESC","SPACE","RETURN"]}]),

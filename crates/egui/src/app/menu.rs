@@ -102,7 +102,7 @@ impl<M: GameModel> App<M> {
             // What sits under the list takes room from it, so the window never outgrows the screen.
             let row = ui.spacing().interact_size.y + ui.spacing().item_spacing.y;
             let paged = menu.total > menu.choices.len();
-            let info = menu.choices.iter().any(|c| is_prose(&c.description));
+            let info = menu.choices.iter().any(|c| !c.description.is_empty());
             let footer =
                 row * usize::from(paged) as f32 + if info { DESCRIPTION_HEIGHT + row } else { 0.0 };
             let listed = area
@@ -293,7 +293,7 @@ impl<M: GameModel> App<M> {
             }
             // A menu that describes its entries keeps the room for the text, so nothing below the list
             // moves as the hovered entry changes.
-            if menu.choices.iter().any(|c| is_prose(&c.description)) {
+            if menu.choices.iter().any(|c| !c.description.is_empty()) {
                 ui.separator();
                 egui::ScrollArea::vertical()
                     .id_salt("menu_description")
@@ -301,7 +301,7 @@ impl<M: GameModel> App<M> {
                     .show(ui, |ui| {
                         ui.set_min_height(DESCRIPTION_HEIGHT);
                         ui.set_min_width(ui.available_width());
-                        if let Some(description) = described.filter(|d| is_prose(d)) {
+                        if let Some(description) = described.filter(|d| !d.is_empty()) {
                             // As in the native text window, a line of two dashes is a rule.
                             let lines = description.lines().collect::<Vec<_>>();
                             for (i, part) in lines.split(|line| *line == "--").enumerate() {
@@ -426,12 +426,4 @@ pub(super) fn list_frame(ctx: &egui::Context) -> egui::Frame {
         .fill(tokens::DIALOG)
         .stroke(egui::Stroke::new(1.0, tokens::BORDER))
         .corner_radius(0)
-}
-
-/// A description the player can read; the engine fills it with the bound action's name (`NO`,
-/// `QUIT`, `ANY_INPUT`) when an entry has no text of its own.
-fn is_prose(description: &str) -> bool {
-    description
-        .chars()
-        .any(|c| !(c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_'))
 }

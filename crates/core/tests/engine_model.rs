@@ -1547,7 +1547,7 @@ fn a_pressed_key_runs_the_action_the_engine_binds_to_it_and_nothing_else() {
 #[test]
 fn any_key_acknowledges_a_press_any_key_popup_and_only_that() {
     let popup = |anykey: bool| {
-        let mut ack = json!({"id":"acknowledge","label":"x","description": if anykey {"ANY_INPUT"} else {"QUIT"},
+        let mut ack = json!({"id":"acknowledge","label":"x","description":"","action_id": if anykey {"ANY_INPUT"} else {"QUIT"},
             "denial":"","enabled":true,"selectable":true,"selected":true,"columns":[]});
         ack["label"] = "Press any key".into();
         json!({"schema_id":"s:p","kind":"choices","context":"POPUP_WAIT","title":"","message":"Nothing.",
@@ -2338,13 +2338,13 @@ fn a_client_line_repeating_the_newest_one_is_not_added_again() {
 }
 
 #[test]
-fn query_popup_rows_do_not_carry_the_action_id_as_a_description() {
+fn query_popup_rows_carry_their_action_apart_from_their_description() {
     let mut menu = counted("base");
     menu["actions"] = json!([{"id": "YES", "name": "Yes", "keys": ["y"]}, {"id": "NO", "name": "No", "keys": ["n"]}]);
     let rows = ["Yes", "No"].map(|label| {
         let id = label.to_uppercase();
-        json!({"id": format!("option:{id}"), "label": label, "description": id, "denial": "",
-            "enabled": true, "selectable": true, "selected": false, "columns": []})
+        json!({"id": format!("option:{id}"), "label": label, "description": "", "action_id": id,
+            "denial": "", "enabled": true, "selectable": true, "selected": false, "columns": []})
     });
     menu["interaction"]["context"] = json!("YESNO");
     menu["interaction"]["choices"] = json!(rows);
@@ -2353,12 +2353,13 @@ fn query_popup_rows_do_not_carry_the_action_id_as_a_description() {
     h.push(change(41, json!({"interaction": menu})));
     m.poll();
     let menu = m.menu().unwrap();
-    assert!(
-        menu.choices.iter().all(|c| c.description.is_empty()),
-        "{:?}",
-        menu.choices
-    );
-    // Text that is not an action id stays.
+    let rows = menu
+        .choices
+        .iter()
+        .map(|c| (c.action.as_str(), c.description.as_str()))
+        .collect::<Vec<_>>();
+    assert_eq!(rows, [("YES", ""), ("NO", "")]);
+    // A description is the engine's text, whatever it reads.
     let mut real = counted("counted");
     real["actions"] = json!([{"id": "YES", "name": "Yes"}]);
     h.push(change(42, json!({"interaction": real})));
