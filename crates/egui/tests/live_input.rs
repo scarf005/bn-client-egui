@@ -4,7 +4,7 @@ use bn_client_egui::watchdog::Watchdog;
 use bn_client_egui::{App, EngineModel, GameModel, MenuModel};
 use eframe::egui;
 use egui_kittest::Harness;
-use egui_kittest::kittest::Queryable;
+use egui_kittest::kittest::{NodeT, Queryable};
 use std::time::Duration;
 
 type H<'a> = Harness<'a, App<EngineModel>>;
@@ -22,6 +22,15 @@ fn run_until(h: &mut H, what: &str, secs: u64, mut done: impl FnMut(&mut H) -> b
     }
 }
 
+/// The enabled button labelled `label`, not a list row of that name (a row is toggled on or off) nor the
+/// disabled one of a screen under the top one.
+fn button<'n>(h: &'n H, label: &'n str) -> Option<egui_kittest::Node<'n>> {
+    h.query_all_by_label(label).find(|n| {
+        let node = n.accesskit_node();
+        !node.is_disabled() && node.toggled().is_none()
+    })
+}
+
 /// Where the widget labelled `label` is once it stopped moving.
 fn settled(h: &mut H, label: &str) -> egui::Rect {
     let mut seen = None;
@@ -32,9 +41,15 @@ fn settled(h: &mut H, label: &str) -> egui::Rect {
     h.get_by_label(label).rect()
 }
 
-fn click_settled(h: &mut H, label: &str) {
-    settled(h, label);
-    h.get_by_label(label).click();
+/// Clicks the button labelled `label` once it stopped moving.
+fn click_button(h: &mut H, label: &str) {
+    let rect = |h: &H| button(h, label).expect(label).rect();
+    let mut seen = None;
+    while seen != Some(rect(h)) {
+        seen = Some(rect(h));
+        h.run_steps(2);
+    }
+    button(h, label).expect(label).click();
 }
 
 fn start<'a>() -> H<'a> {
@@ -134,9 +149,9 @@ fn live_a_word_typed_fast_into_a_filter_arrives_in_order() {
     // The keybindings screen, whose list filter is an affordance that takes the typed text.
     h.event(egui::Event::Text("?".into()));
     run_until(&mut h, "the keybindings", 30, |h| {
-        h.query_by_label("Filter").is_some()
+        button(h, "Filter").is_some()
     });
-    click_settled(&mut h, "Filter");
+    click_button(&mut h, "Filter");
     run_until(&mut h, "the filter prompt", 30, |h| {
         h.query_by_role(egui::accesskit::Role::TextInput).is_some()
     });
@@ -169,7 +184,7 @@ fn live_a_key_prompt_takes_an_arrow_as_the_new_key() {
     world_screen(&mut h);
     h.event(egui::Event::Text("?".into()));
     run_until(&mut h, "the keybindings", 30, |h| {
-        h.query_by_label("Filter").is_some()
+        button(h, "Filter").is_some()
     });
     // Add a local key to the first action.
     h.event(egui::Event::Text("+".into()));
