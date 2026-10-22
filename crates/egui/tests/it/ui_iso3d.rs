@@ -450,6 +450,51 @@ fn hovering_just_inside_any_corner_of_a_flat_isometric_square_describes_that_squ
     }
 }
 
+/// The squares across the last `bn.viewport` the client asked the engine for, in a window of `size` that draws the
+/// isometric tileset on the flat map.
+fn flat_viewport(tag: &str, size: egui::Vec2) -> (i64, i64) {
+    let root = iso_root(tag);
+    let (t, script) = session(&[]);
+    let app = App::new(EngineModel::new(Box::new(t)))
+        .with_root(root.clone())
+        .with_settings(root.join("settings.json"))
+        .with_target_format(eframe::wgpu::TextureFormat::Rgba8Unorm);
+    let mut h = Harness::builder()
+        .with_size(size)
+        .build_ui_state(|ui, app: &mut App<EngineModel>| app.show(ui), app);
+    settle(&mut h);
+    pick_2d(&mut h);
+    // A resized panel is sent once it has kept its size for a moment.
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    h.run_steps(10);
+    let asked = script
+        .sent()
+        .into_iter()
+        .rfind(|m| m["method"] == "bn.viewport")
+        .expect("asked");
+    (
+        asked["params"]["cols"].as_i64().unwrap(),
+        asked["params"]["rows"].as_i64().unwrap(),
+    )
+}
+
+#[test]
+fn the_flat_isometric_map_asks_for_the_squares_that_reach_the_corners_of_a_large_window() {
+    // A diamond of squares reaches the corners of a wide window only with more squares than the 3D view's reach.
+    let (cols, rows) = flat_viewport("flat-large", egui::vec2(2400.0, 1600.0));
+    assert_eq!(cols, rows);
+    assert!((100..=121).contains(&cols), "{cols}");
+    // The game's own view range is the most it asks for.
+    assert_eq!(
+        flat_viewport("flat-huge", egui::vec2(9000.0, 6000.0)),
+        (121, 121)
+    );
+    assert_eq!(
+        flat_viewport("flat-small", egui::vec2(800.0, 600.0)),
+        (61, 61)
+    );
+}
+
 /// How wide a map square's diamond is on the screen of the 3D map: the horizontal distance between the middles
 /// of the squares north and south of it, which the camera at its default turn sees one diagonal apart.
 fn diamond_width(h: &mut H) -> f32 {

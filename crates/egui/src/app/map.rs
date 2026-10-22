@@ -11,6 +11,9 @@ use bn_client_core::{Cell, GameModel, MapMark, MarkRole, Pos, Rgb};
 use eframe::egui::{self, accesskit};
 use std::sync::Arc;
 
+/// The most squares across and down the flat map of an isometric tileset shows: the game's own view range.
+const TILTED_REACH: i32 = 121;
+
 /// The widest a square's tooltip text gets before its lines wrap; the tooltip's frame adds its margins.
 const TOOLTIP_WIDTH: f32 = 420.0;
 
@@ -241,7 +244,7 @@ impl<M: GameModel> App<M> {
         // An isometric tileset on the flat map lays its diamonds out as the game's tile view does.
         let tilted =
             !three && self.display.tiles() && self.display.tileset().is_some_and(|(t, _)| t.iso);
-        let now = self.map_viewport(ui, cell_px, three || tilted);
+        let now = self.map_viewport(ui, cell_px, (three, tilted));
         let size = self.model.size();
         if size.x <= 0 || size.y <= 0 {
             ui.label(tr("No map loaded"));
@@ -371,15 +374,23 @@ impl<M: GameModel> App<M> {
 
     /// Asks the engine for as many squares as the room holds, and takes the animation facts; returns the time
     /// they are played from.
-    fn map_viewport(&mut self, ui: &egui::Ui, cell_px: f32, reach: bool) -> f64 {
+    fn map_viewport(&mut self, ui: &egui::Ui, cell_px: f32, (three, tilted): (bool, bool)) -> f64 {
         // The room left for the map, in whole cells.
         let room = ui.available_size();
-        self.model.set_viewport(match reach {
-            true => Pos {
+        self.model.set_viewport(match (three, tilted) {
+            (true, _) => Pos {
                 x: iso::REACH,
                 y: iso::REACH,
             },
-            false => Pos {
+            // The squares that reach the corners of the room: as many as it holds diagonally, from its middle.
+            (_, true) => {
+                let around = ((room.x + 2.0 * room.y) / cell_px).ceil() as i32 + 3;
+                Pos {
+                    x: around.clamp(iso::REACH, TILTED_REACH),
+                    y: around.clamp(iso::REACH, TILTED_REACH),
+                }
+            }
+            _ => Pos {
                 x: (room.x / cell_px) as i32,
                 y: (room.y / cell_px) as i32,
             },
