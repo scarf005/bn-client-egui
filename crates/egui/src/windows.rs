@@ -65,7 +65,7 @@ pub struct WindowSpec {
     /// A placed window is only first placed by its layout: the player moves and resizes it, and where they
     /// leave it is kept as for any other window.
     pub movable: bool,
-    /// The width a window first has; a window placed at a side is never narrower.
+    /// The width a window first has; a window its layout places is not narrower, as `show` tells.
     pub width: Option<f32>,
     pub height: Option<f32>,
     pub max_width: Option<f32>,
@@ -258,14 +258,16 @@ pub fn show<R>(
         }
     };
     // Where the player left a window it still fits the room its layout gives, whatever a last run kept, and
-    // no window its layout places leaves that room for the bars around it; a window at a side is never narrower
-    // than its layout made it.
+    // no window its layout places leaves that room for the bars around it. Nor is it narrower than its layout
+    // makes it, however its content or room changed since egui first sized it: a window at a side never, any
+    // other unless the player left it narrower in a last run.
     if let Some(place) = spec.place {
         window = window.constrain_to(place.bounds());
         if spec.movable {
             window = window.max_size(place.room());
         }
-        if let (Place::Side { .. }, Some(width)) = (place, spec.width) {
+        let sized = matches!(place, Place::Side { .. }) || placed.kept.is_none();
+        if let Some(width) = spec.width.filter(|_| sized) {
             window = window.min_width(width);
         }
     }
