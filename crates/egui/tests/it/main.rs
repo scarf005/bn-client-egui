@@ -56,6 +56,7 @@ mod ui_generic;
 mod ui_interactions;
 mod ui_iso3d;
 mod ui_iso3d_shots;
+mod ui_key_focus;
 mod ui_kit_table;
 mod ui_layout;
 mod ui_list_search;

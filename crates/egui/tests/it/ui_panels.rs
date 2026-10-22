@@ -49,7 +49,7 @@ fn open<'a>() -> (H<'a>, ScriptHandle) {
     (h, script)
 }
 
-fn panel_reads(script: &ScriptHandle) -> Vec<Value> {
+pub(crate) fn panel_reads(script: &ScriptHandle) -> Vec<Value> {
     script
         .sent()
         .into_iter()
@@ -58,12 +58,12 @@ fn panel_reads(script: &ScriptHandle) -> Vec<Value> {
 }
 
 /// Answers every panel read from the `answered`th on with the panel it asked for.
-fn serve(h: &mut H, script: &ScriptHandle, answered: &mut usize) {
+pub(crate) fn serve(h: &mut H, script: &ScriptHandle, answered: &mut usize) {
     serve_with(h, script, answered, &panel_view);
 }
 
 /// `serve`, with `view` giving the screen of each panel.
-fn serve_with(
+pub(crate) fn serve_with(
     h: &mut H,
     script: &ScriptHandle,
     answered: &mut usize,
@@ -81,17 +81,17 @@ fn serve_with(
     crate::common::settle_windows(h);
 }
 
-fn key(h: &mut H, text: &str) {
+pub(crate) fn key(h: &mut H, text: &str) {
     h.event(egui::Event::Text(text.into()));
     h.run_steps(2);
 }
 
 /// The window titled `title` is shown.
-fn window(h: &H, title: &str) {
+pub(crate) fn window(h: &H, title: &str) {
     h.get_by_role_and_label(egui::accesskit::Role::Window, title);
 }
 
-fn operations(script: &ScriptHandle) -> Vec<Value> {
+pub(crate) fn operations(script: &ScriptHandle) -> Vec<Value> {
     script
         .sent()
         .into_iter()
