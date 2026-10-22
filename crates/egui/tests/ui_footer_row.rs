@@ -84,6 +84,7 @@ fn footer_labels(screen: &Value) -> Vec<String> {
                     AffordanceRole::Select
                         | AffordanceRole::Navigate
                         | AffordanceRole::Digit
+                        | AffordanceRole::Layout
                         | AffordanceRole::Cancel
                         | AffordanceRole::Help
                 )
@@ -194,6 +195,13 @@ fn a_back_action_in_the_footer_sits_leftmost() {
         if a["id"] == "NO" {
             a["role"] = json!("cancel");
         }
+    }
+    // Rows that name no affordance leave YES and NO to the footer.
+    for row in screen["root"]["children"][1]["rows"]
+        .as_array_mut()
+        .unwrap()
+    {
+        row.as_object_mut().unwrap().remove("affordance");
     }
     let h = shown(&screen, LARGE);
     // The footer comes after the list, whose rows read the same.

@@ -12,8 +12,9 @@ const HELP: &str = "?";
 
 /// The footer's buttons on one row: the back first, the confirm last with the help before it, and the other
 /// actions between in the engine's order, as many as the row has room for and the rest in a menu. The navigation
-/// actions and a counting list's digits are the keys, the wheel and the clicks the client already maps, so they
-/// are not drawn; in a window with a `title_bar` the cancel is its close button and the help is there too.
+/// actions and a counting list's digits are the keys, the wheel and the clicks the client already maps, and the
+/// native window's layout toggles change nothing here, so they are not drawn; in a window with a `title_bar` the
+/// cancel is its close button and the help is there too.
 struct FooterButtons<'a> {
     back: Vec<&'a Affordance>,
     rest: Vec<&'a Affordance>,
@@ -24,9 +25,8 @@ struct FooterButtons<'a> {
 fn footer_buttons<'a>(affordances: &[&'a Affordance], title_bar: bool) -> FooterButtons<'a> {
     let role = |a: &&Affordance, role| a.role == Some(role);
     let shown = affordances.iter().copied().filter(|a| match a.role {
-        Some(AffordanceRole::Select | AffordanceRole::Navigate | AffordanceRole::Digit) => false,
         Some(AffordanceRole::Cancel | AffordanceRole::Help) => !title_bar,
-        _ => true,
+        _ => drawn_button(a),
     });
     let (help, actions): (Vec<_>, Vec<_>) = shown.partition(|a| role(a, AffordanceRole::Help));
     let (back, actions): (Vec<_>, Vec<_>) = actions
@@ -248,10 +248,16 @@ impl<M: GameModel> App<M> {
     }
 }
 
-/// Whether `a` is drawn as a button: picking, moving and digits run from their rows and keys instead.
+/// Whether `a` is drawn as a button: picking, moving and digits run from their rows and keys instead, and what
+/// only rearranges the native window changes nothing here.
 pub(super) fn drawn_button(a: &Affordance) -> bool {
     !matches!(
         a.role,
-        Some(AffordanceRole::Select | AffordanceRole::Navigate | AffordanceRole::Digit)
+        Some(
+            AffordanceRole::Select
+                | AffordanceRole::Navigate
+                | AffordanceRole::Digit
+                | AffordanceRole::Layout
+        )
     )
 }

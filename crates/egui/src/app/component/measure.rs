@@ -104,9 +104,10 @@ impl<M: GameModel> App<M> {
                 inside(&tabs.child).map_or(row, |child| stacked(row, child))
             }
             Component::Split(split) => {
-                let parts = split
-                    .children
-                    .iter()
+                let (headings, parts) =
+                    split.children.iter().partition::<Vec<_>, _>(|c| heading(c));
+                let parts = parts
+                    .into_iter()
                     .map(|c| with_margin(self.extent(ui, c, room)))
                     .collect::<Vec<_>>();
                 // Peers wrap onto further lines, so they need only the room of their widest.
@@ -116,12 +117,16 @@ impl<M: GameModel> App<M> {
                         parts.iter().map(|p| p.min).sum::<f32>() + split::gaps(parts.len(), gap)
                     }
                 };
-                Extent {
+                let beside = Extent {
                     min,
                     natural: parts.iter().map(|p| p.natural).sum::<f32>()
                         + split::gaps(parts.len(), gap),
                     grows: parts.iter().any(|p| p.grows),
-                }
+                };
+                headings
+                    .into_iter()
+                    .map(|c| self.extent(ui, c, room))
+                    .fold(beside, stacked)
             }
             Component::Panel(panel) => {
                 let frame = section::margin_width();

@@ -133,6 +133,11 @@ fn prose(c: &Component) -> bool {
     }
 }
 
+/// Whether `c` heads its split above the parts: the screen's banner, or the question the parts answer.
+fn heading(c: &Component) -> bool {
+    matches!(c, Component::Text(t) if matches!(t.role, Some(TextRole::Banner | TextRole::Prompt)))
+}
+
 /// Whether the rows of one of the screen's lists run the affordance, on a double click or Enter.
 fn run_by_rows(screen: &Screen, affordance: &Affordance) -> bool {
     let lists = screen.root.iter().flat_map(Component::nested);
@@ -156,7 +161,21 @@ fn claimed(root: &Component) -> HashSet<&str> {
                 Component::List(l) => l.activate.as_deref(),
                 _ => None,
             };
-            c.head().affordances.iter().map(String::as_str).chain(extra)
+            // A row that does what an affordance does offers it, so it is no button either.
+            let rows = match c {
+                Component::List(l) => l
+                    .rows
+                    .iter()
+                    .filter_map(|r| r.affordance.as_deref())
+                    .collect(),
+                _ => vec![],
+            };
+            c.head()
+                .affordances
+                .iter()
+                .map(String::as_str)
+                .chain(extra)
+                .chain(rows)
         })
         .collect()
 }
@@ -481,12 +500,11 @@ impl<M: GameModel> App<M> {
                 }
             }
             Component::Split(split) => {
-                // A banner is the screen's heading: it sits above the parts, whatever their number.
-                let (banners, parts) = split.children.iter().partition::<Vec<_>, _>(
-                    |c| matches!(c, Component::Text(t) if t.role == Some(TextRole::Banner)),
-                );
-                for banner in banners {
-                    self.component(ui, screen, banner, out);
+                // A banner and a prompt head the parts, whatever their number.
+                let (headings, parts) =
+                    split.children.iter().partition::<Vec<_>, _>(|c| heading(c));
+                for heading in headings {
+                    self.component(ui, screen, heading, out);
                 }
                 self.split(ui, screen, split, &parts, out);
             }
