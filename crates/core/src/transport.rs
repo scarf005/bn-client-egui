@@ -106,7 +106,7 @@ impl Trace {
     }
 }
 
-/// Which user and config directories the engine runs with.
+/// Which user and config directories the engine runs with, and the seed of its random numbers.
 #[derive(clap::Args, Clone, Debug, Default, PartialEq, Eq)]
 pub struct Profile {
     /// Run in a private throwaway profile deleted on exit, instead of the engine's own default profile
@@ -118,6 +118,9 @@ pub struct Profile {
     /// Engine `--configdir` (options, keybindings); ignored with --fresh-profile
     #[arg(long, value_name = "PATH")]
     pub configdir: Option<PathBuf>,
+    /// Engine `--seed`: the same seed starts the same world and the same game
+    #[arg(long, value_name = "TEXT", env = "BN_SEED")]
+    pub seed: Option<String>,
 }
 
 impl Profile {
@@ -191,6 +194,9 @@ impl StdioTransport {
         }
         if let Some(config) = &configdir {
             command.arg("--configdir").arg(dir_arg(config));
+        }
+        if let Some(seed) = &profile.seed {
+            command.arg("--seed").arg(seed);
         }
         let mut child = command
             .stdin(Stdio::piped())

@@ -67,6 +67,7 @@ fn the_menu_and_walking_play_the_engines_sound_pack() {
                     fresh: false,
                     userdir: Some(dir.join("user")),
                     configdir: Some(dir.join("config")),
+                    ..Profile::default()
                 },
             )
             .expect("engine starts")

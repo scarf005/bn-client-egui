@@ -24,7 +24,8 @@ pub fn root() -> PathBuf {
 }
 
 /// A new engine in a profile of its own whose game language is English: tests name what they pick by its
-/// English label, whatever the language of the machine they run on.
+/// English label, whatever the language of the machine they run on. It runs on the seed `BN_SEED`, else
+/// `live`, so a new game starts in the same place every run.
 pub fn english_transport() -> StdioTransport {
     static SPAWNED: AtomicUsize = AtomicUsize::new(0);
     let n = SPAWNED.fetch_add(1, Ordering::Relaxed);
@@ -40,6 +41,7 @@ pub fn english_transport() -> StdioTransport {
         fresh: false,
         userdir: Some(dir),
         configdir: Some(config),
+        seed: Some(std::env::var("BN_SEED").unwrap_or_else(|_| "live".into())),
     };
     StdioTransport::spawn_with(&engine(), &profile).expect("engine starts")
 }

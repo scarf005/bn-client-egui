@@ -23,7 +23,8 @@ else the nearest ancestor of the chosen engine containing `data/json`. So run on
 The engine is started as `<engine> --client mcp` on its own default user and config directories, so your
 saves, options and keybindings are used (Load tab, Save and Quit work as in Tiles). `--userdir PATH` /
 `--configdir PATH` override them; `--fresh-profile` (or `BN_FRESH_PROFILE=1`) uses a private throwaway profile.
-Live tests always use one.
+Live tests always use one. `--seed TEXT` (or `BN_SEED`) passes the engine's `--seed`, so the same seed starts the
+same world and game; live tests run on `BN_SEED`, else `live`.
 
 Sound: the egui client plays the sound effects, ambience and music the engine asks for from the sound pack its
 `Choose soundpack` option picks (off with `Sound Enabled`; volumes from the engine's volume options).

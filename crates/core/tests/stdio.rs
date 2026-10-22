@@ -127,6 +127,15 @@ fn explicit_dirs_end_in_a_separator_because_the_engine_appends_file_names_to_the
     );
 }
 
+#[test]
+fn a_seed_reaches_the_engine_so_the_same_seed_starts_the_same_game() {
+    let profile = Profile {
+        seed: Some("live".into()),
+        ..Profile::default()
+    };
+    assert_eq!(args_of(Some(&profile)), "--client mcp --seed live");
+}
+
 #[derive(Parser)]
 struct Cli {
     #[command(flatten)]
