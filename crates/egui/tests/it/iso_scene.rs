@@ -55,11 +55,13 @@ fn all(scene: &Scene) -> Vec<Instance> {
         .collect()
 }
 
-/// The quads that are not boards.
+/// The quads that are not boards and not the avatar's, who stands in every model.
 fn planes(scene: &Scene) -> Vec<Instance> {
+    let (x, y) = square(&model(vec![]), (3, 4));
     all(scene)
         .into_iter()
         .filter(|i| i.flags[0] & BOARD == 0)
+        .filter(|i| i.origin[0].floor() != x as f32 || i.origin[1].floor() != y as f32)
         .collect()
 }
 
@@ -466,23 +468,48 @@ fn a_tree_drawn_from_above_stands_on_the_ground_its_own_sprites_draw_in_its_squa
 }
 
 #[test]
-fn a_flower_drawn_from_above_lies_over_the_ground_where_a_person_drawn_alike_stands() {
+fn a_flower_drawn_from_above_is_a_thin_solid_over_the_ground_where_a_person_drawn_alike_is_thicker()
+{
     let mut flower = cell(4, 4, 0, "t_grass");
     flower["furniture"] = look("furniture", "f_flower");
     let m = model(vec![flower, cell(3, 4, 0, "t_grass")]);
     let scene = flat_scene_of(&m, "flat-flower");
     let quads = at(&scene, &m, (4, 4));
-    assert_eq!(quads.len(), 2, "{quads:?}");
+    // The grass, and the flower's top, bottom and four sides.
+    assert_eq!(quads.len(), 1 + 2 + 4, "{quads:?}");
     assert!(quads.iter().all(|i| i.flags[0] & BOARD == 0), "{quads:?}");
     let (grass, flower) = (quads[0], quads[1]);
     // Only its eight pixels across lie where the flat map draws them, over the grass.
     let [x, y] = corner(&m, (4, 4));
     assert_eq!(flower.origin[..2], [x + 12.0 / 32.0, y + 12.0 / 32.0]);
     assert_eq!(flower.a[0], 8.0 / 32.0);
+    assert!((flower.origin[2] - 0.1).abs() < 0.01, "{quads:?}");
     assert!(flower.origin[2] > grass.origin[2], "{quads:?}");
-    // The avatar at (3, 4) is a person drawn with the same sprite: a creature stands.
+    // The avatar at (3, 4) is a person drawn with the same sprite: a creature is thick, not a board.
     let me = at(&scene, &m, (3, 4));
-    assert!(me.iter().any(|i| i.flags[0] & BOARD != 0), "{me:?}");
+    assert!(me.iter().all(|i| i.flags[0] & BOARD == 0), "{me:?}");
+    assert_eq!(sides(&me).len(), 4, "{me:?}");
+    assert!(
+        sides(&me).iter().all(|i| (i.b[2] + 0.4).abs() < 0.01),
+        "{me:?}"
+    );
+}
+
+#[test]
+fn an_item_lying_on_the_ground_of_a_tileset_drawn_from_above_has_the_thickness_of_its_pixels() {
+    let mut pile = cell(4, 4, 0, "t_grass");
+    pile["items"] = json!([look("item", "f_flower")]);
+    let m = model(vec![pile]);
+    let scene = flat_scene_of(&m, "flat-item");
+    let quads = at(&scene, &m, (4, 4));
+    // The grass, and the item's top, bottom and the four sides of its eight pixels across.
+    assert_eq!(quads.len(), 1 + 2 + 4, "{quads:?}");
+    assert!(quads.iter().all(|i| i.flags[0] & BOARD == 0), "{quads:?}");
+    assert_eq!(sides(&quads).len(), 4, "{quads:?}");
+    assert!(
+        sides(&quads).iter().all(|i| (i.b[2] + 0.1).abs() < 0.01),
+        "{quads:?}"
+    );
 }
 
 /// A square of terrain `id` the engine calls a wall.

@@ -252,7 +252,9 @@ pub fn shape(m: &Metrics, sprite: &SpriteSource, kind: Kind) -> Shape {
         let block = m.level / LEVEL_BLOCKS;
         return match (kind, inside) {
             (Kind::Formed(form), _) => Shape::Built { form, block },
-            (Kind::Creature, _) | (_, false) => Shape::Board,
+            (_, false) => Shape::Board,
+            (Kind::Creature, true) => Shape::Extrude { top: CREATURE },
+            (Kind::Item, true) => Shape::Extrude { top: ITEM },
             (Kind::Wall { .. }, true) => Shape::Blocks { top: m.level },
             (Kind::Window, true) => Shape::Window {
                 sill: SILL * m.level,
@@ -1098,8 +1100,12 @@ mod tests {
             assert_eq!(shape(&flat, &tall, kind), Shape::Board);
             assert_eq!(shape(&flat, &wide, kind), Shape::Board);
         }
-        // A creature stands however small it is.
-        assert_eq!(shape(&flat, &small, Kind::Creature), Shape::Board);
+        // A creature inside its square is thick, one that reaches out of it stands.
+        assert_eq!(
+            shape(&flat, &small, Kind::Creature),
+            Shape::Extrude { top: CREATURE }
+        );
+        assert_eq!(shape(&flat, &tall, Kind::Creature), Shape::Board);
     }
 
     #[test]
@@ -1500,7 +1506,7 @@ mod tests {
             page: PAGE,
             at: Vec2::new(32.0, 16.0),
             src: Vec2::new(16.0, 16.0),
-            offset: Vec2::ZERO,
+            offset: Vec2::new(0.0, -4.0),
             scale: 1.0,
         };
         let board = |turn| {
