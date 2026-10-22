@@ -67,6 +67,8 @@ pub(super) struct Screens {
     overmap: RefCell<Vec<OvermapPaint>>,
     /// A panel window is being drawn: its screen takes no command, so its tabs and rows only move its focus.
     pub(super) passive: bool,
+    /// The row to choose once the filter prompt that showed it has confirmed its text.
+    reach: Option<String>,
     /// The most rows the lists drawn now show before they scroll, when fewer than their room holds.
     list_rows: std::cell::Cell<Option<usize>>,
 }
@@ -112,6 +114,8 @@ enum Intent {
     More(String),
     /// A row of a list that runs nothing was double-clicked.
     Open,
+    /// A result row of a list filter's prompt was clicked: confirm the text, then choose the row.
+    Reach(String),
     Text(String),
     Pane(String),
     Confirm,
@@ -210,6 +214,33 @@ impl<M: GameModel> App<M> {
         if let Some((id, args)) = self.screens.interaction.take_select() {
             let _ = self.model.invoke_affordance(&id, args);
         }
+        self.reach_row();
+    }
+
+    /// Chooses the row a filter's result click named once the prompt is gone and the list has it; a list that
+    /// lacks it, or is not a list, ends the wait.
+    fn reach_row(&mut self) {
+        let Some(row) = self.screens.reach.clone() else {
+            return;
+        };
+        let Some(top) = interaction::described(self.model.screens()) else {
+            return;
+        };
+        if form::filter_submit(top).is_some() {
+            return;
+        }
+        self.screens.reach = None;
+        let found = top.components().into_iter().find_map(|c| match c {
+            Component::List(list) if self.model.rows(list).iter().any(|r| r.id == row) => {
+                Some((list.head.id.clone(), list.activate.clone()))
+            }
+            _ => None,
+        });
+        if let Some((component, Some(activate))) = found {
+            self.screens.interaction.focus_row(&component, &row);
+            let out = self.screens.interaction.activate(top, &activate);
+            self.settle(out);
+        }
     }
 
     /// The screen on top drawn from its components when the engine describes it so, else the 0.1 menu.
@@ -255,10 +286,11 @@ impl<M: GameModel> App<M> {
         self.sync_screens();
         let pages = self.screens.list_pages.borrow().clone();
         let keys = super::input::frame_keys(ctx).into_iter().map(|k| k.token);
-        // A text box has the typing; its keys are not the screen's, except Escape, which closes the screen.
+        // A text box has the typing; its keys are not the screen's, except Escape, which closes the screen (a filled filter box clears first).
         let typing = ctx.text_edit_focused();
+        let clears = crate::editor::clears_on_escape(ctx);
         let keys = keys
-            .filter(|key| !typing || key == "ESC")
+            .filter(|key| !typing || (key == "ESC" && !clears))
             .collect::<Vec<_>>();
         // A Tab the screen takes is its own: egui must not also walk its focus onto a widget. Any other Tab
         // walks egui's focus over the buttons.
@@ -327,6 +359,13 @@ impl<M: GameModel> App<M> {
             Intent::Text(typed) => return interaction.answer_text(&typed),
             Intent::Cancel => return interaction.cancel(),
             Intent::Open => return,
+            Intent::Reach(row) => {
+                let Some(confirm) = form::filter_submit(top) else {
+                    return;
+                };
+                self.screens.reach = Some(row);
+                return self.apply(confirm);
+            }
             Intent::Run(id) => interaction.activate(top, &id),
             Intent::Move { affordance, at } => {
                 let args = InvokeArgs {

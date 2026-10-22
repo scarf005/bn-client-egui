@@ -80,13 +80,18 @@ fn typed(script: &ScriptHandle) -> Vec<(String, bool)> {
         .collect()
 }
 
+/// The engine shows `screen` alone, as revision `revision`.
+fn screen_event(screen: Value, revision: u32) -> Value {
+    json!({"jsonrpc": "2.0", "method": "bn.events", "params": {"epoch": "e7f3", "events": [{
+        "sequence": (revision + 9).to_string(), "revision": revision.to_string(),
+        "type": "interaction.changed", "changes": {"interaction": boundary(screen, revision)}}]}})
+}
+
 /// The prompt of the example with the engine showing `value`, as revision `revision`.
 fn prompt_event(value: &str, revision: u32) -> Value {
     let mut screen = example("filter prompt before typing");
     screen["root"]["children"][0]["fields"][0]["value"] = value.into();
-    json!({"jsonrpc": "2.0", "method": "bn.events", "params": {"epoch": "e7f3", "events": [{
-        "sequence": (revision + 9).to_string(), "revision": revision.to_string(),
-        "type": "interaction.changed", "changes": {"interaction": boundary(screen, revision)}}]}})
+    screen_event(screen, revision)
 }
 
 /// The engine takes the `n`th command sent (from 1) and finishes it.
@@ -129,13 +134,44 @@ fn a_list_that_is_not_filterable_offers_no_filter() {
 }
 
 #[test]
-fn the_filter_prompt_shows_the_rows_the_text_leaves_and_they_are_not_choices() {
-    let (mut h, script) = harness(example("filter prompt after typing"));
+fn the_filter_prompt_shows_the_rows_the_text_leaves() {
+    let (h, _) = harness(example("filter prompt after typing"));
     h.get_by_label("Teleport…");
     assert!(h.query_by_label("Info…").is_none());
+}
+
+#[test]
+fn a_click_on_a_filter_result_confirms_the_text_and_then_chooses_that_row() {
+    let (mut h, script) = harness(example("filter prompt after typing"));
     h.get_by_label("Teleport…").click();
     h.run_steps(3);
-    assert!(operations(&script).is_empty(), "{:?}", operations(&script));
+    assert_eq!(typed(&script), [("tele".to_string(), true)]);
+    let mut list = example("filterable list screen");
+    list["screen_id"] = "screen:13".into();
+    script.push(screen_event(list, 32));
+    finish(&script, 1, "c:5");
+    h.run_steps(4);
+    let ops = operations(&script);
+    assert_eq!(
+        ops.last().unwrap()["affordance_id"],
+        "bn:choose:list:choices",
+        "{ops:?}"
+    );
+    assert_eq!(ops.last().unwrap()["args"]["row"], "entry:4", "{ops:?}");
+}
+
+#[test]
+fn a_click_on_a_result_of_a_prompt_whose_filter_matches_nothing_chooses_nothing() {
+    let (mut h, script) = harness(example("filter prompt after typing"));
+    h.get_by_label("Teleport…").click();
+    h.run_steps(3);
+    let mut list = example("filterable list screen");
+    list["screen_id"] = "screen:13".into();
+    list["root"]["children"][1]["rows"] = json!([]);
+    script.push(screen_event(list, 32));
+    finish(&script, 1, "c:5");
+    h.run_steps(4);
+    assert_eq!(operations(&script).len(), 1, "{:?}", operations(&script));
 }
 
 #[test]
@@ -233,6 +269,37 @@ fn escape_in_the_prompt_cancels_it() {
     assert_eq!(
         operations(&script),
         [json!({"kind": "invoke", "affordance_id": "bn:cancel", "args": {}})]
+    );
+}
+
+#[test]
+fn escape_in_a_filled_prompt_empties_it_and_a_second_escape_cancels() {
+    let (mut h, script) = harness(example("filter prompt before typing"));
+    field(&h).focus();
+    h.run_steps(2);
+    field(&h).type_text("tele");
+    h.run_steps(3);
+    finish(&script, 1, "c:5");
+    h.run_steps(3);
+    h.key_press(egui::Key::Escape);
+    h.run_steps(3);
+    let ops = operations(&script);
+    assert_eq!(ops.last().unwrap()["args"]["text"], "", "{ops:?}");
+    assert!(
+        !operations(&script)
+            .iter()
+            .any(|op| op["affordance_id"] == "bn:cancel"),
+        "the first Escape only clears: {:?}",
+        operations(&script)
+    );
+    finish(&script, 2, "c:6");
+    h.run_steps(3);
+    h.key_press(egui::Key::Escape);
+    h.run_steps(3);
+    assert!(
+        operations(&script)
+            .iter()
+            .any(|op| op["affordance_id"] == "bn:cancel")
     );
 }
 

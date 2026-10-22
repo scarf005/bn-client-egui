@@ -25,6 +25,9 @@ struct RowLayout<'a> {
     across: egui::Rect,
     /// The list is the one of a dialog with no detail beside it, whose rows a single click answers.
     answers: bool,
+    /// The screen is a list filter's prompt: a row it shows is a result, and a click on one confirms the text and
+    /// then chooses that row of the list.
+    filter: bool,
 }
 
 impl<M: GameModel> App<M> {
@@ -194,6 +197,7 @@ impl<M: GameModel> App<M> {
                 wraps,
                 across: body.max_rect(),
                 answers: screen.role == ScreenRole::Dialog && Self::asks(screen),
+                filter: form::filter_submit(screen).is_some(),
             };
             body.heterogeneous_rows(heights.iter().copied(), |row| {
                 let at = row.index();
@@ -281,7 +285,8 @@ impl<M: GameModel> App<M> {
             .picks(id)
             .iter()
             .find(|p| p.id == row.id);
-        let on = row.enabled && row.selectable;
+        let result = layout.filter && row.enabled && !row.selectable;
+        let on = row.enabled && (row.selectable || result);
         let highlighted = cursor == Some(row.id.as_str()) || (cursor.is_none() && row.selected);
         cells.set_selected(highlighted);
         // The row's text is drawn on the selection bar when it is highlighted.
@@ -408,7 +413,9 @@ impl<M: GameModel> App<M> {
             (false, false) => button.on_disabled_hover_text(denial),
             _ => button,
         };
-        if button.clicked() {
+        if button.clicked() && result {
+            out.push(Intent::Reach(row.id.clone()));
+        } else if button.clicked() {
             out.push(Intent::Focus {
                 component: id.clone(),
                 row: row.id.clone(),
