@@ -217,6 +217,7 @@ impl EngineModel {
                     fifths: h.fifths,
                     color: self.colors.resolve(&h.color).0,
                 }),
+                hostile: e.attitude.as_deref() == Some("hostile"),
                 depth: below.unwrap_or(0),
                 ..self.styled(look, desc)
             };
