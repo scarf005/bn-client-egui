@@ -154,7 +154,11 @@ fn a_screen_is_as_tall_as_its_content_and_leaves_the_map_visible() {
         let (h, _) = playing(size, example("inventory", "drop selector screen"), None);
         let window = window_of(&h, "inventory");
         let region = region(&h);
-        let last = buttons(&h, &["Confirm your selection"])[0];
+        // The footer may wrap (F11): its last row is where the content ends.
+        let last = buttons(&h, &["Confirm your selection", "Examine item"])
+            .into_iter()
+            .max_by(|a, b| a.bottom().total_cmp(&b.bottom()))
+            .unwrap();
         assert!(
             window.bottom() - last.bottom() < 40.0,
             "{size:?}: {window:?} runs past its footer at {last:?}"
