@@ -34,6 +34,10 @@ fn boundary(screen: Value, revision: u32) -> Value {
 }
 
 fn harness<'a>(screen: Value) -> (H<'a>, ScriptHandle) {
+    harness_in(screen, egui::vec2(1100.0, 800.0))
+}
+
+fn harness_in<'a>(screen: Value, size: egui::Vec2) -> (H<'a>, ScriptHandle) {
     let mut subscribe = fixture("subscribe_result");
     subscribe["result"]["interaction"] = boundary(screen, 12);
     let reply = vec![
@@ -48,12 +52,10 @@ fn harness<'a>(screen: Value) -> (H<'a>, ScriptHandle) {
         .on("bn.subscribe", reply);
     let clock = Clock::manual();
     let model = EngineModel::open(Box::new(t), ConnectOptions::default()).with_clock(clock.clone());
-    let mut harness = Harness::builder()
-        .with_size(egui::vec2(1100.0, 800.0))
-        .build_ui_state(
-            |ui, app: &mut App<EngineModel>| app.show(ui),
-            App::new(model).with_clock(clock),
-        );
+    let mut harness = Harness::builder().with_size(size).build_ui_state(
+        |ui, app: &mut App<EngineModel>| app.show(ui),
+        App::new(model).with_clock(clock),
+    );
     harness.run_steps(4);
     (harness, script)
 }
@@ -140,6 +142,52 @@ fn the_filter_prompt_shows_the_rows_the_text_leaves() {
     assert!(h.query_by_label("Info…").is_none());
 }
 
+/// The player drags the window's bottom edge up by `by` points.
+fn shrink_from_below(h: &mut H, by: f32) {
+    let window = h.get_by_role(egui::accesskit::Role::Window).rect();
+    let bottom = window.center_bottom() - egui::vec2(0.0, 2.0);
+    for (at, pressed) in [(bottom, true), (bottom - egui::vec2(0.0, by), false)] {
+        h.hover_at(at);
+        h.run_steps(2);
+        h.event(egui::Event::PointerButton {
+            pos: at,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        });
+        h.run_steps(2);
+    }
+}
+
+#[test]
+fn the_description_of_the_selected_row_shows_in_full_under_a_list_in_a_window_of_the_first_size() {
+    let mut screen = example("filterable list screen");
+    let text = (1..=8)
+        .map(|n| format!("detail line {n}"))
+        .collect::<Vec<_>>();
+    // A long list, as the spawn menu's: more rows than its share of the window holds.
+    let list = &mut screen["root"]["children"][1];
+    list["rows"][0]["description"] = text.join("\n").into();
+    let row = list["rows"][7].clone();
+    let more = (0..22).map(|n| {
+        let mut row = row.clone();
+        row["id"] = format!("entry:{}", 100 + n).into();
+        row["selected"] = false.into();
+        row
+    });
+    list["rows"].as_array_mut().unwrap().extend(more);
+    list["total"] = 30.into();
+    let (mut h, _) = harness_in(screen, egui::vec2(800.0, 800.0));
+    shrink_from_below(&mut h, 100.0);
+    let first = h.get_by_label_contains("detail line 1").rect();
+    let window = h.get_by_role(egui::accesskit::Role::Window).rect();
+    // Room for at least five of the description's lines (a line is about 18 points) above the window's end.
+    assert!(
+        window.bottom() - first.top() >= 5.0 * 18.0,
+        "{first:?} in {window:?}"
+    );
+}
+
 #[test]
 fn the_filter_prompt_has_no_buttons_for_the_keys_that_edit_its_text() {
     let (h, _) = harness(example("filter prompt before typing"));
@@ -152,19 +200,7 @@ fn the_filter_prompt_has_no_buttons_for_the_keys_that_edit_its_text() {
 fn the_filter_prompt_is_the_window_of_the_list_it_filters_with_its_box_above_the_results() {
     let (mut h, script) = harness(example("filterable list screen"));
     let window = |h: &H| h.get_by_role(egui::accesskit::Role::Window).rect();
-    // The player shrinks the window by its bottom edge.
-    let bottom = window(&h).center_bottom() - egui::vec2(0.0, 2.0);
-    for (at, pressed) in [(bottom, true), (bottom - egui::vec2(0.0, 120.0), false)] {
-        h.hover_at(at);
-        h.run_steps(2);
-        h.event(egui::Event::PointerButton {
-            pos: at,
-            button: egui::PointerButton::Primary,
-            pressed,
-            modifiers: egui::Modifiers::NONE,
-        });
-        h.run_steps(2);
-    }
+    shrink_from_below(&mut h, 120.0);
     let before = window(&h);
     assert!(before.height() < 680.0, "{before:?}");
     let mut prompt = example("filter prompt after typing");
