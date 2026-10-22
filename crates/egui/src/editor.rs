@@ -12,6 +12,20 @@ struct Draft {
     text: String,
 }
 
+/// The space between a field's frame and its text, on each side.
+const FIELD_MARGIN: egui::Margin = egui::Margin::symmetric(4, 2);
+
+/// The width a one-line field takes to show the whole of `value`.
+pub fn field_width(ui: &egui::Ui, value: &str) -> f32 {
+    let font = egui::TextStyle::Body.resolve(ui.style());
+    let text = ui
+        .painter()
+        .layout_no_wrap(value.into(), font, egui::Color32::WHITE)
+        .size()
+        .x;
+    text + FIELD_MARGIN.sum().x
+}
+
 /// Draws the control for `editor` next to `label`; returns the new value once it is committed.
 pub fn value_editor(
     ui: &mut egui::Ui,
@@ -59,11 +73,14 @@ pub fn value_editor(
             }
             _ => {
                 ui.label(label);
-                let edit = ui.add(if editor.multiline {
-                    egui::TextEdit::multiline(&mut draft.text)
-                } else {
-                    egui::TextEdit::singleline(&mut draft.text)
-                });
+                // A one-line field widens to its whole value rather than cut it.
+                let edit = ui.add(
+                    match editor.multiline {
+                        true => egui::TextEdit::multiline(&mut draft.text),
+                        false => egui::TextEdit::singleline(&mut draft.text).clip_text(false),
+                    }
+                    .margin(FIELD_MARGIN),
+                );
                 edit.widget_info(|| {
                     egui::WidgetInfo::text_edit(true, draft.text.clone(), draft.text.clone(), label)
                 });

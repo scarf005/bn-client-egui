@@ -154,11 +154,22 @@ impl<M: GameModel> App<M> {
                     .iter()
                     .map(|f| text_width(ui, &markup::plain(&f.label.shown()), &font))
                     .fold(0.0, f32::max);
-                let w = label + ui.spacing().text_edit_width;
+                // A one-line field is the theme's width, or wider to show its whole value.
+                let typed = |f: &&FormField| {
+                    matches!(
+                        f.kind,
+                        FieldKind::Text | FieldKind::Integer | FieldKind::Float
+                    ) && f.multiline != Some(true)
+                };
+                let field = form
+                    .fields
+                    .iter()
+                    .filter(typed)
+                    .map(|f| editor::field_width(ui, &f.value))
+                    .fold(ui.spacing().text_edit_width, f32::max);
                 Extent {
-                    min: w,
-                    natural: w,
                     grows: true,
+                    ..fixed(label + gap + field)
                 }
             }
             Component::Text(block) => {
