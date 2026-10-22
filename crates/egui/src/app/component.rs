@@ -81,7 +81,8 @@ pub(super) struct Screens {
 /// A square of a canvas grid a drag runs its affordance on.
 struct Paint {
     component: String,
-    row: String,
+    /// The square's row; none for the affordance that opens or closes a drag.
+    row: Option<String>,
     affordance: String,
 }
 
@@ -298,7 +299,9 @@ impl<M: GameModel> App<M> {
                 return self.screens.paints.clear();
             };
             let interaction = &mut self.screens.interaction;
-            interaction.focus_row(&paint.component, &paint.row);
+            if let Some(row) = &paint.row {
+                interaction.focus_row(&paint.component, row);
+            }
             let out = interaction.activate(top, &paint.affordance);
             self.screens.denial = out.note();
             if let Some((id, args)) = out.invoke {
@@ -1083,23 +1086,37 @@ impl<M: GameModel> App<M> {
             .ctx()
             .layer_id_at(ui.input(|i| i.pointer.interact_pos()).unwrap_or_default())
             == Some(ui.layer_id());
-        for at in drag::advance(
+        let was_held = held.is_some();
+        let run = drag::advance(
             mode,
             &mut held,
             drag::Pointer {
                 pressed: pointer.pressed && on_top,
                 ..pointer
             },
-        ) {
+        );
+        let marker = |affordance: &Option<String>| {
+            affordance.clone().map(|affordance| {
+                Intent::Paint(Paint {
+                    component: grid.head.id.clone(),
+                    row: None,
+                    affordance,
+                })
+            })
+        };
+        // A drag begins on the press and ends on the frame that lets go of it.
+        out.extend(marker(&grid.drag_begin).filter(|_| !was_held && held.is_some()));
+        for at in run {
             let Some((_, row, affordance)) = squares.get(&at) else {
                 continue;
             };
             out.push(Intent::Paint(Paint {
                 component: grid.head.id.clone(),
-                row: row.clone(),
+                row: Some(row.clone()),
                 affordance: affordance.clone(),
             }));
         }
+        out.extend(marker(&grid.drag_end).filter(|_| was_held && held.is_none()));
         ui.data_mut(|d| d.insert_temp(key, held));
     }
 }

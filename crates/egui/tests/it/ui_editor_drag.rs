@@ -29,9 +29,24 @@ fn editor(drag: Option<&str>) -> Value {
     canvas["cols"] = json!(12);
     canvas["rows"] = json!(12);
     canvas["drag"] = json!(drag);
+    if drag == Some("trail") {
+        canvas["drag_begin"] = json!("editor:stroke_begin");
+        canvas["drag_end"] = json!("editor:stroke_end");
+    }
     canvas["cells"] = (0..12)
         .flat_map(|y| (0..12).map(move |x| json!({ "x": x, "y": y, "id": format!("square:{x},{y}"), "glyph": ".", "affordance": "editor:paint", "enabled": true })))
         .collect();
+    let affordances = screen["affordances"].as_array_mut().unwrap();
+    for id in ["editor:stroke_begin", "editor:stroke_end"] {
+        let mut stroke = affordances
+            .iter()
+            .find(|a| a["id"] == "editor:paint")
+            .unwrap()
+            .clone();
+        stroke["id"] = json!(id);
+        stroke["args"] = json!({});
+        affordances.push(stroke);
+    }
     screen
 }
 
@@ -89,6 +104,21 @@ fn painted(script: &ScriptHandle) -> Vec<String> {
         .collect()
 }
 
+/// The affordances of the invokes sent so far, in order.
+fn sent(script: &ScriptHandle) -> Vec<String> {
+    script
+        .sent()
+        .into_iter()
+        .filter(|m| m["method"] == "bn.command.submit")
+        .map(|m| {
+            m["params"]["operation"]["affordance_id"]
+                .as_str()
+                .unwrap()
+                .to_owned()
+        })
+        .collect()
+}
+
 /// A square's centre: the squares are drawn in rows from the canvas's top left.
 fn square(h: &H, x: u32, y: u32) -> egui::Pos2 {
     let first = h
@@ -140,6 +170,29 @@ fn a_trail_paints_every_square_the_pointer_crosses() {
             "square:4,3"
         ]
     );
+}
+
+#[test]
+fn a_trail_runs_the_grids_begin_and_end_affordances_around_its_squares() {
+    let (mut h, script) = open(editor(Some("trail")));
+    drag(&mut h, (1, 2), &[(3, 2)]);
+    assert_eq!(
+        sent(&script),
+        [
+            "editor:stroke_begin",
+            "editor:paint",
+            "editor:paint",
+            "editor:paint",
+            "editor:stroke_end"
+        ]
+    );
+}
+
+#[test]
+fn a_span_sends_no_begin_or_end_without_the_grid_naming_them() {
+    let (mut h, script) = open(editor(Some("span")));
+    drag(&mut h, (2, 2), &[(5, 2)]);
+    assert_eq!(sent(&script), ["editor:paint", "editor:paint"]);
 }
 
 #[test]
