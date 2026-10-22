@@ -120,6 +120,50 @@ fn the_look_screen_covers_neither_the_cursor_nor_the_avatar() {
     }
 }
 
+/// The look screen with the engine's cursor `dx` squares east of the avatar and `parts` of what is on its square,
+/// published as the next change of the interaction.
+fn look_moved(h: &H, script: &ScriptHandle, step: u64, dx: i64, parts: usize) {
+    let (origin, me) = (h.state().model.origin(), h.state().model.player());
+    let mut screen = example("look", "look-around screen");
+    let target = &mut screen["root"]["child"]["target"];
+    for (square, at) in [("source", 0), ("current", dx)] {
+        target[square]["x"] = json!(i64::from(origin.x + me.x) + at);
+        target[square]["y"] = json!(origin.y + me.y);
+    }
+    let all = target["parts"].as_array().unwrap().clone();
+    target["parts"] = json!(all.into_iter().take(parts).collect::<Vec<_>>());
+    let map = fixture("subscribe_result")["result"]["interaction"]["stack"][0].clone();
+    script.push(
+        json!({"jsonrpc": "2.0", "method": "bn.events", "params": {"epoch": "e7f3", "events": [{
+        "sequence": (43 + step).to_string(), "revision": (34 + step).to_string(),
+        "type": "interaction.changed", "changes": {"interaction": {
+        "boundary_id": "b:60",
+        "readiness": {"phase": "playing", "game_ready": true, "accepts_interaction_commands": true,
+            "accepts_registered_actions": true},
+        "actions": [], "interaction": null, "stack": [map, screen]}}}]}}),
+    );
+}
+
+#[test]
+fn the_window_of_a_cursor_screen_keeps_its_place_and_size_as_the_cursor_and_its_content_change() {
+    let size = egui::vec2(1280.0, 800.0);
+    let (mut h, script) = playing(size, Some(example("look", "look-around screen")));
+    crate::common::settle_windows(&mut h);
+    let first = window_of(&h, "look");
+    let steps = [(8, 10), (-8, 1), (8, 0), (-8, 10), (2, 3)];
+    for (step, (dx, parts)) in steps.into_iter().enumerate() {
+        look_moved(&h, &script, step as u64, dx, parts);
+        for frame in 0..8 {
+            h.run_steps(1);
+            assert_eq!(
+                window_of(&h, "look"),
+                first,
+                "cursor {dx} east with {parts} lines, frame {frame}"
+            );
+        }
+    }
+}
+
 #[test]
 fn a_wide_dialog_takes_its_whole_column_and_stays_inside_the_map_room() {
     let size = egui::vec2(1280.0, 800.0);
