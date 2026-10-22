@@ -4,13 +4,13 @@
 //! `BN_ENGINE=<engine> BN_ROOT=<game root with gfx/Ultica_iso> SHOT_DIR=<dir> cargo test --release -p bn-client-egui
 //! --test live_iso3d -- --ignored --nocapture`. `BN_ISO_GPU=1` draws on the machine's discrete GPU, else on the
 //! software rasteriser the snapshot tests use.
-use bn_client_egui::interaction::InvokeError;
+mod common;
 use bn_client_egui::iso::pages::Pages;
 use bn_client_egui::iso::scene;
-use bn_client_egui::protocol::InvokeArgs;
-use bn_client_egui::transport::{StdioTransport, game_root};
+use bn_client_egui::transport::game_root;
 use bn_client_egui::watchdog::Watchdog;
 use bn_client_egui::{App, EngineModel, GameModel, MenuModel};
+use common::live::{choose, dismiss_popups, run_until, save};
 use eframe::egui;
 use egui_kittest::Harness;
 use egui_kittest::kittest::Queryable;
@@ -18,63 +18,9 @@ use std::time::{Duration, Instant};
 
 type H<'a> = Harness<'a, App<EngineModel>>;
 
-fn run_until(h: &mut H, what: &str, secs: u64, mut done: impl FnMut(&H) -> bool) {
-    let mut watchdog = Watchdog::new(Duration::from_secs(secs), Duration::from_secs(900));
-    while !done(h) {
-        assert!(
-            !watchdog.expired(h.state().model.received()),
-            "timed out: {what}; {:?}; {:?}",
-            h.state().model.command(),
-            h.state().model.menu()
-        );
-        h.run_steps(1);
-        std::thread::sleep(Duration::from_millis(30));
-    }
-}
-
-fn choose(h: &mut H, affordance: &str, row: &str) {
-    let offered = |h: &H| {
-        h.state()
-            .model
-            .screens()
-            .last()
-            .is_some_and(|s| s.affordances.iter().any(|a| a.id == affordance))
-    };
-    loop {
-        run_until(h, row, 180, |h| offered(h) && !h.state().model.busy());
-        let args = InvokeArgs {
-            row: Some(row.into()),
-            ..Default::default()
-        };
-        match h.state_mut().model.invoke_affordance(affordance, args) {
-            Err(InvokeError::Busy) => h.run_steps(1),
-            sent => return sent.unwrap_or_else(|e| panic!("{affordance} on {row}: {e:?}")),
-        }
-    }
-}
-
-fn dismiss_popups(h: &mut H) {
-    while let Some(menu) = h.state().model.menu() {
-        match menu.choices.first().map(|c| c.id.clone()) {
-            Some(id) if !menu.can_cancel => h.state_mut().model.choose(&id),
-            _ => h.state_mut().model.cancel_menu(),
-        }
-        run_until(h, "popup", 180, |h| !h.state().model.busy());
-        h.run_steps(3);
-    }
-}
-
 fn percentile(v: &mut [f64], p: f64) -> f64 {
     v.sort_by(f64::total_cmp);
     v[((v.len() as f64 - 1.0) * p).round() as usize]
-}
-
-fn save(h: &mut H, name: &str) {
-    let image = h.render().expect("renders");
-    if let Some(dir) = std::env::var_os("SHOT_DIR") {
-        std::fs::create_dir_all(&dir).unwrap();
-        image.save(std::path::Path::new(&dir).join(name)).unwrap();
-    }
 }
 
 /// Turns the camera 15 degrees `times` times with Alt+Left.
@@ -130,7 +76,7 @@ fn the_town_in_3d_from_every_side_and_what_a_frame_costs() {
         },
     )
     .unwrap();
-    let transport = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
+    let transport = common::live::english_transport();
     let app = App::new(EngineModel::new(Box::new(transport)))
         .with_settings(settings)
         .with_root(root.clone())

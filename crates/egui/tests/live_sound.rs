@@ -69,10 +69,10 @@ fn the_menu_and_walking_play_the_engines_sound_pack() {
                     configdir: Some(dir.join("config")),
                 },
             )
+            .expect("engine starts")
         }
-        None => StdioTransport::spawn_fresh(engine.as_ref()),
-    }
-    .expect("engine starts");
+        None => common::live::english_transport(),
+    };
     let mut h = Harness::builder()
         .with_size(egui::vec2(1300.0, 800.0))
         .build_ui_state(

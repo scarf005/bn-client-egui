@@ -7,9 +7,10 @@
 mod common;
 use bn_client_egui::interaction::InvokeError;
 use bn_client_egui::protocol::{Component, InvokeArgs, ScreenRole};
-use bn_client_egui::transport::{StdioTransport, game_root};
+use bn_client_egui::transport::game_root;
 use bn_client_egui::watchdog::Watchdog;
 use bn_client_egui::{App, EngineModel, GameModel, MenuModel};
+use common::live::{dismiss_popups, settle};
 use eframe::egui;
 use egui_kittest::Harness;
 use std::time::Duration;
@@ -28,13 +29,6 @@ fn run_until(h: &mut H, what: &str, secs: u64, mut done: impl FnMut(&H) -> bool)
                 .last()
                 .map(|s| (&s.kind, &s.title))
         );
-        h.run_steps(1);
-        std::thread::sleep(Duration::from_millis(30));
-    }
-}
-
-fn settle(h: &mut H) {
-    for _ in 0..30 {
         h.run_steps(1);
         std::thread::sleep(Duration::from_millis(30));
     }
@@ -96,21 +90,6 @@ fn text(value: &str) -> InvokeArgs {
         text: Some(value.into()),
         ..Default::default()
     }
-}
-
-fn dismiss_popups(h: &mut H) {
-    for _ in 0..20 {
-        let Some(menu) = h.state().model.menu() else {
-            return;
-        };
-        match menu.choices.first().map(|c| c.id.clone()) {
-            Some(id) if !menu.can_cancel => h.state_mut().model.choose(&id),
-            _ => h.state_mut().model.cancel_menu(),
-        }
-        run_until(h, "popup", 180, |h| !h.state().model.busy());
-        h.run_steps(3);
-    }
-    panic!("a pop-up stays open: {:?}", h.state().model.menu());
 }
 
 /// Pictures of the window at both sizes.
@@ -180,7 +159,7 @@ fn the_map_editor_opens_draws_and_discards() {
     std::fs::create_dir_all(&dir).unwrap();
     let settings = dir.join("settings.json");
     std::fs::write(&settings, r#"{"tiles":true,"tileset":"UltimateCataclysm"}"#).unwrap();
-    let transport = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
+    let transport = common::live::english_transport();
     let app = App::new(EngineModel::new(Box::new(transport)))
         .with_settings(settings)
         .with_root(root.clone())

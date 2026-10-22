@@ -4,11 +4,10 @@
 //! `BN_ENGINE=<engine> SHOT_DIR=<dir> cargo test --release -p bn-client-egui --test live_world_map -- --ignored
 //! --nocapture`
 mod common;
-use bn_client_egui::interaction::InvokeError;
-use bn_client_egui::protocol::InvokeArgs;
-use bn_client_egui::transport::{StdioTransport, game_root};
+use bn_client_egui::transport::game_root;
 use bn_client_egui::watchdog::Watchdog;
-use bn_client_egui::{App, EngineModel, GameModel, MenuModel};
+use bn_client_egui::{App, EngineModel, GameModel};
+use common::live::{choose, dismiss_popups, save};
 use eframe::egui;
 use egui_kittest::Harness;
 use egui_kittest::kittest::Queryable;
@@ -28,46 +27,6 @@ fn run_until(h: &mut H, what: &str, secs: u64, mut done: impl FnMut(&H) -> bool)
     }
 }
 
-fn choose(h: &mut H, affordance: &str, row: &str) {
-    let offered = |h: &H| {
-        h.state()
-            .model
-            .screens()
-            .last()
-            .is_some_and(|s| s.affordances.iter().any(|a| a.id == affordance))
-    };
-    loop {
-        run_until(h, row, 180, |h| offered(h) && !h.state().model.busy());
-        let args = InvokeArgs {
-            row: Some(row.into()),
-            ..Default::default()
-        };
-        match h.state_mut().model.invoke_affordance(affordance, args) {
-            Err(InvokeError::Busy) => h.run_steps(1),
-            sent => return sent.unwrap_or_else(|e| panic!("{affordance} on {row}: {e:?}")),
-        }
-    }
-}
-
-fn dismiss_popups(h: &mut H) {
-    while let Some(menu) = h.state().model.menu() {
-        match menu.choices.first().map(|c| c.id.clone()) {
-            Some(id) if !menu.can_cancel => h.state_mut().model.choose(&id),
-            _ => h.state_mut().model.cancel_menu(),
-        }
-        run_until(h, "popup", 180, |h| !h.state().model.busy());
-        h.run_steps(3);
-    }
-}
-
-fn save(h: &mut H, name: &str) {
-    let image = h.render().expect("renders");
-    if let Some(dir) = std::env::var_os("SHOT_DIR") {
-        std::fs::create_dir_all(&dir).unwrap();
-        image.save(std::path::Path::new(&dir).join(name)).unwrap();
-    }
-}
-
 fn key(h: &mut H, text: &str) {
     h.event(egui::Event::Text(text.into()));
     h.run_steps(2);
@@ -82,7 +41,7 @@ fn the_player_walks_with_the_map_window_open() {
     std::fs::create_dir_all(&dir).unwrap();
     let settings = dir.join("settings.json");
     std::fs::write(&settings, r#"{"tiles":false,"tileset":null}"#).unwrap();
-    let transport = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
+    let transport = common::live::english_transport();
     let app = App::new(EngineModel::new(Box::new(transport)))
         .with_settings(settings)
         .with_root(root);

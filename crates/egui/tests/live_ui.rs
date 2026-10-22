@@ -1,7 +1,6 @@
 //! Needs a real engine build: `BN_ENGINE=/path/to/cataclysm-bn-tiles cargo test -p bn-client-egui --test live_ui -- --ignored --nocapture`
 //! Set `BN_CLIENT_TRACE=<file>` to log the JSON-RPC traffic.
 mod common;
-use bn_client_egui::transport::StdioTransport;
 use bn_client_egui::watchdog::Watchdog;
 use bn_client_egui::{App, EngineModel, GameModel, MenuModel};
 use eframe::egui;
@@ -43,8 +42,7 @@ fn click_settled(h: &mut H, label: &str) {
 #[test]
 #[ignore = "requires BN_ENGINE pointing at an engine binary"]
 fn clicking_a_main_menu_entry_shows_the_command_status() {
-    let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
-    let transport = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
+    let transport = common::live::english_transport();
     let model = EngineModel::new(Box::new(transport));
     let mut h = Harness::builder()
         .with_size(egui::vec2(1300.0, 800.0))
@@ -76,7 +74,7 @@ fn a_korean_connection_words_the_clients_own_chrome_in_korean() {
         std::env::var_os("BN_ROOT").map(Into::into),
     )
     .expect("game root");
-    let transport = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
+    let transport = common::live::english_transport();
     let options = bn_client_egui::ConnectOptions {
         locale: Some("ko_KR".into()),
         ..Default::default()

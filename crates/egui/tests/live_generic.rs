@@ -1,6 +1,5 @@
 //! Needs a real engine build: `BN_ENGINE=/path/to/cataclysm-bn-tiles cargo test -p bn-client-egui --test live_generic -- --ignored --nocapture`
 mod common;
-use bn_client_egui::transport::StdioTransport;
 use bn_client_egui::watchdog::Watchdog;
 use bn_client_egui::{App, EngineModel, GameModel, MenuModel};
 use eframe::egui;
@@ -24,8 +23,7 @@ fn run_until(h: &mut H, what: &str, secs: u64, mut done: impl FnMut(&mut H) -> b
 
 /// The tutorial map, with its pop-ups closed.
 fn start<'a>() -> H<'a> {
-    let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
-    let transport = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
+    let transport = common::live::english_transport();
     let model = EngineModel::new(Box::new(transport));
     let mut h = Harness::builder()
         .with_size(egui::vec2(1300.0, 800.0))

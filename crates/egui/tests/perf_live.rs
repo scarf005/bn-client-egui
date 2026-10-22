@@ -3,9 +3,10 @@
 //! `BN_ENGINE=<engine> BN_PERF_SCENARIO=tutorial|town BN_PERF_TILES=0|1 cargo test --release -p bn-client-egui --test perf_live -- --ignored --nocapture`
 //! With `--features profile` the scope timings of all frames (egui's own included) are listed too.
 //! Measures the CPU time of one frame (UI pass, tessellation, accessibility tree); GPU work is not included.
+mod common;
 use bn_client_egui::interaction::InvokeError;
 use bn_client_egui::protocol::InvokeArgs;
-use bn_client_egui::transport::{StdioTransport, game_root};
+use bn_client_egui::transport::game_root;
 use bn_client_egui::watchdog::Watchdog;
 use bn_client_egui::{App, EngineModel, GameModel, MenuModel};
 use cpu_time::{ProcessTime, ThreadTime};
@@ -235,7 +236,7 @@ fn frame_cost_idle_and_while_stepping() {
     std::fs::create_dir_all(&dir).unwrap();
     let settings = dir.join("settings.json");
     std::fs::write(&settings, format!(r#"{{"tiles":{tiles},"tileset":null}}"#)).unwrap();
-    let transport = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
+    let transport = common::live::english_transport();
     let model = EngineModel::new(Box::new(transport));
     let app = App::new(model)
         .with_settings(settings)

@@ -6,7 +6,7 @@
 mod common;
 use bn_client_egui::interaction::InvokeError;
 use bn_client_egui::protocol::InvokeArgs;
-use bn_client_egui::transport::{StdioTransport, game_root};
+use bn_client_egui::transport::game_root;
 use bn_client_egui::watchdog::Watchdog;
 use bn_client_egui::{App, EngineModel, GameModel, MenuModel};
 use eframe::egui;
@@ -156,7 +156,7 @@ fn every_toolbar_and_manager_screen_keeps_its_size_and_closes_to_the_map() {
     std::fs::create_dir_all(&dir).unwrap();
     let settings = dir.join("settings.json");
     std::fs::write(&settings, r#"{"tiles":false,"tileset":null}"#).unwrap();
-    let transport = StdioTransport::spawn_fresh(engine.as_ref()).expect("engine starts");
+    let transport = common::live::english_transport();
     let app = App::new(EngineModel::new(Box::new(transport)))
         .with_settings(settings)
         .with_root(root);
