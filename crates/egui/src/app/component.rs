@@ -77,13 +77,13 @@ pub(super) struct Screens {
     list_rows: std::cell::Cell<Option<usize>>,
 }
 
-/// A list's scroll offset in the last frame, and the row of the focus it last brought into sight.
 /// What a window kept off the cursor holds while its screen is open: its side.
 #[derive(Clone, Copy)]
 struct Anchor {
     left: bool,
 }
 
+/// A list's scroll offset in the last frame, and the row of the focus it last brought into sight.
 #[derive(Default)]
 struct ListScroll {
     top: f32,
