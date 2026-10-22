@@ -240,8 +240,8 @@ fn a_screen_widens_with_the_map_region_to_the_width_it_has_there() {
 #[test]
 fn a_dialog_is_no_wider_than_a_readable_column() {
     for size in SIZES {
-        let (h, _) = playing(size, example("npctalk", "NPC talk screen"), None);
-        let window = window_of(&h, "talk");
+        let (h, _) = playing(size, example("tutorial", "wait menu screen"), None);
+        let window = window_of(&h, "uilist");
         let room = region(&h).width() - 2.0 * MARGIN;
         assert!(
             window.width() <= 720.0_f32.min(0.6 * room) + 1.0,
@@ -259,6 +259,23 @@ fn a_dialog_holding_a_table_keeps_each_label_on_one_line() {
     let (h, _) = playing(SIZES[0], screen.clone(), None);
     let labels = common::legible::column_list_labels(&screen);
     let wrapped = common::legible::wrapped_labels(&h.output().shapes, &labels);
+    assert!(wrapped.is_empty(), "{wrapped:#?}");
+}
+
+/// Panes side by side have no words to wrap across them: a dialog holding them is as wide as they need, past the
+/// reading column, which at 1280x800 wraps the NPC's replies word by word.
+#[test]
+fn a_dialog_holding_panes_keeps_each_reply_on_one_line() {
+    let screen = example("npctalk", "NPC talk screen");
+    let replies = screen["root"]["children"][1]["child"]["children"][0]["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| r["label"].as_str().unwrap().to_string())
+        .collect::<Vec<_>>();
+    assert!(replies.len() > 5);
+    let (h, _) = playing(SIZES[0], screen, None);
+    let wrapped = common::legible::wrapped_labels(&h.output().shapes, &replies);
     assert!(wrapped.is_empty(), "{wrapped:#?}");
 }
 
