@@ -14,7 +14,9 @@ fn run_until(h: &mut H, what: &str, secs: u64, mut done: impl FnMut(&mut H) -> b
     while !done(h) {
         assert!(
             !watchdog.expired(h.state().model.received()),
-            "timed out waiting for {what}"
+            "timed out waiting for {what}; {:?}; {:?}",
+            h.state().model.command(),
+            h.state().model.menu()
         );
         h.run_steps(1);
         std::thread::sleep(Duration::from_millis(50));
@@ -41,6 +43,8 @@ fn start<'a>() -> H<'a> {
     });
     // A list row runs on a double click, which a click a frame later would make a triple one.
     let at = settled(&mut h, "Tutorial").center();
+    // Half a second of frames first: the click on New Game, as near in frames, would make it a triple click.
+    h.run_steps(30);
     common::double_click(&mut h, at);
     run_until(&mut h, "the tutorial map", 300, |h| {
         h.state().model.size().x > 0
@@ -117,7 +121,7 @@ fn live_debug_menu_filters_to_tele_and_a_query_popup_declines() {
     settle(&mut h, "the prompt to close");
     h.key_press(egui::Key::Escape);
     run_until(&mut h, "the debug menu to close", 30, |h| {
-        h.query_by_label("Confirm Choice").is_none()
+        h.state().model.menu().is_none() && !h.state().model.busy()
     });
 
     assert!(h.state_mut().model.invoke_action("save"));
