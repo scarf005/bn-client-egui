@@ -1416,10 +1416,13 @@ fn the_wielded_item_is_drawn_with_its_own_look_and_empty_hands_draw_none() {
     let held = m.wielded_cell().expect("a wielded item");
     assert_eq!(held.layers[0].id, "knife_tile");
     assert_eq!(held.glyph, ';');
-    h.push(avatar_event(
+    let mut empty = avatar_event(
         json!([item("hammer", 1, Some("carried"), "hammer")]),
         json!([]),
-    ));
+    );
+    empty["params"]["events"][0]["sequence"] = "42".into();
+    empty["params"]["events"][0]["revision"] = "33".into();
+    h.push(empty);
     m.poll();
     assert_eq!(m.wielded_cell(), None);
 }

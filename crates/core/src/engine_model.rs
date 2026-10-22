@@ -997,6 +997,14 @@ impl GameModel for EngineModel {
         &self.inventory_cells
     }
 
+    fn wielded_cell(&self) -> Option<Cell> {
+        let carried = self.replica.avatar()?.inventory.as_ref()?;
+        let held = carried
+            .iter()
+            .find(|i| i.slot.as_deref() == Some("wielded"))?;
+        Some(self.item_cell(&held.look))
+    }
+
     fn ground_ids(&self) -> Vec<String> {
         self.ground_items.iter().map(|(id, _)| id.clone()).collect()
     }
