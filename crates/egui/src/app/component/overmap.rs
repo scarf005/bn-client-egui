@@ -4,7 +4,7 @@ use super::*;
 use crate::app::{CELL, rgb};
 use bn_client_core::OvermapWatch;
 use bn_client_core::localise::tr;
-use bn_client_core::protocol::OvermapWindow;
+use bn_client_core::protocol::{OvermapNote, OvermapWindow};
 
 /// One thing the overmap draws, in the order it is drawn.
 pub(super) enum OvermapPaint {
@@ -122,32 +122,42 @@ fn overmap_a11y(
     });
 }
 
+/// A note as the side panel lists it.
+fn note_line(note: &OvermapNote) -> String {
+    format!("({}, {}) {}", note.pos.x, note.pos.y, note.text)
+}
+
 impl<M: GameModel> App<M> {
-    /// The legend and the notes beside the overmap, each note in its colour; a click on a note moves the cursor to
-    /// it.
-    fn overmap_side_panel(
+    /// The width of `overmap_notes` with the gap before them: their widest line, none without notes.
+    fn overmap_notes_width(&self, ui: &egui::Ui, om: &OvermapWire) -> f32 {
+        if om.notes.is_empty() {
+            return 0.0;
+        }
+        let body = egui::TextStyle::Body.resolve(ui.style());
+        let heading = egui::TextStyle::Heading.resolve(ui.style());
+        let notes = om
+            .notes
+            .iter()
+            .map(|note| text_width(ui, &markup::plain(&note_line(note)), &body));
+        let widest = notes.fold(text_width(ui, &om.notes_title, &heading), f32::max);
+        widest + ui.spacing().item_spacing.x
+    }
+
+    /// The notes beside the overmap, each in its colour; a click on a note moves the cursor to it.
+    fn overmap_notes(
         &self,
         ui: &mut egui::Ui,
         om: &OvermapWire,
         mover: Option<&Affordance>,
         out: &mut Vec<Intent>,
     ) {
+        if om.notes.is_empty() {
+            return;
+        }
         ui.vertical(|ui| {
-            for line in &om.legend {
-                ui.add(
-                    egui::Label::new(egui::RichText::new(line).monospace())
-                        .wrap_mode(egui::TextWrapMode::Extend),
-                );
-            }
-            if !om.notes.is_empty() {
-                ui.separator();
-                ui.heading(&om.notes_title);
-            }
+            ui.heading(&om.notes_title);
             for note in &om.notes {
-                let link = ui.link(self.line(
-                    ui,
-                    &format!("({}, {}) {}", note.pos.x, note.pos.y, note.text),
-                ));
+                let link = ui.link(self.line(ui, &note_line(note)));
                 if let (true, Some(mover)) = (link.clicked(), mover) {
                     out.push(Intent::Move {
                         affordance: mover.id.clone(),
@@ -162,7 +172,7 @@ impl<M: GameModel> App<M> {
 impl<M: GameModel> App<M> {
     /// The overmap squares around the cursor, cut to the room the window has: hovering names a square, a
     /// click moves the cursor there, and a click on the cursor runs the map's other affordance (travel). The
-    /// engine's lines for the cursor square and its notes stand beside them.
+    /// engine's lines for the cursor square and its legend stand above them, its notes beside them.
     pub(super) fn overmap(
         &self,
         ui: &mut egui::Ui,
@@ -187,10 +197,34 @@ impl<M: GameModel> App<M> {
                 .accesskit_node_builder(label.id, |b| b.set_live(egui::accesskit::Live::Polite));
         }
         let status = status.join(" ");
-        let cell = self.display.cell(CELL);
+        for line in &om.legend {
+            ui.add(
+                egui::Label::new(egui::RichText::new(line).monospace())
+                    .wrap_mode(egui::TextWrapMode::Extend),
+            );
+        }
+        // The squares take the room the notes beside them and the map's button under them leave.
+        let spacing = ui.spacing();
+        let button = (ui.text_style_height(&egui::TextStyle::Button)
+            + 2.0 * spacing.button_padding.y)
+            .max(spacing.interact_size.y);
+        let under = match runner.is_some_and(drawn_button) {
+            true => button + spacing.item_spacing.y,
+            false => 0.0,
+        };
+        let space = egui::vec2(
+            ui.available_width() - self.overmap_notes_width(ui, om),
+            ui.available_height() - under,
+        );
+        // Fewer squares than the room holds grow, up to twice their size, until they fill it; those that then
+        // pass its other side are cut, around the cursor.
+        let base = self.display.cell(CELL);
+        let cell = (space.x / om.cols.max(1) as f32)
+            .max(space.y / om.rows.max(1) as f32)
+            .clamp(base, 2.0 * base);
         // The squares that fit, kept around the cursor.
         let fit = |space: f32| ((space / cell) as usize).max(1);
-        let room = (fit(ui.available_width() * 0.7), fit(ui.available_height()));
+        let room = (fit(space.x), fit(space.y));
         let Some(window) = om.window(&cursor, room) else {
             return;
         };
@@ -235,7 +269,7 @@ impl<M: GameModel> App<M> {
                 }
                 ui.ctx().request_repaint();
             }
-            self.overmap_side_panel(ui, om, mover, out);
+            self.overmap_notes(ui, om, mover, out);
         });
     }
 

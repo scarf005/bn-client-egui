@@ -182,9 +182,14 @@ impl<M: GameModel> App<M> {
                     grows: false,
                 }
             }
-            Component::Map(_) => Extent {
+            // The overmap's squares take all the room they get; the game's map is drawn under the window, and
+            // its slot here holds a few lines.
+            Component::Map(map) => Extent {
                 min: 160.0,
-                natural: room.min(480.0),
+                natural: match map.mode {
+                    MapMode::Overmap => room,
+                    MapMode::World => room.min(480.0),
+                },
                 grows: true,
             },
             Component::Canvas(canvas) => {

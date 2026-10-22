@@ -44,8 +44,6 @@ const KNOWN: &[(&str, Kind, &str)] = &[
     ("info/scores@1920x1080", Kind::Cut, "F6"),
     ("newgame/character creation on the overview page@1280x800", Kind::Cut, "F6"),
     ("newgame/world creation on the finalize page@1280x800", Kind::Cut, "F6"),
-    ("overmap/overmap screen for a client that draws tiles@1280x800", Kind::Cut, "F19"),
-    ("overmap/overmap screen@1280x800", Kind::Cut, "F19"),
     ("title/title screen on the credits tab@1280x800", Kind::Cut, "F6"),
 ];
 
