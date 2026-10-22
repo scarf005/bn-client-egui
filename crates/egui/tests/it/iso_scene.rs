@@ -3,7 +3,7 @@ use crate::common::{fixture, flat_root, iso_root};
 use bn_client_egui::EngineModel;
 use bn_client_egui::GameModel;
 use bn_client_egui::iso::camera::{Camera, Viewport};
-use bn_client_egui::iso::geometry::{BOARD, Instance, PageId};
+use bn_client_egui::iso::geometry::{BOARD, GLOW, Instance, PageId, SHEER};
 use bn_client_egui::iso::pages::Pages;
 use bn_client_egui::iso::scene::{self, Scene};
 use bn_client_egui::tileset::Tileset;
@@ -468,22 +468,21 @@ fn a_tree_drawn_from_above_stands_on_the_ground_its_own_sprites_draw_in_its_squa
 }
 
 #[test]
-fn a_flower_drawn_from_above_is_a_thin_solid_over_the_ground_where_a_person_drawn_alike_is_thicker()
-{
+fn a_flower_drawn_from_above_lies_over_the_ground_where_a_person_drawn_alike_is_thick() {
     let mut flower = cell(4, 4, 0, "t_grass");
     flower["furniture"] = look("furniture", "f_flower");
     let m = model(vec![flower, cell(3, 4, 0, "t_grass")]);
     let scene = flat_scene_of(&m, "flat-flower");
     let quads = at(&scene, &m, (4, 4));
-    // The grass, and the flower's top, bottom and four sides.
-    assert_eq!(quads.len(), 1 + 2 + 4, "{quads:?}");
+    // Furniture is neither an item nor a creature: it lies.
+    assert_eq!(quads.len(), 2, "{quads:?}");
     assert!(quads.iter().all(|i| i.flags[0] & BOARD == 0), "{quads:?}");
     let (grass, flower) = (quads[0], quads[1]);
     // Only its eight pixels across lie where the flat map draws them, over the grass.
     let [x, y] = corner(&m, (4, 4));
     assert_eq!(flower.origin[..2], [x + 12.0 / 32.0, y + 12.0 / 32.0]);
     assert_eq!(flower.a[0], 8.0 / 32.0);
-    assert!((flower.origin[2] - 0.1).abs() < 0.01, "{quads:?}");
+    assert!(flower.origin[2] < 0.01, "{quads:?}");
     assert!(flower.origin[2] > grass.origin[2], "{quads:?}");
     // The avatar at (3, 4) is a person drawn with the same sprite: a creature is thick, not a board.
     let me = at(&scene, &m, (3, 4));
@@ -510,6 +509,65 @@ fn an_item_lying_on_the_ground_of_a_tileset_drawn_from_above_has_the_thickness_o
         sides(&quads).iter().all(|i| (i.b[2] + 0.1).abs() < 0.01),
         "{quads:?}"
     );
+}
+
+#[test]
+fn fields_traps_and_furniture_drawn_from_above_are_not_thick_and_an_item_keeps_its_walls_solid() {
+    let thing = |x: i32, slot: &str, kind: &str, form: Option<&str>| {
+        let mut c = cell(x, 4, 0, "t_grass");
+        let mut l = look(kind, "f_flower");
+        if let Some(form) = form {
+            l["form"] = form.into();
+        }
+        c[slot] = match slot {
+            "furniture" => l,
+            "fields" => json!([{"look": l, "intensity": 1}]),
+            _ => json!([l]),
+        };
+        c
+    };
+    let mut walled = wall(4, 6, "t_wall");
+    walled["items"] = json!([look("item", "f_flower")]);
+    let m = model(vec![
+        thing(4, "traps", "trap", None),
+        thing(5, "fields", "field", None),
+        thing(6, "furniture", "furniture", None),
+        thing(7, "fields", "field", Some("fire")),
+        thing(8, "fields", "field", Some("gas")),
+        thing(9, "furniture", "furniture", Some("seat")),
+        walled,
+    ]);
+    let scene = flat_scene_of(&m, "flat-not-thick");
+    // A trap, blood and furniture without a form lie on the grass.
+    for x in [4, 5, 6] {
+        let quads = at(&scene, &m, (x, 4));
+        assert_eq!(quads.len(), 2, "{x}: {quads:?}");
+        assert!(quads.iter().all(|i| i.origin[2] < 0.01), "{x}: {quads:?}");
+    }
+    // A fire is two crossed boards that give light, a gas is seen through.
+    let fire = at(&scene, &m, (7, 4))
+        .into_iter()
+        .filter(|i| i.flags[0] & GLOW != 0)
+        .collect::<Vec<_>>();
+    assert_eq!(fire.len(), 2, "{fire:?}");
+    assert!(fire.iter().all(|i| i.b == [0.0, 0.0, -1.0]), "{fire:?}");
+    assert!(
+        at(&scene, &m, (8, 4))
+            .iter()
+            .any(|i| i.flags[0] & SHEER != 0)
+    );
+    // A seat is built as one: its back reaches a block up.
+    let (x, y) = square(&m, (9, 4));
+    let seat = all(&scene)
+        .into_iter()
+        .filter(|i| (x as f32..=x as f32 + 1.0).contains(&i.origin[0]))
+        .filter(|i| (y as f32..=y as f32 + 1.0).contains(&i.origin[1]))
+        .map(|i| i.origin[2])
+        .fold(f32::MIN, f32::max);
+    assert!((seat - 1.0).abs() < 0.01, "{seat}");
+    // An item on a wall's square leaves the wall its solid.
+    let (x, y) = square(&m, (4, 6));
+    assert_eq!(scene.column(x, y).unwrap().solid, Some((0.0, 3.0)));
 }
 
 /// A square of terrain `id` the engine calls a wall.
