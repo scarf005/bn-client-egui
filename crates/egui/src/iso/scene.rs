@@ -405,7 +405,7 @@ pub fn build(
             .entry(item.sprite.page)
             .or_default()
             .extend(place(&m, &item.placement(covered, joined)));
-        let bands = wall_bands(&m, item.kind);
+        let bands = wall_bands(&m, &item.sprite, item.kind);
         if !bands.is_empty() {
             // The wall it stands in, else its own sprite.
             let wall = (0..4)

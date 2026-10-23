@@ -292,12 +292,14 @@ pub fn shape(m: &Metrics, sprite: &SpriteSource, kind: Kind) -> Shape {
 }
 
 /// The heights from the ground of the blocks of wall a window or a door of a tileset drawn from above stands in:
-/// under the sill and over the lintel of a window, over a door.
-pub fn wall_bands(m: &Metrics, kind: Kind) -> Vec<(f32, f32)> {
-    let block = m.level / LEVEL_BLOCKS;
-    match kind {
-        Kind::Window if !m.iso => vec![(0.0, SILL * m.level), ((1.0 - LINTEL) * m.level, m.level)],
-        Kind::Formed(Form::Door { .. }) if !m.iso => vec![(DOOR_BLOCKS * block, m.level)],
+/// under the sill and over the lintel of a window drawn as its pane, over a door.
+pub fn wall_bands(m: &Metrics, sprite: &SpriteSource, kind: Kind) -> Vec<(f32, f32)> {
+    match shape(m, sprite, kind) {
+        Shape::Window { sill, lintel, top } => vec![(0.0, sill), (lintel, top)],
+        Shape::Built {
+            form: Form::Door { .. },
+            block,
+        } => vec![(DOOR_BLOCKS * block, m.level)],
         _ => vec![],
     }
 }
@@ -1752,7 +1754,7 @@ mod tests {
             "{lo} {hi}"
         );
         // Under the sill and over the lintel, whole blocks painted with the wall beside it.
-        let bands = wall_bands(&m, Kind::Window);
+        let bands = wall_bands(&m, &s, Kind::Window);
         let expected = [(0.0, 1.0), (2.0, 3.0)];
         assert!(
             bands.len() == 2
@@ -1766,13 +1768,20 @@ mod tests {
             at: Vec2::new(64.0, 0.0),
             ..s
         };
-        let blocks = wall_bands(&m, Kind::Window)
+        let blocks = wall_bands(&m, &s, Kind::Window)
             .into_iter()
             .flat_map(|b| band(&m, &Placement { sprite: &wall, ..p }, b))
             .collect::<Vec<_>>();
         let (lo, hi) = bounds(&blocks);
         assert!(lo.z.abs() < 1e-4 && (hi.z - 3.0).abs() < 1e-4, "{lo} {hi}");
         assert!(blocks.iter().all(|q| q.uv[0] >= 64.0), "{blocks:?}");
+    }
+
+    #[test]
+    fn a_window_drawn_standing_out_of_its_square_stands_in_no_blocks_of_wall() {
+        let (m, _) = block_sprite();
+        let tall = sprite((32.0, 64.0), (0.0, -32.0));
+        assert!(wall_bands(&m, &tall, Kind::Window).is_empty());
     }
 
     #[test]
@@ -1796,7 +1805,7 @@ mod tests {
             assert!((Vec2::from(q.uv_b).y - 32.0).abs() < 0.1, "{q:?}");
         }
         assert_eq!(
-            wall_bands(&m, Kind::Formed(Form::Door { open: false })),
+            wall_bands(&m, &s, Kind::Formed(Form::Door { open: false })),
             vec![(2.0, 3.0)]
         );
     }
