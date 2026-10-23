@@ -1,5 +1,5 @@
-//! Against a real engine: open air in sight over ground the avatar neither sees nor remembers is a solid dark block
-//! in 3D and stays black on the flat map of an isometric tileset.
+//! Against a real engine: open air in sight over ground the avatar neither sees nor remembers is dark ground walled
+//! up to the level in 3D and stays black on the flat map of an isometric tileset.
 //!
 //! A mod in the profile builds a house, a roof over it and open air around it, and puts the avatar on the roof.
 //! `BN_ENGINE=<engine> BN_ROOT=<game root with gfx/Ultica_iso> SHOT_DIR=<dir> SHOT_TAG=<prefix> cargo test
@@ -139,7 +139,7 @@ fn roof_scene(three_d: bool, name: &str) {
         text.contains('X'),
         "open air over unknown ground is known as such"
     );
-    for (w, ht) in [(1280.0, 800.0), (1920.0, 1080.0)] {
+    for (w, ht) in [(1290.0, 830.0), (1920.0, 1080.0)] {
         h.set_size(egui::vec2(w, ht));
         settle(&mut h);
         save(
@@ -151,7 +151,7 @@ fn roof_scene(three_d: bool, name: &str) {
 
 #[test]
 #[ignore = "requires BN_ENGINE and a game root with the Ultica_iso tileset"]
-fn open_air_over_unknown_ground_is_a_dark_block_in_3d() {
+fn open_air_over_unknown_ground_is_dark_ground_walled_up_in_3d() {
     roof_scene(true, "pseudo3d");
 }
 
