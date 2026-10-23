@@ -769,12 +769,12 @@ fn built(form: Form, block: f32, turn: Turn, joined: [bool; 4]) -> Vec<Cuboid> {
     }
 }
 
-/// The gray of the lid and of the faces of what is unknown but solid, in the haze byte of its instances: dark, but not
-/// the black of nothing, so that blocks read as blocks.
+/// The gray of the ground nothing is known about and of the faces down to it, in the haze byte of its instances: dark,
+/// but not the black of nothing, so that the pit reads as ground and walls.
 const VOID_LID: u32 = 22;
 const VOID_FACE: u32 = 10;
 
-/// The lid at height `z` of the unknown solid in `square`.
+/// The dark ground at height `z` of `square`, whose ground nothing is known about.
 pub fn void_lid(square: (i32, i32), z: f32) -> Instance {
     let ground = ([1.0, 0.0, 0.0], [0.0, 1.0, 0.0]);
     instance(
@@ -785,8 +785,7 @@ pub fn void_lid(square: (i32, i32), z: f32) -> Instance {
     )
 }
 
-/// The face of the unknown solid in `square` on its south (0), east, north or west edge, from height `low` up to
-/// `high`.
+/// The dark face of `square` on its south (0), east, north or west edge, from height `low` up to `high`.
 pub fn void_face(square: (i32, i32), face: usize, (low, high): (f32, f32)) -> Instance {
     let (x, y) = (square.0 as f32, square.1 as f32);
     let (from, run) = match face {

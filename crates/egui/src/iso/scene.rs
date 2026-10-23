@@ -211,10 +211,11 @@ pub fn build(
         for x in 0..width {
             let cell = model.cell(Pos { x, y });
             if cell.layers.is_empty() {
-                // Open air in sight over ground nothing is known about: solid up to its level.
+                // Open air in sight over ground nothing is known about: dark ground as deep as the engine says.
                 if cell.depth > 0 {
-                    tops[(y * width + x) as usize] = Some(0.0);
-                    voids.push((x, y));
+                    let ground = -f32::from(cell.depth) * m.level;
+                    tops[(y * width + x) as usize] = Some(ground);
+                    voids.push(((x, y), ground));
                 }
                 continue;
             }
@@ -435,12 +436,12 @@ pub fn build(
                 .extend(bands.into_iter().flat_map(|b| band(&m, &p, b)));
         }
     }
-    // The unknown is solid between the level and the lowered ground drawn beside it: a lid on each block of it and a
-    // face down to that ground from every square as high as the level, so that no hole shows.
+    // The ground nothing is known about is dark at its depth, and every square as high as the level has a face down to
+    // the lowered ground beside it, so that no hole shows.
     if let Some(page) = items.first().map(|i| i.sprite.page) {
         let mut unknown = voids
             .iter()
-            .map(|&square| void_lid(square, 0.0))
+            .map(|&(square, ground)| void_lid(square, ground))
             .collect::<Vec<_>>();
         for (n, top) in tops.iter().enumerate() {
             if *top != Some(0.0) {
