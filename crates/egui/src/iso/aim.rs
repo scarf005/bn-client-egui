@@ -1,31 +1,46 @@
 //! The line of fire in the 3D and first-person views: where it stands in the world and on the screen.
 
-use super::camera::{Camera, Viewport};
+use super::camera::Viewport;
 use glam::{Vec2, Vec3};
 
 /// How high a creature's middle stands over its floor, in squares: where a shot flies.
 pub const BODY: f32 = 0.5;
 
+/// The pieces a segment of the line is cut into, so the part behind a first-person eye is dropped, not stretched.
+const STEPS: usize = 16;
+/// A point farther than this off the view is not worth sending to the painter.
+const FAR_OFF: f32 = 10_000.0;
+
 /// The yaw whose first-person eye looks from the square at `from` toward the one at `to`.
-pub fn yaw_facing(_from: Vec2, _to: Vec2) -> f32 {
-    0.0
+pub fn yaw_facing(from: Vec2, to: Vec2) -> f32 {
+    (from.y - to.y).atan2(from.x - to.x)
 }
 
 /// Where the line of fire crosses a square: its middle, `levels` z-levels of `level` squares over the avatar's.
-pub fn body_point(_square: Vec2, _levels: i32, _level: f32) -> Vec3 {
-    Vec3::ZERO
+pub fn body_point(square: Vec2, levels: i32, level: f32) -> Vec3 {
+    Vec3::new(square.x, square.y, levels as f32 * level + BODY)
 }
 
-/// The screen points of the world path `path`, in points from the view's top left corner, one for each of its
-/// `STEPS` pieces a segment is cut into that lies before the eye. The line stays whole where its ends do not: the
-/// part behind a first-person eye is cut off, not stretched across the view.
-pub fn project(_view: &Viewport, _path: &[Vec3]) -> Vec<Vec2> {
-    vec![]
+/// The screen points of the world path `path`, in points from the view's top left corner: each segment cut into
+/// pieces, those before the eye kept.
+pub fn project(view: &Viewport, path: &[Vec3]) -> Vec<Vec2> {
+    let pieces = |w: &[Vec3]| {
+        (0..=STEPS)
+            .map(|i| w[0].lerp(w[1], i as f32 / STEPS as f32))
+            .collect::<Vec<_>>()
+    };
+    let points = match path {
+        [only] => vec![*only],
+        _ => path.windows(2).flat_map(pieces).collect(),
+    };
+    let on = points.into_iter().filter_map(|p| view.project(p));
+    on.filter(|p| p.abs().max_element() < FAR_OFF).collect()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::iso::camera::Camera;
 
     fn first_person(yaw: f32, avatar: Vec2) -> Viewport {
         Viewport {
