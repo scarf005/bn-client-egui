@@ -984,7 +984,7 @@ fn every_step_down_between_lowered_grounds_has_a_fading_face_from_the_lower_up_t
     let level = 108.0 * 0.034_026;
     let mut deep = open_air(6, 4);
     deep["below"] = 2.into();
-    // Dark ground one level down, dark ground two levels down, and known ground one level down.
+    // Dark ground one level down, dark ground two levels down, and ground one level down.
     let m = model(vec![
         open_air(5, 4),
         deep,

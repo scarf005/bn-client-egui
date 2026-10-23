@@ -31,7 +31,8 @@ gapi.add_on_every_x_hook(TimeDuration.from_turns(1), function()
   if turns == 3 or turns == 6 then
     local you = gapi.get_avatar()
     local p = you:get_pos_ms()
-    local d = turns == 3 and 8 or -8
+    local out = tall and 10 or 8
+    local d = turns == 3 and out or -out
     you:set_pos_ms(at(p.x + d, p.y + d, p.z + (turns == 3 and -up or up)))
   end
   if built then return end
@@ -72,9 +73,10 @@ fn spawn(tall: bool) -> StdioTransport {
         PRELOAD.replace("local tall = false", &format!("local tall = {tall}")),
     )
     .unwrap();
+    // Safe mode would refuse to wait while the zombies around are in sight.
     std::fs::write(
         config.join("options.json"),
-        r#"[{"name":"USE_LANG","value":"en_US"}]"#,
+        r#"[{"name":"USE_LANG","value":"en_US"},{"name":"SAFEMODE","value":"false"}]"#,
     )
     .unwrap();
     std::fs::write(
@@ -148,9 +150,6 @@ fn roof_scene(three_d: bool, tall: bool, name: &str) {
     let mut h = start(three_d, egui::vec2(1280.0, 800.0), tall);
     new_game(&mut h, "new_game:play_now");
     dismiss_popups(&mut h);
-    // Safe mode refuses to wait while the zombies around are in sight.
-    assert!(h.state_mut().model.invoke_action("safemode"));
-    run_until(&mut h, "safe mode off", 120, |h| !h.state().model.busy());
     // The mod builds the scene at the first turn, and the avatar is back on the roof after the sixth.
     for _ in 0..8 {
         assert!(h.state_mut().model.invoke_action("pause"));
