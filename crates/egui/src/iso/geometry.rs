@@ -1171,22 +1171,21 @@ mod tests {
         // An L of the top and left halves: six straight edges.
         let l = Outline::of([32, 32], |x, y| x < 16 || y < 16);
         // As thick as a pixel of a block game's sixteen-pixel item.
-        for (kind, thick) in [(Kind::Item, 1.0 / 16.0)] {
-            assert_eq!(shape(&flat, &whole, kind), Shape::Extrude { top: thick });
-            // What reaches out of its square was drawn standing.
-            assert_eq!(shape(&flat, &reach, kind), Shape::Board);
-            let p = Placement {
-                outline: Some(&l),
-                ..square(&whole, kind)
-            };
-            let quads = place(&flat, &p);
-            // The top, the bottom and a side per edge of the outline, each as deep as the sprite is thick.
-            assert_eq!(quads.len(), 2 + l.edges.len(), "{kind:?}");
-            assert_eq!(quads[0].origin[2], thick);
-            let sides = quads.iter().filter(|q| q.b[2] != 0.0).collect::<Vec<_>>();
-            assert_eq!(sides.len(), 6);
-            assert!(sides.iter().all(|q| (q.b[2] + thick).abs() < 1e-6));
-        }
+        let (kind, thick) = (Kind::Item, 1.0 / 16.0);
+        assert_eq!(shape(&flat, &whole, kind), Shape::Extrude { top: thick });
+        // What reaches out of its square was drawn standing.
+        assert_eq!(shape(&flat, &reach, kind), Shape::Board);
+        let p = Placement {
+            outline: Some(&l),
+            ..square(&whole, kind)
+        };
+        let quads = place(&flat, &p);
+        // The top, the bottom and a side per edge of the outline, each as deep as the sprite is thick.
+        assert_eq!(quads.len(), 2 + l.edges.len(), "{kind:?}");
+        assert_eq!(quads[0].origin[2], thick);
+        let sides = quads.iter().filter(|q| q.b[2] != 0.0).collect::<Vec<_>>();
+        assert_eq!(sides.len(), 6);
+        assert!(sides.iter().all(|q| (q.b[2] + thick).abs() < 1e-6));
         // An isometric tileset keeps its things as boards, and a clear sprite is no solid.
         let iso = sprite((48.0, 48.0), (0.0, -24.0));
         assert_eq!(shape(&ultica(), &iso, Kind::Item), Shape::Board);
