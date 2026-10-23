@@ -3,7 +3,7 @@
 use super::*;
 use crate::app::{CELL, rgb};
 use bn_client_core::OvermapWatch;
-use bn_client_core::localise::tr;
+use bn_client_core::localise::{Value as Arg, tr, tr_format};
 use bn_client_core::protocol::{OvermapNote, OvermapWindow};
 
 /// The client's own map window while it is open.
@@ -386,6 +386,10 @@ impl<M: GameModel> App<M> {
                 screen = ui
                     .add_enabled(offered, egui::Button::new(tr("Travel and notes")))
                     .clicked();
+                if let Some(om) = self.model.watched_overmap() {
+                    // TRANSLATORS: the overmap level the map window shows; %d is its z, 0 at the ground.
+                    ui.label(tr_format("Level %d", &[Arg::Int(om.origin.z.into())]));
+                }
             });
             let room = ui.available_size().max(egui::vec2(12.0, 8.0) * cell);
             // The engine reads at most 64 by 64 squares at once.

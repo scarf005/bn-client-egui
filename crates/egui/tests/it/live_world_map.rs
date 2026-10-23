@@ -67,7 +67,19 @@ fn the_player_walks_with_the_map_window_open() {
             .is_some_and(|s| s.kind.as_deref() == Some("map"))
     );
     h.get_by_label("Travel and notes");
+    // The window names the level of the squares it shows: the avatar's, until a level key moves it.
+    let level = h.state().model.watched_overmap().unwrap().origin.z;
+    h.get_by_label(&format!("Level {level}"));
     save(&mut h, "map-open.png");
+    key(&mut h, "<");
+    run_until(&mut h, "the level above", 60, |h| {
+        h.query_by_label(&format!("Level {}", level + 1)).is_some()
+    });
+    save(&mut h, "map-level-up.png");
+    key(&mut h, ">");
+    run_until(&mut h, "the avatar's level", 60, |h| {
+        h.query_by_label(&format!("Level {level}")).is_some()
+    });
     let square = |h: &H| (h.state().model.player(), h.state().model.origin());
     let before = square(&h);
     // Steps with the window open, turning where the way is blocked.
