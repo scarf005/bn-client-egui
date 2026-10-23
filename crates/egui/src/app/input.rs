@@ -1,10 +1,11 @@
 //! The keyboard of a frame: the keys the client keeps for its own view and focus, the keys that go to the engine,
 //! and the held walk.
 
-use super::component::PANELS;
+use super::component::{PANELS, WorldMap};
 use super::{App, menu_forwards_keys, tab_is_engines};
-use crate::iso;
-use bn_client_core::{GameModel, Menu, interaction, keys};
+use crate::{a11y, iso};
+use bn_client_core::protocol::PanelKind;
+use bn_client_core::{GameModel, Menu, OVERMAP_LEVELS, Pos, interaction, keys};
 use eframe::egui;
 
 /// A key pressed this frame, named like the engine's keys (`SPACE`, `ESC`, `RETURN`, `CTRL+S`); a typed
@@ -15,29 +16,57 @@ pub(super) struct FrameKey {
     pub key: Option<(egui::Key, egui::Modifiers)>,
 }
 
+/// The key an input event is, when it is one.
+fn frame_key(e: &egui::Event) -> Option<FrameKey> {
+    match e {
+        egui::Event::Text(t) => Some(FrameKey {
+            token: if t == " " { "SPACE".into() } else { t.clone() },
+            key: None,
+        }),
+        egui::Event::Key {
+            key,
+            pressed: true,
+            modifiers,
+            ..
+        } => key_name(*key, *modifiers).map(|token| FrameKey {
+            token,
+            key: Some((*key, *modifiers)),
+        }),
+        _ => None,
+    }
+}
+
 /// The keys pressed this frame, in the order they came.
 pub(super) fn frame_keys(ctx: &egui::Context) -> Vec<FrameKey> {
-    ctx.input(|i| {
-        i.events
-            .iter()
-            .filter_map(|e| match e {
-                egui::Event::Text(t) => Some(FrameKey {
-                    token: if t == " " { "SPACE".into() } else { t.clone() },
-                    key: None,
-                }),
-                egui::Event::Key {
-                    key,
-                    pressed: true,
-                    modifiers,
-                    ..
-                } => key_name(*key, *modifiers).map(|token| FrameKey {
-                    token,
-                    key: Some((*key, *modifiers)),
-                }),
-                _ => None,
-            })
-            .collect()
-    })
+    ctx.input(|i| i.events.iter().filter_map(frame_key).collect())
+}
+
+/// The keys that move among rows, tabs and squares: a window with the keyboard keeps them whether or not it can
+/// move any further.
+const NAVIGATION: [&str; 8] = [
+    "UP", "DOWN", "LEFT", "RIGHT", "PPAGE", "NPAGE", "HOME", "END",
+];
+
+/// The client's own windows that can have the keyboard.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum KeyWindow {
+    Panel(PanelKind),
+    WorldMap,
+    Settings,
+}
+
+impl KeyWindow {
+    /// The kind the window is shown and kept as.
+    pub(super) fn kind(self) -> String {
+        match self {
+            Self::Panel(panel) => {
+                let action = PANELS.iter().find(|(p, _)| *p == panel).map(|(_, id)| id);
+                format!("panel:{}", action.unwrap_or(&""))
+            }
+            Self::WorldMap => "world-map".into(),
+            Self::Settings => "client-settings".into(),
+        }
+    }
 }
 
 impl<M: GameModel> App<M> {
@@ -65,7 +94,10 @@ impl<M: GameModel> App<M> {
         match interaction::described(self.model.screens()) {
             _ if client => {}
             Some(_) => self.component_keys(ctx),
-            None => self.game_keys(ctx),
+            None => {
+                self.window_keys(ctx);
+                self.game_keys(ctx)
+            }
         }
         // Whichever screen took the keys, the walk ends with its key.
         self.release_hold_when_up(ctx);
@@ -90,10 +122,130 @@ impl<M: GameModel> App<M> {
         }
     }
 
+    /// Whether the client's own window `window` is open.
+    fn is_open(&self, window: KeyWindow) -> bool {
+        match window {
+            KeyWindow::Panel(panel) => self.panels.contains_key(&panel),
+            KeyWindow::WorldMap => self.world_map.is_some(),
+            KeyWindow::Settings => self.client_settings,
+        }
+    }
+
+    /// The window that just opened has the keyboard, and so has the one the pointer pressed on; a press on
+    /// anything else (the map, the sidebar, an engine screen) gives it back to the game.
+    fn follow_key_window(&mut self, ctx: &egui::Context) {
+        let open = PANELS
+            .map(|(panel, _)| KeyWindow::Panel(panel))
+            .into_iter()
+            .chain([KeyWindow::WorldMap, KeyWindow::Settings])
+            .filter(|w| self.is_open(*w))
+            .collect::<Vec<_>>();
+        if let Some(at) = ctx.input(|i| i.pointer.any_pressed().then(|| i.pointer.interact_pos())) {
+            let layer = at.and_then(|at| ctx.layer_id_at(at));
+            self.key_window = open
+                .iter()
+                .copied()
+                .find(|w| layer.is_some_and(|l| l.id == a11y::dialog_id(&w.kind())));
+        }
+        let opened = open
+            .iter()
+            .rfind(|w| !self.known_windows.contains(w))
+            .copied();
+        self.key_window = opened.or(self.key_window).filter(|w| open.contains(w));
+        self.known_windows = open;
+    }
+
+    /// The keys the window with the keyboard uses are its own and never reach the game. A text box has the
+    /// typing, and look and aim keep the keys for the cursor they move.
+    fn window_keys(&mut self, ctx: &egui::Context) {
+        self.follow_key_window(ctx);
+        let Some(window) = self.key_window else {
+            return;
+        };
+        if ctx.text_edit_focused() || self.model.focus().is_some() {
+            return;
+        }
+        ctx.input_mut(|i| {
+            i.events
+                .retain(|e| !frame_key(e).is_some_and(|k| self.window_takes(window, &k)))
+        });
+    }
+
+    /// Whether `key` is one `window` uses, which it then has run. Escape closes the window; the rest is the
+    /// window's own: a panel's list cursor and tabs, the map's panning and levels.
+    fn window_takes(&mut self, window: KeyWindow, key: &FrameKey) -> bool {
+        if key.key.is_some_and(|(_, mods)| mods.alt || mods.ctrl) {
+            return false;
+        }
+        let token = key.token.as_str();
+        if token == "ESC" {
+            match window {
+                KeyWindow::Panel(panel) => self.panels.remove(&panel).is_some(),
+                KeyWindow::WorldMap => self.world_map.take().is_some(),
+                KeyWindow::Settings => std::mem::take(&mut self.client_settings),
+            };
+            return true;
+        }
+        match window {
+            KeyWindow::Panel(panel) => {
+                let (Some(focus), Some(screen)) =
+                    (self.panels.get_mut(&panel), self.model.watched_panel(panel))
+                else {
+                    return false;
+                };
+                let pages = self.screens.list_pages.borrow();
+                let page = |id: &str| {
+                    let at = (screen.screen_id.clone(), id.to_string());
+                    pages.get(&at).copied().unwrap_or(1)
+                };
+                let model = &self.model;
+                let moved = focus.press_focus(screen, token, &page, &|list| model.rows(list));
+                moved.consumed || NAVIGATION.contains(&token)
+            }
+            KeyWindow::WorldMap => {
+                let actions = self.model.actions();
+                let bound = |id: &str| {
+                    actions
+                        .iter()
+                        .any(|a| a.id == id && a.keys.iter().any(|k| k == token))
+                };
+                let Some(map) = self.world_map.as_mut() else {
+                    return false;
+                };
+                match token {
+                    "UP" => map.pan.y -= 1,
+                    "DOWN" => map.pan.y += 1,
+                    "LEFT" => map.pan.x -= 1,
+                    "RIGHT" => map.pan.x += 1,
+                    _ if NAVIGATION.contains(&token) => {}
+                    _ if bound("LEVEL_UP") => map.level = (map.level + 1).min(OVERMAP_LEVELS),
+                    _ if bound("LEVEL_DOWN") => map.level = (map.level - 1).max(-OVERMAP_LEVELS),
+                    _ => return false,
+                }
+                true
+            }
+            // Its widgets read the keys themselves; the game does not get the ones they move with.
+            KeyWindow::Settings => false,
+        }
+    }
+
     /// Typed characters and special keys are game keys, after the client took its own.
     fn game_keys(&mut self, ctx: &egui::Context) {
         let menu = self.model.menu();
-        let keys = self.client_keys(frame_keys(ctx), menu.as_ref());
+        // The keys that move among the widgets of the client settings, or press one, are the window's.
+        let widget = self.key_window == Some(KeyWindow::Settings);
+        let widget_key = |k: &FrameKey| {
+            let plain = k.key.is_none_or(|(_, mods)| !mods.alt && !mods.ctrl);
+            let moves = k.key.is_some()
+                && (NAVIGATION.contains(&k.token.as_str())
+                    || matches!(k.token.as_str(), "TAB" | "BACKTAB" | "RETURN"));
+            widget && plain && (moves || k.token == "SPACE")
+        };
+        let keys = frame_keys(ctx)
+            .into_iter()
+            .filter(|k| !widget_key(k))
+            .collect();
+        let keys = self.client_keys(keys, menu.as_ref());
         let keys = self.engine_keys(ctx, keys, menu.as_ref());
         self.keys_consumed = false;
         self.focus_action_row(ctx);
@@ -176,7 +328,11 @@ impl<M: GameModel> App<M> {
             if !self.toggle_panel(id) {
                 self.world_map = match self.world_map {
                     Some(_) => None,
-                    None => Some((bn_client_core::Pos { x: 0, y: 0 }, egui::Vec2::ZERO)),
+                    None => Some(WorldMap {
+                        pan: Pos { x: 0, y: 0 },
+                        drag: egui::Vec2::ZERO,
+                        level: 0,
+                    }),
                 };
             }
         }

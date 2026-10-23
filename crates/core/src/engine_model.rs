@@ -15,8 +15,8 @@ use crate::localise::{self, Catalogue, Value as Arg, tr_format, tr_plural};
 use crate::markup::{self, Run};
 use crate::model::{
     ActionEntry, Cell, CommandStatus, Effect, Failure, FailureKind, Follow, GameModel, Glow,
-    Health, Heard, Layer, Loading, LogLine, MapMark, Mutation, OvermapWatch, PanelWatch, Pellet,
-    Pos, Rgb, Shape,
+    Health, Heard, Layer, Loading, LogLine, MapMark, Mutation, OVERMAP_LEVELS, OvermapWatch,
+    PanelWatch, Pellet, Pos, Rgb, Shape,
 };
 use crate::protocol::{
     self, Cell as WorldCell, Entity, InvokeArgs, Known, Look, ModTileset, Operation, PanelKind,
@@ -537,15 +537,16 @@ impl EngineModel {
             return;
         };
         // Overmap squares name no dimension: they are the ones of the avatar's.
+        let z = (avatar.z + watch.level).clamp(-OVERMAP_LEVELS, OVERMAP_LEVELS);
         let player = self.overmap.view.as_ref().map_or_else(
             || WorldPos {
                 dim: String::new(),
                 x: 0,
                 y: 0,
-                z: avatar.z,
+                z,
             },
             |v| WorldPos {
-                z: avatar.z,
+                z,
                 ..v.player.clone()
             },
         );

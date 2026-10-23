@@ -6,6 +6,17 @@ use bn_client_core::OvermapWatch;
 use bn_client_core::localise::tr;
 use bn_client_core::protocol::{OvermapNote, OvermapWindow};
 
+/// The client's own map window while it is open.
+#[derive(Clone, Copy, Debug)]
+pub(in crate::app) struct WorldMap {
+    /// How far it is panned off the player, in squares.
+    pub pan: Pos,
+    /// The part of a square dragged past.
+    pub drag: egui::Vec2,
+    /// The levels it shows above the player's, below when negative.
+    pub level: i32,
+}
+
 /// One thing the overmap draws, in the order it is drawn.
 pub(super) enum OvermapPaint {
     /// A square: its terrain sprite when the tileset has one, else its glyph.
@@ -350,13 +361,19 @@ impl<M: GameModel> App<M> {
     /// the player keeps moving with it open. Dragging pans it; the engine's map screen, with travel and notes,
     /// opens from it.
     pub(in crate::app) fn world_map(&mut self, ctx: &egui::Context) {
-        let Some((mut pan, mut drag)) = self.world_map else {
+        let Some(WorldMap {
+            mut pan,
+            mut drag,
+            level,
+        }) = self.world_map
+        else {
             return self.model.watch_overmap(None);
         };
-        const KIND: Option<&str> = Some("world-map");
+        let kind = KeyWindow::WorldMap.kind();
+        let kind = Some(kind.as_str());
         let spec = WindowSpec {
             closable: true,
-            ..self.window_spec(ctx, KIND, &tr("Map"))
+            ..self.window_spec(ctx, kind, &tr("Map"))
         };
         let cell = self.display.cell(CELL);
         let mut screen = false;
@@ -377,6 +394,7 @@ impl<M: GameModel> App<M> {
                 cols: fit(room.x),
                 rows: fit(room.y),
                 pan,
+                level,
             }));
             let Some(om) = self.model.watched_overmap() else {
                 ui.allocate_space(room);
@@ -405,8 +423,11 @@ impl<M: GameModel> App<M> {
             pan.x += whole.x as i32;
             pan.y += whole.y as i32;
         });
-        let closed = self.keep_window(ctx, KIND, &shown);
-        self.world_map = (!closed).then_some((pan, drag));
+        let closed = self.keep_window(ctx, kind, &shown);
+        self.world_map =
+            self.world_map
+                .filter(|_| !closed)
+                .map(|map| WorldMap { pan, drag, ..map });
         if closed {
             self.model.watch_overmap(None);
         }

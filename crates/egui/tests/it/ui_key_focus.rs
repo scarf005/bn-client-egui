@@ -2,7 +2,7 @@
 //! map window's level, and only the keys a window does not use go on to the game. A window that opens takes the
 //! keyboard, a click in the map gives it back.
 use crate::common::{fixture, panel_view};
-use crate::ui_panels::{key, operations, panel_reads, serve, serve_with};
+use crate::ui_panels::{key, operations, panel_reads, serve, serve_with, window};
 use bn_client_egui::transport::ScriptHandle;
 use bn_client_egui::{App, Clock, EngineModel};
 use eframe::egui;
@@ -175,12 +175,20 @@ fn a_click_on_the_map_gives_the_arrows_back_to_the_game() {
     let mut answered = 0;
     key(&mut h, "i");
     serve(&mut h, &script, &mut answered);
-    h.get_by_label("Map").click();
+    // A press on the map, which a travel would only follow once released.
+    let at = h.get_by_label("Map").rect().center();
+    h.event(egui::Event::PointerMoved(at));
+    h.event(egui::Event::PointerButton {
+        pos: at,
+        button: egui::PointerButton::Primary,
+        pressed: true,
+        modifiers: egui::Modifiers::NONE,
+    });
     h.run_steps(3);
     press(&mut h, egui::Key::ArrowUp);
     assert_eq!(
-        operations(&script).last(),
-        Some(&json!({"kind": "action", "action_id": "UP"}))
+        operations(&script),
+        [json!({"kind": "action", "action_id": "UP"})]
     );
 }
 
@@ -188,20 +196,36 @@ fn a_click_on_the_map_gives_the_arrows_back_to_the_game() {
 fn a_click_in_a_window_takes_the_arrows_from_the_window_opened_before_it() {
     let (mut h, script) = game();
     let mut answered = 0;
-    key(&mut h, "i");
-    serve(&mut h, &script, &mut answered);
     key(&mut h, "@");
     serve(&mut h, &script, &mut answered);
-    h.get_by_label("rock (1)").click();
+    key(&mut h, "i");
+    serve(&mut h, &script, &mut answered);
+    h.get_by_label("Dexterity:").click();
     h.run_steps(3);
     serve(&mut h, &script, &mut answered);
     let reads = panel_reads(&script).len();
-    press(&mut h, egui::Key::ArrowUp);
+    press(&mut h, egui::Key::ArrowDown);
     serve(&mut h, &script, &mut answered);
     let again = &panel_reads(&script)[reads..];
     assert!(
-        again.iter().all(|r| r["params"]["panel"] == "inventory"),
-        "the inventory has the arrows, not the sheet opened after it: {again:?}"
+        !again.is_empty() && again.iter().all(|r| r["params"]["panel"] == "character"),
+        "the sheet has the arrows, not the inventory opened after it: {again:?}"
+    );
+    assert_eq!(operations(&script), Vec::<Value>::new());
+}
+
+#[test]
+fn escape_closes_the_focused_window_and_sends_nothing() {
+    let (mut h, script) = game();
+    let mut answered = 0;
+    key(&mut h, "i");
+    serve(&mut h, &script, &mut answered);
+    window(&h, "Inventory");
+    h.key_press(egui::Key::Escape);
+    h.run_steps(3);
+    assert!(
+        h.query_by_role_and_label(egui::accesskit::Role::Window, "Inventory")
+            .is_none()
     );
     assert!(operations(&script).is_empty());
 }

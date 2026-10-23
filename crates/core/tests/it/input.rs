@@ -382,6 +382,28 @@ fn left_and_right_switch_to_the_next_enabled_tab() {
 }
 
 #[test]
+fn a_window_that_only_reads_its_screen_moves_its_focus_to_the_next_tab_and_sends_nothing() {
+    let tabs = json!({"id": "tabs", "kind": "tabs", "select": "goto", "tabs": [
+        {"id": "t1", "label": "1", "selected": true, "enabled": true},
+        {"id": "t2", "label": "2", "selected": false, "enabled": true}]});
+    let screen = screen_with(
+        tabs,
+        json!([{"id": "goto", "label": "Go", "keys": [], "enabled": true, "expect": "boundary",
+            "args": {"row": {"component_id": "tabs"}}}]),
+    );
+    let mut ui = Interaction::default();
+    let out = ui.press_focus(&screen, "RIGHT", &|_| 3, &no_page);
+    assert!(out.consumed);
+    assert_eq!(invoked(&out), None, "the tab is only focused");
+    assert_eq!(ui.focus().row_id.as_deref(), Some("t2"));
+    let out = ui.press_focus(&screen, "j", &|_| 3, &no_page);
+    assert!(
+        !out.consumed,
+        "a key that moves no focus is not the window's"
+    );
+}
+
+#[test]
 fn the_grid_cursor_moves_to_the_neighbouring_cell() {
     let grid = json!({"id": "grid", "kind": "grid", "cols": 2, "rows": 2, "cursor": {"x": 0, "y": 0},
         "cells": [
