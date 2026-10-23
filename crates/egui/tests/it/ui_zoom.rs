@@ -1,5 +1,6 @@
 //! The map zoom is the client's: the keys the engine binds to `zoom_in` and `zoom_out`, and the wheel over the map.
 use crate::common::{fixture, subscribe_reply};
+use bn_client_egui::app::CELL;
 use bn_client_egui::transport::{ScriptHandle, ScriptedTransport};
 use bn_client_egui::{App, EngineModel};
 use eframe::egui;
@@ -171,7 +172,7 @@ fn the_zoom_survives_a_restart() {
 }
 
 #[test]
-fn the_zoom_reaches_five_times_closer_and_farther() {
+fn the_zoom_reaches_thirty_times_closer_and_five_times_farther() {
     let (mut h, _script) = zooming(None);
     let before = h.state().display().zoom();
     for _ in 0..40 {
@@ -182,6 +183,40 @@ fn the_zoom_reaches_five_times_closer_and_farther() {
         wheel(&mut h, -1.0);
     }
     let least = h.state().display().zoom() / before;
-    assert!(most >= 5.0, "{most}");
+    assert!(most >= 30.0, "{most}");
     assert!(least <= 0.2, "{least}");
+}
+
+#[test]
+fn the_flat_map_fills_its_room_at_every_zoom_with_the_avatar_in_the_middle() {
+    let (mut h, script) = zooming(None);
+    let settle = |h: &mut H| {
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        h.run_steps(10);
+    };
+    settle(&mut h);
+    let room = h.get_by_label("Map").rect();
+    for _ in 0..40 {
+        wheel(&mut h, 1.0);
+    }
+    settle(&mut h);
+    let map = h.get_by_label("Map").rect();
+    assert!(
+        map.width() >= room.width() - 1.0 && map.height() >= room.height() - 1.0,
+        "{map:?} in {room:?}"
+    );
+    let sent = script.sent();
+    let viewport = sent
+        .iter()
+        .rev()
+        .find(|m| m["method"] == "bn.viewport")
+        .unwrap();
+    let cols = viewport["params"]["cols"].as_u64().unwrap();
+    let rows = viewport["params"]["rows"].as_u64().unwrap();
+    assert!(cols % 2 == 1 && rows % 2 == 1, "{cols}x{rows}");
+    let cell = h.state().display().cell(CELL) * h.state().display().zoom();
+    assert!(
+        cols as f32 * cell >= map.width() && rows as f32 * cell >= map.height(),
+        "{cols}x{rows} of {cell}"
+    );
 }
