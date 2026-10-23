@@ -141,7 +141,7 @@ impl EngineModel {
             roofed: self
                 .abs(at)
                 .and_then(|p| self.replica.cell(&p.dim, p.x, p.y, p.z))
-                .is_some_and(|c| c.roofed && c.below.is_none()),
+                .is_some_and(|c| c.roofed),
             ..self.square_at(at)
         };
         let here = self.abs(at).is_some_and(|p| self.avatar_pos() == Some(&p));

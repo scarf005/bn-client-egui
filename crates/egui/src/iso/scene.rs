@@ -214,9 +214,12 @@ pub fn build(
     let mut hostile = vec![];
     let mut squares = 0;
     let mut animated = false;
+    // Under a roof the rooms remembered around the avatar are under it too, as far as it knows.
+    let sheltered = model.cell(model.player()).roofed;
     for y in 0..height {
         for x in 0..width {
             let cell = model.cell(Pos { x, y });
+            roofed[(y * width + x) as usize] = cell.roofed || (cell.remembered && sheltered);
             if cell.layers.is_empty() {
                 // Open air in sight over ground nothing is known about: dark ground as deep as the engine says.
                 if cell.depth > 0 {
@@ -227,9 +230,6 @@ pub fn build(
                 continue;
             }
             squares += 1;
-            if cell.roofed {
-                roofed[(y * width + x) as usize] = true;
-            }
             tops[(y * width + x) as usize] = Some(-f32::from(cell.depth) * m.level);
             // The same filters the flat map puts on what is remembered or poorly lit.
             let fx = match (cell.remembered, cell.light) {
