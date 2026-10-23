@@ -205,9 +205,10 @@ fn aim_at_zombie(name: &str, settings: &str, size: egui::Vec2) {
 }
 
 const FLAT: &str = r#"{"tiles":true,"tileset":"UltimateCataclysm"}"#;
-const ISO: &str = r#"{"tiles":true,"tileset":"Ultica_iso","three_d":false}"#;
-const THREE: &str = r#"{"tiles":true,"tileset":"Ultica_iso","three_d":true}"#;
-const FIRST: &str = r#"{"tiles":true,"tileset":"Ultica_iso","three_d":true,"first_person":true}"#;
+const ISO: &str = r#"{"tiles":true,"tileset":"HitButton_iso","three_d":false}"#;
+const THREE: &str = r#"{"tiles":true,"tileset":"HitButton_iso","three_d":true}"#;
+const FIRST: &str =
+    r#"{"tiles":true,"tileset":"HitButton_iso","three_d":true,"first_person":true}"#;
 const SMALL: egui::Vec2 = egui::vec2(1290.0, 830.0);
 const LARGE: egui::Vec2 = egui::vec2(1920.0, 1080.0);
 
