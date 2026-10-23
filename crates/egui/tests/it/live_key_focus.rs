@@ -3,7 +3,7 @@
 //!
 //! `BN_ENGINE=<engine> TMPDIR=<dir> SHOT_DIR=<dir> cargo test --release -p bn-client-egui --test it live_key_focus:: --
 //! --ignored --nocapture`
-use crate::common::live::{choose, dismiss_popups, save};
+use crate::common::live::{choose, dismiss_popups, safe_mode_off, save};
 use bn_client_egui::protocol::PanelKind;
 use bn_client_egui::transport::game_root;
 use bn_client_egui::watchdog::Watchdog;
@@ -63,8 +63,7 @@ fn playing<'a>() -> H<'a> {
     choose(&mut h, "menu:entry", "new_game:play_now");
     run_until(&mut h, "the map", 600, |h| h.state().model.size().x > 0);
     dismiss_popups(&mut h);
-    key(&mut h, "!");
-    run_until(&mut h, "safe mode", 120, |h| !h.state().model.busy());
+    safe_mode_off(&mut h);
     dismiss_popups(&mut h);
     h
 }

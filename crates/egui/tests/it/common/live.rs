@@ -114,6 +114,32 @@ pub fn choose(h: &mut H, affordance: &str, row: &str) {
     }
 }
 
+/// Sets safe mode off, whatever it holds: a start with a zombie in view refuses every step while it is on, as
+/// natively.
+pub fn safe_mode_off(h: &mut H) {
+    let off = |h: &H| {
+        h.state()
+            .model
+            .modes()
+            .iter()
+            .any(|m| m.id == "safe_mode" && m.value == "off")
+    };
+    run_until(h, "the modes", 180, |h| {
+        !h.state().model.modes().is_empty() && !h.state().model.busy()
+    });
+    let deadline = std::time::Instant::now() + Duration::from_secs(120);
+    while !off(h) {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "timed out: safe mode off"
+        );
+        if !h.state_mut().model.set_mode("safe_mode", "off") {
+            h.run_steps(1);
+        }
+        run_until(h, "safe mode off", 120, |h| !h.state().model.busy());
+    }
+}
+
 /// Chooses the entry of the menu on top labelled `label`, else the first whose label contains it, once the menu
 /// lists it: `East` is East, not North East.
 pub fn pick(h: &mut H, label: &str) {
