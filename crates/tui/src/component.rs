@@ -436,10 +436,20 @@ impl View {
 fn affordance_lines(screen: &Screen, width: usize) -> Vec<Line<'static>> {
     let mut lines: Vec<Vec<Span<'static>>> = vec![vec![]];
     let mut used = 0;
+    let searches = screen
+        .components()
+        .into_iter()
+        .filter_map(|c| match c {
+            Component::List(list) => list.search(screen),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
     for a in screen
         .affordances
         .iter()
         .filter(|a| !matches!(a.role, Some(AffordanceRole::Select | AffordanceRole::Digit)))
+        // The key of the list's filter opens its prompt; setting the text in one invoke is for the windows.
+        .filter(|a| !searches.iter().any(|s| s.id == a.id))
     {
         let keys = match a.keys.is_empty() {
             true => String::new(),
