@@ -1,5 +1,6 @@
 //! The 3D map view: the map drawn as a scene a camera can turn and tilt, with the game's own sprites.
 
+pub mod aim;
 pub mod camera;
 pub mod geometry;
 pub mod gpu;
