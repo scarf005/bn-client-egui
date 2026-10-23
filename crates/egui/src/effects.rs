@@ -6,8 +6,9 @@
 use bn_client_core::{Effect, Layer, Pellet, Pos, Rgb, Shape};
 use eframe::egui::{self, Color32, Rect};
 
-/// The native step delay is a few milliseconds; a person needs at least this long to see a step.
-const SHOT_STEP: f64 = 0.04;
+/// How long a shot takes over one square, gliding from one to the next; a short shot still lasts long enough to see.
+const SHOT_STEP: f64 = 0.01;
+const SHOT_LEAST: f64 = 0.08;
 const BURST_STEP: f64 = 0.06;
 const BLAST: f64 = 0.12;
 /// How long one step of floating text lasts; the native text moves for `MAX_STEPS` steps.
@@ -33,6 +34,13 @@ pub enum Op {
     /// A small round shot, for a tileset with no bullet sprite.
     Dot {
         at: Pos,
+    },
+    /// `op` drawn `f` of the way from square `from` to square `to`, as a shot gliding between them.
+    Between {
+        from: Pos,
+        to: Pos,
+        f: f32,
+        op: Box<Op>,
     },
     /// A tileset sprite, or what stands in for it when the tileset has none.
     Tile {
@@ -102,16 +110,32 @@ fn flight(effect: &Effect) -> &[Pos] {
 
 /// How long each step of a volley lasts: the slowest pellet's, so that every pellet takes its step k at once.
 fn volley_step(pellets: &[Pellet]) -> f64 {
-    pellets
+    let steps = pellets
         .iter()
-        .map(|p| life(&p.flight) / flight(&p.flight).len().max(1) as f64)
-        .fold(SHOT_STEP, f64::max)
+        .map(|p| flight(&p.flight).len())
+        .max()
+        .unwrap_or(1)
+        .max(1);
+    SHOT_STEP.max(SHOT_LEAST / steps as f64)
+}
+
+/// `bullet` at `step` squares along `path`, between two squares where the step has a fraction; none past its end.
+fn gliding(path: &[Pos], step: f64, bullet: impl Fn(Pos) -> Op) -> Option<Op> {
+    let at = *path.get(step as usize)?;
+    let to = path.get(step as usize + 1).copied().unwrap_or(at);
+    Some(Op::Between {
+        from: at,
+        to,
+        f: step.fract() as f32,
+        op: Box::new(bullet(at)),
+    })
 }
 
 fn life(effect: &Effect) -> f64 {
     let native = effect.duration_ms as f64 / 1000.0;
     match &effect.shape {
-        Shape::Projectile { path, .. } => native.max(SHOT_STEP * path.len() as f64),
+        // A shot glides at its own pace, not the native step delay, which only draws a square at a time.
+        Shape::Projectile { path, .. } => (SHOT_STEP * path.len() as f64).max(SHOT_LEAST),
         Shape::Volley { pellets } => {
             let steps = pellets.iter().map(|p| flight(&p.flight).len()).max();
             volley_step(pellets) * steps.unwrap_or(0) as f64
@@ -393,16 +417,14 @@ impl Effects {
                     sprite,
                     color,
                 } => {
-                    let Some(at) = path
-                        .get(((t * path.len() as f64) as usize).min(path.len().saturating_sub(1)))
-                    else {
-                        continue;
-                    };
-                    out.push(bullet(*at, *glyph, sprite, *color, ascii));
+                    let step = t * path.len().saturating_sub(1) as f64;
+                    out.extend(gliding(path, step, |at| {
+                        bullet(at, *glyph, sprite, *color, ascii)
+                    }));
                 }
                 Shape::Volley { pellets } => {
                     // Every pellet at its square of this step; one whose flight ended is gone.
-                    let step = ((now - p.start) / volley_step(pellets)) as usize;
+                    let step = (now - p.start) / volley_step(pellets);
                     for pellet in pellets {
                         if let Shape::Projectile {
                             path,
@@ -410,9 +432,10 @@ impl Effects {
                             sprite,
                             color,
                         } = &pellet.flight.shape
-                            && let Some(at) = path.get(step)
                         {
-                            out.push(bullet(*at, *glyph, sprite, *color, ascii));
+                            out.extend(gliding(path, step, |at| {
+                                bullet(at, *glyph, sprite, *color, ascii)
+                            }));
                         }
                     }
                 }
@@ -516,20 +539,23 @@ impl Effects {
         out
     }
 
-    /// Draws what is playing at `now`. `cell` is the screen square of a world square.
+    /// Draws what is playing at `now`. `cell` is the screen square of a world square; a shot is `shot` times as
+    /// large.
     pub fn paint(
         &self,
         painter: &egui::Painter,
-        now: f64,
-        cell_px: f32,
+        (now, cell_px, shot): (f64, f32, f32),
         cell: impl Fn(Pos) -> Rect,
         sprites: &mut dyn Sprites,
         ascii: bool,
     ) {
-        let font = egui::FontId::monospace(cell_px - 2.0);
+        let style = Style {
+            font: egui::FontId::monospace(cell_px - 2.0),
+            shot,
+        };
         let ops = self.ops(now, ascii, &|layer| sprites.has(layer));
         for op in &ops {
-            draw(painter, op, &cell, &font, sprites);
+            draw(painter, op, &cell, &style, sprites);
         }
     }
 }
@@ -546,11 +572,17 @@ fn tint(color: Rgb, alpha: f32) -> Color32 {
     )
 }
 
+/// How the ops of a frame are drawn: the glyphs' font, and how large a shot is beside its square.
+struct Style {
+    font: egui::FontId,
+    shot: f32,
+}
+
 fn draw(
     painter: &egui::Painter,
     op: &Op,
-    cell: &impl Fn(Pos) -> Rect,
-    font: &egui::FontId,
+    cell: &dyn Fn(Pos) -> Rect,
+    style: &Style,
     sprites: &mut dyn Sprites,
 ) {
     match op {
@@ -567,7 +599,7 @@ fn draw(
                 cell(*at).center(),
                 egui::Align2::CENTER_CENTER,
                 *ch,
-                font.clone(),
+                style.font.clone(),
                 tint(*color, *alpha),
             );
         }
@@ -579,10 +611,30 @@ fn draw(
         }
         Op::Tile { at, layer, or } => {
             if !sprites.tile(painter, cell(*at), layer) {
-                draw(painter, or, cell, font, sprites);
+                draw(painter, or, cell, style, sprites);
+            }
+        }
+        Op::Between { from, to, f, op } => {
+            if let Some(at) = between(cell(*from), cell(*to), *f, style.shot) {
+                draw(painter, op, &|_| at, style, sprites);
             }
         }
     }
+}
+
+/// Where a shot `f` of the way from square `a` to square `b` is drawn, `shot` times as large as `a`. A square behind
+/// the eye has no place on the screen: the shot stays at the other, and is not drawn when both are.
+fn between(a: Rect, b: Rect, f: f32, shot: f32) -> Option<Rect> {
+    let (a, b) = match (a.is_finite(), b.is_finite()) {
+        (true, true) => (a, b),
+        (true, false) => (a, a),
+        (false, true) => (b, b),
+        (false, false) => return None,
+    };
+    Some(Rect::from_center_size(
+        a.center().lerp(b.center(), f),
+        a.size() * shot,
+    ))
 }
 
 impl Sprites for crate::display::Display {
@@ -623,6 +675,7 @@ mod tests {
         match op {
             Op::Glyph { at: p, ch, .. } if *p == at => Some(*ch),
             Op::Tile { or, .. } => glyph_at(or, at),
+            Op::Between { op, .. } => glyph_at(op, at),
             _ => None,
         }
     }
@@ -649,6 +702,7 @@ mod tests {
             match op {
                 Op::Glyph { at, .. } => Some(*at),
                 Op::Tile { or, .. } => at(or),
+                Op::Between { op, .. } => at(op),
                 _ => None,
             }
         }
@@ -656,10 +710,24 @@ mod tests {
     }
 
     fn first_tile(ops: &[Op]) -> Option<(&Layer, &Op)> {
-        ops.iter().find_map(|op| match op {
-            Op::Tile { layer, or, .. } => Some((&**layer, &**or)),
-            _ => None,
-        })
+        fn tile(op: &Op) -> Option<(&Layer, &Op)> {
+            match op {
+                Op::Tile { layer, or, .. } => Some((&**layer, &**or)),
+                Op::Between { op, .. } => tile(op),
+                _ => None,
+            }
+        }
+        ops.iter().find_map(tile)
+    }
+
+    #[test]
+    fn a_shot_whose_square_is_behind_the_eye_is_drawn_at_the_square_in_sight() {
+        let seen = Rect::from_min_size(egui::pos2(10.0, 10.0), egui::vec2(20.0, 20.0));
+        let at = |a, b| between(a, b, 0.5, 0.5).map(|r| (r.center(), r.size()));
+        let expected = Some((seen.center(), egui::vec2(10.0, 10.0)));
+        assert_eq!(at(Rect::NOTHING, seen), expected);
+        assert_eq!(at(seen, Rect::NOTHING), expected);
+        assert_eq!(at(Rect::NOTHING, Rect::NOTHING), None);
     }
 
     fn shot(len: i32) -> Effect {
@@ -701,6 +769,23 @@ mod tests {
         let ops = play(shot(1), true);
         let (_, or) = first_tile(&ops).expect("a sprite");
         assert!(matches!(or, Op::Glyph { ch: '*', .. }), "{or:?}");
+    }
+
+    #[test]
+    fn a_shot_glides_between_the_squares_of_its_path_and_crosses_twenty_within_a_quarter_second() {
+        let effect = shot(21);
+        let flight = life(&effect);
+        assert!(flight <= 0.25, "{flight}");
+        let mut e = Effects::default();
+        e.add(0.0, vec![effect], false);
+        let ops = e.ops(flight * 0.525, false, &none);
+        let between = ops.iter().find_map(|op| match op {
+            Op::Between { from, to, f, .. } => Some((*from, *to, *f)),
+            _ => None,
+        });
+        let (from, to, f) = between.expect("the shot is between two squares");
+        assert_eq!((from.x, to.x), (10, 11));
+        assert!((f - 0.5).abs() < 0.05, "{f}");
     }
 
     #[test]
@@ -915,8 +1000,9 @@ mod tests {
             then: vec![],
         };
         let pellets = vec![pellet(0, 3), pellet(1, 2)];
+        let each = volley_step(&pellets);
         e.add(0.0, vec![volley(pellets), shot_on(5, 1)], false);
-        let at = |step: f64| squares(&e.ops(SHOT_STEP * step, true, &none));
+        let at = |step: f64| squares(&e.ops(each * step, true, &none));
         assert_eq!(at(0.5), [Pos { x: 0, y: 0 }, Pos { x: 0, y: 1 }]);
         assert_eq!(at(1.5), [Pos { x: 1, y: 0 }, Pos { x: 1, y: 1 }]);
         assert_eq!(at(2.5), [Pos { x: 2, y: 0 }], "the shorter pellet ended");
