@@ -88,12 +88,7 @@ fn start<'a>() -> H<'a> {
         let app = h.state();
         app.model.menu().is_none() && !app.model.busy() && !app.display().loading()
     });
-    // A town start often has a zombie in view, and the game's safe mode refuses every step until the player
-    // turns it off ('!'), as natively.
-    settle(&mut h, 2);
-    h.input_mut().events.push(egui::Event::Text("!".into()));
-    settle(&mut h, 2);
-    until(&mut h, 180, "safe mode off", |h| !h.state().model.busy());
+    crate::common::live::safe_mode_off(&mut h);
     h
 }
 

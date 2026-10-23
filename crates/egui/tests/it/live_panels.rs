@@ -3,7 +3,7 @@
 //!
 //! `BN_ENGINE=<engine> SHOT_DIR=<dir> cargo test --release -p bn-client-egui --test it live_panels:: -- --ignored
 //! --nocapture`
-use crate::common::live::{choose, dismiss_popups, save};
+use crate::common::live::{choose, dismiss_popups, safe_mode_off, save};
 use bn_client_egui::protocol::PanelKind;
 use bn_client_egui::transport::game_root;
 use bn_client_egui::watchdog::Watchdog;
@@ -62,9 +62,7 @@ fn the_player_walks_with_the_character_and_inventory_windows_open() {
     choose(&mut h, "menu:entry", "new_game:play_now");
     run_until(&mut h, "the map", 600, |h| h.state().model.size().x > 0);
     dismiss_popups(&mut h);
-    // A start with a zombie in view refuses steps until safe mode is off, as natively.
-    key(&mut h, "!");
-    run_until(&mut h, "safe mode", 120, |h| !h.state().model.busy());
+    safe_mode_off(&mut h);
     dismiss_popups(&mut h);
 
     let read = |panel| move |h: &H| h.state().model.watched_panel(panel).is_some();
