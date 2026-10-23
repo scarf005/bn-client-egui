@@ -269,6 +269,14 @@ impl<M: GameModel> App<M> {
         self
     }
 
+    /// Where the flat map lays out its squares, which may reach past the map's room.
+    pub fn map_squares(&self) -> Option<egui::Rect> {
+        let size = self.model.size();
+        (self.map_view.as_ref()).map(|v| {
+            egui::Rect::from_min_size(v.origin, egui::vec2(size.x as f32, size.y as f32) * v.cell)
+        })
+    }
+
     /// The 3D map's camera, which the right button and Alt+Left and Alt+Right turn.
     pub fn camera(&self) -> iso::camera::Camera {
         self.iso.camera

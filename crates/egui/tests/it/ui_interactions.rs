@@ -470,7 +470,7 @@ fn the_cursor_stays_on_its_map_square_when_the_view_scrolls() {
     h.run_steps(3);
     script.push(view_event(41, -16, 23));
     h.run_steps(3);
-    let origin = h.get_by_label("Map").rect().min;
+    let origin = h.state().map_squares().unwrap().min;
     h.hover_at(origin + egui::vec2(10.5 * CELL, 5.5 * CELL));
     h.run_steps(3);
     let description = |h: &H| {
@@ -922,10 +922,10 @@ fn the_zone_managers_panes_start_under_their_headings() {
 fn the_cell_tooltip_does_not_hang_over_a_dialog() {
     let (mut h, script) = harness();
     h.run_steps(5);
-    let map = h.get_by_label("Map").rect();
     // The avatar's own square is tin_can in the fixture, as is a ground row; the tooltip is one more.
     let me = h.state().model.player();
-    let over = map.min + egui::vec2(me.x as f32 + 0.5, me.y as f32 + 0.5) * CELL;
+    let over = h.state().map_squares().unwrap().min
+        + egui::vec2(me.x as f32 + 0.5, me.y as f32 + 0.5) * CELL;
     let named = |h: &H| h.query_all_by_label("tin_can").count();
     let rows = named(&h);
     h.hover_at(over);

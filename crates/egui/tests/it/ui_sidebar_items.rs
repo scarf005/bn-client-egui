@@ -151,7 +151,7 @@ fn dressed<'a>(tag: &str, tiles: bool) -> H<'a> {
     h
 }
 
-/// The shapes painted left of the row at `row` and level with it: textured meshes (sprites) and text.
+/// The shapes seen left of the row at `row` and level with it: textured meshes (sprites) and text.
 fn beside(h: &H, row: egui::Rect) -> (usize, Vec<(String, egui::Color32)>) {
     let near = |r: egui::Rect| {
         (row.min.x - 40.0..=row.min.x).contains(&r.max.x)
@@ -161,11 +161,14 @@ fn beside(h: &H, row: egui::Rect) -> (usize, Vec<(String, egui::Color32)>) {
     for clipped in &h.output().shapes {
         match &clipped.shape {
             egui::Shape::Mesh(mesh)
-                if mesh.texture_id != egui::TextureId::Managed(0) && near(mesh.calc_bounds()) =>
+                if mesh.texture_id != egui::TextureId::Managed(0)
+                    && near(mesh.calc_bounds().intersect(clipped.clip_rect)) =>
             {
                 sprites += 1;
             }
-            egui::Shape::Text(text) if near(text.visual_bounding_rect()) => {
+            egui::Shape::Text(text)
+                if near(text.visual_bounding_rect().intersect(clipped.clip_rect)) =>
+            {
                 glyphs.push((
                     text.galley.text().to_string(),
                     text.galley.job.sections[0].format.color,

@@ -137,7 +137,13 @@ pub fn legible(h: &Harness<'_, App<EngineModel>>, screen: &Value) -> Vec<Fault> 
         Some("map") => h.ctx.content_rect(),
         _ => room(h),
     };
-    cut_text(shapes, area)
+    // The map's edge squares are cut where the room ends, as the 3D map's are; only other text must fit.
+    let map = (h.query_by_role_and_label(egui::accesskit::Role::Canvas, "Map")).map(|m| m.rect());
+    let unmapped = (shapes.iter())
+        .filter(|s| Some(s.clip_rect) != map)
+        .cloned()
+        .collect::<Vec<_>>();
+    cut_text(&unmapped, area)
         .into_iter()
         .map(fault(Kind::Cut))
         .chain(
