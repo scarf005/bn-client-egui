@@ -1005,3 +1005,142 @@ fn every_step_down_between_lowered_grounds_has_a_fading_face_from_the_lower_up_t
         "{walls:?}"
     );
 }
+
+fn roofed(x: i32, y: i32) -> Value {
+    let mut square = cell(x, y, 0, "t_floor");
+    square["roofed"] = true.into();
+    square
+}
+
+#[test]
+fn a_roofed_square_has_a_flat_dark_ceiling_one_level_up_that_faces_down() {
+    let level = 108.0 * 0.034_026;
+    let m = model(vec![roofed(4, 4), cell(5, 4, 0, "t_floor")]);
+    let scene = scene_of(&m, "scene-ceiling");
+    let o = m.origin();
+    let lids = scene
+        .ceiling
+        .iter()
+        .filter(|i| i.b[2] == 0.0)
+        .collect::<Vec<_>>();
+    assert_eq!(lids.len(), 1, "{:?}", scene.ceiling);
+    let lid = *lids[0];
+    assert_eq!(
+        (lid.origin[0], lid.origin[1]),
+        ((4 - o.x) as f32, (4 - o.y) as f32)
+    );
+    assert!((lid.origin[2] - level).abs() < 0.02, "{lid:?}");
+    let normal_z = lid.a[0] * lid.b[1] - lid.a[1] * lid.b[0];
+    assert!(normal_z < 0.0, "faces down: {lid:?}");
+    assert!(lid.flags[0] & VOID != 0 && lid.flags[1] > 0, "{lid:?}");
+    // The ceiling is not part of the scene the orbit camera looks into from above.
+    assert!(
+        all(&scene).iter().all(|i| i.origin[2] < level - 0.02),
+        "{:?}",
+        all(&scene)
+    );
+}
+
+#[test]
+fn a_square_seen_through_open_air_under_no_roof_gets_no_ceiling() {
+    let m = model(vec![open_air(4, 4), cell(4, 4, -1, "t_dirt")]);
+    assert!(scene_of(&m, "scene-ceiling-air").ceiling.is_empty());
+}
+
+/// The lids and the faces of the ceiling of `m`.
+fn ceiling_of(m: &EngineModel, name: &str) -> (usize, usize) {
+    let scene = scene_of(m, name);
+    let lids = scene.ceiling.iter().filter(|i| i.b[2] == 0.0).count();
+    (lids, scene.ceiling.len() - lids)
+}
+
+#[test]
+fn a_hole_in_the_floor_under_a_roof_is_ceiled_like_the_room_with_no_face_between_them() {
+    let mut hole = open_air(9, 8);
+    hole["roofed"] = true.into();
+    let m = model(vec![roofed(8, 8), hole, cell(9, 8, -1, "t_dirt")]);
+    // Each square closes only its three edges to the unknown.
+    assert_eq!(ceiling_of(&m, "scene-ceiling-hole"), (2, 6));
+}
+
+fn remembered(x: i32, y: i32) -> Value {
+    json!({"at": {"dim": "", "x": x, "y": y, "z": 0}, "known": "remembered",
+        "memory": {"terrain": look("terrain", "t_floor")}})
+}
+
+#[test]
+fn a_remembered_square_is_ceiled_while_the_avatar_stands_under_a_roof_and_open_while_it_does_not() {
+    let m = model(vec![roofed(3, 4), remembered(4, 4)]);
+    assert_eq!(ceiling_of(&m, "scene-ceiling-remembered").0, 2);
+    let m = model(vec![
+        cell(3, 4, 0, "t_floor"),
+        roofed(8, 8),
+        remembered(9, 8),
+    ]);
+    let (lids, _) = ceiling_of(&m, "scene-ceiling-outside");
+    assert_eq!(lids, 1);
+}
+
+#[test]
+fn weather_does_not_fall_on_an_avatar_under_a_roof() {
+    assert!(!bn_client_egui::iso::sheltered(&model(vec![cell(
+        3, 4, 0, "t_floor"
+    )])));
+    assert!(bn_client_egui::iso::sheltered(&model(vec![roofed(3, 4)])));
+}
+
+#[test]
+fn a_ceiling_is_closed_down_to_the_wall_beside_it_and_to_the_lintel_of_a_gap() {
+    let level = 108.0 * 0.034_026;
+    // A wall to the east of the roofed square, and open floor to the south.
+    let m = model(vec![
+        roofed(4, 4),
+        cell(5, 4, 0, "t_wall"),
+        cell(4, 5, 0, "t_floor"),
+    ]);
+    let scene = scene_of(&m, "scene-ceiling-walls");
+    let o = m.origin();
+    let faces = scene
+        .ceiling
+        .iter()
+        .filter(|i| i.b[2] < 0.0)
+        .collect::<Vec<_>>();
+    let wall_top = scene.column(5 - o.x, 4 - o.y).unwrap().top();
+    // The faces on the south edge run along x, and those on the east edge run toward the north.
+    let east = faces.iter().filter(|f| f.a[1] < 0.0);
+    let south = faces.iter().filter(|f| f.a[0] > 0.0);
+    // The wall stops short of the ceiling and is closed above it.
+    assert!(wall_top < level - 1e-3, "{wall_top}");
+    let east = east.collect::<Vec<_>>();
+    assert_eq!(east.len(), 1, "{faces:?}");
+    assert!(
+        (east[0].origin[2] + east[0].b[2] - wall_top).abs() < 1e-3,
+        "{east:?}"
+    );
+    let gap = south.collect::<Vec<_>>();
+    assert_eq!(gap.len(), 1, "{faces:?}");
+    assert!(
+        (gap[0].origin[2] - level).abs() < 1e-3 && gap[0].origin[2] + gap[0].b[2] > 0.0,
+        "closed above a doorway's lintel: {gap:?}"
+    );
+}
+
+#[test]
+fn a_ceiling_beside_squares_nothing_is_known_about_is_closed_from_the_floor_so_no_sky_shows() {
+    let level = 108.0 * 0.034_026;
+    // Only the roofed square is known, away from the avatar: every edge of it faces the unknown.
+    let m = model(vec![roofed(8, 8)]);
+    let scene = scene_of(&m, "scene-ceiling-unknown");
+    let faces = scene
+        .ceiling
+        .iter()
+        .filter(|i| i.b[2] < 0.0)
+        .collect::<Vec<_>>();
+    assert_eq!(faces.len(), 4, "{faces:?}");
+    assert!(
+        faces
+            .iter()
+            .all(|f| (f.origin[2] - level).abs() < 1e-3 && (f.origin[2] + f.b[2]).abs() < 1e-3),
+        "from the floor up to the ceiling: {faces:?}"
+    );
+}

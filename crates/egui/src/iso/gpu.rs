@@ -62,6 +62,8 @@ pub struct Paint {
     pub stats: Arc<Stats>,
     /// The sky behind the scene; black without one.
     pub sky: Option<SkyUniform>,
+    /// Whether the ceilings of the scene are drawn: only the eye under them sees them.
+    pub ceiling: bool,
 }
 
 struct Offscreen {
@@ -91,7 +93,7 @@ struct Gpu {
     /// The pages the uploaded `sheets` came from; another tileset's pages replace them.
     pages: Option<Arc<Pages>>,
     instances: Option<wgpu::Buffer>,
-    version: Option<u64>,
+    version: Option<(u64, bool)>,
     /// The instances of each page: first and count.
     runs: Vec<(PageId, u32, u32)>,
     offscreen: Option<Offscreen>,
@@ -537,8 +539,8 @@ impl Gpu {
         });
     }
 
-    fn upload(&mut self, device: &wgpu::Device, scene: &Scene) {
-        if self.version == Some(scene.version) {
+    fn upload(&mut self, device: &wgpu::Device, scene: &Scene, ceiling: bool) {
+        if self.version == Some((scene.version, ceiling)) {
             return;
         }
         let mut all =
@@ -549,6 +551,12 @@ impl Gpu {
                 .push((batch.page, all.len() as u32, batch.instances.len() as u32));
             all.extend_from_slice(&batch.instances);
         }
+        // A ceiling is flat gray and samples no sprite, so any page serves.
+        if let (true, Some(batch)) = (ceiling, scene.batches.first()) {
+            self.runs
+                .push((batch.page, all.len() as u32, scene.ceiling.len() as u32));
+            all.extend_from_slice(&scene.ceiling);
+        }
         self.instances = (!all.is_empty()).then(|| {
             device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("iso3d instances"),
@@ -556,7 +564,7 @@ impl Gpu {
                 usage: wgpu::BufferUsages::VERTEX,
             })
         });
-        self.version = Some(scene.version);
+        self.version = Some((scene.version, ceiling));
     }
 
     fn draw(
@@ -577,7 +585,7 @@ impl Gpu {
         }
         let limit = device.limits().max_texture_dimension_2d;
         self.resize(device, size.map(|n| n.min(limit)));
-        self.upload(device, &paint.scene);
+        self.upload(device, &paint.scene, paint.ceiling);
         queue.write_buffer(&self.camera, 0, bytemuck::bytes_of(&paint.camera));
         if let Some(sky) = &paint.sky {
             queue.write_buffer(&self.sky_buffer, 0, bytemuck::bytes_of(sky));

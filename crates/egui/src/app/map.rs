@@ -879,7 +879,7 @@ impl<M: GameModel> App<M> {
                     (stats, sky.as_ref()),
                 ));
                 iso::paint_glyphs(painter, canvas.rect, v, &scene, canvas.cell_px);
-                if let Some(sky) = &sky {
+                if let Some(sky) = sky.as_ref().filter(|_| !iso::sheltered(&self.model)) {
                     // With reduced motion what falls stands still.
                     let still = self.display.reduced_motion();
                     let time = if still {

@@ -165,8 +165,14 @@ pub fn callback(
             target,
             stats,
             sky: sky.map(|sky| sky::SkyUniform::new(sky, view.view_proj())),
+            ceiling: view.camera.first_person,
         },
     ))
+}
+
+/// Whether the avatar stands under a roof, where nothing falls from the sky on it.
+pub fn sheltered(model: &(impl GameModel + ?Sized)) -> bool {
+    model.cell(model.player()).roofed
 }
 
 /// What falls from `sky` over the first-person view at `time` seconds: streaks of rain or flakes of snow, as many as

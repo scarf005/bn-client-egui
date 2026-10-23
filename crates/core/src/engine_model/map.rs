@@ -137,7 +137,13 @@ impl EngineModel {
     /// The cell without its square seed. The avatar's square shows the avatar's own glyph and colour over
     /// what it stands on, as the native view draws it.
     pub(super) fn cell_at(&self, at: Pos) -> Cell {
-        let cell = self.square_at(at);
+        let cell = Cell {
+            roofed: self
+                .abs(at)
+                .and_then(|p| self.replica.cell(&p.dim, p.x, p.y, p.z))
+                .is_some_and(|c| c.roofed),
+            ..self.square_at(at)
+        };
         let here = self.abs(at).is_some_and(|p| self.avatar_pos() == Some(&p));
         match self.replica.avatar().and_then(|a| a.look.as_ref()) {
             Some(look) if here => {

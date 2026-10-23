@@ -24,6 +24,7 @@ mod live_menu_height;
 mod live_mouse;
 mod live_occluded;
 mod live_panels;
+mod live_roof;
 mod live_screen_sweep;
 mod live_search;
 mod live_seed;

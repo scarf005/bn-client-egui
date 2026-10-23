@@ -122,6 +122,8 @@ pub struct Cell {
     pub hostile: bool,
     /// How many levels down the layers lie, seen through open air; 0 on the avatar's own level.
     pub depth: u8,
+    /// A roof or a floor above covers the square, which is where rain does not fall, also over a hole in the floor.
+    pub roofed: bool,
     /// The game's per-square seed for weighted sprite variants, also for squares nothing is known about.
     pub square: u32,
 }
