@@ -252,6 +252,17 @@ fn enter_after_a_click_in_the_sheet_is_the_games_alone() {
 }
 
 #[test]
+fn a_single_click_on_an_inventory_row_opens_nothing() {
+    let (mut h, script) = open();
+    let mut answered = 0;
+    key(&mut h, "i");
+    serve(&mut h, &script, &mut answered);
+    h.get_by_label("rock (1)").click();
+    h.run_steps(2);
+    assert!(operations(&script).is_empty(), "{:?}", operations(&script));
+}
+
+#[test]
 fn a_double_click_on_an_inventory_row_opens_the_engines_own_inventory() {
     let (mut h, script) = open();
     let mut answered = 0;
