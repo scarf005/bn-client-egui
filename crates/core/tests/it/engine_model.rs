@@ -3359,3 +3359,108 @@ fn the_sky_the_engine_sends_is_the_models_and_an_older_engine_sends_none() {
     );
     assert_eq!(session(None).sky(), None);
 }
+
+fn stale_describe(kind: &str) -> Value {
+    json!({"jsonrpc":"2.0","id":0,"error":{"code":1000,"message":"stale","data":{"kind":kind,"message":"The screen changed, try again."}}})
+}
+
+#[test]
+fn a_stale_describe_answer_keeps_the_previous_parts() {
+    let (t, h) = session();
+    let wall = json!({"jsonrpc":"2.0","id":0,"result":{"parts":[{"kind":"terrain","text":"Wall"}],"actions":[]}});
+    let mut m = connected(
+        t.on("bn.world.describe", vec![wall])
+            .on("bn.world.describe", vec![stale_describe("stale_boundary")]),
+    );
+    let at = Pos { x: 22, y: 12 };
+    m.hover(at);
+    m.poll();
+    h.push(change(41, json!({"route": [pos(4, 4)]})));
+    m.poll();
+    m.poll();
+    assert_eq!(describes(&h), 2);
+    assert_eq!(m.hover_text(at), Some(vec!["Wall".into()]));
+}
+
+#[test]
+fn a_stale_describe_for_a_new_square_is_asked_again_once_the_world_settles() {
+    let (t, h) = session();
+    let mut m = connected(t.on("bn.world.describe", vec![stale_describe("stale_revision")]));
+    let at = Pos { x: 22, y: 12 };
+    m.hover(at);
+    m.poll();
+    m.poll();
+    assert_eq!(describes(&h), 1);
+    h.push(change(41, json!({"route": [pos(4, 4)]})));
+    m.poll();
+    assert_eq!(describes(&h), 2, "the square is asked for again");
+}
+
+#[test]
+fn no_describe_is_sent_while_one_is_in_flight_and_the_latest_hover_is_asked_after() {
+    let (t, h) = session();
+    let wall = json!({"jsonrpc":"2.0","id":0,"result":{"parts":[{"kind":"terrain","text":"Wall"}],"actions":[]}});
+    // The first question is answered at the next poll, the later ones are not hovered into flight.
+    let mut m = connected(t.on("bn.world.describe", vec![wall]));
+    m.hover(Pos { x: 22, y: 12 });
+    m.hover(Pos { x: 23, y: 12 });
+    m.hover(Pos { x: 24, y: 12 });
+    assert_eq!(describes(&h), 1, "one in flight");
+    m.poll();
+    assert_eq!(describes(&h), 2, "the last hovered square is asked once");
+    let asked = h
+        .sent()
+        .into_iter()
+        .rfind(|m| m["method"] == "bn.world.describe")
+        .unwrap();
+    assert_eq!(
+        asked["params"]["pos"]["x"],
+        json!(7),
+        "the latest hover wins"
+    );
+}
+
+#[test]
+fn no_describe_is_sent_while_a_command_runs() {
+    let (t, h) = session();
+    let mut m = connected(t.on("bn.command.submit", walk_reply()));
+    assert!(m.invoke_action("RIGHT"));
+    m.poll();
+    m.hover(Pos { x: 22, y: 12 });
+    m.poll();
+    assert_eq!(describes(&h), 0, "the boundary is about to change");
+    h.push(fixture("events_41_walk"));
+    h.push(fixture("command_completed"));
+    m.poll();
+    assert_eq!(
+        describes(&h),
+        1,
+        "the hovered square is asked once the command ends"
+    );
+}
+
+fn stale_revision() -> Value {
+    json!({"jsonrpc":"2.0","id":null,"error":{"code":1000,"message":"stale","data":{"kind":"stale_revision","message":"The world changed, try again."}}})
+}
+
+#[test]
+fn a_key_rejected_as_stale_revision_on_a_timed_screen_is_sent_once_to_the_next_boundary() {
+    let (t, h) = session();
+    let mut m = connected(
+        t.on("bn.command.submit", vec![stale_revision()])
+            .on("bn.command.submit", vec![stale_revision()]),
+    );
+    h.push(change(
+        41,
+        json!({"interaction": snake_boundary("b:20", true)}),
+    ));
+    m.poll();
+    assert!(m.press("w"));
+    m.poll();
+    h.push(change(
+        42,
+        json!({"interaction": snake_boundary("b:21", true)}),
+    ));
+    m.poll();
+    assert_eq!(submits(&h).len(), 2);
+}

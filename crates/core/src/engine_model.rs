@@ -176,6 +176,12 @@ pub struct EngineModel {
     at_main_menu: bool,
     /// The square whose description was asked for or received, the revision it is valid for and its lines.
     hovered: Option<Hover>,
+    /// The request for `hovered` whose answer is awaited; at most one is in flight.
+    describing: Option<(u64, (String, String))>,
+    /// The latest square to describe once nothing is in flight and no command runs.
+    describe_wanted: Option<WorldPos>,
+    /// The boundary and revision of the question the engine refused as stale; not asked again until they change.
+    describe_refused: Option<(String, String)>,
     overmap: Watched,
     /// The panel windows open.
     panels: HashMap<PanelKind, WatchedPanel>,
@@ -504,6 +510,18 @@ impl EngineModel {
         let (Some(boundary), Some(now)) = (self.replica.boundary(), self.replica.at()) else {
             return;
         };
+        // A running command changes the boundary at every prompt, so the engine would refuse the question.
+        if self.busy
+            || self
+                .describing
+                .as_ref()
+                .is_some_and(|(id, _)| self.pending.contains_key(id))
+        {
+            self.describe_wanted = Some(pos);
+            return;
+        }
+        self.describe_wanted = None;
+        let asked = (boundary.boundary_id.clone(), now.revision.clone());
         let params = serde_json::to_value(protocol::DescribeParams {
             epoch: now.epoch.clone(),
             boundary_id: boundary.boundary_id.clone(),
@@ -523,7 +541,10 @@ impl EngineModel {
             parts,
             actions,
         });
-        self.call("bn.world.describe", params, Pending::Describe);
+        self.describing = Some((
+            self.call("bn.world.describe", params, Pending::Describe),
+            asked,
+        ));
     }
 
     /// Reads the squares the map window shows once the world or the window changed. The player's square is the
@@ -610,6 +631,17 @@ impl EngineModel {
     /// Asks again for the hovered square once its answer is older than the world, such as after the
     /// engine's window changed size, so a pointer that stays still keeps its description.
     fn refresh_hover(&mut self) {
+        let settled = self
+            .replica
+            .boundary()
+            .zip(self.replica.at())
+            .is_some_and(|(b, now)| {
+                self.describe_refused.as_ref()
+                    != Some(&(b.boundary_id.clone(), now.revision.clone()))
+            });
+        if let (Some(pos), true) = (self.describe_wanted.clone(), settled) {
+            self.ask_describe(pos);
+        }
         let stale = self.hovered.as_ref().filter(|h| {
             h.parts.is_some()
                 && self

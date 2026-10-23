@@ -236,6 +236,17 @@ impl EngineModel {
 
     /// A square outside the engine's window has no description; the cell's own name stands.
     fn described(&mut self, result: Result<Value, RpcError>) {
+        // A refusal as stale says nothing about the square: its earlier answer stands and it is asked again.
+        if let Err(e) = &result
+            && e.data
+                .as_ref()
+                .map(error_kind)
+                .is_some_and(|k| is_stale(&k))
+        {
+            self.describe_wanted = self.hovered.as_ref().map(|h| h.pos.clone());
+            self.describe_refused = self.describing.take().map(|(_, asked)| asked);
+            return;
+        }
         let described = result
             .ok()
             .and_then(|v| serde_json::from_value::<protocol::DescribeResult>(v).ok());
@@ -283,7 +294,7 @@ impl EngineModel {
             .and_then(|b| b.interaction.as_ref())
             .is_some_and(|i| i.refresh_ms.is_some());
         let sent = self.sent.take();
-        let keep = reason == Some("stale_boundary") && timed && sent.is_some();
+        let keep = reason.is_some_and(is_stale) && timed && sent.is_some();
         if keep {
             self.resend = sent;
         }
@@ -325,6 +336,11 @@ fn incompatible(e: &RpcError) -> bool {
             e.data.as_ref().map(error_kind).as_deref(),
             Some("negotiation_failed" | "unavailable_locale")
         )
+}
+
+/// The engine answers a question about an older screen or world as one of these.
+fn is_stale(kind: &str) -> bool {
+    matches!(kind, "stale_boundary" | "stale_revision")
 }
 
 fn error_kind(e: &Value) -> String {
