@@ -18,6 +18,8 @@ pub struct Held<'a> {
 
 /// The vertical field of view a block game draws the hand with.
 const FOV: f32 = 70.0 * std::f32::consts::PI / 180.0;
+/// The shape of the screen the hand is laid out for: as wide as a wide screen's 16 by 9.
+const WIDE: f32 = 16.0 / 9.0;
 /// A pixel of a sixteen-pixel item: how thick the item is, of the square it fills.
 const THICK: f32 = 1.0 / 16.0;
 /// The way the faces are lit from: above, ahead and a little left of the eye.
@@ -103,8 +105,9 @@ pub fn mesh(held: &Held, view: egui::Rect) -> egui::Mesh {
     // The farthest first, so the nearer faces cover them.
     let depth = |f: &Face| f.corners.iter().map(|c| c.z).sum::<f32>();
     faces.sort_by(|a, b| depth(a).total_cmp(&depth(b)));
-    let height = view.height();
-    let middle = view.center();
+    // The hand of a wide screen; in a narrower view, that screen as wide as the view in its bottom right corner.
+    let height = view.height().min(view.width() / WIDE);
+    let middle = view.right_bottom() - egui::vec2(height * WIDE, height) / 2.0;
     let focal = height / 2.0 / (FOV / 2.0).tan();
     let screen = |p: Vec3| middle + egui::vec2(p.x, -p.y) * focal / -p.z;
     let mut mesh = egui::Mesh::with_texture(held.texture);
