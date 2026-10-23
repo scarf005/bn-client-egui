@@ -793,9 +793,46 @@ pub fn void_lid(square: (i32, i32), z: f32) -> Instance {
     )
 }
 
+/// The gray of a ceiling, in the haze byte of its instance: a plain dark, lighter than the unknown ground.
+const CEILING: u32 = 56;
+
+/// The flat ceiling at height `z` over `square`, facing down at whoever stands under it.
+pub fn ceiling_lid(square: (i32, i32), z: f32) -> Instance {
+    let ceiling = ([0.0, 1.0, 0.0], [1.0, 0.0, 0.0]);
+    instance(
+        [square.0 as f32, square.1 as f32, z],
+        ceiling,
+        [Vec2::ZERO; 3],
+        [VOID, CEILING, 0],
+    )
+}
+
 /// The face of `square` on its south (0), east, north or west edge, from height `low` up to `high`: the step down to
 /// the lower ground beside it, fading into the dark at its foot.
-pub fn void_face(square: (i32, i32), face: usize, (low, high): (f32, f32)) -> Instance {
+pub fn void_face(square: (i32, i32), face: usize, range: (f32, f32)) -> Instance {
+    edge_face(
+        square,
+        face,
+        range,
+        (
+            [VOID | FADE, VOID_FACE, 0],
+            [Vec2::ZERO, Vec2::ZERO, Vec2::Y],
+        ),
+    )
+}
+
+/// The flat gray face on the `face` edge of `square` from height `low` up to `high`, which closes the room under a
+/// ceiling above the walls that stop short of it.
+pub fn ceiling_face(square: (i32, i32), face: usize, range: (f32, f32)) -> Instance {
+    edge_face(square, face, range, ([VOID, CEILING, 0], [Vec2::ZERO; 3]))
+}
+
+fn edge_face(
+    square: (i32, i32),
+    face: usize,
+    (low, high): (f32, f32),
+    (flags, uv): ([u32; 3], [Vec2; 3]),
+) -> Instance {
     let (x, y) = (square.0 as f32, square.1 as f32);
     let (from, run) = match face {
         0 => ([x, y + 1.0], [1.0, 0.0]),
@@ -806,8 +843,8 @@ pub fn void_face(square: (i32, i32), face: usize, (low, high): (f32, f32)) -> In
     instance(
         [from[0], from[1], high],
         ([run[0], run[1], 0.0], [0.0, 0.0, low - high]),
-        [Vec2::ZERO, Vec2::ZERO, Vec2::Y],
-        [VOID | FADE, VOID_FACE, 0],
+        uv,
+        flags,
     )
 }
 

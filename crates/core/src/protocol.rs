@@ -206,6 +206,9 @@ pub struct Cell {
     /// A cargo part of a vehicle here holds items.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub cargo: bool,
+    /// The square is not outside: a roof or a floor above covers it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub roofed: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub traps: Vec<Look>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

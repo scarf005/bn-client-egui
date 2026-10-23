@@ -2,7 +2,7 @@
 
 use super::geometry::{
     Form, Instance, Kind, Metrics, Outline, PageId, Placement, Shape, SpriteSource, band, borders,
-    place, shape, void_face, void_lid, wall_bands,
+    ceiling_face, ceiling_lid, place, shape, void_face, void_lid, wall_bands,
 };
 use super::pages::Pages;
 use crate::display::{Fx, STRIP, light, query, resolve_layer};
@@ -23,6 +23,9 @@ pub struct Scene {
     /// Names this scene among those built, so a renderer knows when to upload again.
     pub version: u64,
     pub batches: Vec<Batch>,
+    /// The ceilings over the roofed squares of the avatar's level and the faces that close their rooms, which only the first-person view draws: seen
+    /// from above they would hide the room.
+    pub ceiling: Vec<Instance>,
     /// The squares of the model's view with something to draw.
     pub squares: usize,
     /// The size of the view in squares, and what each square drawn is, row by row.
@@ -113,6 +116,9 @@ impl Item {
     }
 }
 
+/// How high a doorway under a ceiling stays open, in levels.
+const LINTEL: f32 = 0.7;
+
 /// The directions of the faces of a solid, in the order `Placement::covered` lists them: south, east, north, west.
 const FACES: [(i32, i32); 4] = [(0, 1), (1, 0), (0, -1), (-1, 0)];
 
@@ -201,6 +207,7 @@ pub fn build(
     // How high the surface of each square drawn lies, and the squares of solid unknown.
     let mut tops = vec![None::<f32>; (width * height) as usize];
     let mut voids = vec![];
+    let mut roofed = vec![false; (width * height) as usize];
     let mut items = vec![];
     let mut glyphs = vec![];
     let mut hurt = vec![];
@@ -220,6 +227,9 @@ pub fn build(
                 continue;
             }
             squares += 1;
+            if cell.roofed {
+                roofed[(y * width + x) as usize] = true;
+            }
             tops[(y * width + x) as usize] = Some(-f32::from(cell.depth) * m.level);
             // The same filters the flat map puts on what is remembered or poorly lit.
             let fx = match (cell.remembered, cell.light) {
@@ -457,6 +467,24 @@ pub fn build(
         }
         pages.entry(page).or_default().extend(unknown);
     }
+    // The ceiling lies a level up, and a face on each edge of the roofed squares to a square under no roof closes the
+    // room down to the top of the wall there, or to the lintel of a doorway.
+    let mut ceiling = vec![];
+    for (n, _) in roofed.iter().enumerate().filter(|(_, r)| **r) {
+        let (x, y) = (n as i32 % width, n as i32 / width);
+        ceiling.push(ceiling_lid((x, y), m.level));
+        for (face, (dx, dy)) in FACES.into_iter().enumerate() {
+            if let Some(next) =
+                index(x + dx, y + dy).filter(|&n| !roofed[n] && columns[n].is_some())
+            {
+                let wall = columns[next].and_then(|c| c.solid).map(|(_, top)| top);
+                let low = wall.unwrap_or(LINTEL * m.level).min(m.level);
+                if low < m.level - 1e-3 {
+                    ceiling.push(ceiling_face((x, y), face, (low, m.level)));
+                }
+            }
+        }
+    }
     let (low, high) = items.iter().fold((0.0f32, 0.0f32), |(low, high), i| {
         (i.floor.min(low), i.floor.max(high))
     });
@@ -466,6 +494,7 @@ pub fn build(
             .into_iter()
             .map(|(page, instances)| Batch { page, instances })
             .collect(),
+        ceiling,
         squares,
         width,
         height,

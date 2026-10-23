@@ -1018,8 +1018,13 @@ fn a_roofed_square_has_a_flat_dark_ceiling_one_level_up_that_faces_down() {
     let m = model(vec![roofed(4, 4), cell(5, 4, 0, "t_floor")]);
     let scene = scene_of(&m, "scene-ceiling");
     let o = m.origin();
-    assert_eq!(scene.ceiling.len(), 1, "{:?}", scene.ceiling);
-    let lid = scene.ceiling[0];
+    let lids = scene
+        .ceiling
+        .iter()
+        .filter(|i| i.b[2] == 0.0)
+        .collect::<Vec<_>>();
+    assert_eq!(lids.len(), 1, "{:?}", scene.ceiling);
+    let lid = *lids[0];
     assert_eq!(
         (lid.origin[0], lid.origin[1]),
         ((4 - o.x) as f32, (4 - o.y) as f32)
@@ -1050,4 +1055,38 @@ fn weather_does_not_fall_on_an_avatar_under_a_roof() {
         3, 4, 0, "t_floor"
     )])));
     assert!(bn_client_egui::iso::sheltered(&model(vec![roofed(3, 4)])));
+}
+
+#[test]
+fn a_ceiling_is_closed_down_to_the_wall_beside_it_and_to_the_lintel_of_a_gap() {
+    let level = 108.0 * 0.034_026;
+    // A wall to the east of the roofed square, and open floor to the south.
+    let m = model(vec![
+        roofed(4, 4),
+        cell(5, 4, 0, "t_wall"),
+        cell(4, 5, 0, "t_floor"),
+    ]);
+    let scene = scene_of(&m, "scene-ceiling-walls");
+    let o = m.origin();
+    let faces = scene
+        .ceiling
+        .iter()
+        .filter(|i| i.b[2] < 0.0)
+        .collect::<Vec<_>>();
+    let wall_top = scene.column(5 - o.x, 4 - o.y).unwrap().top();
+    // The faces on the south edge run along x, and those on the east edge run toward the north.
+    let east = faces.iter().filter(|f| f.a[1] < 0.0);
+    let south = faces.iter().filter(|f| f.a[0] > 0.0);
+    // Walls as tall as the ceiling need no face; a shorter one is closed above.
+    assert_eq!(
+        east.count(),
+        usize::from(wall_top < level - 1e-3),
+        "{faces:?}"
+    );
+    let gap = south.collect::<Vec<_>>();
+    assert_eq!(gap.len(), 1, "{faces:?}");
+    assert!(
+        (gap[0].origin[2] - level).abs() < 1e-3 && gap[0].origin[2] + gap[0].b[2] > 0.0,
+        "closed above a doorway's lintel: {gap:?}"
+    );
 }
