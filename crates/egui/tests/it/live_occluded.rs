@@ -1,5 +1,5 @@
-//! Against a real engine: the ground a roof edge hides under open air is drawn dimmed, in 3D and on the flat map
-//! of an isometric tileset.
+//! Against a real engine: open air in sight over ground the avatar neither sees nor remembers is a solid dark block
+//! in 3D and stays black on the flat map of an isometric tileset.
 //!
 //! A mod in the profile builds a house, a roof over it and open air around it, and puts the avatar on the roof.
 //! `BN_ENGINE=<engine> BN_ROOT=<game root with gfx/Ultica_iso> SHOT_DIR=<dir> SHOT_TAG=<prefix> cargo test
@@ -91,8 +91,8 @@ fn start(three_d: bool, size: egui::Vec2) -> H<'static> {
     h
 }
 
-/// The squares of the view as a picture of text: `.` nothing known, `R` roof, `o` ground drawn lower and plain,
-/// `m` ground drawn lower and remembered.
+/// The squares of the view as a picture of text: `.` nothing known, `X` open air over unknown ground, `R` roof, `o`
+/// ground drawn lower and plain, `m` ground drawn lower and remembered.
 fn grid(h: &H) -> (String, usize, usize) {
     let m = &h.state().model;
     let size = m.size();
@@ -101,6 +101,7 @@ fn grid(h: &H) -> (String, usize, usize) {
         for x in 0..size.x {
             let c = m.cell(Pos { x, y });
             text.push(match (c.layers.first(), c.depth, c.remembered) {
+                (None, depth, _) if depth > 0 => 'X',
                 (None, ..) => '.',
                 (Some(l), 0, _) if l.id.contains("roof") => 'R',
                 (Some(_), 0, _) => '#',
@@ -134,6 +135,10 @@ fn roof_scene(three_d: bool, name: &str) {
     settle(&mut h);
     let (text, plain, dim) = grid(&h);
     println!("LIVE {name} grid plain {plain} dim {dim}\n{text}");
+    assert!(
+        text.contains('X'),
+        "open air over unknown ground is known as such"
+    );
     for (w, ht) in [(1280.0, 800.0), (1920.0, 1080.0)] {
         h.set_size(egui::vec2(w, ht));
         settle(&mut h);
@@ -146,12 +151,12 @@ fn roof_scene(three_d: bool, name: &str) {
 
 #[test]
 #[ignore = "requires BN_ENGINE and a game root with the Ultica_iso tileset"]
-fn the_ground_a_roof_edge_hides_is_drawn_dimmed_in_3d() {
+fn open_air_over_unknown_ground_is_a_dark_block_in_3d() {
     roof_scene(true, "pseudo3d");
 }
 
 #[test]
 #[ignore = "requires BN_ENGINE and a game root with the Ultica_iso tileset"]
-fn the_ground_a_roof_edge_hides_is_drawn_dimmed_on_the_isometric_flat_map() {
+fn open_air_over_unknown_ground_stays_black_on_the_isometric_flat_map() {
     roof_scene(false, "iso2d");
 }
