@@ -16,7 +16,7 @@ fn harness<'a>() -> H<'a> {
 }
 
 fn cell_center(h: &H, at: Pos) -> egui::Pos2 {
-    let origin = h.get_by_label("Map").rect().min;
+    let origin = h.state().map_squares().unwrap().min;
     origin + egui::vec2((at.x as f32 + 0.5) * CELL, (at.y as f32 + 0.5) * CELL)
 }
 

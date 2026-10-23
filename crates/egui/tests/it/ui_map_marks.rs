@@ -4,7 +4,6 @@ use bn_client_egui::app::CELL;
 use bn_client_egui::{App, Clock, EngineModel, GameModel};
 use eframe::egui;
 use egui_kittest::Harness;
-use egui_kittest::kittest::Queryable;
 use serde_json::{Value, json};
 
 type H<'a> = Harness<'a, App<EngineModel>>;
@@ -54,9 +53,7 @@ fn editor(sequence: u64, marks: Value, over: &[Value]) -> Value {
 /// The screen corner of the square `dx`, `dy` from the avatar, plus (`fx`, `fy`) of a square.
 fn corner(h: &H, (dx, dy): (i32, i32), (fx, fy): (f32, f32)) -> egui::Pos2 {
     let me = h.state().model.player();
-    h.get_by_role_and_label(egui::accesskit::Role::Canvas, "Map")
-        .rect()
-        .min
+    h.state().map_squares().unwrap().min
         + egui::vec2((me.x + dx) as f32 + fx, (me.y + dy) as f32 + fy) * CELL
 }
 

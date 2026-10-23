@@ -28,7 +28,7 @@ const SHADOW: Color32 = Color32::from_gray(170);
 /// squares the engine sends no longer fill the view, in until a few squares do.
 const ZOOM_STEP: f32 = 1.25;
 const ZOOM_OUT: i8 = 8;
-const ZOOM_IN: i8 = 8;
+const ZOOM_IN: i8 = 16;
 
 /// The choice that survives a restart.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]

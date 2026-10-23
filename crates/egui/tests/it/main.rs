@@ -32,6 +32,7 @@ mod live_travel;
 mod live_ui;
 mod live_vehicle_editor;
 mod live_world_map;
+mod live_zoom;
 mod painted_sprites;
 mod perf;
 mod perf_live;

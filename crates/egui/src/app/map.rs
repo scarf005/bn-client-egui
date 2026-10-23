@@ -49,7 +49,7 @@ type Scene3d = (Arc<Scene>, Arc<Pages>);
 
 /// Where the map lies on the screen this frame.
 struct Canvas {
-    /// The area the map paints into.
+    /// The area the map lays out in; the flat squares may reach past the room, which cuts them.
     rect: egui::Rect,
     /// A square's side in points.
     cell_px: f32,
@@ -332,13 +332,13 @@ impl<M: GameModel> App<M> {
             ui.id().with("map_status"),
             egui::Sense::hover(),
         );
-        // The squares fill whole cells, so what is left over is shared by both sides, not left as a band.
-        // The 3D map fills the room and turns with the right button; the flat one is its squares.
+        // The 3D map fills the room and turns with the right button; the flat one is its squares, cut at the
+        // room's edges.
         let (extent, sense) = match three {
             true => (ui.available_size(), egui::Sense::click_and_drag()),
             false if tilted => (ui.available_size(), egui::Sense::click()),
             false => (
-                egui::vec2(size.x as f32 * cell_px, size.y as f32 * cell_px),
+                (egui::vec2(size.x as f32, size.y as f32) * cell_px).min(ui.available_size()),
                 egui::Sense::click(),
             ),
         };
@@ -367,8 +367,13 @@ impl<M: GameModel> App<M> {
                 width: cell_px,
                 ratio: t.tile.1 as f32 / t.tile.0 as f32,
             });
+        // The flat squares are laid out around the middle one, the avatar's, and cut at the room's edges.
+        let grid = egui::Rect::from_center_size(
+            response.rect.center(),
+            egui::vec2(size.x as f32, size.y as f32) * cell_px,
+        );
         let canvas = Canvas {
-            rect: response.rect,
+            rect: if three || tilted { response.rect } else { grid },
             cell_px,
             size,
             view,
@@ -392,7 +397,7 @@ impl<M: GameModel> App<M> {
             .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Other, true, tr("Map")));
         self.map_wheel(ui, &response);
         self.map_view = Some(MapView {
-            origin: response.rect.min,
+            origin: canvas.rect.min,
             cell: cell_px,
             diamond,
         });
@@ -462,9 +467,10 @@ impl<M: GameModel> App<M> {
                     y: around.clamp(iso::REACH, TILTED_REACH),
                 }
             }
+            // Enough squares to cover the room, an odd number so the avatar's is the middle one.
             _ => Pos {
-                x: (room.x / cell_px) as i32,
-                y: (room.y / cell_px) as i32,
+                x: (room.x / cell_px).ceil() as i32 | 1,
+                y: (room.y / cell_px).ceil() as i32 | 1,
             },
         });
         // Facts are always taken, so a long pause never replays them; reduced motion drops them.
@@ -758,7 +764,7 @@ impl<M: GameModel> App<M> {
                 // The 3D scene has no square grid to place the menu on; it opens at the map's centre.
                 Some(_) => response.rect.center(),
                 None if canvas.diamond.is_some() => canvas.rect(at).left_top(),
-                None => response.rect.min + egui::vec2(at.x as f32, at.y as f32) * canvas.cell_px,
+                None => canvas.flat_rect(at).min,
             },
             egui::Vec2::splat(canvas.cell_px),
         ));

@@ -20,7 +20,7 @@ type H<'a> = Harness<'a, App<EngineModel>>;
 fn on_screen(h: &H, at: Pos) -> egui::Pos2 {
     let display = h.state().display();
     let cell = display.cell(CELL) * display.zoom();
-    h.get_by_label("Map").rect().min + egui::vec2(at.x as f32 + 0.5, at.y as f32 + 0.5) * cell
+    h.state().map_squares().unwrap().min + egui::vec2(at.x as f32 + 0.5, at.y as f32 + 0.5) * cell
 }
 
 /// A new game of the default character drawn with tiles, its pop-ups closed.

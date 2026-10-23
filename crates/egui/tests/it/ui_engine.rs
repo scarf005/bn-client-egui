@@ -42,7 +42,7 @@ fn engine_map_renders_and_a_click_submits_a_travel_through_the_protocol() {
     let (mut h, script) = harness();
     h.run_steps(3);
     assert_eq!(script.sent_methods()[..2], ["bn.hello", "bn.subscribe"]);
-    let origin = h.get_by_label("Map").rect().min;
+    let origin = h.state().map_squares().unwrap().min;
     // The avatar is at the middle of the view; click two cells east of it.
     let me = h.state().model.player();
     let pos = origin + egui::vec2((me.x as f32 + 2.5) * CELL, (me.y as f32 + 0.5) * CELL);
@@ -356,7 +356,7 @@ fn reduced_motion_shows_a_still_mark_in_place_of_the_spinner() {
 fn map_click_marks_the_cell_before_the_route_arrives() {
     let (mut h, script) = harness();
     h.run_steps(3);
-    let origin = h.get_by_label("Map").rect().min;
+    let origin = h.state().map_squares().unwrap().min;
     let pos = origin + egui::vec2(22.5 * CELL, 12.5 * CELL);
     h.hover_at(pos);
     h.run_steps(2);
@@ -416,7 +416,7 @@ fn tabbed_menu_shows_tabs_and_only_the_selected_tabs_entries_and_choosing_a_tab_
 }
 
 fn click_map(h: &mut H, view: (f32, f32)) {
-    let origin = h.get_by_label("Map").rect().min;
+    let origin = h.state().map_squares().unwrap().min;
     let pos = origin + egui::vec2(view.0 * CELL, view.1 * CELL);
     h.hover_at(pos);
     h.run_steps(2);

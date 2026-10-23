@@ -53,7 +53,7 @@ fn operations(h: &ScriptHandle) -> Vec<Value> {
 fn square(h: &mut H, view: (f32, f32)) -> egui::Pos2 {
     let me = h.state().model.player();
     let (dx, dy) = (me.x as f32 - 20.0, me.y as f32 - 12.0);
-    h.get_by_label("Map").rect().min + egui::vec2((view.0 + dx) * CELL, (view.1 + dy) * CELL)
+    h.state().map_squares().unwrap().min + egui::vec2((view.0 + dx) * CELL, (view.1 + dy) * CELL)
 }
 
 fn click(h: &mut H, pos: egui::Pos2, button: egui::PointerButton) {
@@ -544,7 +544,7 @@ fn while_looking_the_mouse_moves_the_engines_cursor_and_a_second_click_confirms_
     );
     h.run_steps(3);
     let here = {
-        let origin = h.get_by_label("Map").rect().min;
+        let origin = h.state().map_squares().unwrap().min;
         let view = h.state().model.focus().expect("the engine cursor");
         origin + egui::vec2(view.x as f32 + 0.5, view.y as f32 + 0.5) * CELL
     };
@@ -569,7 +569,7 @@ fn hovering_the_engines_cursor_square_does_not_confirm_it() {
         Some(target),
     );
     let here = {
-        let origin = h.get_by_label("Map").rect().min;
+        let origin = h.state().map_squares().unwrap().min;
         let view = h.state().model.focus().expect("the engine cursor");
         origin + egui::vec2(view.x as f32 + 0.5, view.y as f32 + 0.5) * CELL
     };
