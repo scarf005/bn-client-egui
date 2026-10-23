@@ -87,11 +87,12 @@ fn vs_shadow(q: Quad) -> Varying {
 // Flag bits of an instance's first word, as `geometry` names them.
 const GLOW: u32 = 4u;
 const SHEER: u32 = 8u;
+const VOID: u32 = 16u;
 
 @fragment
 fn fs_shadow(v: Varying) {
     // What gives light or is seen through casts no shadow.
-    if textureSampleLevel(sheet, pixels, v.uv, 0.0).a < 0.5 || (v.flags.x & (GLOW | SHEER)) != 0u {
+    if textureSampleLevel(sheet, pixels, v.uv, 0.0).a < 0.5 || (v.flags.x & (GLOW | SHEER | VOID)) != 0u {
         discard;
     }
 }
@@ -122,6 +123,10 @@ fn filtered(mode: u32, rgb: vec3<f32>) -> vec3<f32> {
 
 @fragment
 fn fs_main(v: Varying) -> @location(0) vec4<f32> {
+    // What is unknown but solid is a flat gray, its level in the haze byte.
+    if (v.flags.x & VOID) != 0u {
+        return vec4<f32>(vec3<f32>(f32(v.flags.y) / 255.0), 1.0);
+    }
     let texel = textureSampleLevel(sheet, pixels, v.uv, 0.0);
     if texel.a < 0.5 {
         discard;

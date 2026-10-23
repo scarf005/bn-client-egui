@@ -3,7 +3,7 @@ use crate::common::{fixture, flat_root, iso_root};
 use bn_client_egui::EngineModel;
 use bn_client_egui::GameModel;
 use bn_client_egui::iso::camera::{Camera, Viewport};
-use bn_client_egui::iso::geometry::{BOARD, GLOW, Instance, PageId, SHEER};
+use bn_client_egui::iso::geometry::{BOARD, GLOW, Instance, PageId, SHEER, VOID};
 use bn_client_egui::iso::pages::Pages;
 use bn_client_egui::iso::scene::{self, Scene};
 use bn_client_egui::tileset::Tileset;
@@ -132,6 +132,85 @@ fn open_air_shows_the_level_below_lower_and_hazed_by_how_far_down_it_is() {
         0,
         "the avatar's level has no haze"
     );
+}
+
+fn open_air(x: i32, y: i32) -> Value {
+    let mut air =
+        json!({"at": {"dim": "", "x": x, "y": y, "z": 0}, "known": "visible", "below": 1});
+    air["terrain"] = serde_json::Value::Null;
+    air
+}
+
+/// The quads of solid unknown in the scene.
+fn voids(scene: &Scene) -> Vec<Instance> {
+    all(scene)
+        .into_iter()
+        .filter(|i| i.flags[0] & VOID != 0)
+        .collect()
+}
+
+#[test]
+fn open_air_over_ground_nothing_is_known_about_is_dark_ground_at_its_depth_walled_up_to_the_level()
+{
+    let level = 108.0 * 0.034_026;
+    let m = model(vec![
+        cell(4, 4, 0, "t_dirt"),
+        open_air(5, 4),
+        cell(6, 4, 0, "t_dirt"),
+    ]);
+    let scene = scene_of(&m, "scene-void");
+    let void = voids(&scene);
+    // Dark ground one level down, no lid at the level, and a wall from it up to each slab beside it.
+    let grounds = void.iter().filter(|i| i.b[2] == 0.0).collect::<Vec<_>>();
+    let walls = void.iter().filter(|i| i.b[2] < 0.0).collect::<Vec<_>>();
+    assert_eq!(grounds.len(), 1, "{void:?}");
+    assert!((grounds[0].origin[2] + level).abs() < 0.02, "{grounds:?}");
+    assert_eq!(walls.len(), 2, "{void:?}");
+    assert!(
+        walls
+            .iter()
+            .all(|w| w.origin[2] == 0.0 && (w.b[2] + level).abs() < 0.02),
+        "{walls:?}"
+    );
+    assert!(
+        void.iter().all(|i| i.flags[1] > 0 && i.flags[1] < 64),
+        "a dark that is not the black of nothing: {void:?}"
+    );
+    // Nothing known about a square that does not look through to ground is no block.
+    assert!(at(&scene, &m, (8, 8)).is_empty());
+}
+
+#[test]
+fn dark_ground_meets_known_ground_as_deep_without_a_face_and_a_slab_edge_walls_down_to_either() {
+    let level = 108.0 * 0.034_026;
+    let mut lowered = vec![open_air(7, 4), cell(7, 4, -1, "t_dirt")];
+    lowered[1]["known"] = "remembered".into();
+    let mut cells = vec![open_air(6, 4), cell(5, 4, 0, "t_floor")];
+    cells.append(&mut lowered);
+    let m = model(cells);
+    let scene = scene_of(&m, "scene-void-faces");
+    // The dark ground at (6, 4) lies as deep as the ground east of it: no face between them, and the slab at (5, 4)
+    // walls down to it.
+    let void = voids(&scene);
+    let walls = void.iter().filter(|i| i.b[2] < 0.0).collect::<Vec<_>>();
+    assert_eq!(void.len(), 2, "its ground and the slab's wall: {void:?}");
+    assert_eq!(walls.len(), 1, "{void:?}");
+    let ground = void.iter().find(|i| i.b[2] == 0.0).expect("its ground");
+    assert_eq!(
+        walls[0].origin[0], ground.origin[0],
+        "on the west edge of it: {void:?}"
+    );
+    assert!((walls[0].b[2] + level).abs() < 0.02, "{walls:?}");
+    // A slab beside lowered ground is cut off by a face down to it.
+    let m = model(vec![
+        cell(5, 4, 0, "t_floor"),
+        open_air(6, 4),
+        cell(6, 4, -1, "t_dirt"),
+    ]);
+    let scene = scene_of(&m, "scene-slab-face");
+    let edge = voids(&scene);
+    assert_eq!(edge.len(), 1, "{edge:?}");
+    assert!((edge[0].b[2] + level).abs() < 0.02, "{edge:?}");
 }
 
 #[test]

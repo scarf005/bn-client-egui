@@ -340,11 +340,15 @@ pub struct Instance {
 }
 
 /// Flag bits of an instance's first word: a board, a board pushed to the near edge of its square, what gives light
-/// (never shaded, casting no shadow) and what is seen through (every other pixel drawn, casting no shadow).
+/// (never shaded, casting no shadow), what is seen through (every other pixel drawn, casting no shadow) and what is
+/// unknown but solid.
 pub const BOARD: u32 = 1;
 pub const EDGE: u32 = 2;
 pub const GLOW: u32 = 4;
 pub const SHEER: u32 = 8;
+/// What nothing is known about but that it fills the space between two levels: a flat dark, its gray in the haze
+/// byte, casting no shadow.
+pub const VOID: u32 = 16;
 
 /// How far an upright sprite of an isometric tileset stands toward the eye from the middle of its square: to the
 /// square's near edge, whatever the camera's yaw. `toward` is the horizontal unit vector from target to eye; the
@@ -763,6 +767,39 @@ fn built(form: Form, block: f32, turn: Turn, joined: [bool; 4]) -> Vec<Cuboid> {
         )],
         Form::Plant | Form::Fire => vec![],
     }
+}
+
+/// The gray of the ground nothing is known about and of the faces down to it, in the haze byte of its instances: dark,
+/// but not the black of nothing, so that the pit reads as ground and walls.
+const VOID_LID: u32 = 22;
+const VOID_FACE: u32 = 10;
+
+/// The dark ground at height `z` of `square`, whose ground nothing is known about.
+pub fn void_lid(square: (i32, i32), z: f32) -> Instance {
+    let ground = ([1.0, 0.0, 0.0], [0.0, 1.0, 0.0]);
+    instance(
+        [square.0 as f32, square.1 as f32, z],
+        ground,
+        [Vec2::ZERO; 3],
+        [VOID, VOID_LID, 0],
+    )
+}
+
+/// The dark face of `square` on its south (0), east, north or west edge, from height `low` up to `high`.
+pub fn void_face(square: (i32, i32), face: usize, (low, high): (f32, f32)) -> Instance {
+    let (x, y) = (square.0 as f32, square.1 as f32);
+    let (from, run) = match face {
+        0 => ([x, y + 1.0], [1.0, 0.0]),
+        1 => ([x + 1.0, y + 1.0], [0.0, -1.0]),
+        2 => ([x + 1.0, y], [-1.0, 0.0]),
+        _ => ([x, y], [0.0, 1.0]),
+    };
+    instance(
+        [from[0], from[1], high],
+        ([run[0], run[1], 0.0], [0.0, 0.0, low - high]),
+        [Vec2::ZERO; 3],
+        [VOID, VOID_FACE, 0],
+    )
 }
 
 /// The instances that draw a sprite: one, the five faces of a box, or the faces of a solid pushed up from it.
