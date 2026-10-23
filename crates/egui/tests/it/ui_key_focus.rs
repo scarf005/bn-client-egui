@@ -15,6 +15,11 @@ type H<'a> = Harness<'a, App<EngineModel>>;
 /// A game offering the character sheet (`@`), the inventory (`i`), the map (`m`), the stairs (`<` and `>`) and
 /// the steps, whose map answers every read with a 3 by 3 overmap.
 fn game<'a>() -> (H<'a>, ScriptHandle) {
+    game_on_level(0)
+}
+
+/// `game`, its map answering every read with the squares of level `z`.
+fn game_on_level<'a>(z: i64) -> (H<'a>, ScriptHandle) {
     let mut subscribed = fixture("subscribe_result");
     subscribed["result"]["interaction"]["actions"]
         .as_array_mut()
@@ -33,10 +38,12 @@ fn game<'a>() -> (H<'a>, ScriptHandle) {
     ];
     let square = json!([".", 2, 0]);
     let row = json!([square, square, square]);
-    let squares = json!({"jsonrpc": "2.0", "id": 0, "result": {
-        "origin": {"dim": "", "x": 0, "y": 0, "z": 0}, "player": {"dim": "", "x": 1, "y": 1, "z": 0},
-        "cols": 3, "rows": 3, "cells": [row, row, row], "legend": [],
-        "cursor_description": "", "notes": [], "path": []}});
+    let squares = |z: i64| {
+        json!({"jsonrpc": "2.0", "id": 0, "result": {
+            "origin": {"dim": "", "x": 0, "y": 0, "z": z}, "player": {"dim": "", "x": 1, "y": 1, "z": z},
+            "cols": 3, "rows": 3, "cells": [row, row, row], "legend": [],
+            "cursor_description": "", "notes": [], "path": []}})
+    };
     let (t, script) = bn_client_egui::transport::ScriptedTransport::new();
     let mut t = t
         .on("bn.hello", vec![fixture("hello_result")])
@@ -44,7 +51,7 @@ fn game<'a>() -> (H<'a>, ScriptHandle) {
         .on("bn.subscribe", reply)
         .on("bn.command.submit", vec![fixture("submit_result")]);
     for _ in 0..40 {
-        t = t.on("bn.overmap.cells", vec![squares.clone()]);
+        t = t.on("bn.overmap.cells", vec![squares(z)]);
     }
     let clock = Clock::manual();
     let model = EngineModel::new(Box::new(t)).with_clock(clock.clone());
@@ -141,6 +148,14 @@ fn level_keys_in_the_map_window_change_its_level_and_climb_no_stairs() {
         "two levels up"
     );
     assert!(operations(&script).is_empty(), "no stairs were taken");
+}
+
+#[test]
+fn the_map_window_names_the_level_of_the_squares_it_shows() {
+    let (mut h, _) = game_on_level(3);
+    key(&mut h, "m");
+    h.run_steps(4);
+    h.get_by_label("Level 3");
 }
 
 #[test]
