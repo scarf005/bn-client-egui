@@ -615,11 +615,19 @@ fn draw(
             }
         }
         Op::Between { from, to, f, op } => {
-            let (a, b) = (cell(*from), cell(*to));
-            let at = Rect::from_center_size(a.center().lerp(b.center(), *f), a.size() * style.shot);
-            draw(painter, op, &|_| at, style, sprites);
+            if let Some(at) = between(cell(*from), cell(*to), *f, style.shot) {
+                draw(painter, op, &|_| at, style, sprites);
+            }
         }
     }
+}
+
+/// Where a shot `f` of the way from square `a` to square `b` is drawn, `shot` times as large as `a`.
+fn between(a: Rect, b: Rect, f: f32, shot: f32) -> Option<Rect> {
+    Some(Rect::from_center_size(
+        a.center().lerp(b.center(), f),
+        a.size() * shot,
+    ))
 }
 
 impl Sprites for crate::display::Display {
@@ -703,6 +711,16 @@ mod tests {
             }
         }
         ops.iter().find_map(tile)
+    }
+
+    #[test]
+    fn a_shot_whose_square_is_behind_the_eye_is_drawn_at_the_square_in_sight() {
+        let seen = Rect::from_min_size(egui::pos2(10.0, 10.0), egui::vec2(20.0, 20.0));
+        let at = |a, b| between(a, b, 0.5, 0.5).map(|r| (r.center(), r.size()));
+        let expected = Some((seen.center(), egui::vec2(10.0, 10.0)));
+        assert_eq!(at(Rect::NOTHING, seen), expected);
+        assert_eq!(at(seen, Rect::NOTHING), expected);
+        assert_eq!(at(Rect::NOTHING, Rect::NOTHING), None);
     }
 
     fn shot(len: i32) -> Effect {
