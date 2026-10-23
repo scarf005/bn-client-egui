@@ -1065,6 +1065,17 @@ mod tests {
     }
 
     #[test]
+    fn the_flat_line_of_fire_keeps_only_the_squares_on_the_level_of_its_target() {
+        let canvas = canvas(None);
+        let mut squares = row(&[10, 11, 12, 13]);
+        squares[0].up = -1;
+        squares[1].up = -1;
+        let line = canvas.fire_line(&squares, 3.0);
+        let middle = |x: i32| canvas.rect(Pos { x, y: 10 }).center();
+        assert_eq!(line, [12, 13].map(middle));
+    }
+
+    #[test]
     fn the_3d_line_of_fire_flies_over_the_ground_of_its_squares_and_ends_at_the_target() {
         let canvas = canvas(Some(orbit()));
         let line = canvas.fire_line(&row(&[10, 11, 12, 13]), 3.0);
