@@ -340,11 +340,15 @@ pub struct Instance {
 }
 
 /// Flag bits of an instance's first word: a board, a board pushed to the near edge of its square, what gives light
-/// (never shaded, casting no shadow) and what is seen through (every other pixel drawn, casting no shadow).
+/// (never shaded, casting no shadow), what is seen through (every other pixel drawn, casting no shadow) and what is
+/// unknown but solid.
 pub const BOARD: u32 = 1;
 pub const EDGE: u32 = 2;
 pub const GLOW: u32 = 4;
 pub const SHEER: u32 = 8;
+/// What nothing is known about but that it fills the space between two levels: a flat dark, its gray in the haze
+/// byte, casting no shadow.
+pub const VOID: u32 = 16;
 
 /// How far an upright sprite of an isometric tileset stands toward the eye from the middle of its square: to the
 /// square's near edge, whatever the camera's yaw. `toward` is the horizontal unit vector from target to eye; the
