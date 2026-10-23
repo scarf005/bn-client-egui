@@ -1,5 +1,6 @@
 //! Against a real engine: open air in sight over ground the avatar neither sees nor remembers is dark ground walled
-//! up to the level in 3D and stays black on the flat map of an isometric tileset.
+//! up to the level in 3D, beside the remembered ground and at every step down, and stays black on the flat map of
+//! an isometric tileset.
 //!
 //! A mod in the profile builds a house, a roof over it and open air around it, and puts the avatar on the roof.
 //! `BN_ENGINE=<engine> BN_ROOT=<game root with gfx/Ultica_iso> SHOT_DIR=<dir> SHOT_TAG=<prefix> cargo test
@@ -16,11 +17,23 @@ const MODINFO: &str = r#"[{"type":"MOD_INFO","id":"occluded_scene","name":"Occlu
 "description":"A house with a roof the avatar stands on.","category":"content","lua_api_version":2,"dependencies":["bn"]}]"#;
 
 /// Builds the scene at the first turn: grass, a walled house, its flat roof one level up, open air around it, the
-/// avatar on the roof over the square it stood on.
+/// avatar on the roof over the square it stood on. With `tall`, the house has a second storey and a one-storey annex
+/// around it with a roof of its own. At the third turn the avatar steps down to the grass outside and at the sixth
+/// back onto the roof, so that what it saw below is remembered.
 const PRELOAD: &str = r#"
 local built = false
+local turns = 0
+local tall = false
+local up = tall and 2 or 1
 local function at(x, y, z) return TripointBubMs.new(x, y, z) end
 gapi.add_on_every_x_hook(TimeDuration.from_turns(1), function()
+  turns = turns + 1
+  if turns == 3 or turns == 6 then
+    local you = gapi.get_avatar()
+    local p = you:get_pos_ms()
+    local d = turns == 3 and 8 or -8
+    you:set_pos_ms(at(p.x + d, p.y + d, p.z + (turns == 3 and -up or up)))
+  end
   if built then return end
   built = true
   local map = gapi.get_map()
@@ -32,23 +45,33 @@ gapi.add_on_every_x_hook(TimeDuration.from_turns(1), function()
       local x, y = p.x + dx, p.y + dy
       local d = math.max(math.abs(dx), math.abs(dy))
       map:set_furn_at(at(x, y, p.z), FurnId.new("f_null"):int_id())
-      ter(x, y, p.z + 1, d <= 5 and "t_flat_roof" or "t_open_air")
-      ter(x, y, p.z, d == 5 and "t_wall" or d < 5 and "t_floor" or "t_grass")
+      if tall then
+        ter(x, y, p.z + 2, d <= 5 and "t_flat_roof" or "t_open_air")
+        ter(x, y, p.z + 1, d == 5 and "t_wall" or d < 5 and "t_floor" or d <= 8 and "t_flat_roof" or "t_open_air")
+        ter(x, y, p.z, (d == 5 or d == 8) and "t_wall" or d < 8 and "t_floor" or "t_grass")
+      else
+        ter(x, y, p.z + 1, d <= 5 and "t_flat_roof" or "t_open_air")
+        ter(x, y, p.z, d == 5 and "t_wall" or d < 5 and "t_floor" or "t_grass")
+      end
     end
   end
-  you:set_pos_ms(at(p.x, p.y, p.z + 1))
+  you:set_pos_ms(at(p.x, p.y, p.z + up))
   gdebug.log_info("occluded_scene built")
 end)
 "#;
 
-fn spawn() -> StdioTransport {
+fn spawn(tall: bool) -> StdioTransport {
     let dir = std::env::temp_dir().join(format!("bn-occluded-{}", std::process::id()));
     let config = dir.join("config");
     let modpath = dir.join("mods").join("occluded_scene");
     std::fs::create_dir_all(&config).unwrap();
     std::fs::create_dir_all(&modpath).unwrap();
     std::fs::write(modpath.join("modinfo.json"), MODINFO).unwrap();
-    std::fs::write(modpath.join("preload.lua"), PRELOAD).unwrap();
+    std::fs::write(
+        modpath.join("preload.lua"),
+        PRELOAD.replace("local tall = false", &format!("local tall = {tall}")),
+    )
+    .unwrap();
     std::fs::write(
         config.join("options.json"),
         r#"[{"name":"USE_LANG","value":"en_US"}]"#,
@@ -68,7 +91,7 @@ fn spawn() -> StdioTransport {
     StdioTransport::spawn_with(&crate::common::live::engine(), &profile).expect("engine starts")
 }
 
-fn start(three_d: bool, size: egui::Vec2) -> H<'static> {
+fn start(three_d: bool, size: egui::Vec2, tall: bool) -> H<'static> {
     let root = root();
     let dir = std::env::temp_dir().join(format!("bn-occluded-ui-{}-{three_d}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
@@ -78,7 +101,7 @@ fn start(three_d: bool, size: egui::Vec2) -> H<'static> {
         format!(r#"{{"tiles":true,"tileset":"Ultica_iso","three_d":{three_d}}}"#),
     )
     .unwrap();
-    let app = App::new(EngineModel::new(Box::new(spawn())))
+    let app = App::new(EngineModel::new(Box::new(spawn(tall))))
         .with_settings(settings)
         .with_root(root.clone())
         .with_target_format(eframe::wgpu::TextureFormat::Rgba8Unorm);
@@ -120,13 +143,19 @@ fn grid(h: &H) -> (String, usize, usize) {
     (text, plain, dim)
 }
 
-fn roof_scene(three_d: bool, name: &str) {
+fn roof_scene(three_d: bool, tall: bool, name: &str) {
     let tag = std::env::var("SHOT_TAG").unwrap_or_default();
-    let mut h = start(three_d, egui::vec2(1280.0, 800.0));
+    let mut h = start(three_d, egui::vec2(1280.0, 800.0), tall);
     new_game(&mut h, "new_game:play_now");
     dismiss_popups(&mut h);
-    // The mod builds the scene at the first turn.
-    assert!(h.state_mut().model.invoke_action("pause"));
+    // Safe mode refuses to wait while the zombies around are in sight.
+    assert!(h.state_mut().model.invoke_action("safemode"));
+    run_until(&mut h, "safe mode off", 120, |h| !h.state().model.busy());
+    // The mod builds the scene at the first turn, and the avatar is back on the roof after the sixth.
+    for _ in 0..8 {
+        assert!(h.state_mut().model.invoke_action("pause"));
+        run_until(&mut h, "a turn", 120, |h| !h.state().model.busy());
+    }
     run_until(&mut h, "the avatar on the roof", 120, |h| {
         !h.state().model.busy() && grid(h).0.contains('R')
     });
@@ -139,6 +168,7 @@ fn roof_scene(three_d: bool, name: &str) {
         text.contains('X'),
         "open air over unknown ground is known as such"
     );
+    assert!(dim > 0, "the ground seen from below is remembered");
     for (w, ht) in [(1290.0, 830.0), (1920.0, 1080.0)] {
         h.set_size(egui::vec2(w, ht));
         settle(&mut h);
@@ -152,11 +182,17 @@ fn roof_scene(three_d: bool, name: &str) {
 #[test]
 #[ignore = "requires BN_ENGINE and a game root with the Ultica_iso tileset"]
 fn open_air_over_unknown_ground_is_dark_ground_walled_up_in_3d() {
-    roof_scene(true, "pseudo3d");
+    roof_scene(true, false, "pseudo3d");
 }
 
 #[test]
 #[ignore = "requires BN_ENGINE and a game root with the Ultica_iso tileset"]
 fn open_air_over_unknown_ground_stays_black_on_the_isometric_flat_map() {
-    roof_scene(false, "iso2d");
+    roof_scene(false, false, "iso2d");
+}
+
+#[test]
+#[ignore = "requires BN_ENGINE and a game root with the Ultica_iso tileset"]
+fn every_step_down_from_a_two_storey_roof_is_walled_in_3d() {
+    roof_scene(true, true, "pseudo3d-tall");
 }
