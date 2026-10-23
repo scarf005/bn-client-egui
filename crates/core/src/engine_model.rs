@@ -1074,6 +1074,25 @@ impl GameModel for EngineModel {
         self.replica.avatar()?.activity.clone()
     }
 
+    fn modes(&self) -> Vec<crate::protocol::Mode> {
+        self.replica
+            .avatar()
+            .map_or(vec![], |avatar| avatar.modes.clone())
+    }
+
+    fn set_mode(&mut self, mode: &str, value: &str) -> bool {
+        let free = self
+            .replica
+            .boundary()
+            .is_some_and(|b| b.interaction.is_none());
+        !self.busy
+            && free
+            && self.submit(Operation::SetMode {
+                mode: mode.into(),
+                value: value.into(),
+            })
+    }
+
     fn sidebar(&self) -> Vec<crate::sidebar::Line> {
         self.replica
             .avatar()

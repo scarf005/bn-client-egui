@@ -799,6 +799,14 @@ pub trait GameModel: MenuModel {
     fn activity(&self) -> Option<crate::protocol::Activity> {
         None
     }
+    /// The settings the engine lets the avatar set, with the value each holds; empty before it reports them.
+    fn modes(&self) -> Vec<crate::protocol::Mode> {
+        vec![]
+    }
+    /// Sets the mode `mode` to its value `value`, both ids from `modes`; false when nothing was sent.
+    fn set_mode(&mut self, _mode: &str, _value: &str) -> bool {
+        false
+    }
     /// The avatar's sidebar as coloured lines; empty before the engine reports one.
     fn sidebar(&self) -> Vec<crate::sidebar::Line> {
         vec![]
