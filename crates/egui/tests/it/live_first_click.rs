@@ -5,7 +5,7 @@ use crate::common::live::{H, engine, new_game, pick, root, run_until, save, sett
 use bn_client_egui::transport::{Profile, StdioTransport};
 use bn_client_egui::{App, EngineModel, GameModel, MenuModel};
 use eframe::egui;
-use egui_kittest::kittest::{NodeT as _, Queryable};
+use egui_kittest::kittest::Queryable;
 
 /// The client over an English engine whose profile is `dir`.
 fn client<'a>(dir: &std::path::Path) -> H<'a> {
@@ -38,7 +38,7 @@ fn click(h: &mut H, pos: egui::Pos2) {
     h.run_steps(2);
     for pressed in [true, false] {
         h.event(egui::Event::PointerButton {
-            pos: pos,
+            pos,
             button: egui::PointerButton::Primary,
             pressed,
             modifiers: egui::Modifiers::NONE,
