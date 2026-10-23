@@ -2456,6 +2456,11 @@ impl MapComponent {
         serde_json::from_value(self.target.as_ref()?["current"].clone()).ok()
     }
 
+    /// The square the cursor's line of fire leaves: the avatar's.
+    pub fn source(&self) -> Option<WorldPos> {
+        serde_json::from_value(self.target.as_ref()?["source"].clone()).ok()
+    }
+
     /// The squares the screen highlights besides its cursor; a mark of a role this client does not know is left
     /// out.
     pub fn marks(&self) -> Vec<ScreenMark> {
