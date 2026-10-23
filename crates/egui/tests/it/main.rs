@@ -10,6 +10,7 @@ mod live_activity;
 mod live_aim;
 mod live_beta_ui;
 mod live_count;
+mod live_curtain;
 mod live_editmap;
 mod live_editor;
 mod live_first_click;

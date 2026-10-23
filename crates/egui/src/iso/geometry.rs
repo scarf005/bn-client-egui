@@ -1750,6 +1750,30 @@ mod tests {
     }
 
     #[test]
+    fn a_door_or_a_fence_of_a_tileset_drawn_from_above_lies_on_its_picture_of_the_ground() {
+        let (m, s) = block_sprite();
+        for form in [
+            Form::Door { open: true },
+            Form::Door { open: false },
+            Form::Fence,
+        ] {
+            let p = Placement {
+                joined: [false, true, false, true],
+                ..formed(&s, form)
+            };
+            // The whole square, flat at its ground, as the flat map shows the square: nothing below shows through.
+            let ground = place(&m, &p).into_iter().find(|i| {
+                i.a[2] == 0.0
+                    && i.b[2] == 0.0
+                    && i.origin[2].abs() < 0.01
+                    && i.a[0] == 1.0
+                    && i.b[1] == 1.0
+            });
+            assert!(ground.is_some(), "{form:?}");
+        }
+    }
+
+    #[test]
     fn a_shut_door_between_walls_hides_the_ends_against_them_and_keeps_its_faces_inside_the_square()
     {
         let (m, s) = block_sprite();
