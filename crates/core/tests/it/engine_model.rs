@@ -2943,6 +2943,27 @@ fn a_square_action_is_named_in_the_status_by_the_label_the_engine_described_it_w
     assert_eq!(status.target.as_deref(), Some("fire"));
 }
 
+#[test]
+fn a_mode_is_set_to_a_named_value_with_one_command() {
+    let (t, h) = session();
+    let mut m = connected(t.on("bn.command.submit", walk_reply()));
+    assert!(m.set_mode("safe_mode", "off"));
+    let sent = h
+        .sent()
+        .into_iter()
+        .filter(|s| s["method"] == "bn.command.submit")
+        .collect::<Vec<_>>();
+    assert_eq!(sent.len(), 1);
+    assert_eq!(
+        sent[0]["params"]["operation"],
+        json!({"kind":"set_mode","mode":"safe_mode","value":"off"})
+    );
+    assert!(
+        !m.set_mode("safe_mode", "off"),
+        "a second command waits for the first"
+    );
+}
+
 fn overmap_reads(h: &bn_client_core::transport::ScriptHandle) -> Vec<Value> {
     h.sent()
         .into_iter()

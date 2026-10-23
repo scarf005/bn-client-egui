@@ -109,6 +109,25 @@ fn operations_serialize_with_the_kind_tag() {
     assert_eq!(to_value(&Cancel), json!({"kind":"cancel"}));
 }
 
+#[test]
+fn a_mode_is_set_by_the_ids_of_the_mode_and_its_value() {
+    let set = protocol::Operation::SetMode {
+        mode: "safe_mode".into(),
+        value: "off".into(),
+    };
+    assert_eq!(
+        to_value(&set),
+        json!({"kind":"set_mode","mode":"safe_mode","value":"off"})
+    );
+    let read = |v: serde_json::Value| serde_json::from_value::<protocol::Operation>(v);
+    assert_eq!(
+        read(json!({"kind":"set_mode","mode":"safe_mode","value":"off"})).unwrap(),
+        set
+    );
+    assert!(read(json!({"kind":"set_mode","mode":"","value":"off"})).is_err());
+    assert!(read(json!({"kind":"set_mode","mode":"safe_mode"})).is_err());
+}
+
 fn overmap(
     cols: usize,
     rows: usize,

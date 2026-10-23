@@ -284,3 +284,18 @@ fn a_spans_colour_tags_split_it_into_runs_and_do_not_count_as_width() {
     assert_eq!(runs[1].color, span.color, "untagged text keeps the span's");
     assert_eq!(span.width(), "|. broadsword".len());
 }
+
+#[test]
+fn the_avatar_lists_its_modes_with_the_value_each_holds_and_the_values_it_takes() {
+    let modes = avatar().modes;
+    let safe = modes.iter().find(|m| m.id == "safe_mode").unwrap();
+    assert!(safe.values.iter().any(|v| v.id == safe.value));
+    assert_eq!(
+        safe.values
+            .iter()
+            .map(|v| v.id.as_str())
+            .collect::<Vec<_>>(),
+        ["on", "off"]
+    );
+    assert!(modes.iter().any(|m| m.id == "move_mode"));
+}
