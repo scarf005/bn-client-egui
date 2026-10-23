@@ -4,6 +4,7 @@ pub mod aim;
 pub mod camera;
 pub mod geometry;
 pub mod gpu;
+pub mod held;
 pub mod pages;
 mod pick;
 pub mod scene;
