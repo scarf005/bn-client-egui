@@ -3464,3 +3464,42 @@ fn a_key_rejected_as_stale_revision_on_a_timed_screen_is_sent_once_to_the_next_b
     m.poll();
     assert_eq!(submits(&h).len(), 2);
 }
+
+#[test]
+fn a_stale_answer_for_an_older_square_does_not_replace_the_latest_hover() {
+    let (t, h) = session();
+    let mut m = connected(t.on("bn.world.describe", vec![stale_describe("stale_boundary")]));
+    m.hover(Pos { x: 22, y: 12 });
+    m.hover(Pos { x: 23, y: 12 });
+    m.poll();
+    h.push(change(41, json!({"route": [pos(4, 4)]})));
+    m.poll();
+    let asked = h
+        .sent()
+        .into_iter()
+        .rfind(|m| m["method"] == "bn.world.describe")
+        .unwrap();
+    assert_eq!(describes(&h), 2);
+    assert_eq!(
+        asked["params"]["pos"]["x"],
+        json!(6),
+        "the latest hover wins"
+    );
+}
+
+#[test]
+fn a_hover_held_back_by_a_command_is_not_asked_when_a_screen_comes_up_with_its_end() {
+    let (t, h) = session();
+    let mut m = connected(t.on("bn.command.submit", walk_reply()));
+    assert!(m.invoke_action("RIGHT"));
+    m.poll();
+    m.hover(Pos { x: 22, y: 12 });
+    m.poll();
+    h.push(change(
+        41,
+        json!({"interaction": snake_boundary("b:20", true)}),
+    ));
+    h.push(fixture("command_completed"));
+    m.poll();
+    assert_eq!(describes(&h), 0, "a screen is up");
+}
