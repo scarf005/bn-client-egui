@@ -34,6 +34,13 @@ pub enum Op {
     Dot {
         at: Pos,
     },
+    /// `op` drawn `f` of the way from square `from` to square `to`, as a shot gliding between them.
+    Between {
+        from: Pos,
+        to: Pos,
+        f: f32,
+        op: Box<Op>,
+    },
     /// A tileset sprite, or what stands in for it when the tileset has none.
     Tile {
         at: Pos,
@@ -582,6 +589,11 @@ fn draw(
                 draw(painter, or, cell, font, sprites);
             }
         }
+        Op::Between { from, to, f, op } => {
+            let (a, b) = (cell(*from), cell(*to));
+            let at = Rect::from_min_size(a.min.lerp(b.min, *f), a.size());
+            draw(painter, op, &|_| at, font, sprites);
+        }
     }
 }
 
@@ -701,6 +713,23 @@ mod tests {
         let ops = play(shot(1), true);
         let (_, or) = first_tile(&ops).expect("a sprite");
         assert!(matches!(or, Op::Glyph { ch: '*', .. }), "{or:?}");
+    }
+
+    #[test]
+    fn a_shot_glides_between_the_squares_of_its_path_and_crosses_twenty_within_a_quarter_second() {
+        let effect = shot(21);
+        let flight = life(&effect);
+        assert!(flight <= 0.25, "{flight}");
+        let mut e = Effects::default();
+        e.add(0.0, vec![effect], false);
+        let ops = e.ops(flight * 0.525, false, &none);
+        let between = ops.iter().find_map(|op| match op {
+            Op::Between { from, to, f, .. } => Some((*from, *to, *f)),
+            _ => None,
+        });
+        let (from, to, f) = between.expect("the shot is between two squares");
+        assert_eq!((from.x, to.x), (10, 11));
+        assert!((f - 0.5).abs() < 0.05, "{f}");
     }
 
     #[test]
