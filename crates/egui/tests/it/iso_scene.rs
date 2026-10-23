@@ -1042,11 +1042,43 @@ fn a_roofed_square_has_a_flat_dark_ceiling_one_level_up_that_faces_down() {
 }
 
 #[test]
-fn a_square_seen_through_open_air_gets_no_ceiling() {
-    let mut air = open_air(4, 4);
-    air["roofed"] = true.into();
-    let m = model(vec![air, cell(4, 4, -1, "t_dirt")]);
+fn a_square_seen_through_open_air_under_no_roof_gets_no_ceiling() {
+    let m = model(vec![open_air(4, 4), cell(4, 4, -1, "t_dirt")]);
     assert!(scene_of(&m, "scene-ceiling-air").ceiling.is_empty());
+}
+
+/// The lids and the faces of the ceiling of `m`.
+fn ceiling_of(m: &EngineModel, name: &str) -> (usize, usize) {
+    let scene = scene_of(m, name);
+    let lids = scene.ceiling.iter().filter(|i| i.b[2] == 0.0).count();
+    (lids, scene.ceiling.len() - lids)
+}
+
+#[test]
+fn a_hole_in_the_floor_under_a_roof_is_ceiled_like_the_room_with_no_face_between_them() {
+    let mut hole = open_air(9, 8);
+    hole["roofed"] = true.into();
+    let m = model(vec![roofed(8, 8), hole, cell(9, 8, -1, "t_dirt")]);
+    // Each square closes only its three edges to the unknown.
+    assert_eq!(ceiling_of(&m, "scene-ceiling-hole"), (2, 6));
+}
+
+fn remembered(x: i32, y: i32) -> Value {
+    json!({"at": {"dim": "", "x": x, "y": y, "z": 0}, "known": "remembered",
+        "memory": {"terrain": look("terrain", "t_floor")}})
+}
+
+#[test]
+fn a_remembered_square_is_ceiled_while_the_avatar_stands_under_a_roof_and_open_while_it_does_not() {
+    let m = model(vec![roofed(3, 4), remembered(4, 4)]);
+    assert_eq!(ceiling_of(&m, "scene-ceiling-remembered").0, 2);
+    let m = model(vec![
+        cell(3, 4, 0, "t_floor"),
+        roofed(8, 8),
+        remembered(9, 8),
+    ]);
+    let (lids, _) = ceiling_of(&m, "scene-ceiling-outside");
+    assert_eq!(lids, 1);
 }
 
 #[test]
