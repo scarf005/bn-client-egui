@@ -134,3 +134,102 @@ fn the_menu_and_walking_play_the_engines_sound_pack() {
         assert!(log.contains("play Channel"), "an ambience channel played");
     }
 }
+
+const LOCKED_MODINFO: &str = r#"[{"type":"MOD_INFO","id":"locked_door","name":"Locked door","authors":["test"],
+"description":"A locked door beside the avatar.","category":"content","lua_api_version":2,"dependencies":["bn"]}]"#;
+
+/// Puts a locked door that opens from neither side on the square east of the avatar, at the first turn.
+const LOCKED_PRELOAD: &str = r#"
+local built = false
+gapi.add_on_every_x_hook(TimeDuration.from_turns(1), function()
+  if built then return end
+  built = true
+  local map = gapi.get_map()
+  local p = gapi.get_avatar():get_pos_ms()
+  local door = TripointBubMs.new(p.x + 1, p.y, p.z)
+  map:set_furn_at(door, FurnId.new("f_null"):int_id())
+  map:set_ter_at(door, TerId.new("t_door_locked_interior"):int_id())
+  gdebug.log_info("locked_door built")
+end)
+"#;
+
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn a_double_click_on_a_locked_door_plays_the_error_sound() {
+    let log_path = std::env::var_os("BN_SOUND_LOG").expect("set BN_SOUND_LOG");
+    let dir = std::env::temp_dir().join(format!("bn-locked-{}", std::process::id()));
+    let config = dir.join("config");
+    let modpath = dir.join("mods").join("locked_door");
+    std::fs::create_dir_all(&config).unwrap();
+    std::fs::create_dir_all(&modpath).unwrap();
+    std::fs::write(modpath.join("modinfo.json"), LOCKED_MODINFO).unwrap();
+    std::fs::write(modpath.join("preload.lua"), LOCKED_PRELOAD).unwrap();
+    std::fs::write(
+        config.join("options.json"),
+        r#"[{"name":"USE_LANG","value":"en_US"},{"name":"SAFEMODE","value":"false"}]"#,
+    )
+    .unwrap();
+    std::fs::write(config.join("default_mods.json"), r#"["bn","locked_door"]"#).unwrap();
+    let profile = Profile {
+        fresh: false,
+        userdir: Some(dir),
+        configdir: Some(config),
+        seed: Some("2".into()),
+    };
+    let transport = StdioTransport::spawn_with(&crate::common::live::engine(), &profile)
+        .expect("engine starts");
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(1290.0, 830.0))
+        .build_ui_state(
+            |ui, app: &mut App<EngineModel>| app.show(ui),
+            App::new(EngineModel::new(Box::new(transport))),
+        );
+    let pack = SoundPack::load(&soundpack_of(&mut h)).expect("the sound pack loads");
+    crate::common::live::new_game(&mut h, "new_game:play_now");
+    crate::common::live::dismiss_popups(&mut h);
+    // The mod builds the door at the first turn.
+    for _ in 0..2 {
+        assert!(h.state_mut().model.invoke_action("pause"));
+        run_until(&mut h, "a turn", 120, |h| !h.state().model.busy());
+    }
+    let me = h.state().model.player();
+    let door = h.state().model.cell(bn_client_egui::Pos {
+        x: me.x + 1,
+        y: me.y,
+    });
+    assert!(
+        door.layers.iter().any(|l| l.id == "t_door_locked_interior"),
+        "the door is built: {:?}",
+        door.layers
+    );
+    let squares = h.state().map_squares().unwrap();
+    let cell = squares.width() / h.state().model.size().x as f32;
+    let at = squares.min + egui::vec2(me.x as f32 + 1.5, me.y as f32 + 0.5) * cell;
+    h.hover_at(at);
+    settle(&mut h, 4);
+    let before = std::fs::read_to_string(&log_path).map_or(0, |log| log.len());
+    for _ in 0..2 {
+        for pressed in [true, false] {
+            h.event(egui::Event::PointerButton {
+                pos: at,
+                button: egui::PointerButton::Primary,
+                pressed,
+                modifiers: egui::Modifiers::NONE,
+            });
+            h.run_steps(1);
+        }
+    }
+    // The engine answers the route into the door with its message and the error sound.
+    run_until(&mut h, "the error sound", 60, |_| {
+        std::fs::read_to_string(&log_path)
+            .is_ok_and(|log| played(&log[before..], &pack, "menu_error", "default"))
+    });
+}
+
+/// The sound pack the engine's hello names, once the main menu is up.
+fn soundpack_of(h: &mut H) -> std::path::PathBuf {
+    run_until(h, "the main menu", 90, |h| {
+        h.query_by_label("Tutorial").is_some()
+    });
+    (h.state().model.soundpack()).expect("the hello names a sound pack")
+}
