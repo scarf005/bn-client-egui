@@ -18,6 +18,7 @@ mod live_glow;
 mod live_input;
 mod live_iso2d;
 mod live_iso3d;
+mod live_menu_height;
 mod live_mouse;
 mod live_panels;
 mod live_screen_sweep;

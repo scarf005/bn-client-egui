@@ -78,10 +78,11 @@ impl<M: GameModel> App<M> {
             }
             // A sheet taller than the room scrolls rather than leaving it.
             if let Some(root) = &screen.root {
-                egui::ScrollArea::vertical()
+                let body = egui::ScrollArea::vertical()
                     .id_salt(("body", action))
                     .auto_shrink([false, true])
                     .show(ui, |ui| self.component(ui, screen, root, &mut out));
+                windows::note_hidden(ui, &body);
             }
         });
         self.screens.passive = false;

@@ -272,6 +272,7 @@ impl<M: GameModel> App<M> {
                     }
                 });
             // The end of a list the engine has more of fetches its next page, as the wheel or a drag gets there.
+            windows::note_hidden(ui, &listed);
             let (shown, all) = (listed.inner_rect.height(), listed.content_size.y);
             more |= paged && all > shown && listed.state.offset.y + shown + 1.0 >= all;
             if menu.total > menu.choices.len() {

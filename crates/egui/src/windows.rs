@@ -109,6 +109,11 @@ pub struct Shown<R> {
 /// The share of its room a window is first as tall and as wide as, but for a width the spec names.
 const FIRST_HEIGHT: f32 = 0.7;
 const FIRST_WIDTH: f32 = 0.5;
+/// The share of its room a window that is not the whole room grows to at most, so that the map and the top bar
+/// stay in view around it.
+const FIT_HEIGHT: f32 = 0.9;
+/// A remembered window shorter than this share of its room is not a readable size to open at: it opens as a new one.
+const READABLE_HEIGHT: f32 = 0.6;
 /// The smallest a window may be dragged to.
 const LEAST: egui::Vec2 = egui::vec2(240.0, 120.0);
 /// How far inside a window's edge its resize handles reach, and how far along it a corner's does.
@@ -123,6 +128,28 @@ struct Geometry {
     /// What `rect` was before it was maximized.
     restore: Option<egui::Rect>,
     minimized: bool,
+    /// The window is still as first opened, and grows to the height its content wants (at most its room) once that
+    /// is known and has held for a frame; this is the content height last seen then. The player's first move or
+    /// resize ends it.
+    fit: Option<f32>,
+    /// The height the content wanted last frame, none (0) before the first.
+    wanted: f32,
+    /// How much of `wanted` the content held out of sight last frame.
+    held: f32,
+    /// `rect` is what an earlier session remembered, which the content's height moves down, not centres.
+    remembered: bool,
+}
+
+/// What the scroll areas drawn in a window hold past their viewports, by the window's layer.
+#[derive(Clone, Copy, Default)]
+struct Hidden(f32);
+
+/// Notes the content `out` holds past its viewport, which the window it is in counts in the height it wants.
+pub fn note_hidden<R>(ui: &egui::Ui, out: &egui::containers::scroll_area::ScrollAreaOutput<R>) {
+    let held = (out.content_size.y - out.inner_rect.height()).max(0.0);
+    let key = ui.layer_id();
+    ui.ctx()
+        .data_mut(|d| d.get_temp_mut_or_default::<Hidden>(egui::Id::new(key)).0 += held);
 }
 
 /// The edges a resize handle moves.
@@ -220,19 +247,30 @@ fn pivoted(pivot: egui::Align2, pos: egui::Pos2, size: egui::Vec2) -> egui::Pos2
     pos - egui::vec2(pivot.x().to_factor(), pivot.y().to_factor()) * size
 }
 
-/// Where a window the player has not touched first lies.
-fn first_rect(spec: &WindowSpec, screen: egui::Rect) -> egui::Rect {
+/// The most a window of `spec` may take of `screen`: its room, but for the share of it a window kept clear of the
+/// map's edge, or of the top bar, leaves.
+fn cap(spec: &WindowSpec, screen: egui::Rect) -> egui::Vec2 {
+    let room = spec.place.map_or(screen, Place::bounds);
+    let most = spec
+        .place
+        .map_or(screen.size(), Place::room)
+        .min(room.size());
+    match spec.place {
+        Some(Place::Fill(_)) => most,
+        _ => egui::vec2(most.x, most.y * FIT_HEIGHT),
+    }
+}
+
+/// Where a window the player has not touched first lies, `least` tall at least (and no taller than its room).
+fn first_rect(spec: &WindowSpec, screen: egui::Rect, least: f32) -> egui::Rect {
     if let Some(Place::Fill(rect)) = spec.place {
         return rect;
     }
     let room = spec.place.map_or(screen, Place::bounds);
-    let cap = spec
-        .place
-        .map_or(screen.size(), Place::room)
-        .min(room.size());
+    let cap = cap(spec, screen);
     let size = egui::vec2(
         spec.width.unwrap_or(FIRST_WIDTH * room.width()),
-        FIRST_HEIGHT * room.height(),
+        (FIRST_HEIGHT * room.height()).max(least),
     )
     .min(cap);
     let (pivot, pos) = match spec.place {
@@ -371,20 +409,60 @@ pub fn show<R>(
     let free = spec.place.is_none() || spec.movable;
     let fills = matches!(spec.place, Some(Place::Fill(_))) && !spec.movable;
     let key = spec.id.with("geometry");
+    let fitting = !matches!(spec.place, Some(Place::Fill(_)));
     let mut geometry = ctx
         .data_mut(|d| d.get_temp::<Geometry>(key))
         .unwrap_or_else(|| match spec.saved {
-            Some(s) => Geometry {
-                rect: egui::Rect::from_min_size(s.pos.into(), s.size.into()),
-                restore: None,
-                minimized: s.collapsed,
-            },
+            Some(s) => {
+                // A remembered height too short to read is no size to open at: the window opens as a new one is tall.
+                let short = fitting && s.size[1] < READABLE_HEIGHT * cap(&spec, screen).y;
+                let first = first_rect(&spec, screen, 0.0);
+                let height = if short { first.height() } else { s.size[1] };
+                Geometry {
+                    rect: egui::Rect::from_min_size(s.pos.into(), egui::vec2(s.size[0], height)),
+                    restore: None,
+                    minimized: s.collapsed,
+                    fit: short.then_some(0.0),
+                    wanted: 0.0,
+                    held: 0.0,
+                    remembered: true,
+                }
+            }
             None => Geometry {
-                rect: first_rect(&spec, screen),
+                rect: first_rect(&spec, screen, 0.0),
                 restore: None,
                 minimized: false,
+                fit: fitting.then_some(0.0),
+                wanted: 0.0,
+                held: 0.0,
+                remembered: false,
             },
         });
+    if let Some(last) = geometry
+        .fit
+        .filter(|_| geometry.wanted > 0.0 && !geometry.minimized)
+    {
+        // What the content holds out of sight is more than it wanted when it was laid out too tight to show it.
+        let room = cap(&spec, screen).y;
+        let height = geometry
+            .wanted
+            .max(geometry.rect.height() + geometry.held)
+            .min(room);
+        let height = height.max(geometry.rect.height());
+        geometry.rect = match geometry.remembered {
+            true => inside(
+                egui::Rect::from_min_size(
+                    geometry.rect.min,
+                    geometry.rect.size().max(egui::vec2(0.0, height)),
+                ),
+                spec.place.map_or(screen, Place::bounds),
+            ),
+            false => first_rect(&spec, screen, height),
+        };
+        let settled =
+            (geometry.wanted - last).abs() < 1.0 && (geometry.held < 1.0 || height >= room);
+        geometry.fit = (!settled).then_some(geometry.wanted);
+    }
     // A window its layout puts is where the layout says; a free one stays where the player left it, inside the
     // screen, however the screen changed.
     geometry.rect = match (spec.place, free) {
@@ -425,6 +503,9 @@ pub fn show<R>(
     };
     let (mut pressed, mut moved, mut dragged, mut inner) =
         (Pressed::default(), egui::Vec2::ZERO, None, None);
+    let (mut wanted, mut held) = (0.0, 0.0);
+    let hidden = egui::Id::new(egui::LayerId::new(egui::Order::Middle, spec.id));
+    ctx.data_mut(|d| d.insert_temp(hidden, Hidden::default()));
     let area = egui::Area::new(spec.id)
         .order(egui::Order::Middle)
         .fixed_pos(shown_rect.min)
@@ -462,14 +543,21 @@ pub fn show<R>(
                 child.set_clip_rect(body.expand2(reach).intersect(shown_rect));
                 inner = Some(match spec.scrolls {
                     true => {
-                        egui::ScrollArea::vertical()
+                        let out = egui::ScrollArea::vertical()
                             .id_salt(spec.id.with("body"))
-                            .auto_shrink(false)
-                            .show(&mut child, add)
-                            .inner
+                            .auto_shrink([false, true])
+                            .show(&mut child, add);
+                        note_hidden(&child, &out);
+                        out.inner
                     }
                     false => add(&mut child),
                 });
+                held = ui
+                    .ctx()
+                    .data(|d| d.get_temp::<Hidden>(hidden))
+                    .unwrap_or_default()
+                    .0;
+                wanted = child.min_rect().bottom() - shown_rect.top() + held + margin.bottom;
                 if free {
                     for g in GRIPS {
                         let id = spec.id.with(("grip", g.left, g.right, g.top, g.bottom));
@@ -496,10 +584,12 @@ pub fn show<R>(
         None => inside(geometry.rect.translate(moved), screen),
     };
     if rect != geometry.rect {
+        geometry.fit = None;
         geometry.restore = None;
         geometry.rect = rect;
     }
     if pressed.maximize {
+        geometry.fit = None;
         geometry.rect = match geometry.restore.take() {
             Some(before) => inside(before, screen),
             None => {
@@ -510,6 +600,8 @@ pub fn show<R>(
         geometry.minimized = false;
     }
     geometry.minimized ^= pressed.minimize;
+    geometry.wanted = wanted;
+    geometry.held = held;
     ctx.data_mut(|d| d.insert_temp(key, geometry));
     let state = free.then(|| WindowState {
         pos: [geometry.rect.min.x, geometry.rect.min.y],

@@ -14,6 +14,14 @@ type H<'a> = Harness<'a, App<EngineModel>>;
 
 const SIZES: [egui::Vec2; 2] = [egui::vec2(1280.0, 800.0), egui::vec2(1920.0, 1080.0)];
 
+/// The sizes the first-height tests run at: the user's, the two above, and a short, narrow client window.
+const HEIGHT_SIZES: [egui::Vec2; 4] = [
+    egui::vec2(1290.0, 830.0),
+    egui::vec2(1280.0, 800.0),
+    egui::vec2(1920.0, 1080.0),
+    egui::vec2(900.0, 480.0),
+];
+
 /// The space a window keeps from the edge of the map region.
 const MARGIN: f32 = 8.0;
 
@@ -116,14 +124,15 @@ fn every_window_lies_in_the_map_region_off_the_top_bar_toolbar_and_sidebar() {
 fn a_window_restored_off_the_screen_is_moved_onto_it() {
     for size in SIZES {
         let file = crate::common::game_root("window-class-restored").join("settings.json");
-        let windows = json!({"windows": {"screen:messages": {"pos": [5000.0, 3000.0], "size": [700.0, 300.0],
+        let windows = json!({"windows": {"screen:messages": {"pos": [5000.0, 3000.0], "size": [700.0, 0.7 * size.y],
             "collapsed": false}}});
         std::fs::write(&file, windows.to_string()).unwrap();
         let (h, _) = playing(size, example("info", "message log"), Some(&file));
         let window = window_of(&h, "messages");
         let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, size);
         assert!(
-            screen.expand(0.5).contains_rect(window) && window.size() == egui::vec2(700.0, 300.0),
+            screen.expand(0.5).contains_rect(window)
+                && window.size() == egui::vec2(700.0, (0.7 * size.y).round()),
             "{size:?}: {window:?} outside {screen:?}"
         );
     }
@@ -414,5 +423,135 @@ fn direction_shots() {
     for size in SIZES {
         let name = format!("{}x{}/direction.png", size.x, size.y);
         crate::common::shot_stack(crate::common::over_map(direction_prompt()), size, &name);
+    }
+}
+
+/// The labels of the first list of `screen`, which is the one that has rows.
+fn row_labels(screen: &Value) -> Vec<String> {
+    fn find(v: &Value) -> Option<Vec<String>> {
+        match v {
+            Value::Object(o) => o
+                .get("rows")
+                .and_then(Value::as_array)
+                .filter(|rows| !rows.is_empty())
+                .map(|rows| {
+                    rows.iter()
+                        .filter_map(|r| r["label"].as_str().map(str::to_string))
+                        .collect()
+                })
+                .or_else(|| o.values().find_map(find)),
+            Value::Array(a) => a.iter().find_map(find),
+            _ => None,
+        }
+    }
+    find(screen).expect("a list")
+}
+
+/// `screen` with its first list given `n` rows, the last ones copies of the first with their own names.
+fn with_rows(mut screen: Value, n: usize) -> Value {
+    fn rows(v: &mut Value) -> Option<&mut Vec<Value>> {
+        match v {
+            Value::Object(o) => {
+                if o.get("rows")
+                    .and_then(Value::as_array)
+                    .is_some_and(|r| !r.is_empty())
+                {
+                    return o.get_mut("rows").and_then(Value::as_array_mut);
+                }
+                o.values_mut().find_map(rows)
+            }
+            Value::Array(a) => a.iter_mut().find_map(rows),
+            _ => None,
+        }
+    }
+    let rows = rows(&mut screen).expect("a list");
+    let first = rows[0].clone();
+    let at = rows.len();
+    rows.truncate(n);
+    rows.extend((at..n).map(|i| {
+        let mut row = first.clone();
+        row["id"] = json!(format!("entry:extra{i}"));
+        row["label"] = json!(format!("Extra row number {i}"));
+        row
+    }));
+    screen
+}
+
+/// Every list window opens showing all its rows, or fills its room when the rows do not fit, at the sizes
+/// of a client window and whether or not a short size was remembered by an earlier session for its kind.
+fn first_height_misses(case: &str, screen: &Value, kind: &str, remembered: bool) -> Vec<String> {
+    let last = row_labels(screen).pop().expect("rows");
+    let mut misses = vec![];
+    for size in HEIGHT_SIZES {
+        let file = crate::common::game_root("window-first-height").join("settings.json");
+        let windows = match remembered {
+            true => json!({"windows": {format!("screen:{kind}"): {"pos": [60.0, 120.0],
+                "size": [size.x * 0.6, 210.0], "collapsed": false}}}),
+            false => json!({}),
+        };
+        std::fs::write(&file, windows.to_string()).unwrap();
+        let (mut h, _) = playing(size, screen.clone(), Some(&file));
+        h.run_steps(8);
+        let window = window_of(&h, kind);
+        let room = region(&h).shrink(MARGIN);
+        let row = h
+            .query_all_by_label_contains(&last)
+            .last()
+            .map(|n| n.rect());
+        let shows = row.is_some_and(|r| window.contains_rect(r.shrink(1.0)));
+        let fills = window.height() >= 0.9 * room.height() - 2.0;
+        if !(shows || fills) {
+            misses.push(format!(
+                "{case} at {size:?}, remembered {remembered}: {window:?} in {room:?} does not show {last:?} ({row:?})"
+            ));
+        }
+    }
+    misses
+}
+
+#[test]
+fn a_list_window_opens_tall_enough_for_its_rows_or_the_room() {
+    let wait = example("tutorial", "wait menu screen");
+    let cases = [
+        ("wait menu", wait.clone(), "uilist"),
+        ("20 rows", with_rows(wait.clone(), 20), "uilist"),
+        ("26 rows", with_rows(wait.clone(), 26), "uilist"),
+        ("60 rows", with_rows(wait, 60), "uilist"),
+        ("spell menu", example("character", "spell menu"), "uilist"),
+        (
+            "filterable list",
+            example("generic", "filterable list screen"),
+            "uilist",
+        ),
+        ("help topics", example("info", "help topics"), "help"),
+        ("message log", example("info", "message log"), "messages"),
+        ("options", example("options", "options screen"), "options"),
+    ];
+    let misses = [false, true]
+        .into_iter()
+        .flat_map(|remembered| {
+            cases.iter().flat_map(move |(case, screen, kind)| {
+                first_height_misses(case, screen, kind, remembered)
+            })
+        })
+        .collect::<Vec<_>>();
+    assert!(misses.is_empty(), "{misses:#?}");
+}
+
+#[test]
+fn a_remembered_height_the_player_left_readable_is_kept() {
+    for size in HEIGHT_SIZES {
+        let file = crate::common::game_root("window-kept-height").join("settings.json");
+        let height = (0.8 * size.y).round();
+        let windows = json!({"windows": {"screen:uilist": {"pos": [60.0, 40.0], "size": [500.0, height],
+            "collapsed": false}}});
+        std::fs::write(&file, windows.to_string()).unwrap();
+        let (mut h, _) = playing(
+            size,
+            example("generic", "filterable list screen"),
+            Some(&file),
+        );
+        h.run_steps(8);
+        assert_eq!(window_of(&h, "uilist").height(), height, "{size:?}");
     }
 }
