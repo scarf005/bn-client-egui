@@ -349,6 +349,9 @@ pub const SHEER: u32 = 8;
 /// What nothing is known about but that it fills the space between two levels: a flat dark, its gray in the haze
 /// byte, casting no shadow.
 pub const VOID: u32 = 16;
+/// A face of `VOID` that fades from light at its top to its dark at its foot by ordered dithering; its uv runs from 0
+/// at the top to 1 at the foot.
+pub const FADE: u32 = 32;
 
 /// How far an upright sprite of an isometric tileset stands toward the eye from the middle of its square: to the
 /// square's near edge, whatever the camera's yaw. `toward` is the horizontal unit vector from target to eye; the
@@ -785,7 +788,8 @@ pub fn void_lid(square: (i32, i32), z: f32) -> Instance {
     )
 }
 
-/// The dark face of `square` on its south (0), east, north or west edge, from height `low` up to `high`.
+/// The face of `square` on its south (0), east, north or west edge, from height `low` up to `high`: the wall a seen
+/// edge stands on, fading into the dark ground nothing is known about at its foot.
 pub fn void_face(square: (i32, i32), face: usize, (low, high): (f32, f32)) -> Instance {
     let (x, y) = (square.0 as f32, square.1 as f32);
     let (from, run) = match face {
@@ -797,8 +801,8 @@ pub fn void_face(square: (i32, i32), face: usize, (low, high): (f32, f32)) -> In
     instance(
         [from[0], from[1], high],
         ([run[0], run[1], 0.0], [0.0, 0.0, low - high]),
-        [Vec2::ZERO; 3],
-        [VOID, VOID_FACE, 0],
+        [Vec2::ZERO, Vec2::ZERO, Vec2::Y],
+        [VOID | FADE, VOID_FACE, 0],
     )
 }
 

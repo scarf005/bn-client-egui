@@ -19,6 +19,9 @@ struct Camera {
 
 // How bright a square in sight is where something stands between it and the light.
 const SHADE: f32 = 0.6;
+// The share of light pixels at the top of a fading wall, and their gray.
+const FADE_TOP: f32 = 0.9;
+const FADE_LIGHT: f32 = 0.42;
 
 struct Quad {
     @builtin(vertex_index) corner: u32,
@@ -88,6 +91,7 @@ fn vs_shadow(q: Quad) -> Varying {
 const GLOW: u32 = 4u;
 const SHEER: u32 = 8u;
 const VOID: u32 = 16u;
+const FADE: u32 = 32u;
 
 @fragment
 fn fs_shadow(v: Varying) {
@@ -125,7 +129,23 @@ fn filtered(mode: u32, rgb: vec3<f32>) -> vec3<f32> {
 fn fs_main(v: Varying) -> @location(0) vec4<f32> {
     // What is unknown but solid is a flat gray, its level in the haze byte.
     if (v.flags.x & VOID) != 0u {
-        return vec4<f32>(vec3<f32>(f32(v.flags.y) / 255.0), 1.0);
+        let dark = vec4<f32>(vec3<f32>(f32(v.flags.y) / 255.0), 1.0);
+        if (v.flags.x & FADE) == 0u {
+            return dark;
+        }
+        // A wall down to it fades from its top by an 8x8 Bayer matrix of 2-pixel cells.
+        let down = (v.uv * vec2<f32>(textureDimensions(sheet))).y;
+        let cell = vec2<u32>(v.position.xy) / 2u;
+        var rank = 0u;
+        for (var bit = 0u; bit < 3u; bit++) {
+            let x = (cell.x >> bit) & 1u;
+            let y = (cell.y >> bit) & 1u;
+            rank = rank * 4u + (((x ^ y) << 1u) | y);
+        }
+        if (f32(rank) + 0.5) / 64.0 < FADE_TOP * (1.0 - down) {
+            return vec4<f32>(vec3<f32>(FADE_LIGHT), 1.0);
+        }
+        return dark;
     }
     let texel = textureSampleLevel(sheet, pixels, v.uv, 0.0);
     if texel.a < 0.5 {
