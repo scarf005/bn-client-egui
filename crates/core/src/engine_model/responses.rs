@@ -243,7 +243,10 @@ impl EngineModel {
                 .map(error_kind)
                 .is_some_and(|k| is_stale(&k))
         {
-            self.describe_wanted = self.hovered.as_ref().map(|h| h.pos.clone());
+            self.describe_wanted = self
+                .describe_wanted
+                .take()
+                .or_else(|| self.hovered.as_ref().map(|h| h.pos.clone()));
             self.describe_refused = self.describing.take().map(|(_, asked)| asked);
             return;
         }
