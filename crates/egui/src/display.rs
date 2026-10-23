@@ -596,6 +596,12 @@ impl Display {
         self.three_d() && self.settings.first_person
     }
 
+    /// The texture of the plain sprite numbered `sprite` and its rectangle there; none while its sheet loads.
+    pub fn sprite_texture(&self, sprite: u32) -> Option<(TextureId, Rect)> {
+        let source = self.atlas.as_ref()?.source(sprite, Fx::Plain)?;
+        Some((source.texture, source.uv))
+    }
+
     /// The ids of the tints the tileset in use has; none without one.
     pub fn tint_ids(&self) -> &[String] {
         &self.tint_ids

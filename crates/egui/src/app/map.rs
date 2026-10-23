@@ -47,6 +47,31 @@ impl MapView {
 /// How large a shot is beside its square on the 3D map.
 const SHOT_3D: f32 = 0.35;
 
+/// The wielded item `held` in the right hand of the first-person view in `view`, its sprite pushed out as a block game
+/// holds an item; none while the sheet it is cut from loads.
+fn held_mesh(
+    display: &crate::display::Display,
+    pages: &Pages,
+    held: &Cell,
+    view: egui::Rect,
+    season: Option<&str>,
+) -> Option<egui::Mesh> {
+    let (tileset, _) = display.tileset()?;
+    let (layer, _) = crate::display::resolve_layer(tileset, held.layers.last()?);
+    let chosen = tileset.choose(&crate::display::query(&layer, season))?;
+    let sprite = chosen.fg.or(chosen.bg)?.sprite;
+    let source = iso::scene::source(tileset, sprite)?;
+    let outline = pages.outline(&source)?;
+    let (texture, uv) = display.sprite_texture(sprite)?;
+    let held = iso::held::Held {
+        texture,
+        uv,
+        size: source.src,
+        outline: &outline,
+    };
+    Some(iso::held::mesh(&held, view))
+}
+
 /// The 3D scene of the map and the pages it samples.
 type Scene3d = (Arc<Scene>, Arc<Pages>);
 
@@ -840,7 +865,7 @@ impl<M: GameModel> App<M> {
         if let (Some(v), Some(target)) = (&canvas.view, self.iso.target) {
             if let Some(shown) = shown {
                 let stats = self.iso.stats.clone();
-                let scene = shown.0.clone();
+                let (scene, pages) = (shown.0.clone(), shown.1.clone());
                 // The first-person view looks into the sky the engine describes; looking down, there is none.
                 let sky = self.model.sky().filter(|_| v.camera.first_person);
                 painter.add(iso::callback(
@@ -870,11 +895,26 @@ impl<M: GameModel> App<M> {
                 if v.camera.first_person
                     && let Some(held) = self.model.wielded_cell()
                 {
-                    // The right hand holds it low, so the bottom edge cuts it.
-                    let side = canvas.rect.size().min_elem() * HELD;
-                    let corner = canvas.rect.right_bottom() + egui::vec2(-1.5 * side, -0.8 * side);
-                    let rect = egui::Rect::from_min_size(corner, egui::Vec2::splat(side));
-                    super::sidebar::paint_cell(painter, rect, &mut self.display, &held, season);
+                    match held_mesh(&self.display, &pages, &held, canvas.rect, season) {
+                        Some(mesh) => {
+                            painter.add(mesh);
+                        }
+                        // The flat picture while the sheet it is cut from loads: the right hand holds it low, so
+                        // the bottom edge cuts it.
+                        None => {
+                            let side = canvas.rect.size().min_elem() * HELD;
+                            let corner =
+                                canvas.rect.right_bottom() + egui::vec2(-1.5 * side, -0.8 * side);
+                            let rect = egui::Rect::from_min_size(corner, egui::Vec2::splat(side));
+                            super::sidebar::paint_cell(
+                                painter,
+                                rect,
+                                &mut self.display,
+                                &held,
+                                season,
+                            );
+                        }
+                    }
                 }
             }
             return;
