@@ -69,6 +69,7 @@ fn by_def(def: &str, v: &Value) -> Result<Value, String> {
         "text" => round_trip::<Text>(v),
         "pos" => round_trip::<WorldPos>(v),
         "avatar" => round_trip::<Avatar>(v),
+        "mode" => round_trip::<Mode>(v),
         "cell" => round_trip::<Cell>(v),
         "entity" => round_trip::<Entity>(v),
         "environment" => round_trip::<Environment>(v),
@@ -219,7 +220,7 @@ fn the_schema_hash_is_the_vendored_schemas_sha256_prefix() {
         .map(|b| format!("{b:02x}"))
         .collect::<String>();
     assert_eq!(protocol::SCHEMA_HASH, format!("sha256:{}", &hex[..16]));
-    assert_eq!(protocol::SCHEMA_HASH, "sha256:864dbea2f2596ae5");
+    assert_eq!(protocol::SCHEMA_HASH, "sha256:60904c6b4dbf4b10");
 }
 
 #[test]

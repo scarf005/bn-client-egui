@@ -401,13 +401,18 @@ fn an_event_avatar_keeps_the_members_it_names_and_clears_the_others() {
         stats: None,
         inventory: None,
         sidebar: None,
+        modes: vec![],
         ground: None,
         activity: None,
         keep: keep.iter().map(|k| k.to_string()).collect(),
         ..avatar.clone()
     };
     assert_eq!(
-        r.events(event("42", "33", moved(&["stats", "sidebar", "inventory"]))),
+        r.events(event(
+            "42",
+            "33",
+            moved(&["stats", "sidebar", "inventory", "modes"])
+        )),
         Outcome::Applied
     );
     let kept = r.avatar().unwrap();
@@ -415,6 +420,8 @@ fn an_event_avatar_keeps_the_members_it_names_and_clears_the_others() {
     assert_eq!(kept.stats, before.stats);
     assert_eq!(kept.sidebar, before.sidebar);
     assert_eq!(kept.inventory, before.inventory);
+    assert!(!before.modes.is_empty());
+    assert_eq!(kept.modes, before.modes);
     assert_eq!(kept.activity, None, "an activity is never kept");
 
     assert_eq!(r.events(event("43", "34", moved(&[]))), Outcome::Applied);
@@ -424,4 +431,5 @@ fn an_event_avatar_keeps_the_members_it_names_and_clears_the_others() {
         "an absent member that is not kept is empty"
     );
     assert!(cleared.sidebar.is_none());
+    assert!(cleared.modes.is_empty());
 }

@@ -322,6 +322,9 @@ pub struct Avatar {
     pub inventory: Option<Vec<InventoryItem>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sidebar: Option<Sidebar>,
+    /// The settings `SetMode` sets, each with the value it holds now.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub modes: Vec<Mode>,
     /// The creatures in sight by direction, what the native compass panel lists.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub compass: Option<Vec<CompassDirection>>,
@@ -330,6 +333,24 @@ pub struct Avatar {
     pub ground: Option<Vec<InventoryItem>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub activity: Option<Activity>,
+}
+
+/// A setting that native keys toggle or cycle, with the value it holds and the values it takes.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Mode {
+    pub id: String,
+    pub label: String,
+    /// The `id` of the value it holds now.
+    pub value: String,
+    pub values: Vec<ModeValue>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ModeValue {
+    pub id: String,
+    pub label: String,
 }
 
 /// What the avatar is busy with over turns: the engine's id and words for it and, for one of a set length, the
@@ -361,6 +382,8 @@ pub struct AvatarChange {
     pub inventory: Option<Vec<InventoryItem>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sidebar: Option<Sidebar>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub modes: Vec<Mode>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub compass: Option<Vec<CompassDirection>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -407,6 +430,11 @@ impl AvatarChange {
                 before.and_then(|a| a.sidebar.clone())
             } else {
                 self.sidebar.clone()
+            },
+            modes: if kept("modes") {
+                before.map(|a| a.modes.clone()).unwrap_or_default()
+            } else {
+                self.modes.clone()
             },
             compass: if kept("compass") {
                 before.and_then(|a| a.compass.clone())
@@ -1209,6 +1237,13 @@ pub enum Operation {
         #[serde(deserialize_with = "opaque_id")]
         action_id: String,
         pos: WorldPos,
+    },
+    /// Sets the mode `mode` of `avatar.modes` to its value `value`; a mode that holds it is left alone.
+    SetMode {
+        #[serde(deserialize_with = "opaque_id")]
+        mode: String,
+        #[serde(deserialize_with = "opaque_id")]
+        value: String,
     },
     /// Runs an affordance of the top screen, by id.
     Invoke {
