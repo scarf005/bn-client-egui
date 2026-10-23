@@ -77,6 +77,12 @@ impl Canvas {
         }
     }
 
+    /// Where something the size of a square standing on square `p` is drawn: as `rect`, and on the 3D map as large
+    /// as the square looks there.
+    fn standing(&self, p: Pos) -> egui::Rect {
+        self.rect(p)
+    }
+
     /// A square's rectangle on the flat map.
     fn flat_rect(&self, p: Pos) -> egui::Rect {
         egui::Rect::from_min_size(
@@ -1003,7 +1009,7 @@ impl<M: GameModel> App<M> {
             now,
             canvas.cell_px,
             |p| {
-                canvas.rect(Pos {
+                canvas.standing(Pos {
                     x: p.x - origin.x,
                     y: p.y - origin.y,
                 })
@@ -1117,5 +1123,27 @@ mod tests {
             "the box is not tall: {top} over {corner:?}"
         );
         assert!(self::canvas(None).cursor_frame(at, 3.0).is_empty());
+    }
+
+    #[test]
+    fn a_shot_in_first_person_is_drawn_smaller_the_farther_it_flies() {
+        let avatar = glam::Vec2::new(10.5, 10.5);
+        let ahead = glam::Vec2::new(30.5, 10.5);
+        let canvas = canvas(Some(Viewport {
+            camera: Camera {
+                yaw: iso::aim::yaw_facing(avatar, ahead),
+                pitch: 0.6,
+                first_person: true,
+            },
+            target: glam::Vec3::new(avatar.x, avatar.y, 0.0),
+            scale: 34.0,
+            size: glam::Vec2::new(1280.0, 720.0),
+        }));
+        let (near, far) = (
+            canvas.standing(Pos { x: 12, y: 10 }),
+            canvas.standing(Pos { x: 18, y: 10 }),
+        );
+        assert!(near.width() > far.width() * 2.0, "{near:?} next to {far:?}");
+        assert!(far.width() > 0.0, "{far:?}");
     }
 }
