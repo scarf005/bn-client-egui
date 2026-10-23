@@ -85,7 +85,9 @@ fn finish(h: &ScriptHandle, n: usize, command: &str) {
 #[test]
 fn a_filterable_list_shows_its_filter_and_the_key_runs_it() {
     let (mut app, h) = open(example("filterable list screen"));
-    assert!(text(&mut app).contains("Filter [/]"));
+    let shown = text(&mut app);
+    assert!(shown.contains("Filter [/]"));
+    assert_eq!(shown.matches("Filter").count(), 1, "{shown}");
     press(&mut app, KeyCode::Char('/'));
     assert_eq!(
         operations(&h),

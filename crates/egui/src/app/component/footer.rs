@@ -237,7 +237,12 @@ pub(super) fn own_buttons<'a>(screen: &'a Screen, component: &Component) -> Vec<
         .iter()
         .filter_map(|id| find(screen, id))
         // A list's rows run its `activate`, also where a panel around the list names it.
-        .filter(|a| !driven(component, a) && !run_by_rows(screen, a) && drawn_button(a))
+        .filter(|a| {
+            !driven(component, a)
+                && !run_by_rows(screen, a)
+                && !matches!(component, Component::List(list) if searched(screen, list, a))
+                && drawn_button(a)
+        })
         .collect()
 }
 

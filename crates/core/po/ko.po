@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: bn-client\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-23 15:11+0900\n"
+"POT-Creation-Date: 2026-10-23 19:32+0900\n"
 "PO-Revision-Date: 2026-10-18 09:30+0900\n"
 "Language-Team: Korean\n"
 "Language: ko\n"
@@ -124,45 +124,45 @@ msgstr "PATH에서 %s: %s"
 msgid "cannot start engine %s: %s"
 msgstr "엔진 %s을(를) 시작할 수 없음: %s"
 
-#: crates/egui/src/app.rs:332 crates/tui/src/lib.rs:697
+#: crates/egui/src/app.rs:336 crates/tui/src/lib.rs:697
 msgid "Engine: %s"
 msgstr "엔진: %s"
 
-#: crates/egui/src/app.rs:337 crates/tui/src/lib.rs:703
+#: crates/egui/src/app.rs:341 crates/tui/src/lib.rs:703
 msgid "Last engine output:"
 msgstr "마지막 엔진 출력:"
 
-#: crates/egui/src/app.rs:344
+#: crates/egui/src/app.rs:348
 msgid "Restart"
 msgstr "다시 시작"
 
-#: crates/egui/src/app.rs:358
+#: crates/egui/src/app.rs:362
 msgid "%s: %s (%d of %d)"
 msgstr "%s: %s (%d/%d)"
 
-#: crates/egui/src/app.rs:374
+#: crates/egui/src/app.rs:378
 msgid "Loading image"
 msgstr "불러오기 그림"
 
-#: crates/egui/src/app.rs:496
+#: crates/egui/src/app.rs:500
 msgid "Resize sidebar"
 msgstr "사이드바 크기 조절"
 
-#: crates/egui/src/app.rs:528 crates/egui/src/app.rs:540
+#: crates/egui/src/app.rs:532 crates/egui/src/app.rs:544
 msgid "Client settings"
 msgstr "클라이언트 설정"
 
-#: crates/egui/src/app.rs:537 crates/egui/src/app/palette.rs:57
+#: crates/egui/src/app.rs:541 crates/egui/src/app/palette.rs:57
 #: crates/egui/src/app/palette.rs:103 crates/tui/src/lib.rs:881
 #: crates/tui/src/lib.rs:1050
 msgid "Actions"
 msgstr "행동"
 
-#: crates/egui/src/app.rs:555 crates/tui/src/lib.rs:666
+#: crates/egui/src/app.rs:559 crates/tui/src/lib.rs:666
 msgid "Ready"
 msgstr "준비"
 
-#: crates/egui/src/app.rs:594
+#: crates/egui/src/app.rs:598
 msgid "Interrupt"
 msgstr "중단"
 
@@ -174,8 +174,12 @@ msgstr "새 키를 누르세요"
 msgid "OK"
 msgstr "확인"
 
+#: crates/egui/src/app/component/list.rs:274 crates/egui/src/app/palette.rs:63
+msgid "Search"
+msgstr "검색"
+
 #: crates/egui/src/app/component/overmap.rs:376
-#: crates/egui/src/app/component/overmap.rs:552 crates/egui/src/app/map.rs:343
+#: crates/egui/src/app/component/overmap.rs:552 crates/egui/src/app/map.rs:392
 #: crates/tui/src/lib.rs:753
 msgid "Map"
 msgstr "지도"
@@ -193,19 +197,19 @@ msgstr "이동과 메모"
 msgid "Level %d"
 msgstr "계층 %d"
 
-#: crates/egui/src/app/map.rs:254 crates/tui/src/lib.rs:763
+#: crates/egui/src/app/map.rs:302 crates/tui/src/lib.rs:763
 msgid "No map loaded"
 msgstr "불러온 지도가 없습니다"
 
-#: crates/egui/src/app/map.rs:432
+#: crates/egui/src/app/map.rs:496
 msgid "Player at (%d, %d). Cursor (%d, %d)."
 msgstr "플레이어 (%d, %d). 커서 (%d, %d)."
 
-#: crates/egui/src/app/map.rs:435
+#: crates/egui/src/app/map.rs:499
 msgid "Player at (%d, %d). Cursor (%d, %d): %s."
 msgstr "플레이어 (%d, %d). 커서 (%d, %d): %s."
 
-#: crates/egui/src/app/map.rs:733
+#: crates/egui/src/app/map.rs:797
 msgid "Map actions"
 msgstr "지도 행동"
 
@@ -216,10 +220,6 @@ msgstr "Space나 Enter로 이 창을 닫습니다"
 #: crates/egui/src/app/menu.rs:280
 msgid "Load more (%d of %d)"
 msgstr "더 불러오기 (%d/%d)"
-
-#: crates/egui/src/app/palette.rs:63
-msgid "Search"
-msgstr "찾기"
 
 #: crates/egui/src/app/palette.rs:67
 msgid "Search actions"
@@ -258,7 +258,7 @@ msgid "Reduced motion"
 msgstr "움직임 줄이기"
 
 #. TRANSLATORS: the mark of north on the compass of the 3D map.
-#: crates/egui/src/iso/mod.rs:250
+#: crates/egui/src/iso/mod.rs:241
 msgid "N"
 msgstr "북"
 

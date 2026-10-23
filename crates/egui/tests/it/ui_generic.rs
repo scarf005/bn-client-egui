@@ -115,16 +115,143 @@ fn field<'a>(h: &'a H) -> egui_kittest::Node<'a> {
     h.get_by_role(egui::accesskit::Role::TextInput)
 }
 
+/// The invoke of the list's filter affordance that sets the text, as the search box sends it.
+fn search_for(text: &str) -> Value {
+    json!({"kind": "invoke", "affordance_id": "bn:filter:list:choices", "args": {"text": text}})
+}
+
+fn search<'a>(h: &'a H) -> egui_kittest::Node<'a> {
+    h.get_by_role_and_label(egui::accesskit::Role::TextInput, "Search")
+}
+
+/// The example list with the engine's filter text `text`.
+fn filtered(text: &str) -> Value {
+    let mut screen = example("filterable list screen");
+    screen["root"]["children"][1]["filter"] = text.into();
+    screen
+}
+
 #[test]
-fn a_filterable_list_offers_the_engines_filter_and_the_click_runs_it() {
-    let (mut h, script) = harness(example("filterable list screen"));
+fn a_filterable_list_has_a_search_box_and_no_filter_button() {
+    let (h, _) = harness(example("filterable list screen"));
     h.get_by_label("Teleport…");
-    h.get_by_label("Filter").click();
-    h.run_steps(3);
-    assert_eq!(
-        operations(&script),
-        [json!({"kind": "invoke", "affordance_id": "FILTER", "args": {}})]
+    assert!(
+        search(&h)
+            .accesskit_node()
+            .value()
+            .unwrap_or_default()
+            .is_empty()
     );
+    assert!(h.query_by_label("Filter").is_none());
+}
+
+#[test]
+fn the_search_box_shows_the_filter_text_the_engine_holds() {
+    let (h, _) = harness(filtered("tele"));
+    assert_eq!(search(&h).accesskit_node().value().as_deref(), Some("tele"));
+}
+
+#[test]
+fn typing_in_the_search_box_sends_each_text_as_a_filter_invoke_one_at_a_time_and_the_newest_wins() {
+    let (mut h, script) = harness(example("filterable list screen"));
+    search(&h).click();
+    h.run_steps(2);
+    search(&h).type_text("t");
+    h.run_steps(2);
+    search(&h).type_text("el");
+    h.run_steps(3);
+    // The engine is busy with the first text: nothing else goes out yet.
+    assert_eq!(operations(&script), [search_for("t")]);
+    finish(&script, 1, "c:5");
+    h.run_steps(3);
+    assert_eq!(operations(&script), [search_for("t"), search_for("tel")]);
+}
+
+#[test]
+fn slash_and_ctrl_f_focus_the_search_box_and_the_slash_is_not_typed_into_it() {
+    for press in ["/", "ctrl+f"] {
+        let (mut h, script) = harness(example("filterable list screen"));
+        assert!(!search(&h).accesskit_node().is_focused());
+        match press {
+            "/" => h.event(egui::Event::Text("/".into())),
+            _ => h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::F),
+        }
+        h.run_steps(3);
+        assert!(search(&h).accesskit_node().is_focused(), "{press}");
+        assert!(
+            search(&h)
+                .accesskit_node()
+                .value()
+                .unwrap_or_default()
+                .is_empty()
+        );
+        assert!(operations(&script).is_empty(), "{:?}", operations(&script));
+    }
+}
+
+#[test]
+fn keys_typed_in_the_search_box_run_no_game_action() {
+    let (mut h, script) = harness(example("filterable list screen"));
+    search(&h).click();
+    h.run_steps(2);
+    search(&h).type_text("q/");
+    h.run_steps(3);
+    assert!(
+        operations(&script)
+            .iter()
+            .all(|op| op["affordance_id"] == "bn:filter:list:choices"),
+        "{:?}",
+        operations(&script)
+    );
+}
+
+#[test]
+fn escape_in_a_filled_search_box_clears_it_and_the_next_escape_leaves_it_without_closing_the_list()
+{
+    let (mut h, script) = harness(example("filterable list screen"));
+    search(&h).click();
+    h.run_steps(2);
+    search(&h).type_text("tele");
+    h.run_steps(3);
+    finish(&script, 1, "c:5");
+    h.run_steps(3);
+    h.key_press(egui::Key::Escape);
+    h.run_steps(3);
+    assert_eq!(operations(&script).last(), Some(&search_for("")));
+    assert!(search(&h).accesskit_node().is_focused());
+    finish(&script, 2, "c:6");
+    h.run_steps(3);
+    h.key_press(egui::Key::Escape);
+    h.run_steps(3);
+    assert!(!search(&h).accesskit_node().is_focused());
+    assert!(
+        operations(&script)
+            .iter()
+            .all(|op| op["affordance_id"] != "bn:cancel"),
+        "{:?}",
+        operations(&script)
+    );
+    // With the focus on the list, Escape closes it as it always did.
+    h.key_press(egui::Key::Escape);
+    h.run_steps(3);
+    assert!(
+        operations(&script)
+            .iter()
+            .any(|op| op["affordance_id"] == "bn:cancel")
+    );
+}
+
+#[test]
+fn enter_and_down_in_the_search_box_leave_it_for_the_first_row_and_send_nothing() {
+    for leave in [egui::Key::Enter, egui::Key::ArrowDown] {
+        let (mut h, script) = harness(filtered("tele"));
+        search(&h).click();
+        h.run_steps(2);
+        h.key_press(leave);
+        h.run_steps(3);
+        assert!(!search(&h).accesskit_node().is_focused(), "{leave:?}");
+        assert!(operations(&script).is_empty(), "{:?}", operations(&script));
+    }
 }
 
 #[test]

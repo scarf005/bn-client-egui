@@ -6,6 +6,9 @@ use crate::kit::table;
 /// The smallest font a canvas is drawn in.
 const CANVAS_MIN_FONT: f32 = 10.0;
 
+/// The width a list's search box keeps, however narrow its rows are.
+const SEARCH_WIDTH: f32 = 220.0;
+
 /// The width of `text` on one line.
 pub(in crate::app) fn text_width(ui: &egui::Ui, text: &str, font: &egui::FontId) -> f32 {
     ui.painter()
@@ -88,7 +91,10 @@ impl<M: GameModel> App<M> {
                 let widths = self.list_widths(ui, list, &rows);
                 // The rows sit beside their scroll bar.
                 let bar = ui.spacing().scroll.allocated_width();
-                let natural = widths.natural(gap) + bar;
+                let natural = widths
+                    .natural(gap)
+                    .max(list.search(screen).map_or(0.0, |_| SEARCH_WIDTH))
+                    + bar;
                 // Every column keeps its values in sight; only the label is cut, down to its longest word.
                 let least = natural - widths.label + widths.label_min;
                 Extent {

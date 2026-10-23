@@ -2075,6 +2075,31 @@ pub struct List {
     /// The list takes a filter text: its filter affordance is among `affordances`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub filterable: Option<bool>,
+    /// The filter text the list holds; none when it holds none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub filter: Option<String>,
+}
+
+impl List {
+    /// The affordance of `screen` that sets this list's filter text in one invoke, with no prompt: the list's
+    /// own, taking only a `text`.
+    pub fn search<'a>(&self, screen: &'a Screen) -> Option<&'a Affordance> {
+        let sets_text = |shape: &ArgShape| {
+            shape.text.is_some()
+                && shape.row.is_none()
+                && shape.rows.is_none()
+                && shape.pane.is_none()
+        };
+        self.filterable
+            .filter(|&filterable| filterable)
+            .and_then(|_| {
+                self.head
+                    .affordances
+                    .iter()
+                    .filter_map(|id| screen.affordances.iter().find(|a| &a.id == id))
+                    .find(|a| a.args.as_ref().is_some_and(sets_text))
+            })
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
