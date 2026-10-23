@@ -17,7 +17,7 @@ pub(super) struct FrameKey {
 }
 
 /// The key an input event is, when it is one.
-fn frame_key(e: &egui::Event) -> Option<FrameKey> {
+pub(super) fn frame_key(e: &egui::Event) -> Option<FrameKey> {
     match e {
         egui::Event::Text(t) => Some(FrameKey {
             token: if t == " " { "SPACE".into() } else { t.clone() },

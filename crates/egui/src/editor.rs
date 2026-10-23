@@ -151,6 +151,34 @@ pub struct Typed {
     pub changed: Option<String>,
     /// The text that Return submits, once the engine can take it.
     pub submit: Option<String>,
+    /// A search box was left by Return or Down, for the results.
+    pub left: bool,
+}
+
+/// A search box above a list; see `search_box`.
+pub struct Search<'a> {
+    pub screen: &'a str,
+    pub id: &'a str,
+    pub label: &'a str,
+    /// The filter text the engine holds.
+    pub value: &'a str,
+    pub busy: bool,
+    /// The box takes the keyboard this frame.
+    pub focus: bool,
+}
+
+/// A text box above a list whose every change goes out as it is typed, the newest text last. It has the keyboard
+/// only when asked: Escape empties it, then leaves it, and Return or Down leave it for the results.
+pub fn search_box(ui: &mut egui::Ui, search: &Search) -> Typed {
+    let Search {
+        screen,
+        id,
+        label,
+        value,
+        busy,
+        focus,
+    } = *search;
+    typing(ui, (screen, id, label, value, busy), Some(focus))
 }
 
 /// A text box whose every change goes out as it is typed and whose Return submits, such as the prompt of a
@@ -164,6 +192,15 @@ pub fn typing_prompt(
     label: &str,
     value: &str,
     busy: bool,
+) -> Typed {
+    typing(ui, (screen, id, label, value, busy), None)
+}
+
+/// A typing prompt, or a search box when `search` holds whether it takes the keyboard now.
+fn typing(
+    ui: &mut egui::Ui,
+    (screen, id, label, value, busy): (&str, &str, &str, &str, bool),
+    search: Option<bool>,
 ) -> Typed {
     // One state per field id, so the prompts of closed screens leave nothing behind.
     let key = egui::Id::new(("typing", id));
@@ -192,18 +229,29 @@ pub fn typing_prompt(
     }
     // Escape empties a filled box first; the screen's own Escape waits for an empty one.
     let box_id = egui::Id::new(("typing-box", id));
-    let cleared = !state.text.is_empty()
-        && ui.memory(|m| m.has_focus(box_id))
+    let focused = ui.memory(|m| m.has_focus(box_id));
+    let escaped = focused
+        && (search.is_some() || !state.text.is_empty())
         && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
+    let cleared = escaped && !state.text.is_empty();
     if cleared {
         state.text.clear();
     }
+    // Down is no focus walk in a search box: it goes to the results.
+    let down = search.is_some()
+        && focused
+        && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowDown));
+    ui.memory_mut(|m| match (search, (escaped && !cleared) || down) {
+        (_, true) => m.surrender_focus(box_id),
+        (Some(true), false) => m.request_focus(box_id),
+        _ => {}
+    });
     let edit = egui::TextEdit::singleline(&mut state.text)
         .id(box_id)
         .desired_width(f32::INFINITY);
     let response = ui.add(edit.hint_text(label));
     // egui drops the focus of a box on Escape unless the box's event filter says it handles it.
-    if response.has_focus() && !state.text.is_empty() {
+    if response.has_focus() && (search.is_some() || !state.text.is_empty()) {
         ui.memory_mut(|m| {
             m.set_focus_lock_filter(
                 box_id,
@@ -219,12 +267,13 @@ pub fn typing_prompt(
     let name = label.to_string();
     ui.ctx()
         .accesskit_node_builder(response.id, move |b| b.set_label(name));
-    if !state.entered {
+    if search.is_none() && !state.entered {
         response.request_focus();
         state.entered = response.has_focus();
     }
     let enter = ui.input(|i| i.key_pressed(egui::Key::Enter));
-    state.submit |= (response.lost_focus() || response.has_focus()) && enter;
+    state.submit |= search.is_none() && (response.lost_focus() || response.has_focus()) && enter;
+    let left = search.is_some() && (down || (response.lost_focus() && enter));
     // Preedit text sits in the box while composing; only the committed text is typed.
     state.composing = ui.input(|i| {
         i.events
@@ -238,10 +287,13 @@ pub fn typing_prompt(
     ui.data_mut(|d| {
         d.insert_temp(
             FILLED,
-            (cleared || !state.text.is_empty()).then_some(box_id),
+            (cleared || search.is_some() || !state.text.is_empty()).then_some(box_id),
         )
     });
-    let mut typed = Typed::default();
+    let mut typed = Typed {
+        left,
+        ..Typed::default()
+    };
     if state.submit && !busy {
         state.submit = false;
         state.handed = state.text.clone();

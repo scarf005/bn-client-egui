@@ -76,6 +76,8 @@ pub(super) struct Screens {
     pub(super) passive: bool,
     /// The row to choose once the filter prompt that showed it has confirmed its text.
     reach: Option<String>,
+    /// A key asked for the list's search box: it takes the keyboard when it is next drawn.
+    focus_search: std::cell::Cell<bool>,
     /// The most rows the lists drawn now show before they scroll, when fewer than their room holds.
     list_rows: std::cell::Cell<Option<usize>>,
     /// The squares a drag crossed that the engine has not taken yet: it holds few commands at once.
@@ -142,6 +144,11 @@ enum Intent {
     Open,
     /// A result row of a list filter's prompt was clicked: confirm the text, then choose the row.
     Reach(String),
+    /// The text a list's search box holds now, for the affordance that sets the list's filter.
+    Search {
+        affordance: String,
+        text: String,
+    },
     Text(String),
     Pane(String),
     Confirm,
@@ -208,6 +215,16 @@ fn claimed(root: &Component) -> HashSet<&str> {
                 .chain(rows)
         })
         .collect()
+}
+
+/// The engine's affordance that opens the prompt of a list's filter.
+const FILTER: &str = "FILTER";
+
+/// Whether `a` is the filter of `component`, a list with a search box: the box sets the text, and its keys
+/// take the box instead of opening the prompt.
+fn searched(screen: &Screen, list: &List, a: &Affordance) -> bool {
+    list.search(screen)
+        .is_some_and(|search| search.id == a.id || a.id == FILTER)
 }
 
 /// Whether a component's own widgets run the affordance, so it needs no button; a click on the map moves
@@ -349,9 +366,10 @@ impl<M: GameModel> App<M> {
         self.keys_consumed = false;
         self.sync_screens();
         let pages = self.screens.list_pages.borrow().clone();
-        let keys = super::input::frame_keys(ctx).into_iter().map(|k| k.token);
         // A text box has the typing; its keys are not the screen's, except Escape, which closes the screen (a filled filter box clears first).
         let typing = ctx.text_edit_focused();
+        self.search_keys(ctx, typing);
+        let keys = super::input::frame_keys(ctx).into_iter().map(|k| k.token);
         let clears = crate::editor::clears_on_escape(ctx);
         let keys = keys
             .filter(|key| !typing || (key == "ESC" && !clears))
@@ -394,6 +412,31 @@ impl<M: GameModel> App<M> {
         }
     }
 
+    /// The keys that take the screen's search box: Ctrl+F, and the keys the engine binds to its filter prompt, which
+    /// the box replaces. They are the box's, not the screen's, and are not typed into it.
+    fn search_keys(&mut self, ctx: &egui::Context, typing: bool) {
+        let Some(top) = interaction::described(self.model.screens()) else {
+            return;
+        };
+        let searched = top
+            .components()
+            .into_iter()
+            .any(|c| matches!(c, Component::List(list) if list.search(top).is_some()));
+        if !searched || typing {
+            return;
+        }
+        let prompt = find(top, FILTER).map_or(vec![], |a| a.keys.clone());
+        let takes = |e: &egui::Event| {
+            let ctrl_f = matches!(e, egui::Event::Key { key: egui::Key::F, pressed: true, modifiers, .. }
+                if modifiers.command && !modifiers.alt);
+            ctrl_f || super::input::frame_key(e).is_some_and(|k| prompt.contains(&k.token))
+        };
+        if ctx.input(|i| i.events.iter().any(takes)) {
+            self.screens.focus_search.set(true);
+            ctx.input_mut(|i| i.events.retain(|e| !takes(e)));
+        }
+    }
+
     /// Shows what the core decided and sends the call it built.
     fn settle(&mut self, out: interaction::Outcome) {
         self.keys_consumed |= out.consumed;
@@ -429,6 +472,18 @@ impl<M: GameModel> App<M> {
                 };
                 self.screens.reach = Some(row);
                 return self.apply(confirm);
+            }
+            Intent::Search { affordance, text } => {
+                let args = InvokeArgs {
+                    text: Some(text),
+                    ..InvokeArgs::default()
+                };
+                if let Err(InvokeError::Disabled(denial)) =
+                    self.model.invoke_affordance(&affordance, args)
+                {
+                    self.screens.denial = denial.as_ref().map(Text::shown);
+                }
+                return;
             }
             Intent::Run(id) => interaction.activate(top, &id),
             Intent::Paint(paint) => return self.screens.paints.push_back(paint),

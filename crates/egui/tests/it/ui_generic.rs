@@ -169,15 +169,15 @@ fn typing_in_the_search_box_sends_each_text_as_a_filter_invoke_one_at_a_time_and
 
 #[test]
 fn slash_and_ctrl_f_focus_the_search_box_and_the_slash_is_not_typed_into_it() {
-    for press in [egui::Key::Slash, egui::Key::F] {
+    for press in ["/", "ctrl+f"] {
         let (mut h, script) = harness(example("filterable list screen"));
         assert!(!search(&h).accesskit_node().is_focused());
         match press {
-            egui::Key::F => h.key_press_modifiers(egui::Modifiers::COMMAND, press),
-            _ => h.key_press(press),
+            "/" => h.event(egui::Event::Text("/".into())),
+            _ => h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::F),
         }
         h.run_steps(3);
-        assert!(search(&h).accesskit_node().is_focused(), "{press:?}");
+        assert!(search(&h).accesskit_node().is_focused(), "{press}");
         assert!(
             search(&h)
                 .accesskit_node()

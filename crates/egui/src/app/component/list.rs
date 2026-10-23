@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::kit::table;
+use bn_client_core::localise::tr;
 
 /// Rows left below the last one shown before the next page is asked for.
 const PREFETCH: usize = 20;
@@ -93,6 +94,9 @@ impl<M: GameModel> App<M> {
         let slot = (screen.screen_id.clone(), id.clone());
         let interaction = &self.screens.interaction;
         let rows = self.known_rows(list);
+        if let Some(search) = list.search(screen).filter(|_| !self.screens.passive) {
+            self.search_box(ui, screen, (list, search), &rows, out);
+        }
         let focus = interaction.focus();
         let cursor = focus
             .row_id
@@ -128,6 +132,7 @@ impl<M: GameModel> App<M> {
             .filter_map(|a| find(screen, a))
             // The rows run the list's `activate`, on a double click or Enter.
             .filter(|a| list.activate.as_deref() != Some(a.id.as_str()))
+            .filter(|a| !searched(screen, list, a))
             .collect::<Vec<_>>();
         let step = height + spacing.y;
         // Room is kept for a refusal and the buttons only when some row or the list has them, so a list with
@@ -248,6 +253,43 @@ impl<M: GameModel> App<M> {
         drop(scrolls);
         let shown = cursor.and_then(|c| rows.iter().find(|r| r.id == c));
         self.affordance_buttons(ui, &own, shown.copied(), out);
+    }
+
+    /// The box above a list that sets the list's filter as it is typed: each text goes to the engine as the
+    /// `search` affordance, one at a time with the newest last. Return or Down put the focus on the first row.
+    fn search_box(
+        &self,
+        ui: &mut egui::Ui,
+        screen: &Screen,
+        (list, search): (&List, &Affordance),
+        rows: &[&Row],
+        out: &mut Vec<Intent>,
+    ) {
+        let id = format!("{}/{}/search", screen.screen_id, list.head.id);
+        let typed = editor::search_box(
+            ui,
+            &editor::Search {
+                screen: &screen.screen_id,
+                id: &id,
+                label: &tr("Search"),
+                value: list.filter.as_deref().unwrap_or_default(),
+                busy: self.model.busy(),
+                focus: self.screens.focus_search.take(),
+            },
+        );
+        if let Some(text) = typed.changed.or(typed.submit) {
+            out.push(Intent::Search {
+                affordance: search.id.clone(),
+                text,
+            });
+        }
+        let first = rows.iter().find(|r| r.enabled && r.selectable);
+        if let (true, Some(row)) = (typed.left, first) {
+            out.push(Intent::Focus {
+                component: list.head.id.clone(),
+                row: row.id.clone(),
+            });
+        }
     }
 
     /// How high a row of a list without columns is with its label wrapped at `label`.
