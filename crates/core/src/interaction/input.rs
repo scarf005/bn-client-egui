@@ -170,10 +170,24 @@ impl Interaction {
         };
         outcome
             .or_else(|| self.press_hotkey(screen, key, rows))
-            .or_else(|| self.press_move(screen, key, page, rows))
+            .or_else(|| self.press_move(screen, key, page, rows, true))
             .or_else(|| {
                 with_role(screen, AffordanceRole::AnyKey).map(|a| self.activate(screen, &a.id))
             })
+            .unwrap_or_default()
+    }
+
+    /// A key pressed on a window that only reads its screen: the keys that move the focus do, a tab key moves it
+    /// to the neighbouring tab, and nothing is sent; any other key is not the window's (the outcome is not
+    /// consumed).
+    pub fn press_focus<'r>(
+        &mut self,
+        screen: &'r Screen,
+        key: &str,
+        page: &dyn Fn(&str) -> usize,
+        rows: &dyn Fn(&'r List) -> Vec<&'r Row>,
+    ) -> Outcome {
+        self.press_move(screen, key, page, rows, false)
             .unwrap_or_default()
     }
 
@@ -435,6 +449,7 @@ impl Interaction {
         key: &str,
         page: &dyn Fn(&str) -> usize,
         rows: &dyn Fn(&'r List) -> Vec<&'r Row>,
+        select: bool,
     ) -> Option<Outcome> {
         let parts = screen.components();
         let holders = parts
@@ -498,7 +513,7 @@ impl Interaction {
                 self.focus_row(holder.id(), id);
                 Some(Outcome::revealing(id))
             }
-            (_, None, Some(by)) => self.switch_tab(screen, &parts, by),
+            (_, None, Some(by)) => self.switch_tab(screen, &parts, by, select),
             _ => None,
         }
     }
@@ -576,8 +591,15 @@ impl Interaction {
         }
     }
 
-    /// Selects the neighbouring enabled tab with the tabs' `select` affordance.
-    fn switch_tab(&mut self, screen: &Screen, parts: &[&Component], by: isize) -> Option<Outcome> {
+    /// Moves the focus to the neighbouring enabled tab, and with `select` selects it with the tabs' `select`
+    /// affordance.
+    fn switch_tab(
+        &mut self,
+        screen: &Screen,
+        parts: &[&Component],
+        by: isize,
+        select_tab: bool,
+    ) -> Option<Outcome> {
         let (tabs, select) = parts.iter().find_map(|c| match c {
             Component::Tabs(tabs) => tabs.select.as_deref().map(|select| (tabs, select)),
             _ => None,
@@ -594,7 +616,10 @@ impl Interaction {
             return Some(Outcome::handled());
         };
         self.focus_row(&tabs.head.id, &tabs.tabs[next].id);
-        Some(self.activate(screen, select))
+        match select_tab {
+            true => Some(self.activate(screen, select)),
+            false => Some(Outcome::revealing(&tabs.tabs[next].id)),
+        }
     }
 
     /// Reads from the screen what an affordance's arguments are chosen among.

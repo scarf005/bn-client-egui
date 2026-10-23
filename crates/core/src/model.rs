@@ -540,13 +540,17 @@ pub trait MenuModel {
     fn set_count(&mut self, _choice_id: &str, _count: u64) {}
 }
 
+/// How many levels above and below ground the engine's overmap reaches.
+pub const OVERMAP_LEVELS: i32 = 10;
+
 /// The overmap squares the client's own map window shows: `cols` by `rows`, centred `pan` squares off the
-/// player's square.
+/// player's square, `level` levels above the player's (below when negative, within `OVERMAP_LEVELS`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct OvermapWatch {
     pub cols: i32,
     pub rows: i32,
     pub pan: Pos,
+    pub level: i32,
 }
 
 /// A panel window the client shows: the row its focus is on, which the engine shows as the screen's cursor.

@@ -135,11 +135,15 @@ pub struct App<M: GameModel> {
     palette: Option<String>,
     /// The client settings window is open.
     client_settings: bool,
-    /// The client's map window is open: how far it is panned off the player, in squares, and the part of a
-    /// square dragged past.
-    world_map: Option<(Pos, egui::Vec2)>,
+    /// The client's map window, while it is open.
+    world_map: Option<component::WorldMap>,
     /// The panel windows open, each with its own focus.
     panels: std::collections::HashMap<PanelKind, interaction::Interaction>,
+    /// The client's own window that has the keyboard: the last one opened or clicked. Its keys come first, and
+    /// the game gets the ones it does not use; none leaves the keyboard with the game.
+    key_window: Option<input::KeyWindow>,
+    /// The client's own windows that were open last frame, to tell a window just opened.
+    known_windows: Vec<input::KeyWindow>,
     /// The message log's height once the user has dragged its edge.
     log_height: Option<f32>,
     /// Title of the menu that last took focus, so a menu is entered once, not on every frame.
@@ -215,6 +219,8 @@ impl<M: GameModel> App<M> {
             client_settings: false,
             world_map: None,
             panels: Default::default(),
+            key_window: None,
+            known_windows: Vec::new(),
             log_height: None,
             menu_title: None,
             focus_menu: false,
@@ -516,7 +522,11 @@ impl<M: GameModel> App<M> {
         }
         let spec = WindowSpec {
             closable: true,
-            ..self.window_spec(ctx, Some("client-settings"), &tr("Client settings"))
+            ..self.window_spec(
+                ctx,
+                Some(&input::KeyWindow::Settings.kind()),
+                &tr("Client settings"),
+            )
         };
         self.client_settings = !windows::show(ctx, spec, |ui| self.display.controls(ui)).closed;
     }

@@ -16,6 +16,7 @@ mod placement;
 mod tabs;
 mod target;
 
+use super::input::KeyWindow;
 use super::{App, sidebar};
 use crate::kit::section::{self, Fact};
 use crate::kit::split::{self, Extent};
@@ -36,6 +37,7 @@ use form::*;
 use list::*;
 pub(super) use measure::text_width;
 use measure::*;
+pub(super) use overmap::WorldMap;
 use overmap::*;
 pub(super) use panel::PANELS;
 use placement::*;
@@ -64,7 +66,7 @@ pub(super) struct Screens {
     /// panel window and the engine's own screen may hold lists of the same id.
     list_scroll: RefCell<HashMap<(String, String), ListScroll>>,
     /// The rows each list had room for in the last frame, by screen and component id: what a page key moves in it.
-    list_pages: RefCell<HashMap<(String, String), usize>>,
+    pub(super) list_pages: RefCell<HashMap<(String, String), usize>>,
     /// The squares of this frame's list rows left for their item's sprite, painted once the window is drawn.
     icons: RefCell<Vec<RowIcon>>,
     /// What this frame's overmap draws, painted once the window is drawn, so that a tileset's sprites come

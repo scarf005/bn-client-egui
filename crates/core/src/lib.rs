@@ -23,6 +23,7 @@ pub use model::FakeModel;
 pub use model::{
     ActionEntry, Cell, CommandStatus, Effect, Failure, FailureKind, Follow, GameModel, Glow,
     Health, Heard, Layer, Loading, LogLine, MapMark, Menu, MenuChoice, MenuModel, MenuPane,
-    Mutation, OvermapWatch, PaneTotals, PanelWatch, Pellet, Pos, Rgb, Shape, action_hint,
+    Mutation, OVERMAP_LEVELS, OvermapWatch, PaneTotals, PanelWatch, Pellet, Pos, Rgb, Shape,
+    action_hint,
 };
 pub use protocol::MarkRole;

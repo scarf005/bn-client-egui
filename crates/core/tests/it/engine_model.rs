@@ -2969,6 +2969,7 @@ fn the_map_window_reads_the_squares_around_the_player_the_engine_names_once_per_
         cols: 3,
         rows: 3,
         pan: Pos { x: 0, y: 0 },
+        level: 0,
     };
     m.watch_overmap(Some(watch));
     m.poll();
@@ -3001,6 +3002,46 @@ fn the_map_window_reads_the_squares_around_the_player_the_engine_names_once_per_
     assert!(m.watched_overmap().is_none());
 }
 
+#[test]
+fn the_map_window_reads_the_level_it_is_shown_at_within_the_engines_reach() {
+    let (t, h) = session();
+    let squares = json!({"jsonrpc":"2.0","id":0,"result":{
+        "origin": {"dim": "", "x": 0, "y": 0, "z": 0}, "player": {"dim": "", "x": 50, "y": 60, "z": 0},
+        "cols": 3, "rows": 3, "cells": [], "legend": [], "cursor_description": "",
+        "notes": [], "path": []}});
+    let mut m = connected(
+        t.on("bn.overmap.cells", vec![squares.clone()])
+            .on("bn.overmap.cells", vec![squares.clone()])
+            .on("bn.overmap.cells", vec![squares.clone()])
+            .on("bn.overmap.cells", vec![squares]),
+    );
+    let at = |level| bn_client_core::OvermapWatch {
+        cols: 3,
+        rows: 3,
+        pan: Pos { x: 0, y: 0 },
+        level,
+    };
+    m.watch_overmap(Some(at(0)));
+    m.poll();
+    m.poll();
+    m.watch_overmap(Some(at(-3)));
+    m.poll();
+    m.poll();
+    m.watch_overmap(Some(at(99)));
+    m.poll();
+    m.poll();
+    let z = |read: &Value| read["min"]["z"].as_i64().unwrap();
+    let reads = overmap_reads(&h);
+    assert_eq!(reads.len(), 4);
+    let level = z(&reads[1]);
+    assert_eq!(z(&reads[2]), level - 3, "three levels below the player");
+    assert_eq!(
+        z(&reads[3]),
+        bn_client_core::OVERMAP_LEVELS as i64,
+        "no higher than the overmap goes"
+    );
+}
+
 /// Every `dim` in `v` set to `dim`.
 fn in_dimension(v: &mut Value, dim: &str) {
     match v {
@@ -3026,6 +3067,7 @@ fn the_map_window_reads_overmap_squares_without_a_dimension_in_a_pocket_dimensio
         cols: 3,
         rows: 3,
         pan: Pos { x: 0, y: 0 },
+        level: 0,
     }));
     m.poll();
     let reads = overmap_reads(&h);
