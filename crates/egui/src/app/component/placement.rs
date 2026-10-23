@@ -250,7 +250,7 @@ pub(super) fn body_scroll(
     let seen = ctx.data(|d| d.get_temp::<Painted>(key)).unwrap_or_default();
     let height = split::whole_rows(&seen.0, room);
     let layer = ui.layer_id();
-    scroll.max_height(height).show(ui, |ui| {
+    let out = scroll.max_height(height).show(ui, |ui| {
         let top = ui.cursor().top();
         let from = ctx.graphics(|g| g.get(layer).map_or(0, |l| l.all_entries().len()));
         draw(ui);
@@ -266,4 +266,5 @@ pub(super) fn body_scroll(
         }
         ctx.data_mut(|d| d.insert_temp(key, Painted(lines)));
     });
+    windows::note_hidden(ui, &out);
 }

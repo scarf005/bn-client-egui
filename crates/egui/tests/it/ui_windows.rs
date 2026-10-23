@@ -114,11 +114,11 @@ fn a_window_is_moved_by_its_title_bar_and_found_there_after_a_restart() {
     drag(
         &mut h,
         title.center(),
-        title.center() + egui::vec2(-80.0, 90.0),
+        title.center() + egui::vec2(-80.0, -40.0),
     );
     let moved = window(&h);
     assert!(
-        (moved.min - before.min - egui::vec2(-80.0, 90.0)).length() < 2.0,
+        (moved.min - before.min - egui::vec2(-80.0, -40.0)).length() < 2.0,
         "{before:?} -> {moved:?}"
     );
     drop(h);

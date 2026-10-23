@@ -228,6 +228,7 @@ impl<M: GameModel> App<M> {
                 }
             })
             .inner;
+        windows::note_hidden(ui, &scrolled);
         // A list with no rows keeps its pane, outlined, as tall as its rows would have been.
         if rows.is_empty() {
             let pane = egui::Rect::from_x_y_ranges(

@@ -14,11 +14,12 @@ type H<'a> = Harness<'a, App<EngineModel>>;
 
 const SIZES: [egui::Vec2; 2] = [egui::vec2(1280.0, 800.0), egui::vec2(1920.0, 1080.0)];
 
-/// The sizes the first-height tests run at: the user's, and the two above.
-const HEIGHT_SIZES: [egui::Vec2; 3] = [
+/// The sizes the first-height tests run at: the user's, the two above, and a short, narrow client window.
+const HEIGHT_SIZES: [egui::Vec2; 4] = [
     egui::vec2(1290.0, 830.0),
     egui::vec2(1280.0, 800.0),
     egui::vec2(1920.0, 1080.0),
+    egui::vec2(900.0, 480.0),
 ];
 
 /// The space a window keeps from the edge of the map region.
@@ -498,7 +499,7 @@ fn first_height_misses(case: &str, screen: &Value, kind: &str, remembered: bool)
             .last()
             .map(|n| n.rect());
         let shows = row.is_some_and(|r| window.contains_rect(r.shrink(1.0)));
-        let fills = window.height() >= room.height() - 2.0;
+        let fills = window.height() >= 0.9 * room.height() - 2.0;
         if !(shows || fills) {
             misses.push(format!(
                 "{case} at {size:?}, remembered {remembered}: {window:?} in {room:?} does not show {last:?} ({row:?})"

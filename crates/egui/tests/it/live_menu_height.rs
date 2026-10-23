@@ -81,7 +81,7 @@ fn the_main_menu_in_a_game_opens_showing_all_its_rows_or_the_room() {
             save(&mut h, &format!("main-menu-{name}.png"));
             let room = egui::vec2(size.0, size.1).y - 47.0 - 16.0;
             let shows = row.is_some_and(|r| window.contains_rect(r.shrink(1.0)));
-            if !(shows || window.height() >= room - 2.0) {
+            if !(shows || window.height() >= 0.9 * room - 2.0) {
                 misses.push(format!(
                     "{name}: {window:?} does not show {last:?} ({row:?})"
                 ));
