@@ -98,6 +98,11 @@ pub fn choose(h: &mut H, affordance: &str, row: &str) {
     };
     loop {
         run_until(h, row, 180, |h| offered(h) && !h.state().model.busy());
+        // A frame takes in what the engine sent since the last one, as a player's click comes after it.
+        h.run_steps(1);
+        if !offered(h) || h.state().model.busy() {
+            continue;
+        }
         let args = InvokeArgs {
             row: Some(row.into()),
             ..Default::default()
