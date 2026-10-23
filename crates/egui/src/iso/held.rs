@@ -103,8 +103,10 @@ pub fn mesh(held: &Held, view: egui::Rect) -> egui::Mesh {
     // The farthest first, so the nearer faces cover them.
     let depth = |f: &Face| f.corners.iter().map(|c| c.z).sum::<f32>();
     faces.sort_by(|a, b| depth(a).total_cmp(&depth(b)));
-    let focal = view.height() / 2.0 / (FOV / 2.0).tan();
-    let screen = |p: Vec3| view.center() + egui::vec2(p.x, -p.y) * focal / -p.z;
+    let height = view.height();
+    let middle = view.center();
+    let focal = height / 2.0 / (FOV / 2.0).tan();
+    let screen = |p: Vec3| middle + egui::vec2(p.x, -p.y) * focal / -p.z;
     let mut mesh = egui::Mesh::with_texture(held.texture);
     for face in faces {
         let gray = (255.0 * face.shade).round() as u8;
@@ -129,8 +131,8 @@ mod tests {
     const VIEW: egui::Rect =
         egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1600.0, 900.0));
 
-    /// The bounds of what `opaque` says of a sixteen-pixel sprite, drawn in the hand.
-    fn drawn(opaque: impl Fn(u32, u32) -> bool) -> (egui::Mesh, egui::Rect) {
+    /// What `opaque` says of a sixteen-pixel sprite, drawn in the hand of the eye that sees `view`.
+    fn drawn_in(opaque: impl Fn(u32, u32) -> bool, view: egui::Rect) -> egui::Mesh {
         let outline = Outline::of([16, 16], opaque);
         let held = Held {
             texture: egui::TextureId::default(),
@@ -138,14 +140,27 @@ mod tests {
             size: Vec2::splat(16.0),
             outline: &outline,
         };
-        let mesh = mesh(&held, VIEW);
-        let bounds = mesh.calc_bounds();
-        (mesh, bounds)
+        mesh(&held, view)
+    }
+
+    fn drawn(opaque: impl Fn(u32, u32) -> bool) -> egui::Mesh {
+        drawn_in(opaque, VIEW)
+    }
+
+    /// Where the picture's corner `uv` is drawn on the face toward the eye, the last drawn.
+    fn corner(mesh: &egui::Mesh, uv: egui::Pos2) -> egui::Pos2 {
+        let near = |v: &&egui::epaint::Vertex| v.uv.distance(uv) < 0.01;
+        mesh.vertices
+            .iter()
+            .rev()
+            .find(near)
+            .map(|v| v.pos)
+            .unwrap()
     }
 
     #[test]
     fn a_held_item_is_large_and_low_on_the_right() {
-        let (_, bounds) = drawn(|_, _| true);
+        let bounds = drawn(|_, _| true).calc_bounds();
         assert!(bounds.height() > 0.35 * VIEW.height(), "{bounds:?}");
         assert!(bounds.center().x > VIEW.center().x, "{bounds:?}");
         assert!(
@@ -155,8 +170,22 @@ mod tests {
     }
 
     #[test]
+    fn a_held_item_in_a_narrower_view_is_laid_out_as_in_the_corner_of_a_wide_screen() {
+        let narrow = egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(900.0, 800.0));
+        let tip = |view| corner(&drawn_in(|_, _| true, view), egui::pos2(1.0, 0.0));
+        // The wide screen is as wide as the narrow view and stands in its bottom right corner.
+        let shrink = narrow.width() / VIEW.width();
+        let expected = narrow.right_bottom() - (VIEW.right_bottom() - tip(VIEW)) * shrink;
+        assert!(
+            tip(narrow).distance(expected) < 0.5,
+            "{:?} {expected:?}",
+            tip(narrow)
+        );
+    }
+
+    #[test]
     fn a_held_item_shows_its_thickness_in_darker_sides() {
-        let (mesh, _) = drawn(|x, y| x + y == 15 || x + y == 16);
+        let mesh = drawn(|x, y| x + y == 15 || x + y == 16);
         let shades = mesh
             .vertices
             .iter()
@@ -169,19 +198,9 @@ mod tests {
 
     #[test]
     fn the_far_corner_of_a_held_item_reaches_up_and_toward_the_middle() {
-        let (mesh, _) = drawn(|_, _| true);
-        // Where the picture's corner `uv` is drawn on the face toward the eye, the last drawn.
-        let corner = |uv: egui::Pos2| {
-            let near = |v: &&egui::epaint::Vertex| v.uv.distance(uv) < 0.01;
-            mesh.vertices
-                .iter()
-                .rev()
-                .find(near)
-                .map(|v| v.pos)
-                .unwrap()
-        };
-        let tip = corner(egui::pos2(1.0, 0.0));
-        let grip = corner(egui::pos2(0.0, 1.0));
+        let mesh = drawn(|_, _| true);
+        let tip = corner(&mesh, egui::pos2(1.0, 0.0));
+        let grip = corner(&mesh, egui::pos2(0.0, 1.0));
         assert!(tip.y < grip.y, "{tip:?} {grip:?}");
         assert!(tip.x < grip.x, "{tip:?} {grip:?}");
     }
