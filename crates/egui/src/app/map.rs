@@ -7,8 +7,8 @@ use crate::display::health_bar;
 use crate::iso::{self, camera::Viewport, pages::Pages, scene::Scene};
 use bn_client_core::localise::{Value as Arg, tr, tr_format};
 use bn_client_core::markup;
-use bn_client_core::protocol::Component;
 use bn_client_core::protocol::Precipitation;
+use bn_client_core::protocol::{Component, MapComponent, WorldPos};
 use bn_client_core::{Cell, GameModel, MapMark, MarkRole, Pos, Rgb};
 use eframe::egui::{self, accesskit};
 use std::sync::Arc;
@@ -148,6 +148,46 @@ impl Canvas {
         }
     }
 
+    /// The screen points of the line of fire through `squares`, the avatar's first, over the middle of each; a z-level
+    /// is `level` squares tall on the 3D map.
+    fn fire_line(&self, squares: &[FireSquare], level: f32) -> Vec<egui::Pos2> {
+        let middle = |s: &FireSquare| glam::Vec2::new(s.at.x as f32 + 0.5, s.at.y as f32 + 0.5);
+        let Some(v) = &self.view else {
+            let on = squares.iter().map(middle);
+            return on.filter_map(|p| self.ground(p.x, p.y)).collect();
+        };
+        let path = squares
+            .iter()
+            .map(|s| iso::aim::body_point(middle(s), s.up, level))
+            .collect::<Vec<_>>();
+        let on = iso::aim::project(v, &path).into_iter();
+        on.map(|p| self.rect.min + egui::vec2(p.x, p.y)).collect()
+    }
+
+    /// The edges of the box of a creature's height around a cursor square; none off the 3D map or with a corner
+    /// behind the eye.
+    fn cursor_frame(&self, square: FireSquare, level: f32) -> Vec<[egui::Pos2; 2]> {
+        let Some(v) = &self.view else { return vec![] };
+        let floor = square.up as f32 * level;
+        let corner = |(dx, dy, up): (f32, f32, bool)| {
+            let z = floor + if up { iso::aim::BODY * 2.0 } else { 0.0 };
+            let at = glam::Vec3::new(square.at.x as f32 + dx, square.at.y as f32 + dy, z);
+            v.project(at)
+                .map(|on| self.rect.min + egui::vec2(on.x, on.y))
+        };
+        let ring = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)];
+        let edges = (0..4).flat_map(|i| {
+            let (a, b) = (ring[i], ring[(i + 1) % 4]);
+            [
+                [(a.0, a.1, false), (b.0, b.1, false)],
+                [(a.0, a.1, true), (b.0, b.1, true)],
+                [(a.0, a.1, false), (a.0, a.1, true)],
+            ]
+        });
+        let edges = edges.map(|[a, b]| Some([corner(a)?, corner(b)?]));
+        edges.collect::<Option<Vec<_>>>().unwrap_or_default()
+    }
+
     /// A screen's mark over the map: a selection fills its squares, a mapgen border outlines its rectangle and a
     /// mapgen stamp ticks the rectangle's corners along its edges.
     fn mark(&self, painter: &egui::Painter, mark: &MapMark) {
@@ -222,6 +262,13 @@ impl Canvas {
     }
 }
 
+/// A square the line of fire crosses: where it lies in the view, and how many z-levels over the avatar's.
+#[derive(Clone, Copy)]
+struct FireSquare {
+    at: Pos,
+    up: i32,
+}
+
 /// The absolute square a moving pointer asked the engine's cursor (look, aim) to go to.
 #[derive(Clone, Copy)]
 pub(super) struct Aim {
@@ -294,19 +341,20 @@ impl<M: GameModel> App<M> {
                 egui::Sense::click(),
             ),
         };
+        let first_person = self.display.first_person();
         let (response, painter) = ui
             .with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
                 ui.allocate_painter(extent, sense.union(egui::Sense::focusable_noninteractive()))
             })
             .inner;
+        self.face_aim(first_person);
         let view = three.then(|| {
             let scale = self
                 .display
                 .tileset()
                 .map_or(cell_px, |(t, _)| iso::scene::world_scale(t, cell_px));
-            let first = self.display.first_person();
             self.iso
-                .viewport(player, scale, response.rect.size(), first)
+                .viewport(player, scale, response.rect.size(), first_person)
         });
         let diamond = self
             .display
@@ -364,6 +412,21 @@ impl<M: GameModel> App<M> {
         self.paint_map(&painter, &canvas, shown, season.as_deref());
         let marked = looking.is_some() || response.hover_pos().is_some();
         self.paint_overlays(ui, &painter, &canvas, &route, marked.then_some(cursor), now);
+    }
+
+    /// While aiming, the first-person eye looks at the square the cursor moves to, so it is on the screen.
+    fn face_aim(&mut self, first_person: bool) {
+        let aimed = self.model.screens().last().and_then(|s| s.root.as_ref());
+        let aimed = aimed.and_then(Component::cursor_map);
+        let aimed = aimed.filter(|m| first_person && !m.trajectory().is_empty());
+        let cursor = aimed.and_then(MapComponent::cursor);
+        if let (Some(m), Some(to), true) = (aimed, &cursor, cursor != self.faced) {
+            let middle = |p: &WorldPos| glam::Vec2::new(p.x as f32 + 0.5, p.y as f32 + 0.5);
+            m.source()
+                .iter()
+                .for_each(|from| self.iso.face(middle(from), middle(to)));
+        }
+        self.faced = cursor;
     }
 
     /// A click on a map square: the engine plans the route, a repeat walks it.
@@ -858,25 +921,44 @@ impl<M: GameModel> App<M> {
                 );
             }
         }
-        // The line of fire the engine publishes while aiming, on the level the cursor is on.
+        // The line of fire the engine publishes while aiming, from the avatar to the cursor in the map's own space.
         let origin = self.model.origin();
         let aimed = self.model.screens().last().and_then(|s| s.root.as_ref());
-        if let Some(map) = aimed.and_then(Component::cursor_map) {
-            let level = map.cursor().map(|at| at.z);
-            let line = map.trajectory().into_iter().filter(|p| Some(p.z) == level);
-            for p in line {
-                let at = Pos {
+        if let Some(map) = aimed.and_then(Component::cursor_map)
+            && let Some(source) = map.source()
+        {
+            let level = self
+                .display
+                .tileset()
+                .map_or(3.0, |(t, _)| iso::scene::metrics(t).level);
+            let square = |p: &WorldPos| FireSquare {
+                at: Pos {
                     x: p.x - origin.x,
                     y: p.y - origin.y,
-                };
-                if (0..size.x).contains(&at.x) && (0..size.y).contains(&at.y) {
-                    canvas.fill(
-                        painter,
-                        at,
-                        egui::Color32::from_rgba_unmultiplied(255, 170, 0, 90),
-                    );
-                }
+                },
+                up: p.z - source.z,
+            };
+            let squares = std::iter::once(&source)
+                .chain(&map.trajectory())
+                .map(square)
+                .collect::<Vec<_>>();
+            let line = canvas.fire_line(&squares, level);
+            if line.len() > 1 && squares.len() > 1 {
+                let shade = egui::Stroke::new(4.0, egui::Color32::from_black_alpha(170));
+                painter.add(egui::Shape::line(line.clone(), shade));
+                let orange = egui::Stroke::new(2.0, egui::Color32::from_rgb(255, 170, 0));
+                painter.add(egui::Shape::line(line, orange));
             }
+            let frame = map.cursor().map(|p| canvas.cursor_frame(square(&p), level));
+            let shade = egui::Stroke::new(3.5, egui::Color32::from_black_alpha(170));
+            let white = egui::Stroke::new(1.5, egui::Color32::WHITE);
+            let frame = frame.into_iter().flatten().collect::<Vec<_>>();
+            frame.iter().for_each(|e| {
+                painter.line_segment(*e, shade);
+            });
+            frame.iter().for_each(|e| {
+                painter.line_segment(*e, white);
+            });
         }
         for mark in self.model.marks() {
             canvas.mark(painter, &mark);
@@ -939,4 +1021,83 @@ fn ground_point(
 ) -> Option<egui::Pos2> {
     let on = v.project(glam::Vec3::new(p.x as f32 + at.0, p.y as f32 + at.1, z))?;
     Some(rect.min + egui::vec2(on.x, on.y))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::iso::camera::Camera;
+
+    fn canvas(view: Option<Viewport>) -> Canvas {
+        Canvas {
+            rect: egui::Rect::from_min_size(egui::pos2(100.0, 50.0), egui::vec2(1280.0, 720.0)),
+            cell_px: 32.0,
+            size: Pos { x: 40, y: 40 },
+            view,
+            diamond: None,
+        }
+    }
+
+    fn orbit() -> Viewport {
+        Viewport {
+            camera: Camera::default(),
+            target: glam::Vec3::new(10.5, 10.5, 0.0),
+            scale: 34.0,
+            size: glam::Vec2::new(1280.0, 720.0),
+        }
+    }
+
+    fn row(x: &[i32]) -> Vec<FireSquare> {
+        x.iter()
+            .map(|x| FireSquare {
+                at: Pos { x: *x, y: 10 },
+                up: 0,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn the_flat_line_of_fire_runs_through_the_middle_of_each_square_from_the_avatar() {
+        let canvas = canvas(None);
+        let line = canvas.fire_line(&row(&[10, 11, 12, 13]), 3.0);
+        let middle = |x: i32| canvas.rect(Pos { x, y: 10 }).center();
+        assert_eq!(line, [10, 11, 12, 13].map(middle));
+    }
+
+    #[test]
+    fn the_3d_line_of_fire_flies_over_the_ground_of_its_squares_and_ends_at_the_target() {
+        let canvas = canvas(Some(orbit()));
+        let line = canvas.fire_line(&row(&[10, 11, 12, 13]), 3.0);
+        let ground = canvas.ground(13.5, 10.5).unwrap();
+        let end = line.last().unwrap();
+        assert!(end.y < ground.y - 5.0, "{end:?} over {ground:?}");
+        assert!((end.x - ground.x).abs() < 1.0, "{end:?} over {ground:?}");
+        assert!(
+            line.len() > 4,
+            "the line is a curve of the view, not four corners"
+        );
+    }
+
+    #[test]
+    fn the_3d_cursor_is_a_box_a_creature_tall_standing_on_its_square() {
+        let canvas = canvas(Some(orbit()));
+        let at = FireSquare {
+            at: Pos { x: 13, y: 10 },
+            up: 0,
+        };
+        let frame = canvas.cursor_frame(at, 3.0);
+        assert_eq!(frame.len(), 12);
+        let ends = || frame.iter().flatten();
+        let corner = canvas.ground(13.0, 10.0).unwrap();
+        assert!(
+            ends().any(|p| p.distance(corner) < 0.5),
+            "no edge stands on {corner:?}"
+        );
+        let top = ends().map(|p| p.y).fold(f32::MAX, f32::min);
+        assert!(
+            top < corner.y - 20.0,
+            "the box is not tall: {top} over {corner:?}"
+        );
+        assert!(self::canvas(None).cursor_frame(at, 3.0).is_empty());
+    }
 }

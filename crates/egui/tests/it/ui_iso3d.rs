@@ -64,7 +64,7 @@ fn session_with(
 
 /// A client with the isometric test tileset; `renderer` says whether it knows the format of a window to draw
 /// the 3D map into, as one with a GPU does.
-fn harness<'a>(root: &Path, settings: &Path, renderer: bool) -> (H<'a>, ScriptHandle) {
+pub(crate) fn harness<'a>(root: &Path, settings: &Path, renderer: bool) -> (H<'a>, ScriptHandle) {
     harness_bound(root, settings, renderer, &[])
 }
 
@@ -96,7 +96,7 @@ fn harness_of<'a>(
     (h, handle)
 }
 
-fn settle(h: &mut H) {
+pub(crate) fn settle(h: &mut H) {
     for _ in 0..200 {
         h.run_steps(2);
         if h.state().display().ready() {

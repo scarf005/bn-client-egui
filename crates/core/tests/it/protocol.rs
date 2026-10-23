@@ -209,3 +209,19 @@ fn a_target_map_lists_its_candidates_and_the_squares_of_its_line_of_fire_in_the_
     let looking = map(json!({"candidates": []}));
     assert!(looking.candidates().is_empty() && looking.trajectory().is_empty());
 }
+
+#[test]
+fn a_target_map_names_the_square_its_line_of_fire_leaves() {
+    let at = |x: i32| json!({"dim": "", "x": x, "y": 5, "z": 1});
+    let map = |target: Value| -> protocol::MapComponent {
+        serde_json::from_value(
+            json!({"id": "target:map", "kind": "map", "mode": "world", "target": target}),
+        )
+        .unwrap()
+    };
+    let aimed =
+        map(json!({"source": at(2), "current": at(5), "trajectory": [at(3), at(4), at(5)]}));
+    let source = aimed.source().unwrap();
+    assert_eq!((source.x, source.z), (2, 1));
+    assert!(map(json!({"current": at(5)})).source().is_none());
+}

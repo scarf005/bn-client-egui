@@ -1,5 +1,6 @@
 //! The 3D map view: the map drawn as a scene a camera can turn and tilt, with the game's own sprites.
 
+pub mod aim;
 pub mod camera;
 pub mod geometry;
 pub mod gpu;
@@ -62,6 +63,11 @@ impl View3d {
     /// Turns the camera by what the right button was dragged.
     pub fn drag(&mut self, delta: egui::Vec2) {
         self.camera.orbit(delta.x * DRAG.0, -delta.y * DRAG.1);
+    }
+
+    /// Turns the camera so a first-person eye at `from` looks at `to`, squares of the map.
+    pub fn face(&mut self, from: Vec2, to: Vec2) {
+        self.camera.yaw = aim::yaw_facing(from, to).rem_euclid(std::f32::consts::TAU);
     }
 
     /// The camera looking at the avatar's square, or out of its eyes, in `size` points; `scale` is points per
