@@ -41,6 +41,7 @@ fn aim_screen(h: &H, current: usize) -> Value {
     let target = &mut screen["root"]["child"]["target"];
     target["current"] = creatures[current].1.clone();
     target["source"] = at(0, 0);
+    target["trajectory"] = json!([creatures[current].1.clone()]);
     target["candidates"] = json!(candidates);
     let key = |id: &str, label: &str| json!({"id": id, "label": label, "keys": [], "enabled": true, "expect": "screen"});
     let affordances = screen["affordances"].as_array_mut().unwrap();
@@ -127,6 +128,8 @@ fn the_first_person_eye_turns_to_the_creature_the_aim_cursor_is_on() {
     h.run_steps(3);
     h.get_by_label("Close window").click();
     h.run_steps(3);
+    script.push(fixture("events_41_walk"));
+    h.run_steps(4);
     // The zombie is three squares east, Don Honeycutt two west and one north.
     for (step, (n, (dx, dy))) in [(0, (3.0, 0.0)), (1, (-2.0, -1.0))].into_iter().enumerate() {
         publish(&script, step as u64, aim_screen(&h, n));

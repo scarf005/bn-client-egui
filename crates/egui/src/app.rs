@@ -118,6 +118,9 @@ pub struct App<M: GameModel> {
     last_pointer: Option<egui::Pos2>,
     /// Where the pointer sent the engine's cursor, drawn until the engine has answered.
     aim: Option<map::Aim>,
+    /// The square the first-person eye last turned to while aiming, so the player's own turning stands until the
+    /// cursor moves on.
+    faced: Option<bn_client_core::protocol::WorldPos>,
     /// Wheel travel over the map short of a whole zoom step, in lines.
     wheel: f32,
     wired: bool,
@@ -207,6 +210,7 @@ impl<M: GameModel> App<M> {
             last_hover: None,
             last_pointer: None,
             aim: None,
+            faced: None,
             wheel: 0.0,
             wired: false,
             images: false,

@@ -7,8 +7,8 @@ use crate::display::health_bar;
 use crate::iso::{self, camera::Viewport, pages::Pages, scene::Scene};
 use bn_client_core::localise::{Value as Arg, tr, tr_format};
 use bn_client_core::markup;
-use bn_client_core::protocol::Component;
 use bn_client_core::protocol::Precipitation;
+use bn_client_core::protocol::{Component, MapComponent, WorldPos};
 use bn_client_core::{Cell, GameModel, MapMark, MarkRole, Pos, Rgb};
 use eframe::egui::{self, accesskit};
 use std::sync::Arc;
@@ -294,19 +294,20 @@ impl<M: GameModel> App<M> {
                 egui::Sense::click(),
             ),
         };
+        let first_person = self.display.first_person();
         let (response, painter) = ui
             .with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
                 ui.allocate_painter(extent, sense.union(egui::Sense::focusable_noninteractive()))
             })
             .inner;
+        self.face_aim(first_person);
         let view = three.then(|| {
             let scale = self
                 .display
                 .tileset()
                 .map_or(cell_px, |(t, _)| iso::scene::world_scale(t, cell_px));
-            let first = self.display.first_person();
             self.iso
-                .viewport(player, scale, response.rect.size(), first)
+                .viewport(player, scale, response.rect.size(), first_person)
         });
         let diamond = self
             .display
@@ -364,6 +365,21 @@ impl<M: GameModel> App<M> {
         self.paint_map(&painter, &canvas, shown, season.as_deref());
         let marked = looking.is_some() || response.hover_pos().is_some();
         self.paint_overlays(ui, &painter, &canvas, &route, marked.then_some(cursor), now);
+    }
+
+    /// While aiming, the first-person eye looks at the square the cursor moves to, so it is on the screen.
+    fn face_aim(&mut self, first_person: bool) {
+        let aimed = self.model.screens().last().and_then(|s| s.root.as_ref());
+        let aimed = aimed.and_then(Component::cursor_map);
+        let aimed = aimed.filter(|m| first_person && !m.trajectory().is_empty());
+        let cursor = aimed.and_then(MapComponent::cursor);
+        if let (Some(m), Some(to), true) = (aimed, &cursor, cursor != self.faced) {
+            let middle = |p: &WorldPos| glam::Vec2::new(p.x as f32 + 0.5, p.y as f32 + 0.5);
+            m.source()
+                .iter()
+                .for_each(|from| self.iso.face(middle(from), middle(to)));
+        }
+        self.faced = cursor;
     }
 
     /// A click on a map square: the engine plans the route, a repeat walks it.

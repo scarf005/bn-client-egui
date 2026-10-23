@@ -64,6 +64,11 @@ impl View3d {
         self.camera.orbit(delta.x * DRAG.0, -delta.y * DRAG.1);
     }
 
+    /// Turns the camera so a first-person eye at `from` looks at `to`, squares of the map.
+    pub fn face(&mut self, from: Vec2, to: Vec2) {
+        self.camera.yaw = aim::yaw_facing(from, to).rem_euclid(std::f32::consts::TAU);
+    }
+
     /// The camera looking at the avatar's square, or out of its eyes, in `size` points; `scale` is points per
     /// world unit.
     pub fn viewport(
