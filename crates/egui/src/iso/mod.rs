@@ -6,6 +6,7 @@ pub mod gpu;
 pub mod pages;
 mod pick;
 pub mod scene;
+pub mod sky;
 
 use crate::display::{Display, glyph_color, health_bar};
 use bn_client_core::GameModel;
@@ -138,13 +139,13 @@ impl View3d {
     }
 }
 
-/// The paint callback that draws `scene` into `rect` against `sky`.
+/// The paint callback that draws `scene` into `rect` in front of `sky`, else of black.
 pub fn callback(
     rect: egui::Rect,
     view: &Viewport,
     target: TextureFormat,
     (scene, pages): (Arc<Scene>, Arc<Pages>),
-    (stats, sky): (Arc<gpu::Stats>, egui::Color32),
+    (stats, sky): (Arc<gpu::Stats>, Option<&Sky>),
 ) -> egui::Shape {
     let light = camera::light_view_proj(scene.width as f32, scene.height as f32, scene.heights);
     egui::Shape::Callback(egui_wgpu::Callback::new_paint_callback(
@@ -156,25 +157,9 @@ pub fn callback(
             size: rect.size(),
             target,
             stats,
-            sky,
+            sky: sky.map(|sky| sky::SkyUniform::new(sky, view.view_proj())),
         },
     ))
-}
-
-/// The colour of the sky the first-person view looks into: blue by day and dark by night as the daylight says,
-/// greyed by as much light as the weather takes away.
-pub fn sky_color(sky: &Sky) -> egui::Color32 {
-    let mix = |a: [f32; 3], b: [f32; 3], t: f32| {
-        std::array::from_fn::<_, 3, _>(|n| a[n] + (b[n] - a[n]) * t)
-    };
-    let cloud = (sky.dimming as f32 / 40.0).clamp(0.0, 1.0);
-    let day = mix([110.0, 165.0, 225.0], [140.0, 145.0, 150.0], 0.85 * cloud);
-    let [r, g, b] = mix(
-        [8.0, 12.0, 28.0],
-        day,
-        f32::from(sky.daylight.min(100)) / 100.0,
-    );
-    egui::Color32::from_rgb(r as u8, g as u8, b as u8)
 }
 
 /// What falls from `sky` over the first-person view at `time` seconds: streaks of rain or flakes of snow, as many as
@@ -338,26 +323,6 @@ pub fn paint_glyphs(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn the_sky_is_blue_by_day_dark_by_night_and_grey_under_clouds() {
-        let sky = |daylight: u8, dimming: u32| {
-            sky_color(&Sky {
-                daylight,
-                dimming,
-                ..Sky::default()
-            })
-        };
-        let brightness = |c: egui::Color32| u32::from(c.r()) + u32::from(c.g()) + u32::from(c.b());
-        let (day, night, cloudy) = (sky(100, 0), sky(0, 0), sky(100, 40));
-        assert!(day.b() > day.r() + 60, "{day:?}");
-        assert!(brightness(night) < brightness(day) / 4, "{night:?}");
-        // As light, and nearly as grey as blue.
-        assert!(cloudy.b() - cloudy.r() < 30, "{cloudy:?}");
-        assert!(
-            brightness(sky(50, 0)) < brightness(day) && brightness(sky(50, 0)) > brightness(night)
-        );
-    }
 
     #[test]
     fn the_compass_points_north_where_the_up_step_goes() {

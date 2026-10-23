@@ -496,7 +496,7 @@ pub struct Environment {
     pub sky: Option<Sky>,
 }
 
-/// The sky over the avatar: how much daylight there is and what the weather lets fall.
+/// The sky over the avatar: how much daylight there is, where the sun or the moon is and what the weather lets fall.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Sky {
     /// The daylight now, in percent of full day.
@@ -508,6 +508,30 @@ pub struct Sky {
     /// How much ambient light the weather takes away, in the game's light points.
     #[serde(default)]
     pub dimming: u32,
+    /// How far the sun has crossed the sky from sunrise in the east to sunset in the west, in percent; none at night.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sun: Option<u8>,
+    /// How far the moon has crossed the night sky from sunset to sunrise, in percent; none by day.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub moon: Option<u8>,
+    #[serde(default)]
+    pub moon_phase: MoonPhase,
+}
+
+/// The moon's phase, in the order it goes through them after `New`; `New` also for a phase a newer engine names.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MoonPhase {
+    WaxingCrescent,
+    HalfMoonWaxing,
+    WaxingGibbous,
+    Full,
+    WaningGibbous,
+    HalfMoonWaning,
+    WaningCrescent,
+    #[default]
+    #[serde(other)]
+    New,
 }
 
 /// How much falls from the sky; `None` also for an amount a newer engine names.

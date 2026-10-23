@@ -5,6 +5,7 @@ use super::camera::{LIGHT, Viewport};
 use super::geometry::{Instance, PageId};
 use super::pages::Pages;
 use super::scene::Scene;
+use super::sky::SkyUniform;
 use bytemuck::{Pod, Zeroable};
 use eframe::egui;
 use egui_wgpu::wgpu::{self, util::DeviceExt};
@@ -59,8 +60,8 @@ pub struct Paint {
     /// The format of the pass the scene is copied into.
     pub target: wgpu::TextureFormat,
     pub stats: Arc<Stats>,
-    /// What shows where nothing is drawn: the sky.
-    pub sky: egui::Color32,
+    /// The sky behind the scene; black without one.
+    pub sky: Option<SkyUniform>,
 }
 
 struct Offscreen {
@@ -78,6 +79,9 @@ struct Gpu {
     shadow_map: wgpu::TextureView,
     shadow_group: wgpu::BindGroup,
     blit: wgpu::RenderPipeline,
+    sky: wgpu::RenderPipeline,
+    sky_buffer: wgpu::Buffer,
+    sky_group: wgpu::BindGroup,
     camera: wgpu::Buffer,
     camera_group: wgpu::BindGroup,
     sheet_layout: wgpu::BindGroupLayout,
@@ -319,6 +323,65 @@ impl Gpu {
             multiview_mask: None,
             cache: None,
         });
+        let sky_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("iso3d sky"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
+        });
+        let sky_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("iso3d sky"),
+            size: std::mem::size_of::<SkyUniform>() as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let sky_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("iso3d sky"),
+            layout: &sky_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: sky_buffer.as_entire_binding(),
+            }],
+        });
+        let sky_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("iso3d sky"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("sky.wgsl").into()),
+        });
+        let sky = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("iso3d sky"),
+            layout: Some(&layout("iso3d sky", &[Some(&sky_layout)])),
+            vertex: wgpu::VertexState {
+                module: &sky_shader,
+                entry_point: Some("vs_main"),
+                compilation_options: Default::default(),
+                buffers: &[],
+            },
+            primitive: Default::default(),
+            // Drawn first and behind everything, so the scene covers it wherever it draws.
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: DEPTH,
+                depth_write_enabled: Some(false),
+                depth_compare: Some(wgpu::CompareFunction::Always),
+                stencil: Default::default(),
+                bias: Default::default(),
+            }),
+            multisample: Default::default(),
+            fragment: Some(wgpu::FragmentState {
+                module: &sky_shader,
+                entry_point: Some("fs_main"),
+                compilation_options: Default::default(),
+                targets: &[Some(COLOR.into())],
+            }),
+            multiview_mask: None,
+            cache: None,
+        });
         let copy = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("iso3d copy"),
             source: wgpu::ShaderSource::Wgsl(include_str!("blit.wgsl").into()),
@@ -355,6 +418,9 @@ impl Gpu {
             shadow_map,
             shadow_group,
             blit,
+            sky,
+            sky_buffer,
+            sky_group,
             camera,
             camera_group,
             sheet_layout,
@@ -513,6 +579,9 @@ impl Gpu {
         self.resize(device, size.map(|n| n.min(limit)));
         self.upload(device, &paint.scene);
         queue.write_buffer(&self.camera, 0, bytemuck::bytes_of(&paint.camera));
+        if let Some(sky) = &paint.sky {
+            queue.write_buffer(&self.sky_buffer, 0, bytemuck::bytes_of(sky));
+        }
         // Pages still being decoded are left out until they arrive.
         let runs = self.runs.clone();
         for (page, ..) in &runs {
@@ -554,11 +623,7 @@ impl Gpu {
                 depth_slice: None,
                 resolve_target: None,
                 ops: wgpu::Operations {
-                    // The scene holds sRGB-encoded colours, as the sky's are.
-                    load: wgpu::LoadOp::Clear({
-                        let [r, g, b, _] = paint.sky.to_array().map(|c| f64::from(c) / 255.0);
-                        wgpu::Color { r, g, b, a: 1.0 }
-                    }),
+                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
                     store: wgpu::StoreOp::Store,
                 },
             })],
@@ -574,6 +639,11 @@ impl Gpu {
             occlusion_query_set: None,
             multiview_mask: None,
         });
+        if paint.sky.is_some() {
+            pass.set_pipeline(&self.sky);
+            pass.set_bind_group(0, &self.sky_group, &[]);
+            pass.draw(0..3, 0..1);
+        }
         let (mut draws, mut drawn) = (0, 0);
         if let Some(instances) = &self.instances {
             pass.set_pipeline(&self.scene);
