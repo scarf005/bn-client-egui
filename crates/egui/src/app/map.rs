@@ -150,14 +150,42 @@ impl Canvas {
 
     /// The screen points of the line of fire through `squares`, the avatar's first, over the middle of each; a z-level
     /// is `level` squares tall on the 3D map.
-    fn fire_line(&self, _squares: &[FireSquare], _level: f32) -> Vec<egui::Pos2> {
-        vec![]
+    fn fire_line(&self, squares: &[FireSquare], level: f32) -> Vec<egui::Pos2> {
+        let middle = |s: &FireSquare| glam::Vec2::new(s.at.x as f32 + 0.5, s.at.y as f32 + 0.5);
+        let Some(v) = &self.view else {
+            let on = squares.iter().map(middle);
+            return on.filter_map(|p| self.ground(p.x, p.y)).collect();
+        };
+        let path = squares
+            .iter()
+            .map(|s| iso::aim::body_point(middle(s), s.up, level))
+            .collect::<Vec<_>>();
+        let on = iso::aim::project(v, &path).into_iter();
+        on.map(|p| self.rect.min + egui::vec2(p.x, p.y)).collect()
     }
 
-    /// The edges of the box of a creature's height around a cursor square `up` levels over the avatar's; none off
-    /// the 3D map.
-    fn cursor_frame(&self, _at: FireSquare, _level: f32) -> Vec<[egui::Pos2; 2]> {
-        vec![]
+    /// The edges of the box of a creature's height around a cursor square; none off the 3D map or with a corner
+    /// behind the eye.
+    fn cursor_frame(&self, square: FireSquare, level: f32) -> Vec<[egui::Pos2; 2]> {
+        let Some(v) = &self.view else { return vec![] };
+        let floor = square.up as f32 * level;
+        let corner = |(dx, dy, up): (f32, f32, bool)| {
+            let z = floor + if up { iso::aim::BODY * 2.0 } else { 0.0 };
+            let at = glam::Vec3::new(square.at.x as f32 + dx, square.at.y as f32 + dy, z);
+            v.project(at)
+                .map(|on| self.rect.min + egui::vec2(on.x, on.y))
+        };
+        let ring = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)];
+        let edges = (0..4).flat_map(|i| {
+            let (a, b) = (ring[i], ring[(i + 1) % 4]);
+            [
+                [(a.0, a.1, false), (b.0, b.1, false)],
+                [(a.0, a.1, true), (b.0, b.1, true)],
+                [(a.0, a.1, false), (a.0, a.1, true)],
+            ]
+        });
+        let edges = edges.map(|[a, b]| Some([corner(a)?, corner(b)?]));
+        edges.collect::<Option<Vec<_>>>().unwrap_or_default()
     }
 
     /// A screen's mark over the map: a selection fills its squares, a mapgen border outlines its rectangle and a
@@ -894,25 +922,44 @@ impl<M: GameModel> App<M> {
                 );
             }
         }
-        // The line of fire the engine publishes while aiming, on the level the cursor is on.
+        // The line of fire the engine publishes while aiming, from the avatar to the cursor in the map's own space.
         let origin = self.model.origin();
         let aimed = self.model.screens().last().and_then(|s| s.root.as_ref());
-        if let Some(map) = aimed.and_then(Component::cursor_map) {
-            let level = map.cursor().map(|at| at.z);
-            let line = map.trajectory().into_iter().filter(|p| Some(p.z) == level);
-            for p in line {
-                let at = Pos {
+        if let Some(map) = aimed.and_then(Component::cursor_map)
+            && let Some(source) = map.source()
+        {
+            let level = self
+                .display
+                .tileset()
+                .map_or(3.0, |(t, _)| iso::scene::metrics(t).level);
+            let square = |p: &WorldPos| FireSquare {
+                at: Pos {
                     x: p.x - origin.x,
                     y: p.y - origin.y,
-                };
-                if (0..size.x).contains(&at.x) && (0..size.y).contains(&at.y) {
-                    canvas.fill(
-                        painter,
-                        at,
-                        egui::Color32::from_rgba_unmultiplied(255, 170, 0, 90),
-                    );
-                }
+                },
+                up: p.z - source.z,
+            };
+            let squares = std::iter::once(&source)
+                .chain(&map.trajectory())
+                .map(square)
+                .collect::<Vec<_>>();
+            let line = canvas.fire_line(&squares, level);
+            if line.len() > 1 && squares.len() > 1 {
+                let shade = egui::Stroke::new(4.0, egui::Color32::from_black_alpha(170));
+                painter.add(egui::Shape::line(line.clone(), shade));
+                let orange = egui::Stroke::new(2.0, egui::Color32::from_rgb(255, 170, 0));
+                painter.add(egui::Shape::line(line, orange));
             }
+            let frame = map.cursor().map(|p| canvas.cursor_frame(square(&p), level));
+            let shade = egui::Stroke::new(3.5, egui::Color32::from_black_alpha(170));
+            let white = egui::Stroke::new(1.5, egui::Color32::WHITE);
+            let frame = frame.into_iter().flatten().collect::<Vec<_>>();
+            frame.iter().for_each(|e| {
+                painter.line_segment(*e, shade);
+            });
+            frame.iter().for_each(|e| {
+                painter.line_segment(*e, white);
+            });
         }
         for mark in self.model.marks() {
             canvas.mark(painter, &mark);
