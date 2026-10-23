@@ -978,3 +978,30 @@ fn a_fire_in_the_3d_scene_shows_the_sprite_of_its_animation_frame() {
     let grass = model(vec![cell(4, 4, 0, "grass")]);
     assert!(!scene::build(&grass, &tileset, None, None, 1, Some(0)).animated);
 }
+
+#[test]
+fn every_step_down_between_lowered_grounds_has_a_fading_face_from_the_lower_up_to_the_higher() {
+    let level = 108.0 * 0.034_026;
+    let mut deep = open_air(6, 4);
+    deep["below"] = 2.into();
+    // Dark ground one level down, dark ground two levels down, and known ground one level down.
+    let m = model(vec![
+        open_air(5, 4),
+        deep,
+        open_air(7, 4),
+        cell(7, 4, -1, "t_dirt"),
+    ]);
+    let scene = scene_of(&m, "scene-void-steps");
+    let walls = voids(&scene)
+        .into_iter()
+        .filter(|i| i.b[2] < 0.0)
+        .collect::<Vec<_>>();
+    // One face on each side of the deeper square, each a level tall from two levels down.
+    assert_eq!(walls.len(), 2, "{walls:?}");
+    assert!(
+        walls.iter().all(|w| (w.origin[2] + level).abs() < 0.02
+            && (w.b[2] + level).abs() < 0.02
+            && w.flags[0] & FADE != 0),
+        "{walls:?}"
+    );
+}
