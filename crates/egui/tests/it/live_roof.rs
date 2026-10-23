@@ -69,7 +69,7 @@ fn indoors_in_the_rain(size: egui::Vec2, name: &str, settings_json: &str) {
 
 #[test]
 #[ignore = "requires BN_ENGINE pointing at an engine binary"]
-fn live_roof_covers_the_room_and_keeps_the_rain_out() {
+fn live_roof_marks_the_avatar_in_the_shelter_as_under_a_roof() {
     indoors_in_the_rain(egui::vec2(1920.0, 1080.0), "fp-1920", FIRST);
     indoors_in_the_rain(egui::vec2(1290.0, 830.0), "fp-1290", FIRST);
     indoors_in_the_rain(egui::vec2(1920.0, 1080.0), "orbit-1920", ORBIT);

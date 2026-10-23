@@ -1109,11 +1109,13 @@ fn a_ceiling_is_closed_down_to_the_wall_beside_it_and_to_the_lintel_of_a_gap() {
     // The faces on the south edge run along x, and those on the east edge run toward the north.
     let east = faces.iter().filter(|f| f.a[1] < 0.0);
     let south = faces.iter().filter(|f| f.a[0] > 0.0);
-    // Walls as tall as the ceiling need no face; a shorter one is closed above.
-    assert_eq!(
-        east.count(),
-        usize::from(wall_top < level - 1e-3),
-        "{faces:?}"
+    // The wall stops short of the ceiling and is closed above it.
+    assert!(wall_top < level - 1e-3, "{wall_top}");
+    let east = east.collect::<Vec<_>>();
+    assert_eq!(east.len(), 1, "{faces:?}");
+    assert!(
+        (east[0].origin[2] + east[0].b[2] - wall_top).abs() < 1e-3,
+        "{east:?}"
     );
     let gap = south.collect::<Vec<_>>();
     assert_eq!(gap.len(), 1, "{faces:?}");
