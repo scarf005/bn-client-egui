@@ -148,6 +148,18 @@ impl Canvas {
         }
     }
 
+    /// The screen points of the line of fire through `squares`, the avatar's first, over the middle of each; a z-level
+    /// is `level` squares tall on the 3D map.
+    fn fire_line(&self, _squares: &[FireSquare], _level: f32) -> Vec<egui::Pos2> {
+        vec![]
+    }
+
+    /// The edges of the box of a creature's height around a cursor square `up` levels over the avatar's; none off
+    /// the 3D map.
+    fn cursor_frame(&self, _at: FireSquare, _level: f32) -> Vec<[egui::Pos2; 2]> {
+        vec![]
+    }
+
     /// A screen's mark over the map: a selection fills its squares, a mapgen border outlines its rectangle and a
     /// mapgen stamp ticks the rectangle's corners along its edges.
     fn mark(&self, painter: &egui::Painter, mark: &MapMark) {
@@ -220,6 +232,13 @@ impl Canvas {
             y: (at.y as i32).clamp(0, self.size.y - 1),
         }
     }
+}
+
+/// A square the line of fire crosses: where it lies in the view, and how many z-levels over the avatar's.
+#[derive(Clone, Copy)]
+struct FireSquare {
+    at: Pos,
+    up: i32,
 }
 
 /// The absolute square a moving pointer asked the engine's cursor (look, aim) to go to.
@@ -956,4 +975,83 @@ fn ground_point(
 ) -> Option<egui::Pos2> {
     let on = v.project(glam::Vec3::new(p.x as f32 + at.0, p.y as f32 + at.1, z))?;
     Some(rect.min + egui::vec2(on.x, on.y))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::iso::camera::Camera;
+
+    fn canvas(view: Option<Viewport>) -> Canvas {
+        Canvas {
+            rect: egui::Rect::from_min_size(egui::pos2(100.0, 50.0), egui::vec2(1280.0, 720.0)),
+            cell_px: 32.0,
+            size: Pos { x: 40, y: 40 },
+            view,
+            diamond: None,
+        }
+    }
+
+    fn orbit() -> Viewport {
+        Viewport {
+            camera: Camera::default(),
+            target: glam::Vec3::new(10.5, 10.5, 0.0),
+            scale: 34.0,
+            size: glam::Vec2::new(1280.0, 720.0),
+        }
+    }
+
+    fn row(x: &[i32]) -> Vec<FireSquare> {
+        x.iter()
+            .map(|x| FireSquare {
+                at: Pos { x: *x, y: 10 },
+                up: 0,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn the_flat_line_of_fire_runs_through_the_middle_of_each_square_from_the_avatar() {
+        let canvas = canvas(None);
+        let line = canvas.fire_line(&row(&[10, 11, 12, 13]), 3.0);
+        let middle = |x: i32| canvas.rect(Pos { x, y: 10 }).center();
+        assert_eq!(line, [10, 11, 12, 13].map(middle));
+    }
+
+    #[test]
+    fn the_3d_line_of_fire_flies_over_the_ground_of_its_squares_and_ends_at_the_target() {
+        let canvas = canvas(Some(orbit()));
+        let line = canvas.fire_line(&row(&[10, 11, 12, 13]), 3.0);
+        let ground = canvas.ground(13.5, 10.5).unwrap();
+        let end = line.last().unwrap();
+        assert!(end.y < ground.y - 5.0, "{end:?} over {ground:?}");
+        assert!((end.x - ground.x).abs() < 1.0, "{end:?} over {ground:?}");
+        assert!(
+            line.len() > 4,
+            "the line is a curve of the view, not four corners"
+        );
+    }
+
+    #[test]
+    fn the_3d_cursor_is_a_box_a_creature_tall_standing_on_its_square() {
+        let canvas = canvas(Some(orbit()));
+        let at = FireSquare {
+            at: Pos { x: 13, y: 10 },
+            up: 0,
+        };
+        let frame = canvas.cursor_frame(at, 3.0);
+        assert_eq!(frame.len(), 12);
+        let ends = || frame.iter().flatten();
+        let corner = canvas.ground(13.0, 10.0).unwrap();
+        assert!(
+            ends().any(|p| p.distance(corner) < 0.5),
+            "no edge stands on {corner:?}"
+        );
+        let top = ends().map(|p| p.y).fold(f32::MAX, f32::min);
+        assert!(
+            top < corner.y - 20.0,
+            "the box is not tall: {top} over {corner:?}"
+        );
+        assert!(self::canvas(None).cursor_frame(at, 3.0).is_empty());
+    }
 }
