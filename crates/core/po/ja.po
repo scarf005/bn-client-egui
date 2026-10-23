@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: bn-client\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-23 06:35+0900\n"
+"POT-Creation-Date: 2026-10-23 15:11+0900\n"
 "PO-Revision-Date: 2026-10-18 09:30+0900\n"
 "Language-Team: Japanese\n"
 "Language: ja\n"
@@ -14,12 +14,12 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
 
-#: crates/core/src/engine_model.rs:773
+#: crates/core/src/engine_model.rs:806
 msgid "The engine has not answered for %d second."
 msgid_plural "The engine has not answered for %d seconds."
 msgstr[0] "エンジンが%d秒間応答していません。"
 
-#: crates/core/src/engine_model.rs:899
+#: crates/core/src/engine_model.rs:932
 msgid "The engine could not be restarted: %s"
 msgstr "エンジンを再起動できませんでした: %s"
 
@@ -44,19 +44,19 @@ msgstr "コマンド"
 msgid "Bad snapshot: %s"
 msgstr "不正なスナップショット: %s"
 
-#: crates/core/src/engine_model/session.rs:272
+#: crates/core/src/engine_model/session.rs:275
 msgid "Bad engine message: %s"
 msgstr "不正なエンジンメッセージ: %s"
 
-#: crates/core/src/engine_model/session.rs:280
+#: crates/core/src/engine_model/session.rs:283
 msgid "Engine connection closed."
 msgstr "エンジンとの接続が切れました。"
 
-#: crates/core/src/engine_model/session.rs:282
+#: crates/core/src/engine_model/session.rs:285
 msgid "The engine stopped (%s)."
 msgstr "エンジンが停止しました(%s)。"
 
-#: crates/core/src/engine_model/session.rs:283
+#: crates/core/src/engine_model/session.rs:286
 msgid "The engine stopped."
 msgstr "エンジンが停止しました。"
 
@@ -124,45 +124,45 @@ msgstr "PATH 内の %s: %s"
 msgid "cannot start engine %s: %s"
 msgstr "エンジン %s を起動できません: %s"
 
-#: crates/egui/src/app.rs:326 crates/tui/src/lib.rs:697
+#: crates/egui/src/app.rs:332 crates/tui/src/lib.rs:697
 msgid "Engine: %s"
 msgstr "エンジン: %s"
 
-#: crates/egui/src/app.rs:331 crates/tui/src/lib.rs:703
+#: crates/egui/src/app.rs:337 crates/tui/src/lib.rs:703
 msgid "Last engine output:"
 msgstr "エンジンの最後の出力:"
 
-#: crates/egui/src/app.rs:338
+#: crates/egui/src/app.rs:344
 msgid "Restart"
 msgstr "再起動"
 
-#: crates/egui/src/app.rs:352
+#: crates/egui/src/app.rs:358
 msgid "%s: %s (%d of %d)"
 msgstr "%s: %s (%d/%d)"
 
-#: crates/egui/src/app.rs:368
+#: crates/egui/src/app.rs:374
 msgid "Loading image"
 msgstr "読み込み画像"
 
-#: crates/egui/src/app.rs:490
+#: crates/egui/src/app.rs:496
 msgid "Resize sidebar"
 msgstr "サイドバーのサイズ変更"
 
-#: crates/egui/src/app.rs:519 crates/egui/src/app.rs:530
+#: crates/egui/src/app.rs:528 crates/egui/src/app.rs:540
 msgid "Client settings"
 msgstr "クライアント設定"
 
-#: crates/egui/src/app.rs:527 crates/egui/src/app/palette.rs:57
+#: crates/egui/src/app.rs:537 crates/egui/src/app/palette.rs:57
 #: crates/egui/src/app/palette.rs:103 crates/tui/src/lib.rs:881
 #: crates/tui/src/lib.rs:1050
 msgid "Actions"
 msgstr "行動"
 
-#: crates/egui/src/app.rs:545 crates/tui/src/lib.rs:666
+#: crates/egui/src/app.rs:555 crates/tui/src/lib.rs:666
 msgid "Ready"
 msgstr "待機中"
 
-#: crates/egui/src/app.rs:584
+#: crates/egui/src/app.rs:594
 msgid "Interrupt"
 msgstr "中断"
 
@@ -174,33 +174,38 @@ msgstr "新しいキーを押してください"
 msgid "OK"
 msgstr "OK"
 
-#: crates/egui/src/app/component/overmap.rs:359
-#: crates/egui/src/app/component/overmap.rs:527 crates/egui/src/app/map.rs:342
+#: crates/egui/src/app/component/overmap.rs:376
+#: crates/egui/src/app/component/overmap.rs:552 crates/egui/src/app/map.rs:343
 #: crates/tui/src/lib.rs:753
 msgid "Map"
 msgstr "地図"
 
-#: crates/egui/src/app/component/overmap.rs:365
+#: crates/egui/src/app/component/overmap.rs:382
 msgid "Centre"
 msgstr "中央へ"
 
-#: crates/egui/src/app/component/overmap.rs:370
+#: crates/egui/src/app/component/overmap.rs:387
 msgid "Travel and notes"
 msgstr "移動とメモ"
 
-#: crates/egui/src/app/map.rs:253 crates/tui/src/lib.rs:763
+#. TRANSLATORS: the overmap level the map window shows; %d is its z, 0 at the ground.
+#: crates/egui/src/app/component/overmap.rs:391
+msgid "Level %d"
+msgstr "階層 %d"
+
+#: crates/egui/src/app/map.rs:254 crates/tui/src/lib.rs:763
 msgid "No map loaded"
 msgstr "地図が読み込まれていません"
 
-#: crates/egui/src/app/map.rs:431
+#: crates/egui/src/app/map.rs:432
 msgid "Player at (%d, %d). Cursor (%d, %d)."
 msgstr "プレイヤー (%d, %d)。カーソル (%d, %d)。"
 
-#: crates/egui/src/app/map.rs:434
+#: crates/egui/src/app/map.rs:435
 msgid "Player at (%d, %d). Cursor (%d, %d): %s."
 msgstr "プレイヤー (%d, %d)。カーソル (%d, %d): %s。"
 
-#: crates/egui/src/app/map.rs:732
+#: crates/egui/src/app/map.rs:733
 msgid "Map actions"
 msgstr "地図の行動"
 
@@ -208,7 +213,7 @@ msgstr "地図の行動"
 msgid "Space or Enter closes this popup"
 msgstr "SpaceかEnterでこのポップアップを閉じます"
 
-#: crates/egui/src/app/menu.rs:279
+#: crates/egui/src/app/menu.rs:280
 msgid "Load more (%d of %d)"
 msgstr "さらに読み込む (%d/%d)"
 
@@ -277,31 +282,31 @@ msgstr "使用する"
 msgid "%s is not an executable file"
 msgstr "%sは実行ファイルではありません"
 
-#: crates/egui/src/windows.rs:293
+#: crates/egui/src/windows.rs:338
 msgid "Close window"
 msgstr "ウィンドウを閉じる"
 
-#: crates/egui/src/windows.rs:301
+#: crates/egui/src/windows.rs:346
 msgid "Restore"
 msgstr "元のサイズに戻す"
 
-#: crates/egui/src/windows.rs:303
+#: crates/egui/src/windows.rs:348
 msgid "Maximize"
 msgstr "最大化"
 
-#: crates/egui/src/windows.rs:322
+#: crates/egui/src/windows.rs:367
 msgid "Expand"
 msgstr "展開"
 
-#: crates/egui/src/windows.rs:324
+#: crates/egui/src/windows.rs:369
 msgid "Minimize"
 msgstr "最小化"
 
-#: crates/egui/src/windows.rs:441
+#: crates/egui/src/windows.rs:529
 msgid "Move window"
 msgstr "ウィンドウを移動"
 
-#: crates/egui/src/windows.rs:472
+#: crates/egui/src/windows.rs:567
 msgid "Resize window"
 msgstr "ウィンドウのサイズ変更"
 
