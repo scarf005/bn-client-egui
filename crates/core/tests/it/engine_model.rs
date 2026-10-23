@@ -3350,7 +3350,7 @@ fn a_layer_keeps_the_form_its_look_stands_as_and_none_for_one_it_does_not_know()
 
 #[test]
 fn the_sky_the_engine_sends_is_the_models_and_an_older_engine_sends_none() {
-    use bn_client_core::protocol::{Precipitation, Sky};
+    use bn_client_core::protocol::{MoonPhase, Precipitation, Sky};
     let session = |sky: Option<serde_json::Value>| {
         let mut subscribe = fixture("subscribe_result");
         if let Some(sky) = sky {
@@ -3367,7 +3367,7 @@ fn the_sky_the_engine_sends_is_the_models_and_an_older_engine_sends_none() {
         ))
     };
     let m = session(Some(
-        json!({"daylight": 40, "precipitation": "heavy", "rain": true, "dimming": 40}),
+        json!({"daylight": 40, "precipitation": "heavy", "rain": true, "dimming": 40, "moon": 25, "moon_phase": "waxing_gibbous"}),
     ));
     assert_eq!(
         m.sky(),
@@ -3375,7 +3375,10 @@ fn the_sky_the_engine_sends_is_the_models_and_an_older_engine_sends_none() {
             daylight: 40,
             precipitation: Precipitation::Heavy,
             rain: true,
-            dimming: 40
+            dimming: 40,
+            sun: None,
+            moon: Some(25),
+            moon_phase: MoonPhase::WaxingGibbous,
         })
     );
     assert_eq!(session(None).sky(), None);
