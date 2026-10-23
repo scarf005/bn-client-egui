@@ -1090,3 +1090,23 @@ fn a_ceiling_is_closed_down_to_the_wall_beside_it_and_to_the_lintel_of_a_gap() {
         "closed above a doorway's lintel: {gap:?}"
     );
 }
+
+#[test]
+fn a_ceiling_beside_squares_nothing_is_known_about_is_closed_from_the_floor_so_no_sky_shows() {
+    let level = 108.0 * 0.034_026;
+    // Only the roofed square is known, away from the avatar: every edge of it faces the unknown.
+    let m = model(vec![roofed(8, 8)]);
+    let scene = scene_of(&m, "scene-ceiling-unknown");
+    let faces = scene
+        .ceiling
+        .iter()
+        .filter(|i| i.b[2] < 0.0)
+        .collect::<Vec<_>>();
+    assert_eq!(faces.len(), 4, "{faces:?}");
+    assert!(
+        faces
+            .iter()
+            .all(|f| (f.origin[2] - level).abs() < 1e-3 && (f.origin[2] + f.b[2]).abs() < 1e-3),
+        "from the floor up to the ceiling: {faces:?}"
+    );
+}
