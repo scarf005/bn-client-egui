@@ -3,7 +3,7 @@ use crate::common::{fixture, flat_root, iso_root};
 use bn_client_egui::EngineModel;
 use bn_client_egui::GameModel;
 use bn_client_egui::iso::camera::{Camera, Viewport};
-use bn_client_egui::iso::geometry::{BOARD, GLOW, Instance, PageId, SHEER, VOID};
+use bn_client_egui::iso::geometry::{BOARD, FADE, GLOW, Instance, PageId, SHEER, VOID};
 use bn_client_egui::iso::pages::Pages;
 use bn_client_egui::iso::scene::{self, Scene};
 use bn_client_egui::tileset::Tileset;
@@ -175,6 +175,17 @@ fn open_air_over_ground_nothing_is_known_about_is_dark_ground_at_its_depth_walle
     assert!(
         void.iter().all(|i| i.flags[1] > 0 && i.flags[1] < 64),
         "a dark that is not the black of nothing: {void:?}"
+    );
+    // The walls fade from light at their top to the dark at their foot; the ground does not.
+    assert!(
+        walls
+            .iter()
+            .all(|w| w.flags[0] & FADE != 0 && w.uv[1] < 0.01 && w.uv[1] + w.uv_b[1] > 0.99),
+        "{walls:?}"
+    );
+    assert!(
+        grounds.iter().all(|g| g.flags[0] & FADE == 0),
+        "{grounds:?}"
     );
     // Nothing known about a square that does not look through to ground is no block.
     assert!(at(&scene, &m, (8, 8)).is_empty());
