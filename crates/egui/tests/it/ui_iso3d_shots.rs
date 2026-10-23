@@ -3,8 +3,9 @@
 //! `SHOT_DIR=<dir> cargo test --test it ui_iso3d_shots:: -- --ignored`.
 use crate::common::{fixture, iso_root};
 use bn_client_egui::app::CELL;
-use bn_client_egui::iso::camera::Viewport;
+use bn_client_egui::iso::camera::{EYE_HEIGHT, Viewport};
 use bn_client_egui::iso::scene::world_scale;
+use bn_client_egui::iso::sky::way;
 use bn_client_egui::transport::ScriptedTransport;
 use bn_client_egui::{App, EngineModel, GameModel};
 use eframe::egui;
@@ -40,10 +41,18 @@ fn cells() -> Vec<Value> {
 }
 
 fn harness<'a>(tag: &str) -> H<'a> {
+    harness_with(tag, r#"{"three_d": true}"#, None)
+}
+
+/// The room drawn with `settings`, under `sky` when the engine names one.
+fn harness_with<'a>(tag: &str, settings_json: &str, sky: Option<Value>) -> H<'a> {
     let root = iso_root(tag);
     let settings = root.join("settings.json");
-    std::fs::write(&settings, r#"{"three_d": true}"#).unwrap();
+    std::fs::write(&settings, settings_json).unwrap();
     let mut subscribe = fixture("subscribe_result");
+    if let Some(sky) = sky {
+        subscribe["result"]["environment"]["sky"] = sky;
+    }
     subscribe["result"]["avatar"]["look"] = json!({
         "kind": "avatar", "id": "avatar", "glyph": "@", "color": "white", "tile": "mon_a"
     });
@@ -112,6 +121,29 @@ fn pixel(h: &mut H, image: &egui::ColorImage, world: (f32, f32, f32)) -> egui::C
         .unwrap();
     let at = rect.min + egui::vec2(on.x, on.y);
     image[(at.x.round() as usize, at.y.round() as usize)]
+}
+
+/// The pixel where the sky is drawn the way `way` from the first-person eye, if the view shows it.
+fn sky_pixel(h: &mut H, image: &egui::ColorImage, way: glam::Vec3) -> Option<egui::Color32> {
+    let rect = h.get_by_label("Map").rect();
+    let app = h.state();
+    let me = app.model.player();
+    let (tileset, _) = app.display().tileset().unwrap();
+    let view = Viewport {
+        camera: bn_client_egui::iso::camera::Camera {
+            first_person: true,
+            ..app.camera()
+        },
+        target: glam::Vec3::new(me.x as f32 + 0.5, me.y as f32 + 0.5, 0.0),
+        scale: world_scale(tileset, app.display().cell(CELL) * app.display().zoom()),
+        size: glam::Vec2::new(rect.width(), rect.height()),
+    };
+    let eye = view.target + glam::Vec3::Z * EYE_HEIGHT;
+    let on = view.project(eye + way * 150.0)?;
+    let at = rect.min + egui::vec2(on.x, on.y);
+    rect.shrink(2.0)
+        .contains(at)
+        .then(|| image[(at.x.round() as usize, at.y.round() as usize)])
 }
 
 fn reddish(c: egui::Color32) -> bool {
@@ -262,4 +294,75 @@ fn one_instanced_draw_per_sheet_page_draws_every_sprite_of_the_view() {
     );
     // 63 ground quads (the wall squares have none), 3 wall boxes in a row, whose touching faces are left out, the table, the zombie and the avatar.
     assert!(stats.instances.load(Ordering::Relaxed) >= 60 + 11 + 3);
+}
+
+#[test]
+#[ignore = "needs a Vulkan adapter"]
+fn the_first_person_sky_is_blue_by_day_red_low_at_dusk_and_dark_with_the_moon_and_stars_at_night() {
+    const FIRST: &str = r#"{"three_d": true, "first_person": true}"#;
+    let brightness = |c: egui::Color32| u32::from(c.r()) + u32::from(c.g()) + u32::from(c.b());
+    // Turns the camera until the view shows `way`, and gives its pixel.
+    let find = |h: &mut H, name: &str, way: glam::Vec3| {
+        for _ in 0..24 {
+            let image = save(h, name);
+            if let Some(c) = sky_pixel(h, &image, way) {
+                return (image, c);
+            }
+            turn(h, 1);
+        }
+        panic!("the view never showed {way:?}");
+    };
+    let mut h = harness_with(
+        "sky-day",
+        FIRST,
+        Some(
+            json!({"daylight": 100, "precipitation": "none", "dimming": 0, "sun": 50, "moon_phase": "new"}),
+        ),
+    );
+    settle(&mut h);
+    // The first-person view looks a little down, so it shows the sky up to about 20 degrees.
+    let high = glam::Vec3::new(0.3, 0.2, 0.12).normalize();
+    let (_, overhead) = find(&mut h, "sky-day.png", high);
+    assert!(bluish(overhead), "{overhead:?}");
+    let mut h = harness_with(
+        "sky-dusk",
+        FIRST,
+        Some(
+            json!({"daylight": 40, "precipitation": "none", "dimming": 0, "sun": 97, "moon_phase": "new"}),
+        ),
+    );
+    settle(&mut h);
+    let low = glam::Vec3::new(-1.0, 0.0, 0.05).normalize();
+    let (_, horizon) = find(&mut h, "sky-dusk.png", low);
+    assert!(horizon.r() > horizon.b() + 40, "{horizon:?}");
+    let mut h = harness_with(
+        "sky-night",
+        FIRST,
+        Some(
+            json!({"daylight": 0, "precipitation": "none", "dimming": 0, "moon": 90, "moon_phase": "full"}),
+        ),
+    );
+    settle(&mut h);
+    // Low in the west, away from the wall east of the avatar.
+    let (image, moon) = find(&mut h, "sky-night.png", way(90));
+    assert!(whitish(moon), "{moon:?}");
+    let night = sky_pixel(&mut h, &image, way(90) + glam::Vec3::new(0.0, 0.0, 0.1)).unwrap();
+    assert!(brightness(night) < 60, "{night:?}");
+    let mut h = harness_with(
+        "sky-overcast",
+        FIRST,
+        Some(
+            json!({"daylight": 70, "precipitation": "light", "rain": true, "dimming": 40, "moon_phase": "new"}),
+        ),
+    );
+    settle(&mut h);
+    let (_, grey) = find(&mut h, "sky-overcast.png", high);
+    // Past the room's west edge, a little under the horizon, nothing is drawn, and that is dark as without a sky.
+    let west = glam::Vec3::new(-1.0, 0.0, -0.1).normalize();
+    let (_, below) = find(&mut h, "sky-overcast-below.png", west);
+    assert!(brightness(below) < 30, "{below:?}");
+    assert!(
+        i32::from(grey.b()) - i32::from(grey.r()) < 40 && brightness(grey) > 250,
+        "{grey:?}"
+    );
 }

@@ -754,13 +754,12 @@ impl<M: GameModel> App<M> {
                 let scene = shown.0.clone();
                 // The first-person view looks into the sky the engine describes; looking down, there is none.
                 let sky = self.model.sky().filter(|_| v.camera.first_person);
-                let colour = sky.as_ref().map_or(egui::Color32::BLACK, iso::sky_color);
                 painter.add(iso::callback(
                     canvas.rect,
                     v,
                     target,
                     shown,
-                    (stats, colour),
+                    (stats, sky.as_ref()),
                 ));
                 iso::paint_glyphs(painter, canvas.rect, v, &scene, canvas.cell_px);
                 if let Some(sky) = &sky {
