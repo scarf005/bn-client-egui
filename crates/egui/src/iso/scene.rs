@@ -2,7 +2,7 @@
 
 use super::geometry::{
     Form, Instance, Kind, Metrics, Outline, PageId, Placement, Shape, SpriteSource, band, borders,
-    place, shape, wall_bands,
+    place, shape, void_face, void_lid, wall_bands,
 };
 use super::pages::Pages;
 use crate::display::{Fx, STRIP, light, query, resolve_layer};
@@ -198,6 +198,9 @@ pub fn build(
     let mut columns = vec![None; (width * height) as usize];
     // The squares that stand in a line of walls: a wall, a window, a door or a fence.
     let mut lined = vec![false; (width * height) as usize];
+    // How high the surface of each square drawn lies, and the squares of solid unknown.
+    let mut tops = vec![None::<f32>; (width * height) as usize];
+    let mut voids = vec![];
     let mut items = vec![];
     let mut glyphs = vec![];
     let mut hurt = vec![];
@@ -208,9 +211,15 @@ pub fn build(
         for x in 0..width {
             let cell = model.cell(Pos { x, y });
             if cell.layers.is_empty() {
+                // Open air in sight over ground nothing is known about: solid up to its level.
+                if cell.depth > 0 {
+                    tops[(y * width + x) as usize] = Some(0.0);
+                    voids.push((x, y));
+                }
                 continue;
             }
             squares += 1;
+            tops[(y * width + x) as usize] = Some(-f32::from(cell.depth) * m.level);
             // The same filters the flat map puts on what is remembered or poorly lit.
             let fx = match (cell.remembered, cell.light) {
                 (true, _) => Fx::Memory,
@@ -425,6 +434,29 @@ pub fn build(
                 .or_default()
                 .extend(bands.into_iter().flat_map(|b| band(&m, &p, b)));
         }
+    }
+    // The unknown is solid between the level and the lowered ground drawn beside it: a lid on each block of it and a
+    // face down to that ground from every square as high as the level, so that no hole shows.
+    if let Some(page) = items.first().map(|i| i.sprite.page) {
+        let mut unknown = voids
+            .iter()
+            .map(|&square| void_lid(square, 0.0))
+            .collect::<Vec<_>>();
+        for (n, top) in tops.iter().enumerate() {
+            if *top != Some(0.0) {
+                continue;
+            }
+            let (x, y) = (n as i32 % width, n as i32 / width);
+            for (face, (dx, dy)) in FACES.into_iter().enumerate() {
+                if let Some(lowered) = index(x + dx, y + dy)
+                    .and_then(|n| tops[n])
+                    .filter(|t| *t < -1e-3)
+                {
+                    unknown.push(void_face((x, y), face, (lowered, 0.0)));
+                }
+            }
+        }
+        pages.entry(page).or_default().extend(unknown);
     }
     let (low, high) = items.iter().fold((0.0f32, 0.0f32), |(low, high), i| {
         (i.floor.min(low), i.floor.max(high))

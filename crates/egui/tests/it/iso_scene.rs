@@ -141,8 +141,9 @@ fn open_air(x: i32, y: i32) -> Value {
     air
 }
 
-fn voids(scene: &Scene, m: &EngineModel, abs: (i32, i32)) -> Vec<Instance> {
-    at(scene, m, abs)
+/// The quads of solid unknown in the scene.
+fn voids(scene: &Scene) -> Vec<Instance> {
+    all(scene)
         .into_iter()
         .filter(|i| i.flags[0] & VOID != 0)
         .collect()
@@ -156,7 +157,7 @@ fn open_air_over_ground_nothing_is_known_about_is_a_solid_dark_block_up_to_its_l
         cell(6, 4, 0, "t_dirt"),
     ]);
     let scene = scene_of(&m, "scene-void");
-    let block = voids(&scene, &m, (5, 4));
+    let block = voids(&scene);
     // Its lid at the level; neighbours as high as it show no face of it.
     assert_eq!(block.len(), 1, "{block:?}");
     assert_eq!(block[0].origin[2], 0.0);
@@ -164,8 +165,8 @@ fn open_air_over_ground_nothing_is_known_about_is_a_solid_dark_block_up_to_its_l
         block[0].flags[1] > 0 && block[0].flags[1] < 64,
         "a dark that is not the black of nothing: {block:?}"
     );
-    // Nothing known about a square that does not look through to ground is not a block.
-    assert!(voids(&scene, &m, (8, 8)).is_empty());
+    // Nothing known about a square that does not look through to ground is no block.
+    assert!(at(&scene, &m, (8, 8)).is_empty());
 }
 
 #[test]
@@ -178,12 +179,13 @@ fn a_dark_block_has_a_face_down_to_the_lowered_ground_beside_it_and_a_slab_edge_
     let m = model(cells);
     let scene = scene_of(&m, "scene-void-faces");
     // The block at (6, 4) stands over the lowered ground east of it: a face on that edge, from the ground up.
-    let block = voids(&scene, &m, (6, 4));
+    let block = voids(&scene);
     let faces = block.iter().filter(|i| i.b[2] < 0.0).collect::<Vec<_>>();
+    assert_eq!(block.len(), 2, "its lid and that face: {block:?}");
     assert_eq!(faces.len(), 1, "{block:?}");
     assert!((faces[0].b[2] + level).abs() < 0.02, "{faces:?}");
-    // The slab at (5, 4) has the block on one side and a floor as high on the other: no face of its own.
-    assert!(voids(&scene, &m, (5, 4)).is_empty());
+    // The slab at (5, 4) has the block on one side and nothing lower: no face of its own.
+    assert_eq!(at(&scene, &m, (5, 4)).len(), 1);
     // A slab beside lowered ground is cut off by a face down to it.
     let m = model(vec![
         cell(5, 4, 0, "t_floor"),
@@ -191,7 +193,7 @@ fn a_dark_block_has_a_face_down_to_the_lowered_ground_beside_it_and_a_slab_edge_
         cell(6, 4, -1, "t_dirt"),
     ]);
     let scene = scene_of(&m, "scene-slab-face");
-    let edge = voids(&scene, &m, (5, 4));
+    let edge = voids(&scene);
     assert_eq!(edge.len(), 1, "{edge:?}");
     assert!((edge[0].b[2] + level).abs() < 0.02, "{edge:?}");
 }
