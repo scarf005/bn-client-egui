@@ -149,11 +149,12 @@ impl Canvas {
     }
 
     /// The screen points of the line of fire through `squares`, the avatar's first, over the middle of each; a z-level
-    /// is `level` squares tall on the 3D map.
+    /// is `level` squares tall on the 3D map. The flat map shows one level: that of the target, the last square.
     fn fire_line(&self, squares: &[FireSquare], level: f32) -> Vec<egui::Pos2> {
         let middle = |s: &FireSquare| glam::Vec2::new(s.at.x as f32 + 0.5, s.at.y as f32 + 0.5);
         let Some(v) = &self.view else {
-            let on = squares.iter().map(middle);
+            let target = squares.last().map(|s| s.up);
+            let on = squares.iter().filter(|s| Some(s.up) == target).map(middle);
             return on.filter_map(|p| self.ground(p.x, p.y)).collect();
         };
         let path = squares
