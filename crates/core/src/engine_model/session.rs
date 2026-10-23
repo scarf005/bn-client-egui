@@ -124,6 +124,9 @@ impl EngineModel {
             status: None,
             at_main_menu: false,
             hovered: None,
+            describing: None,
+            describe_wanted: None,
+            describe_refused: None,
             overmap: Default::default(),
             panels: HashMap::new(),
         };

@@ -21,6 +21,14 @@ fn session(bound: &[&str]) -> (ScriptedTransport, ScriptHandle) {
 }
 
 /// The fixture session, its subscribe result changed by `edit`.
+/// A session whose engine answers each of the next hundred `bn.world.describe` questions.
+fn answering(session: (ScriptedTransport, ScriptHandle)) -> (ScriptedTransport, ScriptHandle) {
+    let reply = json!({"jsonrpc":"2.0","id":0,"result":{"parts":[{"kind":"terrain","text":"Floor"}],"actions":[]}});
+    let (t, h) = session;
+    let t = (0..100).fold(t, |t, _| t.on("bn.world.describe", vec![reply.clone()]));
+    (t, h)
+}
+
 fn session_with(
     bound: &[&str],
     edit: impl FnOnce(&mut Value),
@@ -384,7 +392,12 @@ fn a_click_on_a_3d_square_sends_what_a_click_on_that_square_sends_in_the_flat_ma
 #[test]
 fn hovering_a_3d_square_asks_the_engine_to_describe_that_square() {
     let root = iso_root("hover");
-    let (mut h, script) = harness(&root, &root.join("settings.json"), true);
+    let (mut h, script) = harness_of(
+        &root,
+        &root.join("settings.json"),
+        true,
+        answering(session(&[])),
+    );
     settle(&mut h);
     pick_3d(&mut h);
     let me = h.state().model.player();
@@ -411,7 +424,12 @@ fn hovering_a_3d_square_asks_the_engine_to_describe_that_square() {
 #[test]
 fn hovering_just_inside_any_corner_of_a_flat_isometric_square_describes_that_square() {
     let root = iso_root("flat-corners");
-    let (mut h, script) = harness(&root, &root.join("settings.json"), true);
+    let (mut h, script) = harness_of(
+        &root,
+        &root.join("settings.json"),
+        true,
+        answering(session(&[])),
+    );
     settle(&mut h);
     pick_2d(&mut h);
     let me = h.state().model.player();
