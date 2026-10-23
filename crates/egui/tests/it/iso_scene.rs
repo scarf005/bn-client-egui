@@ -1005,3 +1005,49 @@ fn every_step_down_between_lowered_grounds_has_a_fading_face_from_the_lower_up_t
         "{walls:?}"
     );
 }
+
+fn roofed(x: i32, y: i32) -> Value {
+    let mut square = cell(x, y, 0, "t_floor");
+    square["roofed"] = true.into();
+    square
+}
+
+#[test]
+fn a_roofed_square_has_a_flat_dark_ceiling_one_level_up_that_faces_down() {
+    let level = 108.0 * 0.034_026;
+    let m = model(vec![roofed(4, 4), cell(5, 4, 0, "t_floor")]);
+    let scene = scene_of(&m, "scene-ceiling");
+    let o = m.origin();
+    assert_eq!(scene.ceiling.len(), 1, "{:?}", scene.ceiling);
+    let lid = scene.ceiling[0];
+    assert_eq!(
+        (lid.origin[0], lid.origin[1]),
+        ((4 - o.x) as f32, (4 - o.y) as f32)
+    );
+    assert!((lid.origin[2] - level).abs() < 0.02, "{lid:?}");
+    let normal_z = lid.a[0] * lid.b[1] - lid.a[1] * lid.b[0];
+    assert!(normal_z < 0.0, "faces down: {lid:?}");
+    assert!(lid.flags[0] & VOID != 0 && lid.flags[1] > 0, "{lid:?}");
+    // The ceiling is not part of the scene the orbit camera looks into from above.
+    assert!(
+        all(&scene).iter().all(|i| i.origin[2] < level - 0.02),
+        "{:?}",
+        all(&scene)
+    );
+}
+
+#[test]
+fn a_square_seen_through_open_air_gets_no_ceiling() {
+    let mut air = open_air(4, 4);
+    air["roofed"] = true.into();
+    let m = model(vec![air, cell(4, 4, -1, "t_dirt")]);
+    assert!(scene_of(&m, "scene-ceiling-air").ceiling.is_empty());
+}
+
+#[test]
+fn weather_does_not_fall_on_an_avatar_under_a_roof() {
+    assert!(!bn_client_egui::iso::sheltered(&model(vec![cell(
+        3, 4, 0, "t_floor"
+    )])));
+    assert!(bn_client_egui::iso::sheltered(&model(vec![roofed(3, 4)])));
+}
