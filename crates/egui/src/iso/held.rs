@@ -187,6 +187,21 @@ mod tests {
     }
 
     #[test]
+    fn the_picture_of_a_held_item_bends_with_the_perspective_of_its_squares() {
+        let mesh = drawn(|_, _| true);
+        let middle = corner(&mesh, egui::pos2(0.5, 0.5));
+        let corners = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]
+            .map(|(u, v)| corner(&mesh, egui::pos2(u, v)));
+        let flat = corners
+            .iter()
+            .fold(egui::Vec2::ZERO, |sum, c| sum + c.to_vec2())
+            / 4.0;
+        // Drawn flat, the middle of the picture would be the middle of its corners; seen in perspective the nearer half
+        // is larger.
+        assert!(middle.distance(flat.to_pos2()) > 2.0, "{middle:?} {flat:?}");
+    }
+
+    #[test]
     fn a_held_item_shows_its_thickness_in_darker_sides() {
         let mesh = drawn(|x, y| x + y == 15 || x + y == 16);
         let shades = mesh
