@@ -1,12 +1,14 @@
 //! The aim screen the engine publishes: its ways of aiming are buttons over their chances that fire with them, and
 //! its creatures are rows that move the cursor, which keep their places as the cursor moves.
-use crate::common::{fixture, settle_windows};
+use crate::common::{fixture, iso_root, open_client_settings, settle_windows};
+use crate::ui_iso3d;
 use crate::ui_screen_placement::{example, playing};
 use bn_client_egui::transport::ScriptHandle;
 use bn_client_egui::{App, EngineModel, GameModel};
 use eframe::egui;
 use egui_kittest::Harness;
 use egui_kittest::kittest::Queryable;
+use glam::Vec2;
 use serde_json::{Value, json};
 
 type H<'a> = Harness<'a, App<EngineModel>>;
@@ -113,4 +115,25 @@ fn a_creature_row_moves_the_cursor_to_it_and_the_rows_keep_their_places() {
         to["args"]["pos"]["x"].as_i64(),
         aim_screen(&h, 0)["root"]["child"]["target"]["current"]["x"].as_i64()
     );
+}
+
+#[test]
+fn the_first_person_eye_turns_to_the_creature_the_aim_cursor_is_on() {
+    let root = iso_root("aim-turn");
+    let (mut h, script) = ui_iso3d::harness(&root, &root.join("settings.json"), true);
+    ui_iso3d::settle(&mut h);
+    open_client_settings(&mut h);
+    h.get_by_label("First person").click();
+    h.run_steps(3);
+    h.get_by_label("Close window").click();
+    h.run_steps(3);
+    // The zombie is three squares east, Don Honeycutt two west and one north.
+    for (step, (n, (dx, dy))) in [(0, (3.0, 0.0)), (1, (-2.0, -1.0))].into_iter().enumerate() {
+        publish(&script, step as u64, aim_screen(&h, n));
+        h.run_steps(6);
+        let yaw = h.state().camera().yaw;
+        let ahead = Vec2::new(-yaw.cos(), -yaw.sin());
+        let off = ahead.angle_to(Vec2::new(dx, dy));
+        assert!(off.abs() < 0.05, "the eye is {off} rad off ({dx}, {dy})");
+    }
 }
