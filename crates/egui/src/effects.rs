@@ -622,8 +622,15 @@ fn draw(
     }
 }
 
-/// Where a shot `f` of the way from square `a` to square `b` is drawn, `shot` times as large as `a`.
+/// Where a shot `f` of the way from square `a` to square `b` is drawn, `shot` times as large as `a`. A square behind
+/// the eye has no place on the screen: the shot stays at the other, and is not drawn when both are.
 fn between(a: Rect, b: Rect, f: f32, shot: f32) -> Option<Rect> {
+    let (a, b) = match (a.is_finite(), b.is_finite()) {
+        (true, true) => (a, b),
+        (true, false) => (a, a),
+        (false, true) => (b, b),
+        (false, false) => return None,
+    };
     Some(Rect::from_center_size(
         a.center().lerp(b.center(), f),
         a.size() * shot,
