@@ -468,19 +468,25 @@ pub fn build(
         pages.entry(page).or_default().extend(unknown);
     }
     // The ceiling lies a level up, and a face on each edge of the roofed squares to a square under no roof closes the
-    // room down to the top of the wall there, or to the lintel of a doorway.
+    // room down to the top of the wall there, or to the lintel of a doorway; beside a square nothing is known about it
+    // is dark from the floor up, as the unknown is, so no sky shows past the room.
     let mut ceiling = vec![];
     for (n, _) in roofed.iter().enumerate().filter(|(_, r)| **r) {
         let (x, y) = (n as i32 % width, n as i32 / width);
         ceiling.push(ceiling_lid((x, y), m.level));
         for (face, (dx, dy)) in FACES.into_iter().enumerate() {
-            if let Some(next) =
-                index(x + dx, y + dy).filter(|&n| !roofed[n] && columns[n].is_some())
-            {
-                let wall = columns[next].and_then(|c| c.solid).map(|(_, top)| top);
-                let low = wall.unwrap_or(LINTEL * m.level).min(m.level);
-                if low < m.level - 1e-3 {
-                    ceiling.push(ceiling_face((x, y), face, (low, m.level)));
+            let next = index(x + dx, y + dy);
+            match next.map(|n| (roofed[n], columns[n], tops[n])) {
+                Some((true, ..)) | Some((false, None, Some(_))) => {}
+                Some((false, Some(column), _)) => {
+                    let wall = column.solid.map(|(_, top)| top);
+                    let low = wall.unwrap_or(LINTEL * m.level).min(m.level);
+                    if low < m.level - 1e-3 {
+                        ceiling.push(ceiling_face((x, y), face, (low, m.level)));
+                    }
+                }
+                None | Some((false, None, None)) => {
+                    ceiling.push(void_face((x, y), face, (0.0, m.level)));
                 }
             }
         }
