@@ -577,13 +577,12 @@ fn key_buttons(screen: &Value) -> Vec<(String, String)> {
         .collect()
 }
 
-/// The labels of the rows of the screen's list.
+/// The labels of the rows of the screen, whose root is its list.
 fn row_labels(screen: &Value) -> Vec<String> {
-    screen["root"]["children"]
+    screen["root"]["rows"]
         .as_array()
         .unwrap()
         .iter()
-        .flat_map(|part| part["rows"].as_array().into_iter().flatten())
         .map(|row| row["label"].as_str().unwrap().into())
         .collect()
 }
@@ -593,7 +592,7 @@ fn the_key_commands_of_a_list_are_buttons_and_pressing_one_invokes_its_own_affor
     let screen = example("list with key buttons screen");
     let keys = key_buttons(&screen);
     assert!(keys.len() >= 3, "{keys:?}");
-    let (mut h, script) = harness(screen.clone());
+    let (mut h, script) = harness_in(screen.clone(), egui::vec2(1920.0, 1080.0));
     for (_, label) in &keys {
         h.get_by_label(label);
     }
@@ -611,14 +610,19 @@ fn the_key_commands_of_a_list_are_buttons_and_pressing_one_invokes_its_own_affor
 }
 
 #[test]
-fn down_from_the_search_box_focuses_the_first_row_of_a_list_that_has_key_buttons() {
-    let (mut h, _) = harness(example("list with key buttons screen"));
+fn down_from_the_search_box_reaches_the_first_result_of_a_list_that_has_key_buttons() {
+    let screen = example("list with key buttons screen");
+    let (mut h, script) = harness(screen.clone());
     h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::F);
     h.run_steps(3);
     assert!(search(&h).accesskit_node().is_focused());
     h.key_press(egui::Key::ArrowDown);
     h.run_steps(3);
     assert!(!search(&h).accesskit_node().is_focused());
-    let first = row_labels(&example("list with key buttons screen"))[0].clone();
-    assert!(h.get_by_label(&first).accesskit_node().is_focused());
+    // Enter now confirms the engine's cursor, which is the first result, never one of the key commands.
+    assert_eq!(screen["root"]["rows"][0]["selected"], true);
+    h.key_press(egui::Key::Enter);
+    h.run_steps(3);
+    let sent = operations(&script);
+    assert_eq!(sent.last().unwrap()["affordance_id"], "CONFIRM", "{sent:?}");
 }

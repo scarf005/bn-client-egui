@@ -23,6 +23,37 @@ fn client<'a>(size: (f32, f32)) -> H<'a> {
     h
 }
 
+/// The label of the row the engine's cursor is on in the list on top.
+fn cursor_row(h: &H) -> Option<String> {
+    let screen = h.state().model.screens().last()?.clone();
+    let list = screen.components().into_iter().find_map(|c| match c {
+        Component::List(list) => Some(list),
+        _ => None,
+    })?;
+    let rows = h.state().model.rows(list);
+    rows.iter().find(|r| r.selected).map(|r| r.label.shown())
+}
+
+/// The ids of the rows of the list on top.
+fn row_ids(h: &H) -> Vec<String> {
+    let screen = h.state().model.screens().last().unwrap().clone();
+    screen
+        .components()
+        .into_iter()
+        .find_map(|c| match c {
+            Component::List(list) => Some(
+                h.state()
+                    .model
+                    .rows(list)
+                    .iter()
+                    .map(|r| r.id.clone())
+                    .collect(),
+            ),
+            _ => None,
+        })
+        .unwrap_or_default()
+}
+
 /// The filter text the list on top holds.
 fn engine_filter(h: &H) -> Option<String> {
     let screen = h.state().model.screens().last()?.clone();
@@ -102,6 +133,20 @@ fn the_search_box_narrows_the_debug_menu_and_the_item_spawner_as_it_is_typed() {
         type_slowly(&mut h, "shirt");
         assert_eq!(engine_filter(&h).as_deref(), Some("shirt"));
         assert!(h.query_all_by_label_contains("shirt").count() > 1);
+        // The key commands are buttons of the screen, never rows of the results; a narrow footer keeps the
+        // buttons it has room for and puts the rest in its overflow menu.
+        let keys = [
+            "Choose a container",
+            "Add a flag",
+            "Toggle spawning everything",
+        ];
+        let shown = keys
+            .iter()
+            .filter(|key| h.query_by_label_contains(key).is_some())
+            .count();
+        assert!(shown >= 2, "{shown} of the key commands are buttons");
+        assert!(shown == keys.len() || h.query_by_label("⋯").is_some());
+        assert!(row_ids(&h).iter().all(|id| !id.contains(":key:")));
         save(&mut h, &format!("wish-shirt-{width}.png"));
 
         // Down leaves the box for the first result, which then takes the keyboard.
@@ -109,6 +154,8 @@ fn the_search_box_narrows_the_debug_menu_and_the_item_spawner_as_it_is_typed() {
         h.run_steps(3);
         assert!(!search(&h).accesskit_node().is_focused());
         settle(&mut h);
+        let cursor = cursor_row(&h).expect("the list has a cursor row");
+        assert!(cursor.contains("shirt"), "the cursor is on {cursor}");
         save(&mut h, &format!("wish-shirt-row-{width}.png"));
     }
 }
