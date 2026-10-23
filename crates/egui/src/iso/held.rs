@@ -67,17 +67,33 @@ pub fn mesh(held: &Held, view: egui::Rect) -> egui::Mesh {
         held.uv.min + egui::vec2(q.x, q.y) * held.uv.size()
     };
     let turned = |n: Vec3| hand.transform_vector3(n).normalize();
-    // The two pictures, a hair inside what they draw so no neighbour in the sheet shows.
+    // The two pictures, cut into up to sixteen cells a side so that the texture follows the perspective, a hair
+    // inside what they draw so no neighbour in the sheet shows.
     let inset = Vec2::splat(0.01);
-    let (a, b) = (lo + inset, hi - inset);
-    let picture = [
-        Vec2::new(a.x, a.y),
-        Vec2::new(b.x, a.y),
-        Vec2::new(b.x, b.y),
-        Vec2::new(a.x, b.y),
-    ];
+    let cells = (hi - lo).round().clamp(Vec2::ONE, Vec2::splat(16.0));
+    let (cols, rows) = (cells.x as usize, cells.y as usize);
+    let point = |i: usize, j: usize| {
+        let t = Vec2::new(i as f32 / cols as f32, j as f32 / rows as f32);
+        (lo + (hi - lo) * t).clamp(lo + inset, hi - inset)
+    };
+    let grid = (0..rows)
+        .flat_map(|j| (0..cols).map(move |i| (i, j)))
+        .map(|(i, j)| {
+            [
+                point(i, j),
+                point(i + 1, j),
+                point(i + 1, j + 1),
+                point(i, j + 1),
+            ]
+        })
+        .collect::<Vec<_>>();
+    let (at, uv, turned, grid) = (&at, &uv, &turned, &grid);
     let pictures = [(THICK / 2.0, Vec3::Z), (-THICK / 2.0, -Vec3::Z)]
-        .map(|(z, n)| (picture.map(|p| at(p, z)), picture.map(uv), turned(n)));
+        .into_iter()
+        .flat_map(|(z, n)| {
+            grid.iter()
+                .map(move |c| (c.map(|p| at(p, z)), c.map(uv), turned(n)))
+        });
     // Each edge of the outline, the pixels just inside it drawn across the thickness.
     let sides = held.outline.edges.iter().map(|e| {
         let inside = |p: Vec2| uv(p + e.inward / 2.0);

@@ -58,7 +58,10 @@ fn held_mesh(
 ) -> Option<egui::Mesh> {
     let (tileset, _) = display.tileset()?;
     let (layer, _) = crate::display::resolve_layer(tileset, held.layers.last()?);
-    let chosen = tileset.choose(&crate::display::query(&layer, season))?;
+    let chosen = tileset.choose(&crate::tileset::Query {
+        frame: display.frame(),
+        ..crate::display::query(&layer, season)
+    })?;
     let sprite = chosen.fg.or(chosen.bg)?.sprite;
     let source = iso::scene::source(tileset, sprite)?;
     let outline = pages.outline(&source)?;
