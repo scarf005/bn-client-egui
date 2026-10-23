@@ -245,11 +245,16 @@ pub enum Form {
 /// ground, but for a creature, and a wall, a vehicle part or what covers some of a person is pushed up from it, a
 /// window with its opening left out; what reaches out of its square, a tree, was drawn standing. An isometric tileset
 /// draws a wall's height itself: only the joins tell.
+/// Whether `sprite` draws inside its tile.
+fn fits(m: &Metrics, sprite: &SpriteSource) -> bool {
+    sprite.offset.cmpgt(Vec2::splat(-0.5)).all()
+        && (sprite.offset + sprite.size()).cmplt(m.tile + 0.5).all()
+}
+
 pub fn shape(m: &Metrics, sprite: &SpriteSource, kind: Kind) -> Shape {
     let size = sprite.size();
     if !m.iso {
-        let inside = sprite.offset.cmpgt(Vec2::splat(-0.5)).all()
-            && (sprite.offset + size).cmplt(m.tile + 0.5).all();
+        let inside = fits(m, sprite);
         let block = m.level / LEVEL_BLOCKS;
         return match (kind, inside) {
             (Kind::Formed(form), _) => Shape::Built { form, block },
@@ -879,14 +884,19 @@ pub fn place(m: &Metrics, p: &Placement) -> Vec<Instance> {
                 Form::Gas => SHEER,
                 _ => 0,
             };
+            // A door or a fence is its square's terrain: its picture lies flat under it as the flat map shows the
+            // square, so nothing below shows through, over the square's earlier layers and inside its square.
+            let ground = (matches!(form, Form::Door { .. } | Form::Fence) && fits(m, s))
+                .then(|| lying(corner.z));
             let flags = [flags[0] | glow, flags[1], flags[2]];
-            match form {
+            let standing = match form {
                 Form::Plant | Form::Fire => crossed(corner, block, s, flags),
                 _ => built(form, block, p.turn, p.joined)
                     .iter()
                     .flat_map(|c| cuboid(m, p, (corner, block), c, flags))
                     .collect(),
-            }
+            };
+            standing.into_iter().chain(ground).collect()
         }
         Shape::Floor { z } => {
             let z = p.floor + z;
