@@ -57,14 +57,15 @@ fn start<'a>(settings_json: &str, size: egui::Vec2) -> H<'a> {
     h
 }
 
+/// A game key token straight to the model, so a first-person view cannot turn the key into a step.
 fn type_key(h: &mut H, key: &str) {
-    h.event(egui::Event::Text(key.into()));
+    assert!(h.state_mut().model.press(key), "{key} ran nothing");
     h.run_steps(1);
 }
 
-fn press(h: &mut H, key: egui::Key) {
-    h.key_press(key);
-    h.run_steps(2);
+fn press(h: &mut H, key: &str) {
+    type_key(h, key);
+    h.run_steps(1);
     run_until(h, "the key's answer", 60, |h| !h.state().model.busy());
 }
 
@@ -162,9 +163,9 @@ fn aim_at_zombie(name: &str, settings: &str, size: egui::Vec2) {
     save(&mut h, &format!("{name}-00-wielded.png"));
     spawn_zombie(&mut h);
     for _ in 0..3 {
-        press(&mut h, egui::Key::ArrowRight);
+        press(&mut h, "RIGHT");
     }
-    press(&mut h, egui::Key::Enter);
+    press(&mut h, "RETURN");
     dismiss_popups(&mut h);
     settle(&mut h);
     save(&mut h, &format!("{name}-01-spawned.png"));
@@ -180,7 +181,7 @@ fn aim_at_zombie(name: &str, settings: &str, size: egui::Vec2) {
         .enumerate()
     {
         let _ = n;
-        press(&mut h, egui::Key::Tab);
+        press(&mut h, "TAB");
         settle(&mut h);
         save(&mut h, &format!("{name}-{label}.png"));
     }
@@ -204,28 +205,36 @@ fn aim_at_zombie(name: &str, settings: &str, size: egui::Vec2) {
 }
 
 const FLAT: &str = r#"{"tiles":true,"tileset":"UltimateCataclysm"}"#;
-const ISO: &str = r#"{"tiles":true,"tileset":"Ultica_iso"}"#;
+const ISO: &str = r#"{"tiles":true,"tileset":"Ultica_iso","three_d":false}"#;
+const THREE: &str = r#"{"tiles":true,"tileset":"Ultica_iso","three_d":true}"#;
 const FIRST: &str = r#"{"tiles":true,"tileset":"Ultica_iso","three_d":true,"first_person":true}"#;
-const SMALL: egui::Vec2 = egui::vec2(1280.0, 800.0);
+const SMALL: egui::Vec2 = egui::vec2(1290.0, 830.0);
 const LARGE: egui::Vec2 = egui::vec2(1920.0, 1080.0);
 
 #[test]
 #[ignore = "requires BN_ENGINE pointing at an engine binary"]
 fn live_aim_flat() {
-    aim_at_zombie("flat-1280", FLAT, SMALL);
+    aim_at_zombie("flat-1290", FLAT, SMALL);
     aim_at_zombie("flat-1920", FLAT, LARGE);
 }
 
 #[test]
 #[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn live_aim_iso() {
+    aim_at_zombie("iso-1290", ISO, SMALL);
+    aim_at_zombie("iso-1920", ISO, LARGE);
+}
+
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
 fn live_aim_3d() {
-    aim_at_zombie("3d-1280", ISO, SMALL);
-    aim_at_zombie("3d-1920", ISO, LARGE);
+    aim_at_zombie("3d-1290", THREE, SMALL);
+    aim_at_zombie("3d-1920", THREE, LARGE);
 }
 
 #[test]
 #[ignore = "requires BN_ENGINE pointing at an engine binary"]
 fn live_aim_first_person() {
-    aim_at_zombie("fp-1280", FIRST, SMALL);
+    aim_at_zombie("fp-1290", FIRST, SMALL);
     aim_at_zombie("fp-1920", FIRST, LARGE);
 }
