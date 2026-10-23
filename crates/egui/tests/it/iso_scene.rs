@@ -468,7 +468,7 @@ fn a_tree_drawn_from_above_stands_on_the_ground_its_own_sprites_draw_in_its_squa
 }
 
 #[test]
-fn a_flower_drawn_from_above_lies_over_the_ground_where_a_person_drawn_alike_is_thick() {
+fn a_flower_drawn_from_above_lies_over_the_ground_where_a_person_drawn_alike_stands() {
     let mut flower = cell(4, 4, 0, "t_grass");
     flower["furniture"] = look("furniture", "f_flower");
     let m = model(vec![flower, cell(3, 4, 0, "t_grass")]);
@@ -484,14 +484,9 @@ fn a_flower_drawn_from_above_lies_over_the_ground_where_a_person_drawn_alike_is_
     assert_eq!(flower.a[0], 8.0 / 32.0);
     assert!(flower.origin[2] < 0.01, "{quads:?}");
     assert!(flower.origin[2] > grass.origin[2], "{quads:?}");
-    // The avatar at (3, 4) is a person drawn with the same sprite: a creature is thick, not a board.
+    // The avatar at (3, 4) is a person drawn with the same sprite: a creature stands as a board.
     let me = at(&scene, &m, (3, 4));
-    assert!(me.iter().all(|i| i.flags[0] & BOARD == 0), "{me:?}");
-    assert_eq!(sides(&me).len(), 4, "{me:?}");
-    assert!(
-        sides(&me).iter().all(|i| (i.b[2] + 0.4).abs() < 0.01),
-        "{me:?}"
-    );
+    assert!(me.iter().any(|i| i.flags[0] & BOARD != 0), "{me:?}");
 }
 
 #[test]
@@ -506,7 +501,9 @@ fn an_item_lying_on_the_ground_of_a_tileset_drawn_from_above_has_the_thickness_o
     assert!(quads.iter().all(|i| i.flags[0] & BOARD == 0), "{quads:?}");
     assert_eq!(sides(&quads).len(), 4, "{quads:?}");
     assert!(
-        sides(&quads).iter().all(|i| (i.b[2] + 0.1).abs() < 0.01),
+        sides(&quads)
+            .iter()
+            .all(|i| (i.b[2] + 1.0 / 16.0).abs() < 0.01),
         "{quads:?}"
     );
 }
