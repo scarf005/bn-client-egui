@@ -44,6 +44,9 @@ impl MapView {
     }
 }
 
+/// How large a shot is beside its square on the 3D map.
+const SHOT_3D: f32 = 0.35;
+
 /// The 3D scene of the map and the pages it samples.
 type Scene3d = (Arc<Scene>, Arc<Pages>);
 
@@ -80,7 +83,17 @@ impl Canvas {
     /// Where something the size of a square standing on square `p` is drawn: as `rect`, and on the 3D map as large
     /// as the square looks there.
     fn standing(&self, p: Pos) -> egui::Rect {
-        self.rect(p)
+        let Some(v) = self.view.as_ref().filter(|_| self.diamond.is_none()) else {
+            return self.rect(p);
+        };
+        let at = |z| ground_point(v, self.rect, p, (0.5, 0.5), z);
+        let body = iso::aim::BODY;
+        match (at(body), at(body - 0.5), at(body + 0.5)) {
+            (Some(middle), Some(low), Some(high)) => {
+                egui::Rect::from_center_size(middle, egui::Vec2::splat(low.distance(high)))
+            }
+            _ => egui::Rect::NOTHING,
+        }
     }
 
     /// A square's rectangle on the flat map.
@@ -1004,10 +1017,15 @@ impl<M: GameModel> App<M> {
         }
         // Effects stand on world squares: placed by the origin of this frame, not of when they arrived.
         let tiles = self.display.tiles();
+        // On the 3D map a shot is a small thing flying through the square, not a sprite as large as it.
+        let shot = if canvas.view.is_some() && canvas.diamond.is_none() {
+            SHOT_3D
+        } else {
+            1.0
+        };
         self.effects.paint(
             painter,
-            now,
-            canvas.cell_px,
+            (now, canvas.cell_px, shot),
             |p| {
                 canvas.standing(Pos {
                     x: p.x - origin.x,
