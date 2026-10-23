@@ -422,20 +422,24 @@ fn a_spell_row_shows_its_hotkey_and_the_cursor_spells_detail_text() {
 }
 
 #[test]
-fn a_key_row_of_the_spell_menu_is_chosen_by_its_own_row_id() {
+fn the_keys_of_the_spell_menu_are_buttons_that_invoke_their_own_affordance() {
     let screen = example("spell menu");
     let (mut h, script) = open(screen.clone());
     let list = find(&screen["root"], "list:choices").unwrap();
-    let key = list["rows"]
+    assert!(
+        list["rows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|r| !r["id"].as_str().unwrap().contains(":key:"))
+    );
+    let key = screen["affordances"]
         .as_array()
         .unwrap()
         .iter()
-        .find(|r| r["id"].as_str().unwrap().starts_with("action:key:"))
+        .find(|a| a["id"].as_str().unwrap().starts_with("bn:key:"))
         .unwrap();
-    let at = first(&h, key["label"].as_str().unwrap()).rect().center();
-    crate::common::double_click(&mut h, at);
+    first(&h, key["label"].as_str().unwrap()).click();
     h.run_steps(3);
-    let last = last_invoke(&script);
-    assert_eq!(last["affordance_id"], list["activate"]);
-    assert_eq!(last["args"]["row"], key["id"]);
+    assert_eq!(last_invoke(&script)["affordance_id"], key["id"]);
 }

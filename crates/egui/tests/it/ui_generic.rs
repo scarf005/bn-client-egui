@@ -560,3 +560,65 @@ fn tab_on_a_screen_that_takes_no_tab_moves_the_focus_to_a_button() {
         .any(|b| b.accesskit_node().is_focused());
     assert!(focused);
 }
+
+/// The affordances of `screen` that press a key the list's handler tests, as (id, label).
+fn key_buttons(screen: &Value) -> Vec<(String, String)> {
+    screen["affordances"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|a| a["id"].as_str().unwrap().starts_with("bn:key:"))
+        .map(|a| {
+            (
+                a["id"].as_str().unwrap().into(),
+                a["label"].as_str().unwrap().into(),
+            )
+        })
+        .collect()
+}
+
+/// The labels of the rows of the screen's list.
+fn row_labels(screen: &Value) -> Vec<String> {
+    screen["root"]["children"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .flat_map(|part| part["rows"].as_array().into_iter().flatten())
+        .map(|row| row["label"].as_str().unwrap().into())
+        .collect()
+}
+
+#[test]
+fn the_key_commands_of_a_list_are_buttons_and_pressing_one_invokes_its_own_affordance() {
+    let screen = example("list with key buttons screen");
+    let keys = key_buttons(&screen);
+    assert!(keys.len() >= 3, "{keys:?}");
+    let (mut h, script) = harness(screen.clone());
+    for (_, label) in &keys {
+        h.get_by_label(label);
+    }
+    // No row of the list is a key.
+    assert!(
+        row_labels(&screen)
+            .iter()
+            .all(|l| keys.iter().all(|(_, k)| l != k))
+    );
+    let (id, label) = &keys[0];
+    h.get_by_label(label).click();
+    h.run_steps(3);
+    let sent = operations(&script);
+    assert_eq!(sent.last().unwrap()["affordance_id"], *id, "{sent:?}");
+}
+
+#[test]
+fn down_from_the_search_box_focuses_the_first_row_of_a_list_that_has_key_buttons() {
+    let (mut h, _) = harness(example("list with key buttons screen"));
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::F);
+    h.run_steps(3);
+    assert!(search(&h).accesskit_node().is_focused());
+    h.key_press(egui::Key::ArrowDown);
+    h.run_steps(3);
+    assert!(!search(&h).accesskit_node().is_focused());
+    let first = row_labels(&example("list with key buttons screen"))[0].clone();
+    assert!(h.get_by_label(&first).accesskit_node().is_focused());
+}
