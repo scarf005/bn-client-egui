@@ -436,24 +436,22 @@ pub fn build(
                 .extend(bands.into_iter().flat_map(|b| band(&m, &p, b)));
         }
     }
-    // The ground nothing is known about is dark at its depth, and every square as high as the level has a face down to
-    // the lowered ground beside it, so that no hole shows.
+    // The ground nothing is known about is dark at its depth, and every square drawn has a face down to the lower
+    // ground beside it, so that no hole shows at any step.
     if let Some(page) = items.first().map(|i| i.sprite.page) {
         let mut unknown = voids
             .iter()
             .map(|&(square, ground)| void_lid(square, ground))
             .collect::<Vec<_>>();
         for (n, top) in tops.iter().enumerate() {
-            if *top != Some(0.0) {
-                continue;
-            }
+            let Some(top) = *top else { continue };
             let (x, y) = (n as i32 % width, n as i32 / width);
             for (face, (dx, dy)) in FACES.into_iter().enumerate() {
-                if let Some(lowered) = index(x + dx, y + dy)
+                if let Some(lower) = index(x + dx, y + dy)
                     .and_then(|n| tops[n])
-                    .filter(|t| *t < -1e-3)
+                    .filter(|t| *t < top - 1e-3)
                 {
-                    unknown.push(void_face((x, y), face, (lowered, 0.0)));
+                    unknown.push(void_face((x, y), face, (lower, top)));
                 }
             }
         }

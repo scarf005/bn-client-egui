@@ -788,8 +788,8 @@ pub fn void_lid(square: (i32, i32), z: f32) -> Instance {
     )
 }
 
-/// The face of `square` on its south (0), east, north or west edge, from height `low` up to `high`: the wall a seen
-/// edge stands on, fading into the dark ground nothing is known about at its foot.
+/// The face of `square` on its south (0), east, north or west edge, from height `low` up to `high`: the step down to
+/// the lower ground beside it, fading into the dark at its foot.
 pub fn void_face(square: (i32, i32), face: usize, (low, high): (f32, f32)) -> Instance {
     let (x, y) = (square.0 as f32, square.1 as f32);
     let (from, run) = match face {
