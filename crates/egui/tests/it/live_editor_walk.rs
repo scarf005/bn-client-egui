@@ -139,7 +139,7 @@ fn reveal(h: &mut H, label: &str) {
     let size = h.ctx.content_rect().size();
     for _ in 0..80 {
         if let Some(r) = find(h, label) {
-            if r.top() > 80.0 && r.bottom() < size.y - 50.0 && r.bottom() > 0.0 {
+            if r.top() > 70.0 && r.bottom() < size.y - 50.0 && r.bottom() > 0.0 {
                 return;
             }
             wheel(
@@ -300,6 +300,11 @@ fn click_tab(h: &mut H, label: &str) {
         })
     });
     rest(h);
+}
+
+/// Whether a button is labelled exactly `label`: a row of a list, not a square that names it among its parts.
+fn has_row(h: &H, label: &str) -> bool {
+    labels(h).contains(&format!("Button {label}"))
 }
 
 /// Scrolls until square (`x`, `y`) of the canvas is in view and clicks it.
@@ -481,4 +486,114 @@ fn the_map_editor_paints_places_furniture_undoes_previews_saves_and_reopens() {
     assert_eq!(canvas_glyphs(&h), edited);
     shot(&mut h, "map-11-reopened");
     let _ = dir;
+}
+
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn the_vehicle_editor_opens_a_prototype_installs_and_saves_a_mod_file() {
+    let dir = std::env::temp_dir().join(format!("bn-walk-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let (mut h, _root) = start(&dir);
+    h.set_size(egui::vec2(1290.0, 830.0));
+    rest(&mut h);
+    click(&mut h, "Editor");
+    click(&mut h, "Vehicle editor");
+    key(&mut h, egui::Key::Escape);
+    click(&mut h, "Yes");
+    wait_kind(&mut h, "vehicle_editor");
+    rest(&mut h);
+    shot(&mut h, "veh-1-editor");
+    click_footer(&mut h, "Filter");
+    rest(&mut h);
+    shot(&mut h, "veh-2-filter-asks");
+    type_text(&mut h, "car");
+    shot(&mut h, "veh-3-typed");
+    key(&mut h, egui::Key::Enter);
+    rest(&mut h);
+    shot(&mut h, "veh-3-filtered");
+    double_click(&mut h, "Offroad Car");
+    wait_kind(&mut h, "vehicle_editor");
+    rest(&mut h);
+    shot(&mut h, "veh-4-opened");
+    // The mount holding the tank, by a click on its square.
+    click(&mut h, "vehicle tank (60L)");
+    rest(&mut h);
+    shot(&mut h, "veh-5-mount");
+    double_click(&mut h, "vehicle tank (60L)");
+    rest(&mut h);
+    shot(&mut h, "veh-6-part-picked");
+    press(&mut h, "⋯");
+    rest(&mut h);
+    click(&mut h, "Part");
+    rest(&mut h);
+    shot(&mut h, "veh-8-part-tab");
+    click_box(&mut h, 0);
+    replace_text(&mut h, "diesel");
+    key(&mut h, egui::Key::Enter);
+    rest(&mut h);
+    shot(&mut h, "veh-9-fuel");
+
+    // A headlight installed on the quarterpanel mount from the filtered part list, then shown on the Mount tab.
+    click(&mut h, "frame, quarterpanel");
+    click_tab(&mut h, "Install");
+    click_footer(&mut h, "Filter parts");
+    type_text(&mut h, "headlight");
+    key(&mut h, egui::Key::Enter);
+    rest(&mut h);
+    shot(&mut h, "veh-10-parts-filtered");
+    double_click(&mut h, "headlight");
+    rest(&mut h);
+    shot(&mut h, "veh-11-installed");
+    click_tab(&mut h, "Mount");
+    shot(&mut h, "veh-12-mount-after");
+    assert!(has_row(&h, "headlight"));
+
+    // Removed from the stack by the footer's Remove and brought back by the footer's Undo; the engine binds no key to the vehicle editor's Undo.
+    double_click(&mut h, "headlight");
+    click_footer(&mut h, "Remove");
+    rest(&mut h);
+    shot(&mut h, "veh-13-removed");
+    assert!(!has_row(&h, "headlight"), "{}", labels(&h).join("\n"));
+    click_footer(&mut h, "Undo");
+    rest(&mut h);
+    assert!(has_row(&h, "headlight"));
+    shot(&mut h, "veh-14-undone");
+
+    // The vehicle's name on the Vehicle tab.
+    press(&mut h, "⋯");
+    click(&mut h, "Vehicle");
+    rest(&mut h);
+    shot(&mut h, "veh-15-vehicle-tab");
+    click_box(&mut h, 0);
+    replace_text(&mut h, "Walker Car");
+    key(&mut h, egui::Key::Enter);
+    rest(&mut h);
+    shot(&mut h, "veh-16-renamed");
+
+    // Saved as a mod file: the engine only writes under the game's data or a mod.
+    let path = std::env::temp_dir().join(format!(
+        "bn-live-{}-0/mods/zz_vehicle.json",
+        std::process::id()
+    ));
+    click_footer(&mut h, "Save as");
+    rest(&mut h);
+    shot(&mut h, "veh-17-save-as-asks");
+    type_text(&mut h, &path.to_string_lossy());
+    key(&mut h, egui::Key::Enter);
+    rest(&mut h);
+    shot(&mut h, "veh-18-saved");
+
+    // The edited design spawned beside the avatar, listed on the World tab, and looked at on the map.
+    click_footer(&mut h, "Spawn");
+    rest(&mut h);
+    click_tab(&mut h, "World");
+    shot(&mut h, "veh-19-world");
+    key(&mut h, egui::Key::Escape);
+    rest(&mut h);
+    shot(&mut h, "veh-20-spawned-on-map");
+    let saved = std::fs::read_to_string(&path).unwrap_or_default();
+    assert!(
+        saved.contains("Walker Car") && saved.contains("diesel"),
+        "{saved}"
+    );
 }
