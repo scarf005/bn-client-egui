@@ -855,10 +855,11 @@ impl<M: GameModel> App<M> {
         };
         match natural {
             true => {
-                egui::ScrollArea::vertical()
+                let scroll = egui::ScrollArea::vertical()
                     .id_salt(("split-lines", &split.head.id))
-                    .auto_shrink([false, true])
-                    .show(ui, draw);
+                    .auto_shrink([false, true]);
+                let room = ui.available_height();
+                body_scroll(ui, scroll, room, draw);
             }
             false => draw(ui),
         }
