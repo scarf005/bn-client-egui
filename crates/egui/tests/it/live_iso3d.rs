@@ -262,6 +262,35 @@ fn the_town_in_3d_from_every_side_and_what_a_frame_costs() {
             .click();
         h.run_steps(4);
     };
+    // BN_ISO_SPRITES: close to the avatar and what stands and lies beside it, from eight sides in 3D and from every
+    // fifteen degrees in first person, and nothing more.
+    if std::env::var_os("BN_ISO_SPRITES").is_some() {
+        choose(&mut h, "3D");
+        for _ in 0..40 {
+            h.event(egui::Event::MouseWheel {
+                unit: egui::MouseWheelUnit::Line,
+                delta: egui::vec2(0.0, 1.0),
+                modifiers: egui::Modifiers::NONE,
+                phase: egui::TouchPhase::Move,
+            });
+            h.run_steps(2);
+        }
+        for n in 0..8 {
+            save(&mut h, &format!("sprites-3d-{n}.png"));
+            turn(&mut h, 3);
+        }
+        drag(&mut h, egui::vec2(0.0, -300.0));
+        for n in 0..4 {
+            save(&mut h, &format!("sprites-top-{n}.png"));
+            turn(&mut h, 6);
+        }
+        choose(&mut h, "First person");
+        for n in 0..24 {
+            save(&mut h, &format!("sprites-fp-{n:02}.png"));
+            turn(&mut h, 1);
+        }
+        return;
+    }
     choose(&mut h, "2D");
     save(&mut h, "town-flat.png");
     choose(&mut h, "3D");
