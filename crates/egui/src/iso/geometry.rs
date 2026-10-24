@@ -1744,6 +1744,41 @@ mod tests {
     }
 
     #[test]
+    fn a_creature_or_an_item_board_is_one_texel_thick_along_its_opaque_edges_and_nothing_else_is() {
+        let m = ultica();
+        let s = sprite((16.0, 32.0), (16.0, 0.0));
+        let opaque = Outline::of([16, 32], |x, y| x >= 4 && y >= 8);
+        for kind in [Kind::Creature, Kind::Item] {
+            let quads = place(
+                &m,
+                &Placement {
+                    outline: Some(&opaque),
+                    ..square(&s, kind)
+                },
+            );
+            // The sprite, and a side along each of the four edges of its opaque block.
+            assert_eq!(quads.len(), 5, "{kind:?}");
+            assert!(quads.iter().all(|q| q.flags[0] & BOARD != 0), "{kind:?}");
+            // The sides run back from the sprite by a texel of the world, whatever way the board turns to the eye.
+            let back = quads.iter().filter(|q| (q.b[0] + m.across).abs() < 1e-6);
+            assert_eq!(back.count(), 4, "{kind:?} {quads:?}");
+        }
+        // Standing terrain and a wall are as thin as before, with or without an outline.
+        for kind in [Kind::Terrain, Kind::Thing] {
+            let quads = place(
+                &m,
+                &Placement {
+                    outline: Some(&opaque),
+                    ..square(&s, kind)
+                },
+            );
+            assert_eq!(quads.len(), 1, "{kind:?}");
+        }
+        // Without the outline of its pixels a creature is the flat board it was.
+        assert_eq!(place(&m, &square(&s, Kind::Creature)).len(), 1);
+    }
+
+    #[test]
     fn a_plant_and_a_fire_stand_as_two_crossed_boards_and_fire_and_gas_cast_no_shadow() {
         let (m, s) = block_sprite();
         for form in [Form::Plant, Form::Fire] {
