@@ -13,6 +13,11 @@ type H<'a> = Harness<'a, App<EngineModel>>;
 
 /// The editor with a 12×12 canvas that drags as `drag`.
 fn editor(drag: Option<&str>) -> Value {
+    editor_of(drag, 12)
+}
+
+/// The editor with a `side`×`side` canvas that drags as `drag`.
+fn editor_of(drag: Option<&str>, side: u32) -> Value {
     let path = concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../core/tests/fixtures/0.2.examples/editor.json"
@@ -26,14 +31,14 @@ fn editor(drag: Option<&str>) -> Value {
         .unwrap()["value"]
         .clone();
     let canvas = find(&mut screen["root"], "editor:canvas").unwrap();
-    canvas["cols"] = json!(12);
-    canvas["rows"] = json!(12);
+    canvas["cols"] = json!(side);
+    canvas["rows"] = json!(side);
     canvas["drag"] = json!(drag);
     let strokes = drag == Some("trail");
     canvas["drag_begin"] = json!(strokes.then_some("editor:stroke_begin"));
     canvas["drag_end"] = json!(strokes.then_some("editor:stroke_end"));
-    canvas["cells"] = (0..12)
-        .flat_map(|y| (0..12).map(move |x| json!({ "x": x, "y": y, "id": format!("square:{x},{y}"), "glyph": ".", "affordance": "editor:paint", "enabled": true })))
+    canvas["cells"] = (0..side)
+        .flat_map(|y| (0..side).map(move |x| json!({ "x": x, "y": y, "id": format!("square:{x},{y}"), "glyph": ".", "affordance": "editor:paint", "enabled": true })))
         .collect();
     screen
 }
@@ -50,6 +55,10 @@ fn find<'a>(value: &'a mut Value, id: &str) -> Option<&'a mut Value> {
 }
 
 fn open<'a>(screen: Value) -> (H<'a>, ScriptHandle) {
+    open_sized(screen, egui::vec2(1280.0, 1600.0))
+}
+
+fn open_sized<'a>(screen: Value, size: egui::Vec2) -> (H<'a>, ScriptHandle) {
     let mut subscribe = fixture("subscribe_result");
     subscribe["result"]["interaction"]["stack"] = json!([screen]);
     let reply = vec![
@@ -70,12 +79,10 @@ fn open<'a>(screen: Value) -> (H<'a>, ScriptHandle) {
     }
     let clock = Clock::manual();
     let model = EngineModel::open(Box::new(t), ConnectOptions::default()).with_clock(clock.clone());
-    let mut h = Harness::builder()
-        .with_size(egui::vec2(1280.0, 1600.0))
-        .build_ui_state(
-            |ui, app: &mut App<EngineModel>| app.show(ui),
-            App::new(model).with_clock(clock),
-        );
+    let mut h = Harness::builder().with_size(size).build_ui_state(
+        |ui, app: &mut App<EngineModel>| app.show(ui),
+        App::new(model).with_clock(clock),
+    );
     h.run_steps(6);
     (h, script)
 }
@@ -288,4 +295,57 @@ fn a_drag_left_open_by_a_closed_editor_sends_nothing_into_its_next_showing() {
     button(&mut h, at, false);
     h.run_steps(4);
     assert_eq!(sent(&script), begun);
+}
+
+#[test]
+fn a_click_on_the_middle_row_of_a_24_square_canvas_paints_it_in_a_laptop_window() {
+    for size in [egui::vec2(1290.0, 830.0), egui::vec2(1920.0, 1080.0)] {
+        let (mut h, script) = open_sized(editor_of(Some("span"), 24), size);
+        let close = h.get_by_label("Close window").rect();
+        let at = square(&h, 3, 12);
+        assert!(
+            at.y > close.bottom() && at.y < size.y,
+            "row 12 is drawn in the window at {size:?}: {at:?}"
+        );
+        drag(&mut h, (3, 12), &[]);
+        assert_eq!(painted(&script), ["square:3,12"], "at {size:?}");
+    }
+}
+
+/// The rows of the symbols picked by double clicks on the legend row of `#`, at its label or at its value.
+fn picked_by_double_click_on(label: bool) -> Vec<String> {
+    let (mut h, script) = open(editor(Some("span")));
+    let value = h
+        .get_all_by_label("\"t_wall\"")
+        .next()
+        .unwrap()
+        .rect()
+        .center();
+    let symbol = h
+        .get_all_by_label("#")
+        .map(|n| n.rect().center())
+        .find(|c| (c.y - value.y).abs() < 4.0)
+        .unwrap();
+    h.hover_at(value);
+    h.run_steps(2);
+    crate::common::double_click(&mut h, if label { symbol } else { value });
+    h.run_steps(6);
+    script
+        .sent()
+        .into_iter()
+        .filter(|m| m["method"] == "bn.command.submit")
+        .map(|m| m["params"]["operation"].clone())
+        .filter(|o| o["affordance_id"] == "editor:symbol")
+        .map(|o| o["args"]["row"].as_str().unwrap().to_owned())
+        .collect()
+}
+
+#[test]
+fn a_double_click_on_a_legend_rows_label_runs_its_symbol() {
+    assert_eq!(picked_by_double_click_on(true), ["symbol:#"]);
+}
+
+#[test]
+fn a_double_click_on_a_legend_rows_value_runs_its_symbol() {
+    assert_eq!(picked_by_double_click_on(false), ["symbol:#"]);
 }

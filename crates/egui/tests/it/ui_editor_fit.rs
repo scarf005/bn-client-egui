@@ -105,3 +105,40 @@ fn the_catalog_under_a_full_canvas_scrolls_into_the_window() {
     }
     assert!(shown(&h), "a catalog row is inside the window {room:?}");
 }
+
+#[test]
+fn the_legend_under_a_full_canvas_shows_most_of_a_dozen_symbols_at_once() {
+    for size in [egui::vec2(1290.0, 830.0), egui::vec2(1920.0, 1080.0)] {
+        let mut screen = editor();
+        let legend = find(&mut screen["root"], "editor:legend").unwrap();
+        legend["rows"] = (0..12)
+            .map(|n| json!({ "id": format!("symbol:{n}"), "label": format!("{n}"), "description": "", "denial": "", "enabled": true, "selectable": true, "selected": false, "columns": [{ "key": "terrain", "label": "terrain", "value": format!("\"t_wall_{n}\"") }] }))
+            .collect();
+        legend["total"] = json!(12);
+        let mut h = open(screen, size);
+        let over = egui::pos2(size.x * 0.45, 150.0);
+        // Scrolling the window a notch at a time, the most symbols in view at once.
+        let mut drawn = 0;
+        for _ in 0..60 {
+            h.hover_at(over);
+            h.event(egui::Event::MouseWheel {
+                unit: egui::MouseWheelUnit::Point,
+                delta: egui::vec2(0.0, -50.0),
+                modifiers: egui::Modifiers::NONE,
+                phase: egui::TouchPhase::Move,
+            });
+            h.run_steps(2);
+            let seen = (0..12)
+                .filter(|n| {
+                    h.query_by_label_contains(&format!("t_wall_{n}\""))
+                        .is_some()
+                })
+                .count();
+            drawn = drawn.max(seen);
+        }
+        assert!(
+            drawn >= 8,
+            "{drawn} of 12 legend symbols are in view at once at {size:?}"
+        );
+    }
+}

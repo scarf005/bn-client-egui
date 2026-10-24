@@ -77,7 +77,9 @@ pub fn value_editor(
                 let edit = ui.add(
                     match editor.multiline {
                         true => egui::TextEdit::multiline(&mut draft.text),
-                        false => egui::TextEdit::singleline(&mut draft.text).clip_text(false),
+                        false => egui::TextEdit::singleline(&mut draft.text)
+                            .desired_width(ui.spacing().text_edit_width.min(ui.available_width()))
+                            .clip_text(false),
                     }
                     .margin(FIELD_MARGIN),
                 );

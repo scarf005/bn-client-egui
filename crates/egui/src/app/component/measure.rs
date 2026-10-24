@@ -6,6 +6,9 @@ use crate::kit::table;
 /// The smallest font a canvas is drawn in.
 const CANVAS_MIN_FONT: f32 = 10.0;
 
+/// The width a form's one-line field keeps, however narrow the room beside the other panes.
+const FIELD_MIN: f32 = 100.0;
+
 /// The width a list's search box keeps, however narrow its rows are.
 const SEARCH_WIDTH: f32 = 220.0;
 
@@ -198,9 +201,11 @@ impl<M: GameModel> App<M> {
                     .filter(typed)
                     .map(|f| editor::field_width(ui, &f.value))
                     .fold(ui.spacing().text_edit_width, f32::max);
+                // A field gives way to the panes beside it, down to room for a short value.
                 Extent {
+                    min: label + gap + FIELD_MIN,
+                    natural: label + gap + field,
                     grows: true,
-                    ..fixed(label + gap + field)
                 }
             }
             Component::Text(block) => {

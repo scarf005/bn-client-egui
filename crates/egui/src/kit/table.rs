@@ -73,6 +73,8 @@ pub fn table<'a>(ui: &'a mut egui::Ui, widths: &Widths, label: f32) -> TableBuil
         })
         .column(Column::remainder())
         .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
+        // A click anywhere on a row is a click on the row, not only on its label.
+        .sense(egui::Sense::click())
         .animate_scrolling(false)
 }
 
@@ -135,7 +137,10 @@ pub fn section(mut row: TableRow, widths: &Widths, across: egui::Rect, title: St
 /// A value at the right of its column, so the digits of a column line up.
 pub fn right_aligned(ui: &mut egui::Ui, text: impl Into<egui::WidgetText>) {
     let layout = egui::Layout::right_to_left(egui::Align::Center);
-    ui.with_layout(layout, |ui| ui.add(egui::Label::new(text).truncate()));
+    // Not selectable: a click on the text is a click on its row.
+    ui.with_layout(layout, |ui| {
+        ui.add(egui::Label::new(text).truncate().selectable(false))
+    });
 }
 
 /// A row's key, right-aligned in its column so the labels after it line up.

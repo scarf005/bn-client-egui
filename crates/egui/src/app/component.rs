@@ -797,12 +797,22 @@ impl<M: GameModel> App<M> {
                 // what is left, past a few rows.
                 let spacing = ui.spacing();
                 let floor = 4.0 * (spacing.interact_size.y + spacing.item_spacing.y);
-                let height = match natural {
-                    true => f32::INFINITY,
-                    false => (ui.available_height() / (count - n) as f32).max(floor),
+                // A line holding a map or a canvas takes all the room; the lines under it are as tall as what they
+                // hold, a list up to `PEER_ROWS` rows, and scroll below.
+                let takes = |line: &std::ops::Range<usize>| {
+                    parts[line.clone()]
+                        .iter()
+                        .flat_map(|c| c.nested())
+                        .any(takes_room)
+                };
+                let below = lines[..n].iter().any(takes);
+                let height = match (natural || below, takes(line)) {
+                    (_, true) => ui.available_height().max(floor),
+                    (true, false) => f32::INFINITY,
+                    (false, false) => (ui.available_height() / (count - n) as f32).max(floor),
                 };
                 // Inside a peer, a pane that shares its height still has none to share.
-                let rows = match natural {
+                let rows = match natural || below {
                     true => Some(PEER_ROWS),
                     false => self.screens.list_rows.get(),
                 };

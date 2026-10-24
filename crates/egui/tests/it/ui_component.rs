@@ -1684,3 +1684,20 @@ fn an_any_key_popup_says_its_message_once_and_asks_for_the_key_only_by_its_butto
     h.get_by_label("Press any key");
     assert!(h.query_by_label("Press the new key").is_none());
 }
+
+#[test]
+fn the_text_a_started_affordance_asks_for_takes_the_typing_without_a_click_first() {
+    let ask = affordance("name", &[], json!({"text": {}}));
+    let (mut h, script) = harness(dialog(rows_list(&["a", "b"]), vec![ask]));
+    h.get_by_label("name").click();
+    h.run_steps(3);
+    h.event(egui::Event::Text("car".into()));
+    h.run_steps(3);
+    h.key_press(egui::Key::Enter);
+    h.run_steps(3);
+    assert_eq!(
+        submits(&script),
+        [boundary_invoke("name", json!({"text": "car"}))],
+        "the box of the question has the focus when it opens"
+    );
+}
