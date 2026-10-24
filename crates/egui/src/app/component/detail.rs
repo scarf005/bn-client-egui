@@ -46,6 +46,10 @@ impl<M: GameModel> App<M> {
             self.with_list_rows(Some(rows.min(ROWS_OVER).min(share.max(LEAST_ROWS))), || {
                 self.list(ui, screen, list, out)
             });
+            // A rule across the pane, so the description reads as no row of the list over it.
+            if focused.is_some_and(|r| !r.description.shown().is_empty()) {
+                ui.separator();
+            }
             return self.row_detail(ui, &list.head.id, focused, ROWS_OVER as f32);
         }
         let gap = ui.spacing().item_spacing.x;
