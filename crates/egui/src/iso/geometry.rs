@@ -1841,6 +1841,25 @@ mod tests {
     }
 
     #[test]
+    fn the_sides_of_a_board_drawn_over_others_start_where_the_board_stands_toward_the_eye() {
+        let m = ultica();
+        let s = sprite((16.0, 32.0), (16.0, 0.0));
+        let opaque = Outline::of([16, 32], |x, y| x >= 4 && y >= 8);
+        let quads = place(
+            &m,
+            &Placement {
+                order: 3,
+                outline: Some(&opaque),
+                ..square(&s, Kind::Creature)
+            },
+        );
+        let board = quads[0].a[2];
+        assert!((board - 3.0 * LAYER_BIAS).abs() < 1e-6);
+        // No gap between the picture and its sides.
+        assert!(quads[1..].iter().all(|q| (q.b[1] - board).abs() < 1e-6), "{quads:?}");
+    }
+
+    #[test]
     fn the_sides_of_a_mirrored_board_run_along_the_edges_of_the_mirrored_picture() {
         let m = ultica();
         let s = sprite((16.0, 32.0), (16.0, 0.0));
