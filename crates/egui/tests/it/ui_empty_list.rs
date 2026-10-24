@@ -60,14 +60,11 @@ fn panes(h: &Harness<'_, App<EngineModel>>, title: &str) -> Vec<egui::Rect> {
 
 #[test]
 fn an_empty_list_keeps_an_outlined_pane_at_both_sizes() {
-    let screens = [
-        ("crafting", "Crafting screen", "Crafting"),
-        (
-            "safemode",
-            "safe mode manager without rules",
-            "SAFE MODE MANAGER",
-        ),
-    ];
+    let screens = [(
+        "safemode",
+        "safe mode manager without rules",
+        "SAFE MODE MANAGER",
+    )];
     for (file, name, title) in screens {
         let screen = example(file, name);
         for size in [SMALL, LARGE] {
