@@ -346,7 +346,7 @@ pub struct Instance {
     /// toward the eye. For a `SIDE`: its span across the screen and up, and its start across the screen.
     pub a: [f32; 3],
     /// The edge along `v`. For a board: height and its bottom edge over the origin. For a `SIDE`: how far back from
-    /// the board it runs.
+    /// the board it runs, and the board's offset toward the eye.
     pub b: [f32; 3],
     /// The sprite pixel at `(0, 0)` and the pixels spanned by `u` and by `v`.
     pub uv: [f32; 2],
@@ -865,8 +865,8 @@ fn edge_face(
 
 /// The sides of a board of `p`'s sprite: one for each edge of `outline`, running back from the board a texel of the
 /// sprite, with the pixels just inside the edge. An instance's `a` is the edge's span across the screen and up and
-/// the edge's start across the screen; `b[0]` is the way back; `origin` is the square's centre at the edge's start
-/// height. `[bl, br, tl]` are the sprite's corners as the board draws them and `place` the board's left and bottom.
+/// the edge's start across the screen; `b[0]` is the way back from the board's step toward the eye `b[1]`; `origin`
+/// is the square's centre at the edge's start height. `[bl, br, tl]` are the sprite's corners as the board draws them and `place` the board's left and bottom.
 fn board_sides(
     m: &Metrics,
     p: &Placement,
@@ -886,6 +886,7 @@ fn board_sides(
         Vec2::new(left + c.x * size.x * m.across, rest + c.y * size.y * m.up)
     };
     let texel = s.scale * m.across;
+    let bias = LAYER_BIAS * p.order as f32;
     outline
         .edges
         .iter()
@@ -893,7 +894,7 @@ fn board_sides(
             let (from, to) = (on_board(e.from), on_board(e.to));
             instance(
                 [x + 0.5, y + 0.5, p.floor + from.y],
-                ([to.x - from.x, to.y - from.y, from.x], [-texel, 0.0, 0.0]),
+                ([to.x - from.x, to.y - from.y, from.x], [-texel, bias, 0.0]),
                 e.inside(s.at),
                 flags,
             )
@@ -1856,7 +1857,10 @@ mod tests {
         let board = quads[0].a[2];
         assert!((board - 3.0 * LAYER_BIAS).abs() < 1e-6);
         // No gap between the picture and its sides.
-        assert!(quads[1..].iter().all(|q| (q.b[1] - board).abs() < 1e-6), "{quads:?}");
+        assert!(
+            quads[1..].iter().all(|q| (q.b[1] - board).abs() < 1e-6),
+            "{quads:?}"
+        );
     }
 
     #[test]

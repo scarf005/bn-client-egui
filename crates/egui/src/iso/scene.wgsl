@@ -58,7 +58,7 @@ fn world_of(q: Quad, right: vec3<f32>, toward: vec3<f32>) -> vec3<f32> {
         if (q.flags.x & SIDE) != 0u {
             across = q.a.z + c.x * q.a.x;
             up = c.x * q.a.y;
-            step = c.y * q.b.x;
+            step = q.b.y + c.y * q.b.x;
         }
         if (q.flags.x & 2u) != 0u {
             step += 0.5 / max(max(abs(toward.x), abs(toward.y)), 1e-6);
