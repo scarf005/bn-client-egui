@@ -350,8 +350,12 @@ pub fn build(
                     {
                         column.solid = Some((floor + low, floor + high));
                     }
-                    let outline = match form {
-                        Shape::Extrude { .. } => pages.and_then(|p| p.outline(&sprite)),
+                    // The outline of what is pushed up, or is thick as a creature or an item is.
+                    let outline = match (form, kind) {
+                        (Shape::Extrude { .. }, _)
+                        | (Shape::Board, Kind::Creature | Kind::Item) => {
+                            pages.and_then(|p| p.outline(&sprite))
+                        }
                         _ => None,
                     };
                     items.push(Item {
