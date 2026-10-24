@@ -226,6 +226,37 @@ fn the_focused_items_description_shows_whole_lines_past_the_old_strip_at_1280() 
     assert!(text.shown > 10, "{} lines shown", text.shown);
 }
 
+#[test]
+fn the_focused_items_description_under_its_list_is_set_apart_by_a_rule_at_1280() {
+    let h = shown(
+        example("inventory", "drop selector screen"),
+        egui::vec2(1280.0, 800.0),
+    );
+    let text = description(&h);
+    let row = h.get_by_label("rock (1)").rect();
+    assert!(
+        text.rect.top() >= row.bottom(),
+        "{:?} is not under {row:?}",
+        text.rect
+    );
+    // A line across the pane between the list and the description, so the description reads as no row of it.
+    let rules = h
+        .output()
+        .shapes
+        .iter()
+        .filter_map(|c| match &c.shape {
+            epaint::Shape::LineSegment { points, .. } => Some(*points),
+            _ => None,
+        })
+        .filter(|[a, b]| (a.y - b.y).abs() < 0.5)
+        .filter(|[a, _]| a.y < text.rect.top() && a.y > text.rect.top() - 16.0)
+        .filter(|[a, b]| {
+            a.x.min(b.x) <= text.rect.left() + 2.0 && a.x.max(b.x) > text.rect.left() + 100.0
+        })
+        .count();
+    assert!(rules > 0, "no rule over the description at {:?}", text.rect);
+}
+
 /// The left edge of the leftmost node labelled `label`.
 fn left_of(h: &H, label: &str) -> egui::Rect {
     h.query_all_by_label(label)
