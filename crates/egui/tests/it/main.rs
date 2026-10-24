@@ -13,6 +13,7 @@ mod live_count;
 mod live_curtain;
 mod live_editmap;
 mod live_editor;
+mod live_editor_walk;
 mod live_first_click;
 mod live_generic;
 mod live_glow;
