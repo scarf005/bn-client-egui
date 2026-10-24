@@ -797,9 +797,12 @@ impl<M: GameModel> App<M> {
                 // what is left, past a few rows.
                 let spacing = ui.spacing();
                 let floor = 4.0 * (spacing.interact_size.y + spacing.item_spacing.y);
-                let height = match natural {
-                    true => f32::INFINITY,
-                    false => (ui.available_height() / (count - n) as f32).max(floor),
+                // A line holding a map or a canvas takes all the room, the lines under it scroll below.
+                let holds_room = panes.iter().flat_map(|c| c.nested()).any(takes_room);
+                let height = match (natural, holds_room) {
+                    (true, _) => f32::INFINITY,
+                    (false, true) => ui.available_height().max(floor),
+                    (false, false) => (ui.available_height() / (count - n) as f32).max(floor),
                 };
                 // Inside a peer, a pane that shares its height still has none to share.
                 let rows = match natural {
