@@ -344,7 +344,7 @@ impl<M: GameModel> App<M> {
                 table::checkbox(ui, ticked);
             }
             if let Some(marks) = Self::row_marks(row) {
-                ui.label(line(ui, &marks));
+                ui.add(egui::Label::new(line(ui, &marks)).selectable(false));
             }
         });
         table::cell(&mut cells, widths.item, |ui| {
@@ -369,7 +369,10 @@ impl<M: GameModel> App<M> {
                     });
                 }
                 (None, Some(look)) => {
-                    ui.label(line(ui, &tagged(Some(&look.color), &look.glyph)));
+                    ui.add(
+                        egui::Label::new(line(ui, &tagged(Some(&look.color), &look.glyph)))
+                            .selectable(false),
+                    );
                 }
                 (None, None) => {}
             }
@@ -441,6 +444,7 @@ impl<M: GameModel> App<M> {
             }
         });
         table::spare(&mut cells);
+        let across = cells.response();
         let Some(button) = button else {
             return;
         };
@@ -457,9 +461,10 @@ impl<M: GameModel> App<M> {
             (false, false) => button.on_disabled_hover_text(denial),
             _ => button,
         };
-        if button.clicked() && result {
+        let clicked = button.clicked() || across.clicked();
+        if clicked && result {
             out.push(Intent::Reach(row.id.clone()));
-        } else if button.clicked() {
+        } else if clicked {
             out.push(Intent::Focus {
                 component: id.clone(),
                 row: row.id.clone(),
@@ -467,7 +472,7 @@ impl<M: GameModel> App<M> {
             match (
                 list.selection,
                 &list.activate,
-                layout.answers || button.double_clicked(),
+                layout.answers || button.double_clicked() || across.double_clicked(),
             ) {
                 (Selection::Multi | Selection::Count, _, _) => out.push(Intent::Mark {
                     component: id.clone(),

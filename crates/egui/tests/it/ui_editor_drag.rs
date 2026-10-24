@@ -312,8 +312,8 @@ fn a_click_on_the_middle_row_of_a_24_square_canvas_paints_it_in_a_laptop_window(
     }
 }
 
-#[test]
-fn a_double_click_on_a_legend_rows_value_runs_its_symbol_like_one_on_its_label() {
+/// The rows of the symbols picked by double clicks on the legend row of `#`, at its label or at its value.
+fn picked_by_double_click_on(label: bool) -> Vec<String> {
     let (mut h, script) = open(editor(Some("span")));
     let value = h
         .get_all_by_label("\"t_wall\"")
@@ -321,15 +321,31 @@ fn a_double_click_on_a_legend_rows_value_runs_its_symbol_like_one_on_its_label()
         .unwrap()
         .rect()
         .center();
-    crate::common::double_click(&mut h, value);
+    let symbol = h
+        .get_all_by_label("#")
+        .map(|n| n.rect().center())
+        .find(|c| (c.y - value.y).abs() < 4.0)
+        .unwrap();
+    h.hover_at(value);
+    h.run_steps(2);
+    crate::common::double_click(&mut h, if label { symbol } else { value });
     h.run_steps(6);
-    let picked = script
+    script
         .sent()
         .into_iter()
         .filter(|m| m["method"] == "bn.command.submit")
         .map(|m| m["params"]["operation"].clone())
         .filter(|o| o["affordance_id"] == "editor:symbol")
         .map(|o| o["args"]["row"].as_str().unwrap().to_owned())
-        .collect::<Vec<_>>();
-    assert_eq!(picked, ["symbol:#"]);
+        .collect()
+}
+
+#[test]
+fn a_double_click_on_a_legend_rows_label_runs_its_symbol() {
+    assert_eq!(picked_by_double_click_on(true), ["symbol:#"]);
+}
+
+#[test]
+fn a_double_click_on_a_legend_rows_value_runs_its_symbol() {
+    assert_eq!(picked_by_double_click_on(false), ["symbol:#"]);
 }
