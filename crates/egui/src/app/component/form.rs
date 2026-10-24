@@ -143,7 +143,9 @@ impl<M: GameModel> App<M> {
 
     /// The count, text or pane the affordance being started still asks the player for.
     pub(super) fn question(&self, ui: &mut egui::Ui, screen: &Screen, out: &mut Vec<Intent>) {
+        let focused = egui::Id::new("question focused");
         let Some(ask) = self.screens.interaction.ask() else {
+            ui.data_mut(|d| d.remove::<egui::Id>(focused));
             return;
         };
         let Some(aff) = find(screen, &ask.affordance_id) else {
@@ -169,6 +171,12 @@ impl<M: GameModel> App<M> {
             } else if let (Some(typed), Some(ArgKind::Text)) = (&ask.text, ask.asking) {
                 let mut shown = typed.clone();
                 let edit = ui.text_edit_singleline(&mut shown);
+                // The box a question opens with has the typing, as in a game's own prompt.
+                let opened = egui::Id::new(&ask.affordance_id);
+                if ui.data(|d| d.get_temp::<egui::Id>(focused)) != Some(opened) {
+                    edit.request_focus();
+                    ui.data_mut(|d| d.insert_temp(focused, opened));
+                }
                 if edit.changed() {
                     out.push(Intent::Text(shown));
                 }
