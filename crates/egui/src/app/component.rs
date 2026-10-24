@@ -1023,8 +1023,11 @@ impl<M: GameModel> App<M> {
         if canvas {
             // The wheel scrolls it; a middle-button drag pans it, while the primary drag is left to painting.
             let pan = ui.input(|i| i.pointer.middle_down().then(|| i.pointer.delta()));
+            // The viewport is a whole number of cells tall, so none is cut across.
+            let rows = (ui.available_height() / cell).floor().max(1.0);
             let shown = egui::ScrollArea::both()
                 .id_salt(("grid", &grid.head.id))
+                .max_height(rows * cell)
                 .auto_shrink([true, true])
                 .scroll_source(egui::scroll_area::ScrollSource {
                     drag: egui::scroll_area::DragScroll::Never,
