@@ -52,12 +52,20 @@ fn world_of(q: Quad, right: vec3<f32>, toward: vec3<f32>) -> vec3<f32> {
         // A board: width across the screen from its left edge, height up from its bottom edge, and a step toward
         // the eye; a board at the near edge of its square steps there first, as `edge_push` does.
         var step = q.a.z;
+        var across = q.a.y + c.x * q.a.x;
+        var up = q.b.y + c.y * q.b.x;
+        // A side of a board: its edge across and up from the origin along `u`, the way back along `v`.
+        if (q.flags.x & SIDE) != 0u {
+            across = q.a.z + c.x * q.a.x;
+            up = c.x * q.a.y;
+            step = c.y * q.b.x;
+        }
         if (q.flags.x & 2u) != 0u {
             step += 0.5 / max(max(abs(toward.x), abs(toward.y)), 1e-6);
         }
         world = q.origin
-            + right * (q.a.y + c.x * q.a.x)
-            + vec3<f32>(0.0, 0.0, q.b.y + c.y * q.b.x)
+            + right * across
+            + vec3<f32>(0.0, 0.0, up)
             + toward * step;
     } else {
         world = q.origin + q.a * c.x + q.b * c.y;
@@ -92,6 +100,7 @@ const GLOW: u32 = 4u;
 const SHEER: u32 = 8u;
 const VOID: u32 = 16u;
 const FADE: u32 = 32u;
+const SIDE: u32 = 64u;
 
 @fragment
 fn fs_shadow(v: Varying) {

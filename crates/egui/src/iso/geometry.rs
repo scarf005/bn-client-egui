@@ -149,6 +149,18 @@ pub struct Edge {
     pub inward: Vec2,
 }
 
+impl Edge {
+    /// The sprite's pixels just inside the edge, for a face drawn from the edge across the sprite's thickness: the
+    /// page pixel at its start and the pixels it spans, given the sprite's top left corner `at` in its page.
+    pub fn inside(&self, at: Vec2) -> [Vec2; 3] {
+        [
+            at + self.from + self.inward / 2.0,
+            self.to - self.from,
+            Vec2::ZERO,
+        ]
+    }
+}
+
 impl Outline {
     /// The outline of a sprite `size` pixels big whose pixel `(x, y)` is opaque where `opaque` says so.
     pub fn of(size: [u32; 2], opaque: impl Fn(u32, u32) -> bool) -> Self {
@@ -331,9 +343,10 @@ pub struct Instance {
     /// The corner `(u, v) = (0, 0)`. For a board, its square's centre on the ground.
     pub origin: [f32; 3],
     /// The edge along `u`. For a board: width, its left edge from the origin across the screen, and its offset
-    /// toward the eye.
+    /// toward the eye. For a `SIDE`: its span across the screen and up, and its start across the screen.
     pub a: [f32; 3],
-    /// The edge along `v`. For a board: height and its bottom edge over the origin.
+    /// The edge along `v`. For a board: height and its bottom edge over the origin. For a `SIDE`: how far back from
+    /// the board it runs.
     pub b: [f32; 3],
     /// The sprite pixel at `(0, 0)` and the pixels spanned by `u` and by `v`.
     pub uv: [f32; 2],
@@ -357,6 +370,8 @@ pub const VOID: u32 = 16;
 /// A face of `VOID` that fades from light at its top to its dark at its foot by ordered dithering; its uv runs from 0
 /// at the top to 1 at the foot.
 pub const FADE: u32 = 32;
+/// A side of a board, pushed back from it along an edge of its sprite's outline: see `board_sides`.
+pub const SIDE: u32 = 64;
 
 /// How far an upright sprite of an isometric tileset stands toward the eye from the middle of its square: to the
 /// square's near edge, whatever the camera's yaw. `toward` is the horizontal unit vector from target to eye; the
@@ -848,6 +863,44 @@ fn edge_face(
     )
 }
 
+/// The sides of a board of `p`'s sprite: one for each edge of `outline`, running back from the board a texel of the
+/// sprite, with the pixels just inside the edge. An instance's `a` is the edge's span across the screen and up and
+/// the edge's start across the screen; `b[0]` is the way back; `origin` is the square's centre at the edge's start
+/// height. `[bl, br, tl]` are the sprite's corners as the board draws them and `place` the board's left and bottom.
+fn board_sides(
+    m: &Metrics,
+    p: &Placement,
+    outline: &Outline,
+    [bl, br, tl]: [Vec2; 3],
+    flags: [u32; 3],
+    [left, rest]: [f32; 2],
+) -> Vec<Instance> {
+    let s = p.sprite;
+    let size = s.size();
+    let (x, y) = (p.square.0 as f32, p.square.1 as f32);
+    let flags = [flags[0] | SIDE, flags[1], flags[2]];
+    let of_page = Mat2::from_cols(br - bl, tl - bl).inverse();
+    // Where a pixel of the sprite lies on the board: across from its centre and up from the ground.
+    let on_board = |q: Vec2| {
+        let c = of_page * (s.at + q - bl);
+        Vec2::new(left + c.x * size.x * m.across, rest + c.y * size.y * m.up)
+    };
+    let texel = s.scale * m.across;
+    outline
+        .edges
+        .iter()
+        .map(|e| {
+            let (from, to) = (on_board(e.from), on_board(e.to));
+            instance(
+                [x + 0.5, y + 0.5, p.floor + from.y],
+                ([to.x - from.x, to.y - from.y, from.x], [-texel, 0.0, 0.0]),
+                e.inside(s.at),
+                flags,
+            )
+        })
+        .collect()
+}
+
 /// The instances that draw a sprite: one, the five faces of a box, or the faces of a solid pushed up from it.
 pub fn place(m: &Metrics, p: &Placement) -> Vec<Instance> {
     let s = p.sprite;
@@ -890,7 +943,7 @@ pub fn place(m: &Metrics, p: &Placement) -> Vec<Instance> {
             .map(|side| {
                 let (e, run) = (side.edge, side.to - side.from);
                 // The pixels inside the edge, drawn all the way down.
-                let uv = [s.at + e.from + e.inward / 2.0, e.to - e.from, Vec2::ZERO];
+                let uv = e.inside(s.at);
                 let edges = ([run.x, run.y, 0.0], [0.0, 0.0, -height]);
                 instance(
                     [side.from.x, side.from.y, bottom + height],
@@ -1018,12 +1071,21 @@ pub fn place(m: &Metrics, p: &Placement) -> Vec<Instance> {
                 flags[1],
                 flags[2],
             ];
-            vec![instance(
+            let front = instance(
                 [x + 0.5, y + 0.5, p.floor],
                 edges,
                 [bl, br - bl, tl - bl],
                 flags,
-            )]
+            );
+            // A creature or an item has the thickness of a texel, as a block game's item has.
+            let outline = match p.kind {
+                Kind::Creature | Kind::Item => p.outline,
+                _ => None,
+            };
+            let sides = outline.map_or(vec![], |o| {
+                board_sides(m, p, o, [bl, br, tl], flags, [left, rest])
+            });
+            std::iter::once(front).chain(sides).collect()
         }
     }
 }
@@ -1776,6 +1838,33 @@ mod tests {
         }
         // Without the outline of its pixels a creature is the flat board it was.
         assert_eq!(place(&m, &square(&s, Kind::Creature)).len(), 1);
+    }
+
+    #[test]
+    fn the_sides_of_a_mirrored_board_run_along_the_edges_of_the_mirrored_picture() {
+        let m = ultica();
+        let s = sprite((16.0, 32.0), (16.0, 0.0));
+        // Opaque in the left quarter of the sprite's pixels only.
+        let left = Outline::of([16, 32], |x, _| x < 4);
+        let reach = |turn| {
+            let quads = place(
+                &m,
+                &Placement {
+                    turn,
+                    outline: Some(&left),
+                    ..square(&s, Kind::Creature)
+                },
+            );
+            // Where the sides start across the screen from the board's centre, the leftmost first.
+            let mut starts = quads[1..].iter().map(|q| q.a[2]).collect::<Vec<_>>();
+            starts.sort_by(f32::total_cmp);
+            (starts[0], starts[starts.len() - 1])
+        };
+        let (near, far) = reach(Turn::None);
+        let (mirrored_near, mirrored_far) = reach(Turn::Mirror);
+        // The picture turned about the board's middle: its left quarter becomes the right quarter.
+        assert!((near + mirrored_far).abs() < 1e-5, "{near} {mirrored_far}");
+        assert!((far + mirrored_near).abs() < 1e-5, "{far} {mirrored_near}");
     }
 
     #[test]

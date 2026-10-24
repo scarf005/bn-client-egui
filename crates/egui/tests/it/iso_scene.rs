@@ -3,7 +3,7 @@ use crate::common::{fixture, flat_root, iso_root};
 use bn_client_egui::EngineModel;
 use bn_client_egui::GameModel;
 use bn_client_egui::iso::camera::{Camera, Viewport};
-use bn_client_egui::iso::geometry::{BOARD, FADE, GLOW, Instance, PageId, SHEER, VOID};
+use bn_client_egui::iso::geometry::{BOARD, FADE, GLOW, Instance, PageId, SHEER, SIDE, VOID};
 use bn_client_egui::iso::pages::Pages;
 use bn_client_egui::iso::scene::{self, Scene};
 use bn_client_egui::tileset::Tileset;
@@ -577,6 +577,23 @@ fn a_flower_drawn_from_above_lies_over_the_ground_where_a_person_drawn_alike_sta
     // The avatar at (3, 4) is a person drawn with the same sprite: a creature stands as a board.
     let me = at(&scene, &m, (3, 4));
     assert!(me.iter().any(|i| i.flags[0] & BOARD != 0), "{me:?}");
+}
+
+#[test]
+fn a_person_drawn_from_above_stands_as_a_board_a_texel_thick_with_a_side_along_each_edge_of_its_pixels()
+ {
+    let m = model(vec![cell(3, 4, 0, "t_grass")]);
+    let scene = flat_scene_of(&m, "flat-person");
+    let me = at(&scene, &m, (3, 4));
+    let (sides, front): (Vec<&Instance>, Vec<&Instance>) = me
+        .iter()
+        .filter(|i| i.flags[0] & BOARD != 0)
+        .partition(|i| i.flags[0] & SIDE != 0);
+    // The avatar is the eight-pixel square of the flower: the board, and one side for each of its four edges, a
+    // texel of the 32-pixel tile back.
+    assert_eq!(front.len(), 1, "{me:?}");
+    assert_eq!(sides.len(), 4, "{me:?}");
+    assert!(sides.iter().all(|i| (i.b[0] + 1.0 / 32.0).abs() < 1e-6));
 }
 
 #[test]
