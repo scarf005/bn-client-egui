@@ -142,3 +142,25 @@ fn the_legend_under_a_full_canvas_shows_most_of_a_dozen_symbols_at_once() {
         );
     }
 }
+
+/// A legend of one symbol is as tall as its row, a few rows at most, instead of the dozen rows a list may take: the
+/// catalog tabs under it, in a screen with no canvas as a palette's, are close under the row.
+#[test]
+fn a_legend_of_one_symbol_leaves_no_screenful_of_empty_list_above_the_catalog_tabs() {
+    let mut screen = editor();
+    let body = find(&mut screen["root"], "editor:body").unwrap();
+    body["children"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|c| c["id"] != "editor:canvas");
+    let legend = find(&mut screen["root"], "editor:legend").unwrap();
+    legend["rows"] = json!([{ "id": "symbol:.", "label": ".", "description": "", "denial": "", "enabled": true, "selectable": true, "selected": false, "columns": [{ "key": "terrain", "label": "terrain", "value": "\"t_floor_unique\"" }] }]);
+    legend["total"] = json!(1);
+    let h = open(screen, egui::vec2(1280.0, 800.0));
+    let row = h.get_by_label_contains("t_floor_unique").rect();
+    let tab = h.get_by_label("Furniture").rect();
+    assert!(
+        tab.top() - row.bottom() < 200.0,
+        "tabs {tab:?} under row {row:?}"
+    );
+}
