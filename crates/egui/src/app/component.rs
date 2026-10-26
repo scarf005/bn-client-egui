@@ -1236,10 +1236,11 @@ impl<M: GameModel> App<M> {
         let key = egui::Id::new(("grid-drag", &grid.head.id));
         // A drag not kept in the last pass belongs to an earlier showing of the grid: it ends unsent.
         let pass = ui.ctx().cumulative_pass_nr();
-        let mut held = ui
-            .data(|d| d.get_temp::<(Option<drag::Drag>, u64)>(key))
-            .filter(|(_, last)| last + 1 >= pass)
-            .and_then(|(held, _)| held);
+        let (mut held, mut began) = ui
+            .data(|d| d.get_temp::<(Option<drag::Drag>, Option<String>, u64)>(key))
+            .filter(|(_, _, last)| last + 1 >= pass)
+            .map(|(held, began, _)| (held, began))
+            .unwrap_or_default();
         let pointer = ui.input(|i| {
             let at = i.pointer.interact_pos();
             drag::Pointer {
@@ -1259,7 +1260,6 @@ impl<M: GameModel> App<M> {
             .ctx()
             .layer_id_at(ui.input(|i| i.pointer.interact_pos()).unwrap_or_default())
             == Some(ui.layer_id());
-        let before = held;
         let was_held = held.is_some();
         let run = drag::advance(
             mode,
@@ -1280,13 +1280,17 @@ impl<M: GameModel> App<M> {
         };
         // A drag begins on the press and ends on the frame that lets go of it.
         out.extend(marker(&grid.drag_begin).filter(|_| !was_held && held.is_some()));
-        // Only the squares of the affordance the drag began on: a stroke does not run a neighbour's.
-        let began = held
-            .or(before)
-            .and_then(|d| squares.get(&d.from()))
-            .map(|s| &s.2);
+        // Only the squares of the affordance the drag was pressed on: a stroke does not run a neighbour's, nor
+        // what a grid shown anew under the pointer puts there.
+        if !was_held && held.is_some() {
+            began = run
+                .first()
+                .and_then(|at| squares.get(at))
+                .map(|s| s.2.clone());
+        }
         for at in run {
-            let Some((_, row, affordance)) = squares.get(&at).filter(|s| Some(&s.2) == began)
+            let Some((_, row, affordance)) =
+                squares.get(&at).filter(|s| began.as_ref() == Some(&s.2))
             else {
                 continue;
             };
@@ -1297,7 +1301,8 @@ impl<M: GameModel> App<M> {
             }));
         }
         out.extend(marker(&grid.drag_end).filter(|_| was_held && held.is_none()));
-        ui.data_mut(|d| d.insert_temp(key, (held, pass)));
+        let began = began.filter(|_| held.is_some());
+        ui.data_mut(|d| d.insert_temp(key, (held, began, pass)));
     }
 }
 
