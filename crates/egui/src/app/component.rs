@@ -53,6 +53,8 @@ const PEER_ROWS: usize = 12;
 const GRID_CELL: f32 = 26.0;
 /// The largest a grid's cell grows to when the room allows.
 const GRID_MAX_CELL: f32 = 2.0 * GRID_CELL;
+/// The opacity of the squares a grid marks faded.
+const GRID_FADED: f32 = 0.45;
 /// The least and the most the zoom gesture scales a canvas grid's cells from the size that fills its room.
 const GRID_ZOOM: (f32, f32) = (0.5, 4.0);
 
@@ -69,6 +71,8 @@ pub(super) struct Screens {
     pub(super) list_pages: RefCell<HashMap<(String, String), usize>>,
     /// The squares of this frame's list rows left for their item's sprite, painted once the window is drawn.
     icons: RefCell<Vec<RowIcon>>,
+    /// The block outlines of this frame's grids, painted after the sprites they run over.
+    rules: RefCell<Vec<(egui::Painter, Vec<egui::Shape>)>>,
     /// What this frame's overmap draws, painted once the window is drawn, so that a tileset's sprites come
     /// before the marks over them.
     overmap: RefCell<Vec<OvermapPaint>>,
@@ -358,6 +362,9 @@ impl<M: GameModel> App<M> {
                 &icon.cell,
                 season.as_deref(),
             );
+        }
+        for (painter, rules) in self.screens.rules.take() {
+            painter.extend(rules);
         }
     }
 
@@ -1074,15 +1081,21 @@ impl<M: GameModel> App<M> {
         out: &mut Vec<Intent>,
     ) {
         let (xs, ys) = drawn_span(grid);
-        ui.scope(|ui| {
+        let opacity = ui.opacity();
+        let drawn = ui.scope(|ui| {
             ui.spacing_mut().item_spacing = egui::Vec2::ZERO;
-            for y in ys {
+            for y in ys.clone() {
                 ui.horizontal(|ui| {
                     for x in xs.clone() {
                         let Some(cell) = grid.cells.iter().find(|c| (c.x, c.y) == (x, y)) else {
                             ui.allocate_space(size);
                             continue;
                         };
+                        // Another level seen through open air is drawn faded, as its sprites and its glyph.
+                        ui.set_opacity(match cell.faded {
+                            Some(true) => opacity * GRID_FADED,
+                            _ => opacity,
+                        });
                         let glyph = cell.glyph.clone().unwrap_or_else(|| " ".into());
                         let name = cell.label.as_ref().map_or(glyph.clone(), Text::shown);
                         // With a tileset the cell is its sprites, drawn over it once its window is drawn.
@@ -1169,6 +1182,33 @@ impl<M: GameModel> App<M> {
                 });
             }
         });
+        if let Some(block) = grid.block.filter(|b| b.x > 0 && b.y > 0) {
+            let origin = drawn.response.rect.min;
+            let stroke = egui::Stroke::new(1.0, ui.visuals().text_color());
+            let along = |range: &std::ops::Range<u32>, step: u32| {
+                (range.start..=range.end)
+                    .filter(move |n| n % step == 0)
+                    .map(|n| (n - range.start) as f32)
+                    .collect::<Vec<_>>()
+            };
+            let (width, height) = (xs.len() as f32 * size.x, ys.len() as f32 * size.y);
+            let lines = along(&xs, block.x)
+                .into_iter()
+                .map(|n| origin.x + n * size.x)
+                .map(|x| [egui::pos2(x, origin.y), egui::pos2(x, origin.y + height)])
+                .chain(
+                    along(&ys, block.y)
+                        .into_iter()
+                        .map(|n| origin.y + n * size.y)
+                        .map(|y| [egui::pos2(origin.x, y), egui::pos2(origin.x + width, y)]),
+                )
+                .map(|points| egui::Shape::line_segment(points, stroke))
+                .collect();
+            self.screens
+                .rules
+                .borrow_mut()
+                .push((ui.painter().clone(), lines));
+        }
     }
 
     /// Runs the affordance of the squares a pointer drag over `squares` crosses.

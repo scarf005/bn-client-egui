@@ -2357,6 +2357,15 @@ pub struct Grid {
     /// The affordance run when a drag ends, after the last square's, so the engine can make the drag one step.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub drag_end: Option<String>,
+    /// The size in cells of the blocks a client outlines, counted from the top left; none: no outline.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub block: Option<GridBlock>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GridBlock {
+    pub x: u32,
+    pub y: u32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -2405,6 +2414,9 @@ pub struct GridCell {
     /// sprites; `glyph` stands for it otherwise.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub looks: Vec<usize>,
+    /// The cell shows another level, such as the one below seen through open air, which a client draws faded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub faded: Option<bool>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]

@@ -140,7 +140,7 @@ fn opacity(h: &H, x: u32, y: u32) -> f32 {
             egui::Shape::Text(t)
                 if t.galley.text() == "." && at.contains(t.pos + egui::vec2(1.0, 1.0)) =>
             {
-                Some(t.opacity_factor)
+                Some(t.fallback_color.a() as f32 / 255.0)
             }
             _ => None,
         })
@@ -179,12 +179,12 @@ fn a_canvas_without_a_block_draws_no_lines() {
 }
 
 #[test]
-fn a_faded_square_is_drawn_at_reduced_opacity_and_the_rest_in_full() {
+fn a_faded_square_is_drawn_at_under_half_the_opacity_of_the_rest() {
     let (h, _) = open(editor(Some((6, 6)), &[(2, 1)]));
-    let faded = opacity(&h, 2, 1);
-    assert!((0.3..0.6).contains(&faded), "faded at {faded}");
-    assert_eq!(opacity(&h, 3, 1), 1.0);
-    assert_eq!(opacity(&h, 2, 2), 1.0);
+    let full = opacity(&h, 3, 1);
+    assert_eq!(opacity(&h, 2, 2), full);
+    let ratio = opacity(&h, 2, 1) / full;
+    assert!((0.3..0.6).contains(&ratio), "faded at {ratio} of {full}");
 }
 
 #[test]
@@ -216,4 +216,46 @@ fn a_faded_square_still_takes_a_click_like_the_others() {
         .map(|o| o["args"]["row"].as_str().unwrap().to_owned())
         .collect::<Vec<_>>();
     assert!(rows.contains(&"square:2,1".to_owned()), "{rows:?}");
+}
+
+fn sent(script: &ScriptHandle) -> Vec<String> {
+    script
+        .sent()
+        .into_iter()
+        .filter(|m| m["method"] == "bn.command.submit")
+        .map(|m| {
+            m["params"]["operation"]["affordance_id"]
+                .as_str()
+                .unwrap()
+                .to_owned()
+        })
+        .collect()
+}
+
+fn type_key(h: &mut H, key: &str) {
+    h.event(egui::Event::Text(key.into()));
+    h.run_steps(4);
+}
+
+#[test]
+fn the_level_keys_run_the_level_affordances_and_a_disabled_one_shows_its_denial() {
+    let mut screen = editor(Some((6, 6)), &[]);
+    let up = screen["affordances"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|a| a["id"] == "editor:level_up")
+        .unwrap();
+    up["enabled"] = json!(true);
+    up["denial"] = Value::Null;
+    let (mut h, script) = open(screen);
+    type_key(&mut h, "<");
+    assert_eq!(sent(&script), ["editor:level_up"]);
+    type_key(&mut h, ">");
+    assert_eq!(
+        sent(&script),
+        ["editor:level_up"],
+        "a disabled affordance is not sent"
+    );
+    h.get_by_label_contains("No level below in this file.");
 }
