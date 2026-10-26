@@ -162,19 +162,13 @@ fn reveal(h: &mut H, label: &str) {
 /// `reveal` for any widget `rect_of` finds, named `what` when it never comes into view.
 fn reveal_rect(h: &mut H, what: &str, rect_of: impl Fn(&H) -> Option<egui::Rect>) {
     let size = h.ctx.content_rect().size();
-    let mut missing = 0;
+    // How many times it was not drawn so far.
+    let mut misses = 0u32..;
     for _ in 0..120 {
         let Some(r) = rect_of(h) else {
             // Not drawn: it is scrolled out of the window, so look down the window, then up.
-            wheel(
-                h,
-                if (missing / 30) % 2 == 0 {
-                    -150.0
-                } else {
-                    150.0
-                },
-            );
-            missing += 1;
+            let down = (misses.next().unwrap_or_default() / 30) % 2 == 0;
+            wheel(h, if down { -150.0 } else { 150.0 });
             continue;
         };
         if r.top() > 70.0 && r.bottom() < size.y - 50.0 && r.bottom() > 0.0 {
@@ -1113,8 +1107,11 @@ fn the_map_editor_lets_turns_pass_and_opens_again_by_itself() {
     assert_eq!(document(&h), before, "the same document is back");
 }
 
+/// The squares the canvas marks faded, and its block size.
+type Faded = (Vec<(u32, u32)>, Option<(u32, u32)>);
+
 /// The squares the canvas on top marks faded, as (x, y), and its block size.
-fn faded_squares(h: &H) -> (Vec<(u32, u32)>, Option<(u32, u32)>) {
+fn faded_squares(h: &H) -> Faded {
     let top = h.state().model.screens().last().unwrap();
     let Some(bn_client_egui::protocol::Component::Grid(grid)) =
         top.root.as_ref().unwrap().find("editor:canvas")
