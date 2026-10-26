@@ -127,6 +127,7 @@
               "id": "editor:import_form",
               "kind": "form",
               "affordances": [
+                "editor:import_set",
                 "editor:import"
               ],
               "fields": [
@@ -650,7 +651,7 @@
                   "columns": []
                 }
               ],
-              "total": 2952,
+              "total": 2953,
               "selection": "single",
               "activate": "editor:browser_open",
               "filterable": true
@@ -768,16 +769,38 @@
             "expect": "screen"
           },
           {
-            "id": "editor:import",
-            "label": "Stamp mapgen text",
+            "id": "editor:advance",
+            "label": "Let turns pass",
             "keys": [],
             "enabled": true,
             "args": {
-              "text": {
-                "field_id": "import"
+              "count": {
+                "min": 1,
+                "max": 3600,
+                "default": 60
               }
             },
+            "expect": "screen"
+          },
+          {
+            "id": "editor:import_set",
+            "label": "Mapgen to stamp",
+            "keys": [],
+            "enabled": true,
+            "args": {
+              "row": {
+                "component_id": "editor:import_form"
+              },
+              "text": {}
+            },
             "expect": "boundary"
+          },
+          {
+            "id": "editor:import",
+            "label": "Stamp text",
+            "keys": [],
+            "enabled": true,
+            "expect": "screen"
           },
           {
             "id": "editor:browser_open",
@@ -2959,6 +2982,7 @@
               "id": "editor:import_form",
               "kind": "form",
               "affordances": [
+                "editor:import_set",
                 "editor:import"
               ],
               "fields": [
@@ -3482,7 +3506,7 @@
                   "columns": []
                 }
               ],
-              "total": 2952,
+              "total": 2953,
               "selection": "single",
               "activate": "editor:browser_open",
               "filterable": true
@@ -3612,16 +3636,38 @@
             "expect": "screen"
           },
           {
-            "id": "editor:import",
-            "label": "Stamp mapgen text",
+            "id": "editor:advance",
+            "label": "Let turns pass",
             "keys": [],
             "enabled": true,
             "args": {
-              "text": {
-                "field_id": "import"
+              "count": {
+                "min": 1,
+                "max": 3600,
+                "default": 60
               }
             },
+            "expect": "screen"
+          },
+          {
+            "id": "editor:import_set",
+            "label": "Mapgen to stamp",
+            "keys": [],
+            "enabled": true,
+            "args": {
+              "row": {
+                "component_id": "editor:import_form"
+              },
+              "text": {}
+            },
             "expect": "boundary"
+          },
+          {
+            "id": "editor:import",
+            "label": "Stamp text",
+            "keys": [],
+            "enabled": true,
+            "expect": "screen"
           },
           {
             "id": "editor:browser_open",
@@ -6288,6 +6334,7 @@
               "id": "editor:import_form",
               "kind": "form",
               "affordances": [
+                "editor:import_set",
                 "editor:import"
               ],
               "fields": [
@@ -6811,7 +6858,7 @@
                   "columns": []
                 }
               ],
-              "total": 2952,
+              "total": 2953,
               "selection": "single",
               "activate": "editor:browser_open",
               "filterable": true
@@ -6941,16 +6988,38 @@
             "expect": "screen"
           },
           {
-            "id": "editor:import",
-            "label": "Stamp mapgen text",
+            "id": "editor:advance",
+            "label": "Let turns pass",
             "keys": [],
             "enabled": true,
             "args": {
-              "text": {
-                "field_id": "import"
+              "count": {
+                "min": 1,
+                "max": 3600,
+                "default": 60
               }
             },
+            "expect": "screen"
+          },
+          {
+            "id": "editor:import_set",
+            "label": "Mapgen to stamp",
+            "keys": [],
+            "enabled": true,
+            "args": {
+              "row": {
+                "component_id": "editor:import_form"
+              },
+              "text": {}
+            },
             "expect": "boundary"
+          },
+          {
+            "id": "editor:import",
+            "label": "Stamp text",
+            "keys": [],
+            "enabled": true,
+            "expect": "screen"
           },
           {
             "id": "editor:browser_open",
@@ -9487,6 +9556,7 @@
               "id": "editor:import_form",
               "kind": "form",
               "affordances": [
+                "editor:import_set",
                 "editor:import"
               ],
               "fields": [
@@ -10010,7 +10080,7 @@
                   "columns": []
                 }
               ],
-              "total": 2952,
+              "total": 2953,
               "selection": "single",
               "activate": "editor:browser_open",
               "filterable": true
@@ -10140,16 +10210,38 @@
             "expect": "screen"
           },
           {
-            "id": "editor:import",
-            "label": "Stamp mapgen text",
+            "id": "editor:advance",
+            "label": "Let turns pass",
             "keys": [],
             "enabled": true,
             "args": {
-              "text": {
-                "field_id": "import"
+              "count": {
+                "min": 1,
+                "max": 3600,
+                "default": 60
               }
             },
+            "expect": "screen"
+          },
+          {
+            "id": "editor:import_set",
+            "label": "Mapgen to stamp",
+            "keys": [],
+            "enabled": true,
+            "args": {
+              "row": {
+                "component_id": "editor:import_form"
+              },
+              "text": {}
+            },
             "expect": "boundary"
+          },
+          {
+            "id": "editor:import",
+            "label": "Stamp text",
+            "keys": [],
+            "enabled": true,
+            "expect": "screen"
           },
           {
             "id": "editor:browser_open",
@@ -26441,6 +26533,7 @@
               "id": "editor:import_form",
               "kind": "form",
               "affordances": [
+                "editor:import_set",
                 "editor:import"
               ],
               "fields": [
@@ -26964,7 +27057,7 @@
                   "columns": []
                 }
               ],
-              "total": 2952,
+              "total": 2953,
               "selection": "single",
               "activate": "editor:browser_open",
               "filterable": true
@@ -27094,16 +27187,38 @@
             "expect": "screen"
           },
           {
-            "id": "editor:import",
-            "label": "Stamp mapgen text",
+            "id": "editor:advance",
+            "label": "Let turns pass",
             "keys": [],
             "enabled": true,
             "args": {
-              "text": {
-                "field_id": "import"
+              "count": {
+                "min": 1,
+                "max": 3600,
+                "default": 60
               }
             },
+            "expect": "screen"
+          },
+          {
+            "id": "editor:import_set",
+            "label": "Mapgen to stamp",
+            "keys": [],
+            "enabled": true,
+            "args": {
+              "row": {
+                "component_id": "editor:import_form"
+              },
+              "text": {}
+            },
             "expect": "boundary"
+          },
+          {
+            "id": "editor:import",
+            "label": "Stamp text",
+            "keys": [],
+            "enabled": true,
+            "expect": "screen"
           },
           {
             "id": "editor:browser_open",
