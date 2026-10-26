@@ -1184,7 +1184,11 @@ impl<M: GameModel> App<M> {
         });
         if let Some(block) = grid.block.filter(|b| b.x > 0 && b.y > 0) {
             let origin = drawn.response.rect.min;
-            let stroke = egui::Stroke::new(1.0, ui.visuals().text_color());
+            // A light line over a dark one, so it reads on pale and dark squares alike.
+            let strokes = [
+                egui::Stroke::new(3.0, egui::Color32::from_black_alpha(160)),
+                egui::Stroke::new(1.0, egui::Color32::WHITE),
+            ];
             let along = |range: &std::ops::Range<u32>, step: u32| {
                 (range.start..=range.end)
                     .filter(move |n| n % step == 0)
@@ -1202,7 +1206,7 @@ impl<M: GameModel> App<M> {
                         .map(|n| origin.y + n * size.y)
                         .map(|y| [egui::pos2(origin.x, y), egui::pos2(origin.x + width, y)]),
                 )
-                .map(|points| egui::Shape::line_segment(points, stroke))
+                .flat_map(|points| strokes.map(|stroke| egui::Shape::line_segment(points, stroke)))
                 .collect();
             self.screens
                 .rules
