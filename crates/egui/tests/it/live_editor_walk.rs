@@ -96,16 +96,36 @@ fn double_click(h: &mut H, label: &str) {
     rest(h);
 }
 
-/// Clicks a button of the footer, which stays in view whatever the body scrolls.
+/// Clicks a button of the footer, which stays in view whatever the body scrolls; one that did not fit the footer is in
+/// the menu of its `⋯`, the lowest one in the window.
 fn click_footer(h: &mut H, label: &str) {
+    if find(h, label).is_none() {
+        let at = stable(h, label, |h| more_buttons(h).first().copied());
+        click_at(h, at.center());
+    }
     press(h, label);
+}
+
+/// The `⋯` buttons drawn, in the order the screen draws them: the footer's first, then those of tab bars.
+fn more_buttons(h: &H) -> Vec<egui::Rect> {
+    h.root()
+        .children_recursive()
+        .filter(|n| n.accesskit_node().label().as_deref() == Some("⋯"))
+        .map(|n| n.rect())
+        .collect()
 }
 
 /// The rectangle of the widget labelled exactly `label`, else the first whose label contains it.
 fn find(h: &H, label: &str) -> Option<egui::Rect> {
     let labelled = |n: &egui_kittest::Node| {
         let a = n.accesskit_node();
-        a.label().or_else(|| a.value()).map(|l| l.to_string())
+        // What a person typed into a box is not a widget to aim at.
+        (!matches!(
+            a.role(),
+            egui::accesskit::Role::TextInput | egui::accesskit::Role::TextRun
+        ))
+        .then(|| a.label().or_else(|| a.value()).map(|l| l.to_string()))
+        .flatten()
     };
     let nodes = h.root().children_recursive().collect::<Vec<_>>();
     let exact = nodes.iter().find(|n| labelled(n).as_deref() == Some(label));
@@ -136,25 +156,40 @@ fn key(h: &mut H, key: egui::Key) {
 /// Scrolls the window with the wheel until the widget whose label contains `label` is drawn in view, between the
 /// title bar and the footer buttons, as a player would before aiming at it.
 fn reveal(h: &mut H, label: &str) {
+    reveal_rect(h, label, |h| find(h, label));
+}
+
+/// `reveal` for any widget `rect_of` finds, named `what` when it never comes into view.
+fn reveal_rect(h: &mut H, what: &str, rect_of: impl Fn(&H) -> Option<egui::Rect>) {
     let size = h.ctx.content_rect().size();
-    for _ in 0..80 {
-        if let Some(r) = find(h, label) {
-            if r.top() > 70.0 && r.bottom() < size.y - 50.0 && r.bottom() > 0.0 {
-                return;
-            }
+    let mut missing = 0;
+    for _ in 0..120 {
+        let Some(r) = rect_of(h) else {
+            // Not drawn: it is scrolled out of the window, so look down the window, then up.
             wheel(
                 h,
-                if r.center().y < size.y / 2.0 {
-                    150.0
-                } else {
+                if (missing / 30) % 2 == 0 {
                     -150.0
+                } else {
+                    150.0
                 },
             );
-        } else {
-            wheel(h, -150.0);
+            missing += 1;
+            continue;
+        };
+        if r.top() > 70.0 && r.bottom() < size.y - 50.0 && r.bottom() > 0.0 {
+            return;
         }
+        wheel(
+            h,
+            if r.center().y < size.y / 2.0 {
+                150.0
+            } else {
+                -150.0
+            },
+        );
     }
-    panic!("{label} is never brought into view by the wheel");
+    panic!("{what} is never brought into view by the wheel");
 }
 
 /// Turns the wheel over the window's middle by `dy` points and lets the frames follow.
@@ -182,27 +217,6 @@ fn type_text(h: &mut H, text: &str) {
     h.event(egui::Event::Text(text.to_string()));
     h.run_steps(3);
     rest(h);
-}
-
-/// Scrolls until text box `at` of `text_boxes` is in view and clicks into it.
-fn click_box(h: &mut H, at: usize) {
-    let size = h.ctx.content_rect().size();
-    for _ in 0..80 {
-        let r = text_boxes(h)[at];
-        if r.top() > 80.0 && r.bottom() < size.y - 50.0 {
-            break;
-        }
-        wheel(
-            h,
-            if r.center().y < size.y / 2.0 {
-                150.0
-            } else {
-                -150.0
-            },
-        );
-    }
-    h.run_steps(6);
-    click_at(h, text_boxes(h)[at].center());
 }
 
 /// Replaces the text of the box with the keyboard focus, as Ctrl+A and typing do.
@@ -290,6 +304,16 @@ fn open_map_editor(h: &mut H) {
 
 /// Clicks the tab labelled `label` and waits until it is the selected one.
 fn click_tab(h: &mut H, label: &str) {
+    let in_bar = |h: &H| {
+        h.root().children_recursive().any(|n| {
+            n.accesskit_node().role() == egui::accesskit::Role::Tab
+                && n.accesskit_node().label().as_deref() == Some(label)
+        })
+    };
+    if !in_bar(h) {
+        // A tab that did not fit the bar is in the menu of its `⋯`.
+        open_more_tabs(h);
+    }
     click(h, label);
     run_until(h, label, 30, |h| {
         h.root().children_recursive().any(|n| {
@@ -335,11 +359,10 @@ fn glyph(h: &H, x: usize, y: usize) -> Option<char> {
 
 /// A new mapgen file in the profile's mods directory, made from the editor's form, and its canvas.
 fn create_mapgen(h: &mut H, name: &str) -> std::path::PathBuf {
-    let path =
-        std::env::temp_dir().join(format!("bn-live-{}-0/mods/{name}.json", std::process::id()));
-    click_box(h, 1);
+    let path = crate::common::live::profile_dir().join(format!("mods/{name}.json"));
+    click_beside(h, "New file");
     type_text(h, &path.to_string_lossy());
-    click_box(h, 2);
+    click_beside(h, "Overmap terrain");
     type_text(h, "field");
     click(h, "Create");
     if find(h, "Continue").is_some() {
@@ -368,7 +391,7 @@ fn the_map_editor_paints_places_furniture_undoes_previews_saves_and_reopens() {
     click(&mut h, "Terrain");
     double_click(&mut h, "brick wall");
     assert_eq!(field(&h, "editor:mapping", "value"), "t_brick_wall");
-    click_box(&mut h, 2);
+    click_beside(&mut h, "Symbol");
     replace_text(&mut h, "#");
     key(&mut h, egui::Key::Enter);
     click(&mut h, "Set mapping");
@@ -400,7 +423,18 @@ fn the_map_editor_paints_places_furniture_undoes_previews_saves_and_reopens() {
     assert_eq!(canvas_glyphs(&h), blank);
     key_mod(&mut h, egui::Modifiers::CTRL, egui::Key::Y);
 
-    // Furniture: the first catalog entry becomes the legend's `C`, drawn with the pencil on one square.
+    // Furniture: the symbol `C` names a floor first, as the engine refuses a symbol without a terrain, then the first
+    // catalog entry, and is drawn with the pencil on one square.
+    click_tab(&mut h, "Terrain");
+    let top = h.state().model.screens().last().unwrap();
+    let catalog = serde_json::to_value(top.root.as_ref().unwrap().find("editor:catalog")).unwrap();
+    let floor = catalog["rows"][0]["label"].as_str().unwrap().to_string();
+    double_click(&mut h, &floor);
+    assert_eq!(field(&h, "editor:mapping", "layer"), "terrain");
+    click_beside(&mut h, "Symbol");
+    replace_text(&mut h, "C");
+    key(&mut h, egui::Key::Enter);
+    click(&mut h, "Set mapping");
     click_tab(&mut h, "Furniture");
     let top = h.state().model.screens().last().unwrap();
     let catalog = serde_json::to_value(top.root.as_ref().unwrap().find("editor:catalog")).unwrap();
@@ -408,19 +442,7 @@ fn the_map_editor_paints_places_furniture_undoes_previews_saves_and_reopens() {
     double_click(&mut h, &name);
     assert_eq!(field(&h, "editor:mapping", "layer"), "furniture");
     let furniture = field(&h, "editor:mapping", "value");
-    click_box(&mut h, 2);
-    replace_text(&mut h, "C");
-    key(&mut h, egui::Key::Enter);
-    click(&mut h, "Set mapping");
-    // The same symbol also names the floor under it: the entry has no `fill_ter`, so a symbol without
-    // a terrain makes the entry invalid.
-    click_tab(&mut h, "Terrain");
-    let top = h.state().model.screens().last().unwrap();
-    let catalog = serde_json::to_value(top.root.as_ref().unwrap().find("editor:catalog")).unwrap();
-    let floor = catalog["rows"][0]["label"].as_str().unwrap().to_string();
-    double_click(&mut h, &floor);
-    assert_eq!(field(&h, "editor:mapping", "layer"), "terrain");
-    click_box(&mut h, 2);
+    click_beside(&mut h, "Symbol");
     replace_text(&mut h, "C");
     key(&mut h, egui::Key::Enter);
     click(&mut h, "Set mapping");
@@ -440,7 +462,6 @@ fn the_map_editor_paints_places_furniture_undoes_previews_saves_and_reopens() {
     shot(&mut h, "map-5-furniture");
 
     // The game's own generation of the edited entry, from the overflow menu.
-    click_footer(&mut h, "⋯");
     click_footer(&mut h, "Preview");
     shot(&mut h, "map-7-preview-asks");
     click_footer(&mut h, "OK");
@@ -475,7 +496,7 @@ fn the_map_editor_paints_places_furniture_undoes_previews_saves_and_reopens() {
     // Reopened from the file list by its name: the walls and the barrel are still there.
     click(&mut h, "Map Editor");
     wait_kind(&mut h, "editor");
-    click_box(&mut h, 0);
+    click_input(&mut h, "Search");
     replace_text(&mut h, &path.to_string_lossy());
     key(&mut h, egui::Key::Enter);
     shot(&mut h, "map-10-filtered");
@@ -571,7 +592,7 @@ fn the_vehicle_editor_opens_a_prototype_installs_and_saves_a_mod_file() {
     wait_kind(&mut h, "vehicle_editor");
     rest(&mut h);
     shot(&mut h, "veh-1-editor");
-    click_footer(&mut h, "Filter");
+    click_input(&mut h, "Search");
     rest(&mut h);
     shot(&mut h, "veh-2-filter-asks");
     type_text(&mut h, "car");
@@ -590,12 +611,10 @@ fn the_vehicle_editor_opens_a_prototype_installs_and_saves_a_mod_file() {
     double_click(&mut h, "vehicle tank (60L)");
     rest(&mut h);
     shot(&mut h, "veh-6-part-picked");
-    press(&mut h, "⋯");
-    rest(&mut h);
-    click(&mut h, "Part");
+    click_tab(&mut h, "Part");
     rest(&mut h);
     shot(&mut h, "veh-8-part-tab");
-    click_box(&mut h, 0);
+    click_beside(&mut h, "Fuel");
     replace_text(&mut h, "diesel");
     key(&mut h, egui::Key::Enter);
     rest(&mut h);
@@ -604,7 +623,7 @@ fn the_vehicle_editor_opens_a_prototype_installs_and_saves_a_mod_file() {
     // A headlight installed on the quarterpanel mount from the filtered part list, then shown on the Mount tab.
     click(&mut h, "frame, quarterpanel");
     click_tab(&mut h, "Install");
-    click_footer(&mut h, "Filter parts");
+    click_input(&mut h, "Search");
     type_text(&mut h, "headlight");
     key(&mut h, egui::Key::Enter);
     rest(&mut h);
@@ -628,21 +647,17 @@ fn the_vehicle_editor_opens_a_prototype_installs_and_saves_a_mod_file() {
     shot(&mut h, "veh-14-undone");
 
     // The vehicle's name on the Vehicle tab.
-    press(&mut h, "⋯");
-    click(&mut h, "Vehicle");
+    click_tab(&mut h, "Vehicle");
     rest(&mut h);
     shot(&mut h, "veh-15-vehicle-tab");
-    click_box(&mut h, 0);
+    click_beside(&mut h, "Name");
     replace_text(&mut h, "Walker Car");
     key(&mut h, egui::Key::Enter);
     rest(&mut h);
     shot(&mut h, "veh-16-renamed");
 
     // Saved as a mod file: the engine only writes under the game's data or a mod.
-    let path = std::env::temp_dir().join(format!(
-        "bn-live-{}-0/mods/zz_vehicle.json",
-        std::process::id()
-    ));
+    let path = crate::common::live::profile_dir().join("mods/zz_vehicle.json");
     click_footer(&mut h, "Save as");
     rest(&mut h);
     shot(&mut h, "veh-17-save-as-asks");
@@ -680,7 +695,7 @@ fn the_vehicle_editor_sets_the_ammunition_of_a_turret_from_the_part_tab() {
     click(&mut h, "Yes");
     wait_kind(&mut h, "vehicle_editor");
     rest(&mut h);
-    click_footer(&mut h, "Filter");
+    click_input(&mut h, "Search");
     type_text(&mut h, "armored_car");
     key(&mut h, egui::Key::Enter);
     double_click(&mut h, "Armored Car");
@@ -691,21 +706,20 @@ fn the_vehicle_editor_sets_the_ammunition_of_a_turret_from_the_part_tab() {
     // The mount holding a turret, then the turret among its parts, then the Part tab's form.
     click(&mut h, "turret mount, mounted M249, heavy duty opaque door");
     double_click(&mut h, "mounted M249");
-    press(&mut h, "⋯");
-    click(&mut h, "Part");
+    click_tab(&mut h, "Part");
     rest(&mut h);
     shot(&mut h, "turret-2-part-tab-before");
     let form = "vehicle:part_form";
     assert_eq!(field(&h, form, "ammo"), "60");
 
     // The ammunition percentage, the ammunition types and the fewest and most rounds, each typed into its box.
-    for (at, id, text) in [
-        (0, "ammo", "50"),
-        (1, "ammo_types", "223"),
-        (2, "ammo_min", "10"),
-        (3, "ammo_max", "20"),
+    for (label, id, text) in [
+        ("Ammo %", "ammo", "50"),
+        ("Ammo types", "ammo_types", "223"),
+        ("Rounds, fewest", "ammo_min", "10"),
+        ("Rounds, most", "ammo_max", "20"),
     ] {
-        click_box(&mut h, at);
+        click_beside(&mut h, label);
         replace_text(&mut h, text);
         key(&mut h, egui::Key::Enter);
         rest(&mut h);
@@ -714,10 +728,7 @@ fn the_vehicle_editor_sets_the_ammunition_of_a_turret_from_the_part_tab() {
     shot(&mut h, "turret-3-part-tab-after");
 
     // Saved as a mod file, where the turret's part entry carries what was typed.
-    let path = std::env::temp_dir().join(format!(
-        "bn-live-{}-0/mods/zz_turret.json",
-        std::process::id()
-    ));
+    let path = crate::common::live::profile_dir().join("mods/zz_turret.json");
     click_footer(&mut h, "Save as");
     type_text(&mut h, &path.to_string_lossy());
     key(&mut h, egui::Key::Enter);
@@ -732,28 +743,65 @@ fn the_vehicle_editor_sets_the_ammunition_of_a_turret_from_the_part_tab() {
     );
 }
 
+/// Opens the menu of the tabs that did not fit the tab bar: the last `⋯` drawn, not the footer's.
+fn open_more_tabs(h: &mut H) {
+    let at = click_stable(h, "⋯ of the tabs", |h| more_buttons(h).last().copied());
+    click_at(h, at.center());
+}
+
+/// Clicks into the text box whose accessible label is exactly `label`, such as the search box above a list; of
+/// several, the one drawn last, in the innermost pane.
+fn click_input(h: &mut H, label: &str) {
+    let rect_of = |h: &H| {
+        h.root()
+            .children_recursive()
+            .filter(|n| {
+                let a = n.accesskit_node();
+                a.role() == egui::accesskit::Role::TextInput && a.label().as_deref() == Some(label)
+            })
+            .last()
+            .map(|n| n.rect())
+    };
+    let at = click_stable(h, label, rect_of);
+    click_at(h, at.center());
+}
+
 /// Clicks into the text box drawn right of the label `label`, on the label's row.
 fn click_beside(h: &mut H, label: &str) {
-    let labelled = |n: &egui_kittest::Node| {
-        let a = n.accesskit_node();
-        a.role() != egui::accesskit::Role::TextInput
-            && a.label().or_else(|| a.value()).as_deref() == Some(label)
+    let rect_of = |h: &H| {
+        let boxes = text_boxes(h);
+        h.root()
+            .children_recursive()
+            .filter(|n| {
+                let a = n.accesskit_node();
+                a.role() != egui::accesskit::Role::TextInput
+                    && a.label().or_else(|| a.value()).as_deref() == Some(label)
+            })
+            .map(|n| n.rect())
+            .find(|l| {
+                boxes
+                    .iter()
+                    .any(|b| b.y_range().contains(l.center().y) && b.left() > l.left())
+            })
     };
-    let boxes = text_boxes(h);
-    let shown = h
-        .root()
-        .children_recursive()
-        .filter(labelled)
-        .map(|n| n.rect());
-    let at = shown
-        .filter(|l| {
-            boxes
-                .iter()
-                .any(|b| b.y_range().contains(l.center().y) && b.left() > l.left())
-        })
-        .next()
-        .unwrap_or_else(|| panic!("no text box beside {label}"));
+    let at = click_stable(h, label, rect_of);
     click_at(h, egui::pos2(at.right() + 40.0, at.center().y));
+}
+
+/// Scrolls the rectangle `rect_of` finds into view, waits until it stopped moving and returns it.
+fn click_stable(h: &mut H, what: &str, rect_of: impl Fn(&H) -> Option<egui::Rect>) -> egui::Rect {
+    reveal_rect(h, what, &rect_of);
+    stable(h, what, rect_of)
+}
+
+/// The rectangle `rect_of` finds once it stopped moving.
+fn stable(h: &mut H, what: &str, rect_of: impl Fn(&H) -> Option<egui::Rect>) -> egui::Rect {
+    let mut seen = None;
+    while seen != rect_of(h) {
+        seen = rect_of(h);
+        h.run_steps(3);
+    }
+    seen.unwrap_or_else(|| panic!("no {what}: {:?}", labels(h)))
 }
 
 #[test]
@@ -772,10 +820,7 @@ fn the_map_editor_creates_a_palette_maps_a_symbol_and_saves_it() {
     shot_at(&mut h, "pal-2-kinds", &sizes);
     click(&mut h, "Palette");
     assert!(find(&h, "Palette id").is_some(), "{:?}", labels(&h));
-    let path = std::env::temp_dir().join(format!(
-        "bn-live-{}-0/mods/zz_palette.json",
-        std::process::id()
-    ));
+    let path = crate::common::live::profile_dir().join("mods/zz_palette.json");
     click_beside(&mut h, "New file");
     type_text(&mut h, &path.to_string_lossy());
     click_beside(&mut h, "Palette id");
