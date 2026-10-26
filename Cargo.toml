@@ -2,6 +2,14 @@
 members = ["crates/core", "crates/egui", "crates/tui"]
 resolver = "3"
 
-# Dependencies (egui, image, wgpu) optimized even in debug builds; this crate's own code stays debuggable.
+# Dependencies (egui, image, wgpu) optimized even in debug builds.
 [profile.dev.package."*"]
 opt-level = 2
+
+# The client's own crates at opt-level 1 keep debug info and overflow checks; the UI tests paint thousands of map
+# cells per frame and run 5x faster than at 0.
+[profile.dev.package.bn-client-core]
+opt-level = 1
+
+[profile.dev.package.bn-client-egui]
+opt-level = 1
