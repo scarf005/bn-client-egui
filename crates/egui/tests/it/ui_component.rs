@@ -1412,6 +1412,21 @@ fn the_typing_state_of_closed_prompts_is_not_kept() {
 }
 
 #[test]
+fn a_multiline_field_holding_a_long_text_stays_a_few_lines_tall_and_as_wide_as_the_form() {
+    let long = "{\"rows\":[\"########################\"]}".repeat(60);
+    let form = json!({"id": "form:f", "kind": "form", "affordances": ["fill"],
+        "fields": [{"id": "field:t", "label": "Mapgen", "value": long, "type": "text", "multiline": true}],
+        "submit": "fill"});
+    let text = json!({"text": {"field_id": "field:t"}});
+    let (mut h, _script) = harness(dialog(form, vec![affordance("fill", &[], text)]));
+    h.run_steps(5);
+    let rect = h.get_by_role(egui::accesskit::Role::TextInput).rect();
+    let window = h.ctx.content_rect();
+    assert!(rect.height() < window.height() / 3.0, "{rect:?} in {window:?}");
+    assert!(rect.width() > window.width() / 2.0, "{rect:?} in {window:?}");
+}
+
+#[test]
 fn hovering_an_off_tab_gives_the_engines_reason() {
     let mut screen = recipe_screen("tabs", "list", "pick");
     screen["root"]["tabs"][1]["enabled"] = json!(false);
