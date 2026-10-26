@@ -1197,3 +1197,63 @@ fn the_map_editor_outlines_overmap_squares_and_shows_the_level_below_faded() {
     assert!(document(&h).contains("\"Level\"=\"0\""), "{}", document(&h));
     assert!(faded_squares(&h).0.is_empty());
 }
+
+/// A mod file of two mapgens that stand side by side in the `urban_1_house` city building, opened as a player
+/// reopens a file; a click on the faded square beside the canvas puts that entry on it.
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn the_map_editor_shows_the_squares_beside_the_entry_and_a_click_on_one_opens_it() {
+    let sizes = [(1920.0, 1080.0)];
+    let dir = std::env::temp_dir().join(format!("bn-walk-{}", std::process::id()));
+    let profile = std::env::temp_dir().join(format!("bn-live-{}-0", std::process::id()));
+    let moddir = profile.join("mods").join("walk_neighbours");
+    std::fs::create_dir_all(&moddir).unwrap();
+    std::fs::create_dir_all(&dir).unwrap();
+    let entry = |terrain: &str, symbol: &str, id: &str| {
+        serde_json::json!({ "type": "mapgen", "method": "json", "om_terrain": terrain,
+            "object": { "rows": vec![symbol.repeat(24); 24], "terrain": { symbol: id } } })
+    };
+    let entries = serde_json::json!([
+        entry("urban_1_1", ".", "t_floor"),
+        entry("urban_1_2", "#", "t_wall")
+    ]);
+    let file = moddir.join("neighbours.json");
+    std::fs::write(&file, entries.to_string()).unwrap();
+    let file = file.to_string_lossy().to_string();
+    let recent = serde_json::json!([{ "editor": "map", "name": file, "mods": ["bn"] }]);
+    let (mut h, _root) = start_with(&dir, &[("editor_recent.json", recent.to_string())]);
+    assert_eq!(crate::common::live::profile_dir(), profile);
+    h.set_size(egui::vec2(1920.0, 1080.0));
+    rest(&mut h);
+    click(&mut h, "Editor");
+    rest(&mut h);
+    click(&mut h, &file);
+    rest(&mut h);
+    key(&mut h, egui::Key::Escape);
+    click(&mut h, "Yes");
+    wait_kind(&mut h, "editor");
+    rest(&mut h);
+    shot_at(&mut h, "nb-1-first-entry", &sizes);
+    dump(&h, "first entry");
+    let (faded, block) = faded_squares(&h);
+    assert_eq!(block, Some((24, 24)));
+    assert!(!faded.is_empty(), "the square east of the entry is shown");
+    assert!(faded.iter().all(|&(x, _)| x >= 24), "{faded:?}");
+    let rows = canvas_glyphs(&h);
+    assert_eq!(rows.len(), 24);
+    assert!(rows[0].starts_with(&".".repeat(24)), "{}", rows[0]);
+    assert!(rows[0].ends_with('#'), "{}", rows[0]);
+
+    // A click on a faded square, as a player makes it, opens that entry.
+    let (x, y) = faded[faded.len() / 2];
+    let at = square(&h, x as usize, y as usize).center();
+    click_at(&mut h, at);
+    shot_at(&mut h, "nb-2-second-entry", &sizes);
+    dump(&h, "second entry");
+    let (faded, _) = faded_squares(&h);
+    assert!(!faded.is_empty(), "the square west of the entry is shown");
+    assert!(faded.iter().all(|&(x, _)| x < 24), "{faded:?}");
+    let rows = canvas_glyphs(&h);
+    assert!(rows[0].ends_with(&"#".repeat(24)), "{}", rows[0]);
+    assert!(rows[0].trim_start().starts_with("....#"), "{}", rows[0]);
+}
