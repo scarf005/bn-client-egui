@@ -3613,6 +3613,34 @@
             "expect": "boundary"
           },
           {
+            "id": "editor:export_width",
+            "label": "Export width",
+            "keys": [],
+            "enabled": true,
+            "args": {
+              "count": {
+                "min": 1,
+                "max": 3,
+                "default": 1
+              }
+            },
+            "expect": "screen"
+          },
+          {
+            "id": "editor:export_height",
+            "label": "Export height",
+            "keys": [],
+            "enabled": true,
+            "args": {
+              "count": {
+                "min": 1,
+                "max": 3,
+                "default": 1
+              }
+            },
+            "expect": "screen"
+          },
+          {
             "id": "editor:browser_open",
             "label": "Open",
             "keys": [],
