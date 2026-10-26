@@ -6735,6 +6735,10 @@
                   "minimum": 0
                 },
                 "description": "What the cell shows from the bottom up, as indexes into the grid's `looks`, for a client that draws sprites; `glyph` stands for it otherwise."
+              },
+              "faded": {
+                "type": "boolean",
+                "description": "Whether the cell shows another level, such as the one below seen through open air on the map editor's canvas, which a client draws faded. Absent for false."
               }
             },
             "required": [
@@ -6798,6 +6802,25 @@
         "drag_end": {
           "$ref": "#/$defs/opaque_id",
           "description": "The affordance a client runs when a drag over the cells ends, after the last square's, so the engine can make the whole drag one step. Absent for none."
+        },
+        "block": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "y": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "required": [
+            "x",
+            "y"
+          ],
+          "additionalProperties": false,
+          "description": "The `x` by `y` squares a client outlines as one, counted from the top-left, such as each overmap square of the map editor's canvas. Absent for none."
         }
       },
       "required": [
