@@ -34,15 +34,16 @@ struct RowLayout<'a> {
 
 impl<M: GameModel> App<M> {
     /// The room a list has here: what the window has left, less the `below` lines it draws under itself (the
-    /// refusal and the buttons), and no more than `list_rows` rows of `step` when the list is drawn so.
-    fn list_height(&self, ui: &egui::Ui, step: f32, below: usize) -> f32 {
+    /// refusal and the buttons), and no more than `list_rows` rows of `step` when the list is drawn so, nor more
+    /// than the `held` height of the rows of a list that has all its rows, past `MIN_ROWS`.
+    fn list_height(&self, ui: &egui::Ui, step: f32, below: usize, held: Option<f32>) -> f32 {
         let spacing = ui.spacing();
         let line = spacing.interact_size.y + spacing.item_spacing.y;
         let room = (ui.available_height() - below as f32 * line).max(MIN_ROWS * line);
-        self.screens
-            .list_rows
-            .get()
-            .map_or(room, |rows| room.min(rows as f32 * step))
+        self.screens.list_rows.get().map_or(room, |rows| {
+            let cap = rows as f32 * step;
+            room.min(held.map_or(cap, |held| cap.min(held.max(MIN_ROWS * step))))
+        })
     }
 
     /// The row's label in its colour.
@@ -142,18 +143,6 @@ impl<M: GameModel> App<M> {
             .any(|r| !r.enabled && !r.denial.shown().is_empty());
         let buttons = own.iter().any(|a| drawn_button(a));
         let below = usize::from(refused) + 2 * usize::from(buttons);
-        let list_height = self.list_height(ui, step, below) - header.map_or(0.0, |h| h + spacing.y);
-        // A page is the rows the list has room for.
-        let page = ((list_height + spacing.y) / step) as usize;
-        self.screens
-            .list_pages
-            .borrow_mut()
-            .insert(slot.clone(), page.max(1));
-        let at = cursor.and_then(|c| rows.iter().position(|r| r.id == c));
-        // The engine may put its cursor on a row past the pages held: they are asked for until it is among them.
-        if cursor.is_some() && at.is_none() {
-            out.push(Intent::More(id.clone()));
-        }
         // A label that wraps makes its row taller; every other row is one line high.
         let heights = rows
             .iter()
@@ -170,6 +159,24 @@ impl<M: GameModel> App<M> {
                 Some(start)
             })
             .collect::<Vec<_>>();
+        // A list that holds every row it has is no taller than they are, under its captions.
+        let held = (rows.len() as u64 >= list.total).then(|| {
+            let end = starts.last().zip(heights.last());
+            end.map_or(0.0, |(start, h)| start + h) + header.map_or(0.0, |h| h + spacing.y)
+        });
+        let list_height =
+            self.list_height(ui, step, below, held) - header.map_or(0.0, |h| h + spacing.y);
+        // A page is the rows the list has room for.
+        let page = ((list_height + spacing.y) / step) as usize;
+        self.screens
+            .list_pages
+            .borrow_mut()
+            .insert(slot.clone(), page.max(1));
+        let at = cursor.and_then(|c| rows.iter().position(|r| r.id == c));
+        // The engine may put its cursor on a row past the pages held: they are asked for until it is among them.
+        if cursor.is_some() && at.is_none() {
+            out.push(Intent::More(id.clone()));
+        }
         // The viewport is a whole number of rows tall: the most rows from the top that fit. An empty list, or one
         // whose first row does not fit, keeps its room.
         let list_height = starts
