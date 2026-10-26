@@ -457,6 +457,10 @@ fn the_map_editor_paints_places_furniture_undoes_previews_saves_and_reopens() {
     );
     click(&mut h, "Pencil");
     paint(&mut h, 15, 15);
+    // The engine answers a paint after the client went idle; wait for the square instead of racing the reply.
+    run_until(&mut h, "the painted C", 60, |h| {
+        glyph(h, 15, 15) == Some('C')
+    });
     assert_eq!(glyph(&h, 15, 15), Some('C'));
     let edited = canvas_glyphs(&h);
     shot(&mut h, "map-5-furniture");
