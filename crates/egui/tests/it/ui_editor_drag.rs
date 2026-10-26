@@ -227,6 +227,17 @@ fn editor_with_neighbours(drag: &str) -> Value {
 }
 
 #[test]
+fn a_stroke_crossing_into_a_neighbour_square_never_runs_the_neighbours_affordance() {
+    let (mut h, script) = open(editor_with_neighbours("trail"));
+    drag(&mut h, (1, 2), &[(3, 2), (7, 2)]);
+    assert_eq!(
+        painted(&script),
+        ["square:1,2", "square:2,2", "square:3,2", "square:4,2"]
+    );
+    assert!(!sent(&script).contains(&"editor:object".to_owned()));
+}
+
+#[test]
 fn a_click_on_a_neighbour_square_runs_its_affordance_on_the_row_of_the_objects_list() {
     let (mut h, script) = open(editor_with_neighbours("trail"));
     drag(&mut h, (6, 2), &[]);
