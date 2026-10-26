@@ -488,6 +488,74 @@ fn the_map_editor_paints_places_furniture_undoes_previews_saves_and_reopens() {
     let _ = dir;
 }
 
+/// Pictures of the window at each of `sizes`, back at 1290x830 after.
+fn shot_at(h: &mut H, name: &str, sizes: &[(f32, f32)]) {
+    let Some(dir) = std::env::var_os("SHOT_DIR") else {
+        return;
+    };
+    std::fs::create_dir_all(&dir).unwrap();
+    for &(w, ht) in sizes {
+        h.set_size(egui::vec2(w, ht));
+        settle(h);
+        h.render()
+            .expect("renders")
+            .save(std::path::Path::new(&dir).join(format!("{name}-{w}x{ht}.png")))
+            .unwrap();
+    }
+    h.set_size(egui::vec2(1290.0, 830.0));
+    settle(h);
+}
+
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn the_vehicle_editor_prototypes_list_keeps_its_id_column_clear_of_the_scroll_bar() {
+    let dir = std::env::temp_dir().join(format!("bn-walk-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let (mut h, _root) = start(&dir);
+    h.set_size(egui::vec2(1290.0, 830.0));
+    rest(&mut h);
+    click(&mut h, "Editor");
+    click(&mut h, "Vehicle editor");
+    key(&mut h, egui::Key::Escape);
+    click(&mut h, "Yes");
+    wait_kind(&mut h, "vehicle_editor");
+    rest(&mut h);
+    // Opened, the prototype takes the right of the window and the list is left a narrow pane.
+    double_click(&mut h, "Offroad Car");
+    wait_kind(&mut h, "vehicle_editor");
+    rest(&mut h);
+    shot_at(
+        &mut h,
+        "prototypes-beside-detail",
+        &[(1290.0, 830.0), (1920.0, 1080.0)],
+    );
+    // No ID of the list reaches its scroll bar.
+    let window = find(&h, "Vehicle Editor").expect("window");
+    let shapes = &h.output().shapes;
+    let bar = shapes
+        .iter()
+        .filter_map(|c| match &c.shape {
+            egui::Shape::Rect(r) if r.rect.width() < 20.0 && r.rect.height() > 50.0 => Some(r.rect),
+            _ => None,
+        })
+        .filter(|r| window.x_range().contains(r.left()))
+        .map(|r| r.left())
+        .fold(f32::MAX, f32::min);
+    let ids = shapes
+        .iter()
+        .filter_map(|c| match &c.shape {
+            egui::Shape::Text(t) if t.galley.text().ends_with("_car") => {
+                Some(t.visual_bounding_rect().right())
+            }
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert!(
+        !ids.is_empty() && ids.iter().all(|r| *r <= bar),
+        "{ids:?} past the bar at {bar}"
+    );
+}
+
 #[test]
 #[ignore = "requires BN_ENGINE pointing at an engine binary"]
 fn the_vehicle_editor_opens_a_prototype_installs_and_saves_a_mod_file() {
@@ -594,6 +662,72 @@ fn the_vehicle_editor_opens_a_prototype_installs_and_saves_a_mod_file() {
     let saved = std::fs::read_to_string(&path).unwrap_or_default();
     assert!(
         saved.contains("Walker Car") && saved.contains("diesel"),
+        "{saved}"
+    );
+}
+
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn the_vehicle_editor_sets_the_ammunition_of_a_turret_from_the_part_tab() {
+    let dir = std::env::temp_dir().join(format!("bn-walk-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let (mut h, _root) = start(&dir);
+    h.set_size(egui::vec2(1290.0, 830.0));
+    rest(&mut h);
+    click(&mut h, "Editor");
+    click(&mut h, "Vehicle editor");
+    key(&mut h, egui::Key::Escape);
+    click(&mut h, "Yes");
+    wait_kind(&mut h, "vehicle_editor");
+    rest(&mut h);
+    click_footer(&mut h, "Filter");
+    type_text(&mut h, "armored_car");
+    key(&mut h, egui::Key::Enter);
+    double_click(&mut h, "Armored Car");
+    wait_kind(&mut h, "vehicle_editor");
+    rest(&mut h);
+    shot(&mut h, "turret-1-opened");
+
+    // The mount holding a turret, then the turret among its parts, then the Part tab's form.
+    click(&mut h, "turret mount, mounted M249, heavy duty opaque door");
+    double_click(&mut h, "mounted M249");
+    press(&mut h, "⋯");
+    click(&mut h, "Part");
+    rest(&mut h);
+    shot(&mut h, "turret-2-part-tab-before");
+    let form = "vehicle:part_form";
+    assert_eq!(field(&h, form, "ammo"), "60");
+
+    // The ammunition percentage, the ammunition types and the fewest and most rounds, each typed into its box.
+    for (at, id, text) in [
+        (0, "ammo", "50"),
+        (1, "ammo_types", "223"),
+        (2, "ammo_min", "10"),
+        (3, "ammo_max", "20"),
+    ] {
+        click_box(&mut h, at);
+        replace_text(&mut h, text);
+        key(&mut h, egui::Key::Enter);
+        rest(&mut h);
+        assert_eq!(field(&h, form, id), text, "{id}");
+    }
+    shot(&mut h, "turret-3-part-tab-after");
+
+    // Saved as a mod file, where the turret's part entry carries what was typed.
+    let path = std::env::temp_dir().join(format!(
+        "bn-live-{}-0/mods/zz_turret.json",
+        std::process::id()
+    ));
+    click_footer(&mut h, "Save as");
+    type_text(&mut h, &path.to_string_lossy());
+    key(&mut h, egui::Key::Enter);
+    rest(&mut h);
+    shot(&mut h, "turret-4-saved");
+    let saved = std::fs::read_to_string(&path).unwrap_or_default();
+    assert!(
+        saved.contains(
+            r#"{ "part": "m249", "ammo": 50, "ammo_types": [ "223" ], "ammo_qty": [ 10, 20 ] }"#
+        ),
         "{saved}"
     );
 }
