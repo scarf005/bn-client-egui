@@ -731,3 +731,100 @@ fn the_vehicle_editor_sets_the_ammunition_of_a_turret_from_the_part_tab() {
         "{saved}"
     );
 }
+
+/// Clicks into the text box drawn right of the label `label`, on the label's row.
+fn click_beside(h: &mut H, label: &str) {
+    let labelled = |n: &egui_kittest::Node| {
+        let a = n.accesskit_node();
+        a.role() != egui::accesskit::Role::TextInput
+            && a.label().or_else(|| a.value()).as_deref() == Some(label)
+    };
+    let boxes = text_boxes(h);
+    let shown = h
+        .root()
+        .children_recursive()
+        .filter(labelled)
+        .map(|n| n.rect());
+    let at = shown
+        .filter(|l| {
+            boxes
+                .iter()
+                .any(|b| b.y_range().contains(l.center().y) && b.left() > l.left())
+        })
+        .next()
+        .unwrap_or_else(|| panic!("no text box beside {label}"));
+    click_at(h, egui::pos2(at.right() + 40.0, at.center().y));
+}
+
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn the_map_editor_creates_a_palette_maps_a_symbol_and_saves_it() {
+    let sizes = [(1290.0, 830.0), (1280.0, 800.0)];
+    let dir = std::env::temp_dir().join(format!("bn-walk-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let (mut h, _root) = start(&dir);
+    h.set_size(egui::vec2(1290.0, 830.0));
+    rest(&mut h);
+    open_map_editor(&mut h);
+    shot_at(&mut h, "pal-1-form", &sizes);
+    // The kind select, opened by a click; its third option names the palette and relabels the id field.
+    click(&mut h, "Mapgen");
+    shot_at(&mut h, "pal-2-kinds", &sizes);
+    click(&mut h, "Palette");
+    assert!(find(&h, "Palette id").is_some(), "{:?}", labels(&h));
+    let path = std::env::temp_dir().join(format!(
+        "bn-live-{}-0/mods/zz_palette.json",
+        std::process::id()
+    ));
+    click_beside(&mut h, "New file");
+    type_text(&mut h, &path.to_string_lossy());
+    click_beside(&mut h, "Palette id");
+    type_text(&mut h, "zz_walk_palette");
+    shot_at(&mut h, "pal-3-form-filled", &sizes);
+    click(&mut h, "Create");
+    if find(&h, "Continue").is_some() {
+        click(&mut h, "Continue");
+    }
+    wait_kind(&mut h, "editor");
+    rest(&mut h);
+    dump(&h, "the palette screen");
+    shot_at(&mut h, "pal-4-created", &sizes);
+    assert!(crate::live_editor::rows(&h, "editor:legend").contains(&"symbol:.".to_string()));
+    let top = h.state().model.screens().last().unwrap();
+    let root = top.root.as_ref().unwrap();
+    assert!(root.find("editor:canvas").is_none() && root.find("editor:tools").is_none());
+    assert_eq!(
+        top.focus.as_ref().and_then(|f| f.component_id.as_deref()),
+        Some("editor:legend")
+    );
+
+    // A terrain from the catalog becomes the palette's `#`.
+    click(&mut h, "Terrain");
+    shot_at(&mut h, "pal-5-catalog", &sizes);
+    double_click(&mut h, "brick wall");
+    assert_eq!(field(&h, "editor:mapping", "value"), "t_brick_wall");
+    shot_at(&mut h, "pal-5b-picked", &sizes);
+    click_beside(&mut h, "Symbol");
+    replace_text(&mut h, "#");
+    key(&mut h, egui::Key::Enter);
+    click(&mut h, "Set mapping");
+    shot_at(&mut h, "pal-6-mapped", &sizes);
+    let legend = crate::live_editor::rows(&h, "editor:legend");
+    assert!(legend.contains(&"symbol:#".to_string()), "{legend:?}");
+
+    key_mod(&mut h, egui::Modifiers::CTRL, egui::Key::S);
+    let saved = std::fs::read_to_string(&path).unwrap();
+    assert!(
+        saved.contains("zz_walk_palette") && saved.contains("t_brick_wall"),
+        "{saved}"
+    );
+    assert!(
+        document(&h).contains("\"Saved\"=\"Yes\""),
+        "{}",
+        document(&h)
+    );
+    for _ in 0..8 {
+        wheel(&mut h, 150.0);
+    }
+    shot_at(&mut h, "pal-7-saved", &sizes);
+}
