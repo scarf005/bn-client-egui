@@ -51,15 +51,16 @@ impl Widths {
     }
 
     /// The label's width in `room`: its natural width when that fits beside the other columns, else what they
-    /// leave it, but never less than its longest word.
+    /// leave it. Short of room for the longest word it is cut below that, so the columns after it stay beside the
+    /// scroll bar.
     pub fn label_in(&self, room: f32, gap: f32) -> f32 {
         let others = self.natural(gap) - self.label;
-        (room - others).min(self.label).max(self.label_min)
+        (room - others).min(self.label).max(0.0)
     }
 
     /// The label's width in `room` for a list whose labels wrap: all the other columns leave it.
     pub fn wrapped_label_in(&self, room: f32, gap: f32) -> f32 {
-        (room - (self.natural(gap) - self.label)).max(self.label_min)
+        (room - (self.natural(gap) - self.label)).max(0.0)
     }
 }
 
@@ -215,12 +216,12 @@ mod tests {
     }
 
     #[test]
-    fn a_label_keeps_its_natural_width_when_there_is_room_and_its_longest_word_when_there_is_none()
-    {
+    fn a_label_keeps_its_natural_width_when_there_is_room_and_is_cut_below_its_longest_word_when_there_is_none()
+     {
         let w = widths();
         assert_eq!(w.label_in(1000.0, 8.0), 200.0);
         assert_eq!(w.label_in(250.0, 8.0), 250.0 - 150.0);
-        assert_eq!(w.label_in(100.0, 8.0), 60.0);
+        assert_eq!(w.label_in(100.0, 8.0), 0.0);
         assert_eq!(w.wrapped_label_in(1000.0, 8.0), 1000.0 - 150.0);
     }
 }
