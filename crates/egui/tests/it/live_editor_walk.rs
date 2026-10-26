@@ -989,3 +989,83 @@ fn the_main_menu_reopens_a_recent_vehicle_in_the_vehicle_editor() {
     let opened = labels(&h).join("\n");
     assert!(opened.contains("Bicycle"), "{opened}");
 }
+
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn the_map_editor_exports_two_squares_stamps_pasted_mapgen_and_takes_it_back() {
+    let sizes = [(1280.0, 800.0)];
+    let dir = std::env::temp_dir().join(format!("bn-walk-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let (mut h, _root) = start(&dir);
+    h.set_size(egui::vec2(1280.0, 800.0));
+    rest(&mut h);
+    open_map_editor(&mut h);
+    shot_at(&mut h, "imp-1-editor", &sizes);
+    dump(&h, "the map editor");
+    let unstamp_enabled = |h: &H| {
+        h.state()
+            .model
+            .screens()
+            .last()
+            .and_then(|s| s.affordances.iter().find(|a| a.id == "editor:unstamp"))
+            .map(|a| a.enabled)
+    };
+    assert_eq!(unstamp_enabled(&h), Some(false));
+
+    // The export is two squares wide: the count prompt takes its digit and OK.
+    click_footer(&mut h, "Export width");
+    shot_at(&mut h, "imp-2-width-asks", &sizes);
+    replace_text(&mut h, "2");
+    shot_at(&mut h, "imp-3-width-typed", &sizes);
+    click(&mut h, "OK");
+    click_footer(&mut h, "Export width");
+    shot_at(&mut h, "imp-4-width-kept", &sizes);
+    click(&mut h, "Cancel");
+
+    // Exported to a new mod file, whose first entry names the avatar's overmap terrain.
+    let path = crate::common::live::profile_dir().join("mods/zz_export.json");
+    click_footer(&mut h, "Export mapgen here");
+    type_text(&mut h, &path.to_string_lossy());
+    shot_at(&mut h, "imp-5-path", &sizes);
+    key(&mut h, egui::Key::Enter);
+    shot_at(&mut h, "imp-6-exported", &sizes);
+    let exported = std::fs::read_to_string(&path).expect("the export file");
+    let json: serde_json::Value = serde_json::from_str(&exported).expect("json");
+    let terrain = json
+        .as_array()
+        .unwrap()
+        .iter()
+        .find_map(|e| {
+            e["om_terrain"]
+                .as_array()?
+                .first()?
+                .as_array()?
+                .first()?
+                .as_str()
+        })
+        .unwrap_or_else(|| panic!("no om_terrain: {exported}"))
+        .to_string();
+    assert_eq!(json[0]["om_terrain"][0].as_array().map(Vec::len), Some(2));
+
+    // Mapgen text pasted into the import box stamps over the avatar's square.
+    let row = "#".repeat(24);
+    let mapgen = serde_json::json!({
+        "type": "mapgen", "method": "json", "om_terrain": [terrain],
+        "object": { "rows": vec![row; 24], "terrain": { "#": "t_wall" } }
+    });
+    click_beside(&mut h, "Mapgen to stamp");
+    h.event(egui::Event::Paste(mapgen.to_string()));
+    h.run_steps(3);
+    rest(&mut h);
+    shot_at(&mut h, "imp-7-pasted", &sizes);
+    // The box has no button of its own: leaving it sends the text, here by a click on the window's title.
+    let title = find(&h, "Map Editor").expect("the window title");
+    click_at(&mut h, title.center());
+    shot_at(&mut h, "imp-8-stamped", &sizes);
+    assert_eq!(unstamp_enabled(&h), Some(true), "{:?}", labels(&h));
+
+    click_footer(&mut h, "Take back stamp");
+    rest(&mut h);
+    shot_at(&mut h, "imp-9-taken-back", &sizes);
+    assert_eq!(unstamp_enabled(&h), Some(false));
+}
