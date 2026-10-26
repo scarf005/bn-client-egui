@@ -249,6 +249,27 @@ fn a_click_on_a_neighbour_square_runs_its_affordance_on_the_row_of_the_objects_l
     assert!(painted(&script).is_empty());
 }
 
+#[test]
+fn a_press_on_a_neighbour_paints_nothing_on_the_entry_it_opens() {
+    let (mut h, script) = open(editor_with_neighbours("trail"));
+    let at = square(&h, 6, 2);
+    h.hover_at(at);
+    h.run_steps(2);
+    button(&mut h, at, true);
+    // The engine answers the click with the neighbour's entry, painted squares where the neighbour was.
+    restack(&script, 41, vec![editor(Some("trail"))]);
+    h.run_steps(6);
+    for x in [7, 8] {
+        let over = square(&h, x, 2);
+        h.hover_at(over);
+        h.run_steps(2);
+    }
+    let last = square(&h, 8, 2);
+    button(&mut h, last, false);
+    h.run_steps(4);
+    assert!(painted(&script).is_empty(), "{:?}", painted(&script));
+}
+
 fn first_square(h: &H) -> egui::Rect {
     h.get_all_by_label(".")
         .map(|n| n.rect())
