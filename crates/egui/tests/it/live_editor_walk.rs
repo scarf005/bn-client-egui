@@ -1112,3 +1112,88 @@ fn the_map_editor_lets_turns_pass_and_opens_again_by_itself() {
     dump(&h, "after letting turns pass");
     assert_eq!(document(&h), before, "the same document is back");
 }
+
+/// The squares the canvas on top marks faded, as (x, y), and its block size.
+fn faded_squares(h: &H) -> (Vec<(u32, u32)>, Option<(u32, u32)>) {
+    let top = h.state().model.screens().last().unwrap();
+    let Some(bn_client_egui::protocol::Component::Grid(grid)) =
+        top.root.as_ref().unwrap().find("editor:canvas")
+    else {
+        panic!("no canvas");
+    };
+    let faded = grid
+        .cells
+        .iter()
+        .filter(|c| c.faded == Some(true))
+        .map(|c| (c.x, c.y))
+        .collect();
+    (faded, grid.block.map(|b| (b.x, b.y)))
+}
+
+/// A mod file of two overmap squares side by side and the roof of the first, open air on its west half, opened from
+/// the recent documents as a player reopens a file.
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn the_map_editor_outlines_overmap_squares_and_shows_the_level_below_faded() {
+    let sizes = [(1920.0, 1080.0)];
+    let dir = std::env::temp_dir().join(format!("bn-walk-{}", std::process::id()));
+    // The first engine this process spawns has the profile `bn-live-<pid>-0`; its user mods are where the engine opens
+    // files from, and the recent documents name this one before the engine runs.
+    let profile = std::env::temp_dir().join(format!("bn-live-{}-0", std::process::id()));
+    let moddir = profile.join("mods").join("walk_levels");
+    std::fs::create_dir_all(&moddir).unwrap();
+    std::fs::create_dir_all(&dir).unwrap();
+    let ground = vec![".".repeat(48); 24];
+    let roof = vec![format!("{}{}", " ".repeat(12), "r".repeat(12)); 24];
+    let entries = serde_json::json!([
+        { "type": "mapgen", "method": "json", "om_terrain": [["house_01", "house_04"]],
+          "object": { "rows": ground, "terrain": { ".": "t_floor" } } },
+        { "type": "mapgen", "method": "json", "om_terrain": "house_01_roof",
+          "object": { "rows": roof, "terrain": { " ": "t_open_air", "r": "t_flat_roof" } } },
+    ]);
+    let file = moddir.join("levels.json");
+    std::fs::write(&file, entries.to_string()).unwrap();
+    let file = file.to_string_lossy().to_string();
+    let recent = serde_json::json!([{ "editor": "map", "name": file, "mods": ["bn"] }]);
+    let (mut h, _root) = start_with(&dir, &[("editor_recent.json", recent.to_string())]);
+    assert_eq!(crate::common::live::profile_dir(), profile);
+    h.set_size(egui::vec2(1920.0, 1080.0));
+    rest(&mut h);
+    click(&mut h, "Editor");
+    rest(&mut h);
+    click(&mut h, &file);
+    rest(&mut h);
+    key(&mut h, egui::Key::Escape);
+    click(&mut h, "Yes");
+    wait_kind(&mut h, "editor");
+    rest(&mut h);
+    shot_at(&mut h, "lv-1-ground", &sizes);
+    dump(&h, "ground level");
+    let (faded, block) = faded_squares(&h);
+    assert_eq!(block, Some((24, 24)));
+    assert!(faded.is_empty(), "the ground level shows nothing faded");
+    assert_eq!(canvas_glyphs(&h)[0].chars().count(), 48);
+
+    type_text(&mut h, "<");
+    shot_at(&mut h, "lv-2-roof", &sizes);
+    dump(&h, "roof level");
+    assert!(document(&h).contains("\"Level\"=\"1\""), "{}", document(&h));
+    let (faded, _) = faded_squares(&h);
+    assert!(!faded.is_empty(), "the open air shows the floor below");
+    assert!(faded.iter().all(|&(x, _)| x < 12), "{faded:?}");
+
+    // A faded square takes a paint like any other.
+    double_click(&mut h, "\"t_flat_roof\"");
+    shot_at(&mut h, "lv-2b-roof-symbol-picked", &sizes);
+    let before = canvas_glyphs(&h);
+    let at = square(&h, 3, 3).center();
+    click_at(&mut h, at);
+    shot_at(&mut h, "lv-3-painted-on-faded", &sizes);
+    assert_ne!(canvas_glyphs(&h), before, "the paint changed no square");
+    assert_eq!(canvas_glyphs(&h)[3].chars().nth(3), Some('r'));
+
+    type_text(&mut h, ">");
+    shot_at(&mut h, "lv-4-back-down", &sizes);
+    assert!(document(&h).contains("\"Level\"=\"0\""), "{}", document(&h));
+    assert!(faded_squares(&h).0.is_empty());
+}
