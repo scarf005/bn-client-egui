@@ -276,3 +276,85 @@ fn colour_manager_keeps_every_value_column_in_sight() {
         .collect::<Vec<_>>();
     assert!(hidden.is_empty(), "{hidden:?}");
 }
+
+/// The list `id` of the `screen` JSON, wherever it sits.
+fn list_mut<'a>(c: &'a mut Value, id: &str) -> Option<&'a mut Value> {
+    if c["id"] == id {
+        return Some(c);
+    }
+    let own = c.as_object_mut()?;
+    own.iter_mut()
+        .filter(|(k, _)| matches!(k.as_str(), "children" | "child" | "tabs"))
+        .find_map(|(_, v)| match v {
+            Value::Array(a) => a.iter_mut().find_map(|c| list_mut(c, id)),
+            v => list_mut(v, id),
+        })
+}
+
+/// The vehicle editor example `name` with the prototypes of a real game: long names and ids, enough rows that the
+/// list scrolls.
+fn prototypes(name: &str) -> Value {
+    let mut screen = example("vehicle_editor", name);
+    let list = list_mut(&mut screen["root"], "vehicle:prototypes").unwrap();
+    let base = list["rows"].as_array().unwrap().clone();
+    let rows = (0..8)
+        .flat_map(|i| {
+            base.iter().map(move |row| {
+                let mut row = row.clone();
+                let id = row["columns"][0]["value"].as_str().unwrap().to_string();
+                row["id"] = json!(format!("{}{i}", row["id"].as_str().unwrap()));
+                row["label"] = json!(format!(
+                    "{} {i} Infantry Carrier",
+                    row["label"].as_str().unwrap()
+                ));
+                row["columns"][0]["value"] = json!(format!("{id}_airliner_cargo_{i}"));
+                row
+            })
+        })
+        .collect::<Vec<_>>();
+    list["rows"] = json!(rows);
+    screen
+}
+
+/// How far the scroll bar of the list is right of the widest of its `id` texts.
+fn bar_gap(h: &H, id: &str) -> f32 {
+    let right = texts(h)
+        .into_iter()
+        .filter(|t| t.galley.text().starts_with(id))
+        .map(|t| t.pos.x + t.galley.rect.max.x)
+        .fold(f32::MIN, f32::max);
+    let bar = h
+        .output()
+        .shapes
+        .iter()
+        .filter_map(|c| match &c.shape {
+            egui::Shape::Rect(r) if r.rect.width() < 20.0 && r.rect.height() > 50.0 => {
+                Some(r.rect.left())
+            }
+            _ => None,
+        })
+        .fold(f32::MAX, f32::min);
+    bar - right
+}
+
+/// `prototypes` with a label of one long word among its rows.
+fn with_long_word(mut screen: Value) -> Value {
+    let list = list_mut(&mut screen["root"], "vehicle:prototypes").unwrap();
+    list["rows"][3]["label"] = json!("Supercalifragilisticexpialidocious");
+    screen
+}
+
+#[test]
+fn a_list_too_narrow_for_its_columns_cuts_its_label_and_keeps_the_last_column_clear_of_the_bar() {
+    for width in [700.0, 880.0, 1000.0] {
+        let screen = with_long_word(prototypes(
+            "vehicle editor with a prototype open on a mount",
+        ));
+        let h = open(screen, egui::vec2(width, 830.0));
+        let gap = bar_gap(&h, "bicycle_plastic_airliner");
+        assert!(
+            gap >= 0.0,
+            "at {width} the ID column ends {gap} before the scroll bar, under it if negative"
+        );
+    }
+}
