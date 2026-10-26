@@ -213,6 +213,31 @@ fn a_canvas_without_drag_paints_a_click_and_ignores_the_drag() {
     assert_eq!(painted(&script), ["square:5,5"]);
 }
 
+/// The editor whose squares from column 5 on are neighbours: clicking one opens it as `editor:object`.
+fn editor_with_neighbours(drag: &str) -> Value {
+    let mut screen = editor(Some(drag));
+    let canvas = find(&mut screen["root"], "editor:canvas").unwrap();
+    for cell in canvas["cells"].as_array_mut().unwrap() {
+        if cell["x"].as_u64().unwrap() >= 5 {
+            cell["id"] = json!(format!("object:{}", cell["x"]));
+            cell["affordance"] = json!("editor:object");
+        }
+    }
+    screen
+}
+
+#[test]
+fn a_click_on_a_neighbour_square_runs_its_affordance_on_the_row_of_the_objects_list() {
+    let (mut h, script) = open(editor_with_neighbours("trail"));
+    drag(&mut h, (6, 2), &[]);
+    assert!(
+        sent(&script).contains(&"editor:object".to_owned()),
+        "{:?}",
+        sent(&script)
+    );
+    assert!(painted(&script).is_empty());
+}
+
 fn first_square(h: &H) -> egui::Rect {
     h.get_all_by_label(".")
         .map(|n| n.rect())
