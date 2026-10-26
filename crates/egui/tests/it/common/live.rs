@@ -30,11 +30,22 @@ pub fn english_transport() -> StdioTransport {
     english_transport_on(&std::env::var("BN_SEED").unwrap_or_else(|_| "2".into()))
 }
 
+thread_local! {
+    /// The profile of the engine this test thread spawned last; tests run on threads of their own.
+    static PROFILE: std::cell::RefCell<std::path::PathBuf> = std::cell::RefCell::default();
+}
+
+/// The profile directory of the engine this test spawned last, where its mod files are written.
+pub fn profile_dir() -> std::path::PathBuf {
+    PROFILE.with_borrow(Clone::clone)
+}
+
 /// `english_transport()` on `seed`, for a test that needs a start the default seed does not give.
 pub fn english_transport_on(seed: &str) -> StdioTransport {
     static SPAWNED: AtomicUsize = AtomicUsize::new(0);
     let n = SPAWNED.fetch_add(1, Ordering::Relaxed);
     let dir = std::env::temp_dir().join(format!("bn-live-{}-{n}", std::process::id()));
+    PROFILE.set(dir.clone());
     let config = dir.join("config");
     std::fs::create_dir_all(&config).unwrap();
     std::fs::write(
