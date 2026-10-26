@@ -885,6 +885,11 @@
                   "key": "mirror_y",
                   "label": "Mirror down",
                   "value": "Off"
+                },
+                {
+                  "key": "apply_on_save",
+                  "label": "Apply on save",
+                  "value": "Off"
                 }
               ]
             },
@@ -3809,6 +3814,13 @@
             "expect": "screen"
           },
           {
+            "id": "editor:apply_on_save",
+            "label": "Apply on save",
+            "keys": [],
+            "enabled": true,
+            "expect": "screen"
+          },
+          {
             "id": "editor:stamp",
             "label": "Stamp",
             "keys": [],
@@ -4074,6 +4086,11 @@
                 {
                   "key": "mirror_y",
                   "label": "Mirror down",
+                  "value": "Off"
+                },
+                {
+                  "key": "apply_on_save",
+                  "label": "Apply on save",
                   "value": "Off"
                 }
               ]
@@ -7039,6 +7056,13 @@
             "expect": "screen"
           },
           {
+            "id": "editor:apply_on_save",
+            "label": "Apply on save",
+            "keys": [],
+            "enabled": true,
+            "expect": "screen"
+          },
+          {
             "id": "editor:stamp",
             "label": "Stamp",
             "keys": [],
@@ -7182,6 +7206,11 @@
                 {
                   "key": "mirror_y",
                   "label": "Mirror down",
+                  "value": "Off"
+                },
+                {
+                  "key": "apply_on_save",
+                  "label": "Apply on save",
                   "value": "Off"
                 }
               ]
@@ -10167,6 +10196,13 @@
             "expect": "screen"
           },
           {
+            "id": "editor:apply_on_save",
+            "label": "Apply on save",
+            "keys": [],
+            "enabled": true,
+            "expect": "screen"
+          },
+          {
             "id": "editor:stamp",
             "label": "Stamp",
             "keys": [],
@@ -10678,6 +10714,11 @@
                 {
                   "key": "mirror_y",
                   "label": "Mirror down",
+                  "value": "Off"
+                },
+                {
+                  "key": "apply_on_save",
+                  "label": "Apply on save",
                   "value": "Off"
                 },
                 {
@@ -26995,6 +27036,13 @@
           {
             "id": "editor:apply",
             "label": "Apply to game",
+            "keys": [],
+            "enabled": true,
+            "expect": "screen"
+          },
+          {
+            "id": "editor:apply_on_save",
+            "label": "Apply on save",
             "keys": [],
             "enabled": true,
             "expect": "screen"
