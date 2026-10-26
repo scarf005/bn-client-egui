@@ -107,7 +107,8 @@
               "id": "editor:browser",
               "kind": "list",
               "affordances": [
-                "editor:browser_open"
+                "editor:browser_open",
+                "editor:browser_filter"
               ],
               "columns": [],
               "rows": [
@@ -1220,6 +1221,10 @@
                 {
                   "key": "terrain",
                   "label": "terrain"
+                },
+                {
+                  "key": "use",
+                  "label": "Use"
                 }
               ],
               "rows": [
@@ -1236,6 +1241,11 @@
                       "key": "terrain",
                       "label": "terrain",
                       "value": "\"t_wall\""
+                    },
+                    {
+                      "key": "use",
+                      "label": "Use",
+                      "value": "Unused"
                     }
                   ]
                 },
@@ -1323,6 +1333,140 @@
               "total": 1,
               "selection": "single",
               "activate": "editor:placement"
+            },
+            {
+              "id": "editor:place",
+              "kind": "form",
+              "affordances": [
+                "editor:place_set",
+                "editor:place_apply"
+              ],
+              "fields": [
+                {
+                  "id": "kind",
+                  "label": "Kind",
+                  "value": "place_items",
+                  "type": "select",
+                  "options": [
+                    {
+                      "id": "place_item",
+                      "label": "place_item"
+                    },
+                    {
+                      "id": "place_fields",
+                      "label": "place_fields"
+                    },
+                    {
+                      "id": "place_npcs",
+                      "label": "place_npcs"
+                    },
+                    {
+                      "id": "place_signs",
+                      "label": "place_signs"
+                    },
+                    {
+                      "id": "place_vendingmachines",
+                      "label": "place_vendingmachines"
+                    },
+                    {
+                      "id": "place_toilets",
+                      "label": "place_toilets"
+                    },
+                    {
+                      "id": "place_liquids",
+                      "label": "place_liquids"
+                    },
+                    {
+                      "id": "place_gaspumps",
+                      "label": "place_gaspumps"
+                    },
+                    {
+                      "id": "place_items",
+                      "label": "place_items"
+                    },
+                    {
+                      "id": "place_loot",
+                      "label": "place_loot"
+                    },
+                    {
+                      "id": "place_artifact",
+                      "label": "place_artifact"
+                    },
+                    {
+                      "id": "place_monsters",
+                      "label": "place_monsters"
+                    },
+                    {
+                      "id": "place_vehicles",
+                      "label": "place_vehicles"
+                    },
+                    {
+                      "id": "place_traps",
+                      "label": "place_traps"
+                    },
+                    {
+                      "id": "place_furniture",
+                      "label": "place_furniture"
+                    },
+                    {
+                      "id": "place_terrain",
+                      "label": "place_terrain"
+                    },
+                    {
+                      "id": "place_monster",
+                      "label": "place_monster"
+                    },
+                    {
+                      "id": "place_rubble",
+                      "label": "place_rubble"
+                    },
+                    {
+                      "id": "place_computers",
+                      "label": "place_computers"
+                    },
+                    {
+                      "id": "place_nested",
+                      "label": "place_nested"
+                    },
+                    {
+                      "id": "place_graffiti",
+                      "label": "place_graffiti"
+                    },
+                    {
+                      "id": "place_zones",
+                      "label": "place_zones"
+                    },
+                    {
+                      "id": "place_ter_furn_transforms",
+                      "label": "place_ter_furn_transforms"
+                    },
+                    {
+                      "id": "place_remove_all",
+                      "label": "place_remove_all"
+                    }
+                  ]
+                },
+                {
+                  "id": "x",
+                  "label": "x",
+                  "value": "0",
+                  "type": "text"
+                },
+                {
+                  "id": "y",
+                  "label": "y",
+                  "value": "0",
+                  "type": "text"
+                },
+                {
+                  "id": "value",
+                  "label": "Value",
+                  "value": "",
+                  "type": "text",
+                  "multiline": true
+                }
+              ],
+              "submit": "editor:place_apply"
             },
             {
               "id": "editor:field",
@@ -1567,7 +1711,8 @@
                 "id": "editor:catalog",
                 "kind": "list",
                 "affordances": [
-                  "editor:catalog_pick"
+                  "editor:catalog_pick",
+                  "editor:catalog_filter"
                 ],
                 "columns": [
                   {
@@ -2692,7 +2837,8 @@
               "id": "editor:browser",
               "kind": "list",
               "affordances": [
-                "editor:browser_open"
+                "editor:browser_open",
+                "editor:browser_filter"
               ],
               "columns": [],
               "rows": [
@@ -3400,6 +3546,26 @@
             "expect": "boundary"
           },
           {
+            "id": "editor:place_set",
+            "label": "Value",
+            "keys": [],
+            "enabled": true,
+            "args": {
+              "row": {
+                "component_id": "editor:place"
+              },
+              "text": {}
+            },
+            "expect": "boundary"
+          },
+          {
+            "id": "editor:place_apply",
+            "label": "Add placement",
+            "keys": [],
+            "enabled": true,
+            "expect": "screen"
+          },
+          {
             "id": "editor:field_set",
             "label": "Value",
             "keys": [],
@@ -3492,8 +3658,32 @@
             "expect": "screen"
           },
           {
+            "id": "editor:cut",
+            "label": "Cut",
+            "keys": [],
+            "enabled": false,
+            "denial": "Not available now.",
+            "expect": "screen"
+          },
+          {
             "id": "editor:rotate",
             "label": "Rotate",
+            "keys": [],
+            "enabled": false,
+            "denial": "Not available now.",
+            "expect": "screen"
+          },
+          {
+            "id": "editor:flip_x",
+            "label": "Flip across",
+            "keys": [],
+            "enabled": false,
+            "denial": "Not available now.",
+            "expect": "screen"
+          },
+          {
+            "id": "editor:flip_y",
+            "label": "Flip down",
             "keys": [],
             "enabled": false,
             "denial": "Not available now.",
@@ -4233,6 +4423,10 @@
                 {
                   "key": "terrain",
                   "label": "terrain"
+                },
+                {
+                  "key": "use",
+                  "label": "Use"
                 }
               ],
               "rows": [
@@ -4281,6 +4475,11 @@
                       "key": "terrain",
                       "label": "terrain",
                       "value": "\"t_dirt\""
+                    },
+                    {
+                      "key": "use",
+                      "label": "Use",
+                      "value": "Unused"
                     }
                   ]
                 }
@@ -4352,6 +4551,140 @@
               "total": 1,
               "selection": "single",
               "activate": "editor:placement"
+            },
+            {
+              "id": "editor:place",
+              "kind": "form",
+              "affordances": [
+                "editor:place_set",
+                "editor:place_apply"
+              ],
+              "fields": [
+                {
+                  "id": "kind",
+                  "label": "Kind",
+                  "value": "place_items",
+                  "type": "select",
+                  "options": [
+                    {
+                      "id": "place_item",
+                      "label": "place_item"
+                    },
+                    {
+                      "id": "place_fields",
+                      "label": "place_fields"
+                    },
+                    {
+                      "id": "place_npcs",
+                      "label": "place_npcs"
+                    },
+                    {
+                      "id": "place_signs",
+                      "label": "place_signs"
+                    },
+                    {
+                      "id": "place_vendingmachines",
+                      "label": "place_vendingmachines"
+                    },
+                    {
+                      "id": "place_toilets",
+                      "label": "place_toilets"
+                    },
+                    {
+                      "id": "place_liquids",
+                      "label": "place_liquids"
+                    },
+                    {
+                      "id": "place_gaspumps",
+                      "label": "place_gaspumps"
+                    },
+                    {
+                      "id": "place_items",
+                      "label": "place_items"
+                    },
+                    {
+                      "id": "place_loot",
+                      "label": "place_loot"
+                    },
+                    {
+                      "id": "place_artifact",
+                      "label": "place_artifact"
+                    },
+                    {
+                      "id": "place_monsters",
+                      "label": "place_monsters"
+                    },
+                    {
+                      "id": "place_vehicles",
+                      "label": "place_vehicles"
+                    },
+                    {
+                      "id": "place_traps",
+                      "label": "place_traps"
+                    },
+                    {
+                      "id": "place_furniture",
+                      "label": "place_furniture"
+                    },
+                    {
+                      "id": "place_terrain",
+                      "label": "place_terrain"
+                    },
+                    {
+                      "id": "place_monster",
+                      "label": "place_monster"
+                    },
+                    {
+                      "id": "place_rubble",
+                      "label": "place_rubble"
+                    },
+                    {
+                      "id": "place_computers",
+                      "label": "place_computers"
+                    },
+                    {
+                      "id": "place_nested",
+                      "label": "place_nested"
+                    },
+                    {
+                      "id": "place_graffiti",
+                      "label": "place_graffiti"
+                    },
+                    {
+                      "id": "place_zones",
+                      "label": "place_zones"
+                    },
+                    {
+                      "id": "place_ter_furn_transforms",
+                      "label": "place_ter_furn_transforms"
+                    },
+                    {
+                      "id": "place_remove_all",
+                      "label": "place_remove_all"
+                    }
+                  ]
+                },
+                {
+                  "id": "x",
+                  "label": "x",
+                  "value": "0",
+                  "type": "text"
+                },
+                {
+                  "id": "y",
+                  "label": "y",
+                  "value": "0",
+                  "type": "text"
+                },
+                {
+                  "id": "value",
+                  "label": "Value",
+                  "value": "",
+                  "type": "text",
+                  "multiline": true
+                }
+              ],
+              "submit": "editor:place_apply"
             },
             {
               "id": "editor:field",
@@ -4596,7 +4929,8 @@
                 "id": "editor:catalog",
                 "kind": "list",
                 "affordances": [
-                  "editor:catalog_pick"
+                  "editor:catalog_pick",
+                  "editor:catalog_filter"
                 ],
                 "columns": [
                   {
@@ -5721,7 +6055,8 @@
               "id": "editor:browser",
               "kind": "list",
               "affordances": [
-                "editor:browser_open"
+                "editor:browser_open",
+                "editor:browser_filter"
               ],
               "columns": [],
               "rows": [
@@ -6427,6 +6762,26 @@
             "expect": "boundary"
           },
           {
+            "id": "editor:place_set",
+            "label": "Value",
+            "keys": [],
+            "enabled": true,
+            "args": {
+              "row": {
+                "component_id": "editor:place"
+              },
+              "text": {}
+            },
+            "expect": "boundary"
+          },
+          {
+            "id": "editor:place_apply",
+            "label": "Add placement",
+            "keys": [],
+            "enabled": true,
+            "expect": "screen"
+          },
+          {
             "id": "editor:field_set",
             "label": "Value",
             "keys": [],
@@ -6519,8 +6874,32 @@
             "expect": "screen"
           },
           {
+            "id": "editor:cut",
+            "label": "Cut",
+            "keys": [],
+            "enabled": false,
+            "denial": "Not available now.",
+            "expect": "screen"
+          },
+          {
             "id": "editor:rotate",
             "label": "Rotate",
+            "keys": [],
+            "enabled": false,
+            "denial": "Not available now.",
+            "expect": "screen"
+          },
+          {
+            "id": "editor:flip_x",
+            "label": "Flip across",
+            "keys": [],
+            "enabled": false,
+            "denial": "Not available now.",
+            "expect": "screen"
+          },
+          {
+            "id": "editor:flip_y",
+            "label": "Flip down",
             "keys": [],
             "enabled": false,
             "denial": "Not available now.",
@@ -7262,6 +7641,140 @@
               "submit": "editor:move_apply"
             },
             {
+              "id": "editor:place",
+              "kind": "form",
+              "affordances": [
+                "editor:place_set",
+                "editor:place_apply"
+              ],
+              "fields": [
+                {
+                  "id": "kind",
+                  "label": "Kind",
+                  "value": "place_items",
+                  "type": "select",
+                  "options": [
+                    {
+                      "id": "place_item",
+                      "label": "place_item"
+                    },
+                    {
+                      "id": "place_fields",
+                      "label": "place_fields"
+                    },
+                    {
+                      "id": "place_npcs",
+                      "label": "place_npcs"
+                    },
+                    {
+                      "id": "place_signs",
+                      "label": "place_signs"
+                    },
+                    {
+                      "id": "place_vendingmachines",
+                      "label": "place_vendingmachines"
+                    },
+                    {
+                      "id": "place_toilets",
+                      "label": "place_toilets"
+                    },
+                    {
+                      "id": "place_liquids",
+                      "label": "place_liquids"
+                    },
+                    {
+                      "id": "place_gaspumps",
+                      "label": "place_gaspumps"
+                    },
+                    {
+                      "id": "place_items",
+                      "label": "place_items"
+                    },
+                    {
+                      "id": "place_loot",
+                      "label": "place_loot"
+                    },
+                    {
+                      "id": "place_artifact",
+                      "label": "place_artifact"
+                    },
+                    {
+                      "id": "place_monsters",
+                      "label": "place_monsters"
+                    },
+                    {
+                      "id": "place_vehicles",
+                      "label": "place_vehicles"
+                    },
+                    {
+                      "id": "place_traps",
+                      "label": "place_traps"
+                    },
+                    {
+                      "id": "place_furniture",
+                      "label": "place_furniture"
+                    },
+                    {
+                      "id": "place_terrain",
+                      "label": "place_terrain"
+                    },
+                    {
+                      "id": "place_monster",
+                      "label": "place_monster"
+                    },
+                    {
+                      "id": "place_rubble",
+                      "label": "place_rubble"
+                    },
+                    {
+                      "id": "place_computers",
+                      "label": "place_computers"
+                    },
+                    {
+                      "id": "place_nested",
+                      "label": "place_nested"
+                    },
+                    {
+                      "id": "place_graffiti",
+                      "label": "place_graffiti"
+                    },
+                    {
+                      "id": "place_zones",
+                      "label": "place_zones"
+                    },
+                    {
+                      "id": "place_ter_furn_transforms",
+                      "label": "place_ter_furn_transforms"
+                    },
+                    {
+                      "id": "place_remove_all",
+                      "label": "place_remove_all"
+                    }
+                  ]
+                },
+                {
+                  "id": "x",
+                  "label": "x",
+                  "value": "0",
+                  "type": "text"
+                },
+                {
+                  "id": "y",
+                  "label": "y",
+                  "value": "0",
+                  "type": "text"
+                },
+                {
+                  "id": "value",
+                  "label": "Value",
+                  "value": "",
+                  "type": "text",
+                  "multiline": true
+                }
+              ],
+              "submit": "editor:place_apply"
+            },
+            {
               "id": "editor:field",
               "kind": "form",
               "affordances": [
@@ -7504,7 +8017,8 @@
                 "id": "editor:catalog",
                 "kind": "list",
                 "affordances": [
-                  "editor:catalog_pick"
+                  "editor:catalog_pick",
+                  "editor:catalog_filter"
                 ],
                 "columns": [
                   {
@@ -8629,7 +9143,8 @@
               "id": "editor:browser",
               "kind": "list",
               "affordances": [
-                "editor:browser_open"
+                "editor:browser_open",
+                "editor:browser_filter"
               ],
               "columns": [],
               "rows": [
@@ -9354,6 +9869,33 @@
             "expect": "screen"
           },
           {
+            "id": "editor:placement_delete",
+            "label": "Delete placement",
+            "keys": [],
+            "enabled": true,
+            "expect": "screen"
+          },
+          {
+            "id": "editor:place_set",
+            "label": "Value",
+            "keys": [],
+            "enabled": true,
+            "args": {
+              "row": {
+                "component_id": "editor:place"
+              },
+              "text": {}
+            },
+            "expect": "boundary"
+          },
+          {
+            "id": "editor:place_apply",
+            "label": "Add placement",
+            "keys": [],
+            "enabled": true,
+            "expect": "screen"
+          },
+          {
             "id": "editor:field_set",
             "label": "Value",
             "keys": [],
@@ -9446,8 +9988,32 @@
             "expect": "screen"
           },
           {
+            "id": "editor:cut",
+            "label": "Cut",
+            "keys": [],
+            "enabled": false,
+            "denial": "Not available now.",
+            "expect": "screen"
+          },
+          {
             "id": "editor:rotate",
             "label": "Rotate",
+            "keys": [],
+            "enabled": false,
+            "denial": "Not available now.",
+            "expect": "screen"
+          },
+          {
+            "id": "editor:flip_x",
+            "label": "Flip across",
+            "keys": [],
+            "enabled": false,
+            "denial": "Not available now.",
+            "expect": "screen"
+          },
+          {
+            "id": "editor:flip_y",
+            "label": "Flip down",
             "keys": [],
             "enabled": false,
             "denial": "Not available now.",
@@ -14942,6 +15508,140 @@
               "activate": "editor:placement"
             },
             {
+              "id": "editor:place",
+              "kind": "form",
+              "affordances": [
+                "editor:place_set",
+                "editor:place_apply"
+              ],
+              "fields": [
+                {
+                  "id": "kind",
+                  "label": "Kind",
+                  "value": "place_items",
+                  "type": "select",
+                  "options": [
+                    {
+                      "id": "place_item",
+                      "label": "place_item"
+                    },
+                    {
+                      "id": "place_fields",
+                      "label": "place_fields"
+                    },
+                    {
+                      "id": "place_npcs",
+                      "label": "place_npcs"
+                    },
+                    {
+                      "id": "place_signs",
+                      "label": "place_signs"
+                    },
+                    {
+                      "id": "place_vendingmachines",
+                      "label": "place_vendingmachines"
+                    },
+                    {
+                      "id": "place_toilets",
+                      "label": "place_toilets"
+                    },
+                    {
+                      "id": "place_liquids",
+                      "label": "place_liquids"
+                    },
+                    {
+                      "id": "place_gaspumps",
+                      "label": "place_gaspumps"
+                    },
+                    {
+                      "id": "place_items",
+                      "label": "place_items"
+                    },
+                    {
+                      "id": "place_loot",
+                      "label": "place_loot"
+                    },
+                    {
+                      "id": "place_artifact",
+                      "label": "place_artifact"
+                    },
+                    {
+                      "id": "place_monsters",
+                      "label": "place_monsters"
+                    },
+                    {
+                      "id": "place_vehicles",
+                      "label": "place_vehicles"
+                    },
+                    {
+                      "id": "place_traps",
+                      "label": "place_traps"
+                    },
+                    {
+                      "id": "place_furniture",
+                      "label": "place_furniture"
+                    },
+                    {
+                      "id": "place_terrain",
+                      "label": "place_terrain"
+                    },
+                    {
+                      "id": "place_monster",
+                      "label": "place_monster"
+                    },
+                    {
+                      "id": "place_rubble",
+                      "label": "place_rubble"
+                    },
+                    {
+                      "id": "place_computers",
+                      "label": "place_computers"
+                    },
+                    {
+                      "id": "place_nested",
+                      "label": "place_nested"
+                    },
+                    {
+                      "id": "place_graffiti",
+                      "label": "place_graffiti"
+                    },
+                    {
+                      "id": "place_zones",
+                      "label": "place_zones"
+                    },
+                    {
+                      "id": "place_ter_furn_transforms",
+                      "label": "place_ter_furn_transforms"
+                    },
+                    {
+                      "id": "place_remove_all",
+                      "label": "place_remove_all"
+                    }
+                  ]
+                },
+                {
+                  "id": "x",
+                  "label": "x",
+                  "value": "0",
+                  "type": "text"
+                },
+                {
+                  "id": "y",
+                  "label": "y",
+                  "value": "0",
+                  "type": "text"
+                },
+                {
+                  "id": "value",
+                  "label": "Value",
+                  "value": "",
+                  "type": "text",
+                  "multiline": true
+                }
+              ],
+              "submit": "editor:place_apply"
+            },
+            {
               "id": "editor:field",
               "kind": "form",
               "affordances": [
@@ -15184,7 +15884,8 @@
                 "id": "editor:catalog",
                 "kind": "list",
                 "affordances": [
-                  "editor:catalog_pick"
+                  "editor:catalog_pick",
+                  "editor:catalog_filter"
                 ],
                 "columns": [
                   {
@@ -25285,7 +25986,8 @@
               "id": "editor:browser",
               "kind": "list",
               "affordances": [
-                "editor:browser_open"
+                "editor:browser_open",
+                "editor:browser_filter"
               ],
               "columns": [],
               "rows": [
@@ -25993,6 +26695,26 @@
             "expect": "boundary"
           },
           {
+            "id": "editor:place_set",
+            "label": "Value",
+            "keys": [],
+            "enabled": true,
+            "args": {
+              "row": {
+                "component_id": "editor:place"
+              },
+              "text": {}
+            },
+            "expect": "boundary"
+          },
+          {
+            "id": "editor:place_apply",
+            "label": "Add placement",
+            "keys": [],
+            "enabled": true,
+            "expect": "screen"
+          },
+          {
             "id": "editor:field_set",
             "label": "Value",
             "keys": [],
@@ -26085,8 +26807,32 @@
             "expect": "screen"
           },
           {
+            "id": "editor:cut",
+            "label": "Cut",
+            "keys": [],
+            "enabled": false,
+            "denial": "Not available now.",
+            "expect": "screen"
+          },
+          {
             "id": "editor:rotate",
             "label": "Rotate",
+            "keys": [],
+            "enabled": false,
+            "denial": "Not available now.",
+            "expect": "screen"
+          },
+          {
+            "id": "editor:flip_x",
+            "label": "Flip across",
+            "keys": [],
+            "enabled": false,
+            "denial": "Not available now.",
+            "expect": "screen"
+          },
+          {
+            "id": "editor:flip_y",
+            "label": "Flip down",
             "keys": [],
             "enabled": false,
             "denial": "Not available now.",
