@@ -1173,7 +1173,7 @@ impl<M: GameModel> App<M> {
                             &cell.affordance,
                         ) {
                             out.push(Intent::Focus {
-                                component: grid.head.id.clone(),
+                                component: self.row_component(a, &grid.head.id),
                                 row: id.clone(),
                             });
                             out.push(Intent::Run(a.clone()));
@@ -1213,6 +1213,15 @@ impl<M: GameModel> App<M> {
                 .borrow_mut()
                 .push((ui.painter().clone(), lines));
         }
+    }
+
+    /// The component whose row `affordance` acts on: the one its row argument names, else `own`.
+    fn row_component(&self, affordance: &str, own: &str) -> String {
+        interaction::described(self.model.screens())
+            .and_then(|top| top.affordances.iter().find(|a| a.id == affordance))
+            .and_then(|a| a.args.as_ref()?.row.as_ref())
+            .map_or(own, |of| of.component_id.as_str())
+            .to_owned()
     }
 
     /// Runs the affordance of the squares a pointer drag over `squares` crosses.
@@ -1275,7 +1284,7 @@ impl<M: GameModel> App<M> {
                 continue;
             };
             out.push(Intent::Paint(Paint {
-                component: grid.head.id.clone(),
+                component: self.row_component(affordance, &grid.head.id),
                 row: Some(row.clone()),
                 affordance: affordance.clone(),
             }));
