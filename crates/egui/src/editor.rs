@@ -15,6 +15,9 @@ struct Draft {
 /// The space between a field's frame and its text, on each side.
 const FIELD_MARGIN: egui::Margin = egui::Margin::symmetric(4, 2);
 
+/// The rows a multiline field shows before its text scrolls.
+const MULTILINE_ROWS: usize = 6;
+
 /// The width a one-line field takes to show the whole of `value`.
 pub fn field_width(ui: &egui::Ui, value: &str) -> f32 {
     let font = egui::TextStyle::Body.resolve(ui.style());
@@ -74,15 +77,31 @@ pub fn value_editor(
             _ => {
                 ui.label(label);
                 // A one-line field widens to its whole value rather than cut it.
-                let edit = ui.add(
-                    match editor.multiline {
-                        true => egui::TextEdit::multiline(&mut draft.text),
-                        false => egui::TextEdit::singleline(&mut draft.text)
-                            .desired_width(ui.spacing().text_edit_width.min(ui.available_width()))
-                            .clip_text(false),
+                let edit = match editor.multiline {
+                    // A long text scrolls in a box of a few lines, as wide as the room left.
+                    true => {
+                        let line = ui.text_style_height(&egui::TextStyle::Body);
+                        egui::ScrollArea::vertical()
+                            .id_salt(key)
+                            .max_height(MULTILINE_ROWS as f32 * line)
+                            .show(ui, |ui| {
+                                ui.add(
+                                    egui::TextEdit::multiline(&mut draft.text)
+                                        .id_salt(key)
+                                        .desired_rows(MULTILINE_ROWS)
+                                        .desired_width(ui.available_width())
+                                        .margin(FIELD_MARGIN),
+                                )
+                            })
+                            .inner
                     }
-                    .margin(FIELD_MARGIN),
-                );
+                    false => ui.add(
+                        egui::TextEdit::singleline(&mut draft.text)
+                            .desired_width(ui.spacing().text_edit_width.min(ui.available_width()))
+                            .clip_text(false)
+                            .margin(FIELD_MARGIN),
+                    ),
+                };
                 edit.widget_info(|| {
                     egui::WidgetInfo::text_edit(true, draft.text.clone(), draft.text.clone(), label)
                 });

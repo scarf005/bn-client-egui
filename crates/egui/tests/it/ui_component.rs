@@ -1415,15 +1415,29 @@ fn the_typing_state_of_closed_prompts_is_not_kept() {
 fn a_multiline_field_holding_a_long_text_stays_a_few_lines_tall_and_as_wide_as_the_form() {
     let long = "{\"rows\":[\"########################\"]}".repeat(60);
     let form = json!({"id": "form:f", "kind": "form", "affordances": ["fill"],
-        "fields": [{"id": "field:t", "label": "Mapgen", "value": long, "type": "text", "multiline": true}],
+        "fields": [{"id": "field:t", "label": "Mapgen", "value": long, "type": "text", "multiline": true},
+            {"id": "field:u", "label": "After", "value": "", "type": "text"}],
         "submit": "fill"});
     let text = json!({"text": {"field_id": "field:t"}});
     let (mut h, _script) = harness(dialog(form, vec![affordance("fill", &[], text)]));
     h.run_steps(5);
-    let rect = h.get_by_role(egui::accesskit::Role::TextInput).rect();
+    let rect = h.get_by_label("Mapgen").rect();
+    let after = h.get_by_label("After").rect();
     let window = h.ctx.content_rect();
-    assert!(rect.height() < window.height() / 3.0, "{rect:?} in {window:?}");
-    assert!(rect.width() > window.width() / 2.0, "{rect:?} in {window:?}");
+    // The next field follows within a few lines, and the box is as wide as the window's room allows.
+    assert!(
+        after.top() - rect.top() < window.height() / 3.0,
+        "{rect:?} {after:?}"
+    );
+    let field = h
+        .get_all_by_role(egui::accesskit::Role::TextInput)
+        .next()
+        .unwrap()
+        .rect();
+    assert!(
+        field.width() > window.width() / 2.0,
+        "{field:?} in {window:?}"
+    );
 }
 
 #[test]
