@@ -42,6 +42,11 @@ pub fn profile_dir() -> std::path::PathBuf {
 
 /// `english_transport()` on `seed`, for a test that needs a start the default seed does not give.
 pub fn english_transport_on(seed: &str) -> StdioTransport {
+    english_transport_with(seed, &[])
+}
+
+/// `english_transport_on(seed)` with `files` (name, content) written to the profile's config directory first.
+pub fn english_transport_with(seed: &str, files: &[(&str, String)]) -> StdioTransport {
     static SPAWNED: AtomicUsize = AtomicUsize::new(0);
     let n = SPAWNED.fetch_add(1, Ordering::Relaxed);
     let dir = std::env::temp_dir().join(format!("bn-live-{}-{n}", std::process::id()));
@@ -53,6 +58,9 @@ pub fn english_transport_on(seed: &str) -> StdioTransport {
         r#"[{"name":"USE_LANG","value":"en_US"}]"#,
     )
     .unwrap();
+    for (name, content) in files {
+        std::fs::write(config.join(name), content).unwrap();
+    }
     let profile = Profile {
         fresh: false,
         userdir: Some(dir),

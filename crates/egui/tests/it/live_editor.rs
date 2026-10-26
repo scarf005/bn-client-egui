@@ -158,12 +158,21 @@ fn at_main_menu() -> (H<'static>, std::path::PathBuf, std::path::PathBuf) {
 
 /// A harness on a real engine's main menu in English, with the tiles drawn, and the game root.
 pub(crate) fn start(dir: &std::path::Path) -> (H<'static>, std::path::PathBuf) {
+    start_with(dir, &[])
+}
+
+/// `start` with `files` (name, content) in the engine profile's config directory before the engine runs.
+pub(crate) fn start_with(
+    dir: &std::path::Path,
+    files: &[(&str, String)],
+) -> (H<'static>, std::path::PathBuf) {
     let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
     let root =
         game_root(engine.as_ref(), std::env::var_os("BN_ROOT").map(Into::into)).expect("game root");
     let settings = dir.join("settings.json");
     std::fs::write(&settings, r#"{"tiles":true,"tileset":"UltimateCataclysm"}"#).unwrap();
-    let transport = crate::common::live::english_transport();
+    let seed = std::env::var("BN_SEED").unwrap_or_else(|_| "2".into());
+    let transport = crate::common::live::english_transport_with(&seed, files);
     let app = App::new(EngineModel::new(Box::new(transport)))
         .with_settings(settings)
         .with_root(root.clone())

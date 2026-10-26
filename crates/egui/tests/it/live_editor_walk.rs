@@ -4,7 +4,7 @@
 //! `BN_ENGINE=<engine> SHOT_DIR=<dir> cargo test --release -p bn-client-egui --test it live_editor_walk:: --
 //! --ignored --nocapture`
 use crate::common::live::settle;
-use crate::live_editor::{H, field, run_until, start, wait_kind};
+use crate::live_editor::{H, field, run_until, start, start_with, wait_kind};
 use bn_client_egui::GameModel;
 use eframe::egui;
 use egui_kittest::kittest::NodeT;
@@ -872,4 +872,120 @@ fn the_map_editor_creates_a_palette_maps_a_symbol_and_saves_it() {
         wheel(&mut h, 150.0);
     }
     shot_at(&mut h, "pal-7-saved", &sizes);
+}
+
+/// A walk's engine profile holding the documents the editors opened before: a map file of the game's data and the
+/// bicycle prototype, both with the core mod.
+fn start_with_recent() -> (H<'static>, String) {
+    let dir = std::env::temp_dir().join(format!("bn-walk-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let root = crate::common::live::root();
+    let file = root.join("data/json/mapgen/house/house01.json");
+    assert!(file.is_file(), "{}", file.display());
+    let file = file.to_string_lossy().replace('\\', "/");
+    let recent = serde_json::json!([
+        { "editor": "map", "name": file, "mods": ["bn"] },
+        { "editor": "vehicle", "name": "bicycle", "mods": ["bn"] },
+    ]);
+    let (mut h, _root) = start_with(&dir, &[("editor_recent.json", recent.to_string())]);
+    h.set_size(egui::vec2(1290.0, 830.0));
+    rest(&mut h);
+    (h, file)
+}
+
+/// The Editor tab opened, with each of `rows` drawn whole inside the window and not cut short, and its description
+/// drawn once the arrow keys moved the selection onto it, as the menu shows the selected entry's.
+fn editor_tab_lists(h: &mut H, rows: &[(&str, &str)]) {
+    click(h, "Editor");
+    rest(h);
+    shot(h, "recent-1-editor-tab");
+    for (label, _) in rows {
+        for (w, ht) in [(1290.0, 830.0), (1920.0, 1080.0)] {
+            h.set_size(egui::vec2(w, ht));
+            settle(h);
+            reveal(h, label);
+            let window = h.ctx.content_rect();
+            let row = find(h, label).unwrap_or_else(|| panic!("no row {label}: {:?}", labels(h)));
+            assert!(
+                window.contains_rect(row),
+                "{label} {row:?} outside {window:?}"
+            );
+            // A label cut short is drawn with an ellipsis in place of its end.
+            let cut = h.output().shapes.iter().any(|c| match &c.shape {
+                egui::Shape::Text(t) => {
+                    let text = t.galley.text().trim_end_matches('\u{2026}').to_string();
+                    t.galley.text().ends_with('\u{2026}') && label.contains(&text)
+                }
+                _ => false,
+            });
+            assert!(!cut, "{label} is drawn cut at {w}x{ht}");
+        }
+        h.set_size(egui::vec2(1290.0, 830.0));
+        settle(h);
+    }
+    // Map editor, Vehicle editor, Load save, then the recent documents.
+    for _ in 0..2 {
+        key(h, egui::Key::ArrowDown);
+    }
+    for (i, (label, description)) in rows.iter().enumerate() {
+        key(h, egui::Key::ArrowDown);
+        shot(h, &format!("recent-1b-selected-{i}"));
+        assert!(
+            find(h, description).is_some(),
+            "no {description} on {label}: {:?}",
+            labels(h)
+        );
+    }
+    dump(h, "the editor tab");
+}
+
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn the_main_menu_reopens_a_recent_map_file_in_the_map_editor() {
+    let (mut h, file) = start_with_recent();
+    editor_tab_lists(
+        &mut h,
+        &[
+            (&file, "Open it in the map editor with"),
+            ("bicycle", "Open it in the vehicle editor with"),
+        ],
+    );
+    click(&mut h, &file);
+    rest(&mut h);
+    shot(&mut h, "recent-2-map-mods-asks");
+    // The mod list: Escape leaves it with the mods the document was opened with, and the engine asks to open.
+    key(&mut h, egui::Key::Escape);
+    shot(&mut h, "recent-3-map-confirm");
+    click(&mut h, "Yes");
+    wait_kind(&mut h, "editor");
+    rest(&mut h);
+    shot(&mut h, "recent-4-map-opened");
+    dump(&h, "the map editor");
+    let opened = labels(&h).join("\n");
+    assert!(opened.contains(&file), "{opened}");
+    assert!(canvas_glyphs(&h).len() > 1, "no canvas of the opened file");
+}
+
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn the_main_menu_reopens_a_recent_vehicle_in_the_vehicle_editor() {
+    let (mut h, file) = start_with_recent();
+    editor_tab_lists(
+        &mut h,
+        &[
+            (&file, "Open it in the map editor with"),
+            ("bicycle", "Open it in the vehicle editor with"),
+        ],
+    );
+    click(&mut h, "bicycle");
+    rest(&mut h);
+    shot(&mut h, "recent-2-vehicle-mods-asks");
+    key(&mut h, egui::Key::Escape);
+    click(&mut h, "Yes");
+    wait_kind(&mut h, "vehicle_editor");
+    rest(&mut h);
+    shot(&mut h, "recent-3-vehicle-opened");
+    dump(&h, "the vehicle editor");
+    let opened = labels(&h).join("\n");
+    assert!(opened.contains("Bicycle"), "{opened}");
 }
