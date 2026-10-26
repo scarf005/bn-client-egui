@@ -160,3 +160,12 @@ fn lines_side_by_side_that_overlap_move_the_end_above_both() {
     let panes = [(0.0, 20.0), (4.0, 24.0), (30.0, 50.0), (34.0, 54.0)];
     assert_eq!(whole_rows(&panes, 40.0), 30.0);
 }
+
+#[test]
+fn a_chain_of_stale_lines_moves_the_end_up_by_a_few_lines_not_to_the_top() {
+    let stale = (0..40)
+        .map(|n| (n as f32 * 15.0, n as f32 * 15.0 + 18.0))
+        .collect::<Vec<_>>();
+    let end = whole_rows(&stale, 600.0);
+    assert!((540.0..600.0).contains(&end), "{end}");
+}

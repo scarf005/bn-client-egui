@@ -120,16 +120,15 @@ pub fn prose_widths(parts: &[Extent], prose: usize, room: f32, gap: f32) -> Vec<
 }
 
 /// The height, at most `room`, of a viewport from the top of content whose lines of text are `rows`, as
-/// (top, bottom) from the content's top: `room`, or the top of the line it would cut across, until it cuts none.
+/// (top, bottom) from the content's top: `room`, or the top of the line it would cut across, until it cuts none or
+/// has moved `MOVES` times: lines of past views, left behind by a list that scrolled since, chain without end.
 pub fn whole_rows(rows: &[(f32, f32)], room: f32) -> f32 {
-    let mut at = room;
-    while let Some(top) = rows
-        .iter()
-        .filter(|(top, bottom)| *top + 0.5 < at && at < *bottom - 0.5)
-        .map(|(top, _)| *top)
-        .reduce(f32::min)
-    {
-        at = top;
-    }
-    at
+    const MOVES: usize = 4;
+    (0..MOVES).fold(room, |at, _| {
+        rows.iter()
+            .filter(|(top, bottom)| *top + 0.5 < at && at < *bottom - 0.5)
+            .map(|(top, _)| *top)
+            .reduce(f32::min)
+            .unwrap_or(at)
+    })
 }
