@@ -1259,6 +1259,7 @@ impl<M: GameModel> App<M> {
             .ctx()
             .layer_id_at(ui.input(|i| i.pointer.interact_pos()).unwrap_or_default())
             == Some(ui.layer_id());
+        let before = held;
         let was_held = held.is_some();
         let run = drag::advance(
             mode,
@@ -1279,8 +1280,14 @@ impl<M: GameModel> App<M> {
         };
         // A drag begins on the press and ends on the frame that lets go of it.
         out.extend(marker(&grid.drag_begin).filter(|_| !was_held && held.is_some()));
+        // Only the squares of the affordance the drag began on: a stroke does not run a neighbour's.
+        let began = held
+            .or(before)
+            .and_then(|d| squares.get(&d.from()))
+            .map(|s| &s.2);
         for at in run {
-            let Some((_, row, affordance)) = squares.get(&at) else {
+            let Some((_, row, affordance)) = squares.get(&at).filter(|s| Some(&s.2) == began)
+            else {
                 continue;
             };
             out.push(Intent::Paint(Paint {

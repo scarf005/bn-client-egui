@@ -20,6 +20,13 @@ pub(super) struct Drag {
     last: Square,
 }
 
+impl Drag {
+    /// The square the drag began on.
+    pub(super) fn from(&self) -> Square {
+        self.from
+    }
+}
+
 /// Advances `drag` by one frame of `pointer`; the squares to run, in order.
 pub(super) fn advance(mode: GridDrag, drag: &mut Option<Drag>, pointer: Pointer) -> Vec<Square> {
     if let (true, Some(over)) = (pointer.pressed, pointer.over) {
