@@ -174,6 +174,8 @@ pub(crate) fn start(dir: &std::path::Path) -> (H<'static>, std::path::PathBuf) {
         .wgpu()
         .build_ui_state(|ui, app: &mut App<EngineModel>| app.show(ui), app);
     bn_client_egui::fonts::install(&h.ctx, &root);
+    // The theme the game's window applies, solid scroll bars among it.
+    bn_client_egui::kit::tokens::apply(&h.ctx);
     run_until(&mut h, "the main menu", 120, |h| {
         h.state().model.menu().is_some()
     });
