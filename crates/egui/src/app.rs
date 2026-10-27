@@ -534,6 +534,12 @@ impl<M: GameModel> App<M> {
 
     /// The client's own choices (view mode, tileset, motion), which are no part of the game.
     fn client_settings(&mut self, ctx: &egui::Context) {
+        // Taking the keyboard, the window takes the focus too, so that no widget outside it takes Enter or Space;
+        // a text box focused after that keeps it.
+        let keys = self.key_window == Some(input::KeyWindow::Settings);
+        let had = egui::Id::new("settings_had_keys");
+        let take_focus = keys && !ctx.data(|d| d.get_temp::<bool>(had)).unwrap_or_default();
+        ctx.data_mut(|d| d.insert_temp(had, keys));
         if !self.client_settings {
             return;
         }
@@ -548,13 +554,6 @@ impl<M: GameModel> App<M> {
                 &tr("Client settings"),
             )
         };
-        // With the keyboard, the window keeps the focus too, so that no widget outside it takes Enter or Space.
-        let layer = egui::LayerId::new(egui::Order::Middle, spec.id);
-        let outside = ctx
-            .memory(|m| m.focused())
-            .and_then(|id| ctx.read_response(id))
-            .is_none_or(|r| r.layer_id != layer);
-        let take_focus = outside && self.key_window == Some(input::KeyWindow::Settings);
         let shown = windows::show(ctx, spec, |ui| self.display.controls(ui, take_focus));
         self.client_settings = !shown.closed;
     }
