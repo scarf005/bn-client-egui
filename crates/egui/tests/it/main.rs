@@ -56,6 +56,7 @@ mod ui_editor_drag;
 mod ui_editor_fit;
 mod ui_editor_keys;
 mod ui_editor_levels;
+mod ui_editor_special;
 mod ui_editor_window;
 mod ui_effects;
 mod ui_empty_list;
