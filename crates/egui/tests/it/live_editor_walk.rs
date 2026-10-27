@@ -5,7 +5,7 @@
 //! --ignored --nocapture`
 use crate::common::live::settle;
 use crate::live_editor::{H, field, run_until, start, start_with, wait_kind};
-use bn_client_egui::GameModel;
+use bn_client_egui::{GameModel, MenuModel};
 use eframe::egui;
 use egui_kittest::kittest::NodeT;
 
@@ -103,6 +103,13 @@ fn click_footer(h: &mut H, label: &str) {
         let at = stable(h, label, |h| more_buttons(h).first().copied());
         click_at(h, at.center());
     }
+    press(h, label);
+}
+
+/// Clicks the entry `label` of the footer's overflow menu, whose button is the first `⋯`.
+fn click_overflow(h: &mut H, label: &str) {
+    let at = stable(h, "the footer's ⋯", |h| more_buttons(h).first().copied());
+    click_at(h, at.center());
     press(h, label);
 }
 
@@ -377,9 +384,10 @@ fn glyph(h: &H, x: usize, y: usize) -> Option<char> {
 fn create_mapgen(h: &mut H, name: &str) -> std::path::PathBuf {
     let path = crate::common::live::profile_dir().join(format!("mods/{name}.json"));
     click_beside(h, "New file");
-    type_text(h, &path.to_string_lossy());
+    // The form keeps what the file made before it was given.
+    replace_text(h, &path.to_string_lossy());
     click_beside(h, "Overmap terrain");
-    type_text(h, "field");
+    replace_text(h, "field");
     click(h, "Create");
     if find(h, "Continue").is_some() {
         click(h, "Continue");
@@ -1906,4 +1914,717 @@ fn the_map_editor_places_an_overmap_special_in_the_world_and_tests_it_there() {
     println!("view origin after {after:?}");
 
     assert_ne!(after, before);
+}
+
+/// A wall symbol `#` mapped to the catalog's brick wall in the open mapgen, as the first walk maps it.
+fn map_wall(h: &mut H) {
+    click(h, "Terrain");
+    double_click(h, "brick wall");
+    click_beside(h, "Symbol");
+    replace_text(h, "#");
+    key(h, egui::Key::Enter);
+    click(h, "Set mapping");
+    // The legend row picks the symbol the canvas draws with.
+    double_click(h, "\"t_brick_wall\"");
+    assert!(document(h).contains("\"Symbol\"=\"#\""), "{}", document(h));
+}
+
+/// A region copied from one mapgen file and cut from another is pasted into a third, which maps nothing of it.
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn the_map_editor_copies_and_cuts_between_two_open_documents_and_pastes() {
+    let sizes = [(1280.0, 800.0), (1920.0, 1080.0)];
+    let dir = std::env::temp_dir().join(format!("bn-walk-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let (mut h, _root) = start(&dir);
+    // A window tall enough for the canvas to show the squares the walk aims at.
+    h.set_size(egui::vec2(1920.0, 1080.0));
+    rest(&mut h);
+    open_map_editor(&mut h);
+
+    // Document A: a wall bar, saved, with a 3x2 region of it copied.
+    let a = create_mapgen(&mut h, "zz_xdoc_a");
+    map_wall(&mut h);
+    click(&mut h, "Rectangle");
+    paint(&mut h, 3, 1);
+    paint(&mut h, 9, 2);
+    type_text(&mut h, "s");
+    paint(&mut h, 2, 1);
+    paint(&mut h, 4, 2);
+    key_mod(&mut h, egui::Modifiers::CTRL, egui::Key::C);
+    assert!(
+        document(&h).contains("\"Clipboard\"=\"3x2\""),
+        "{}",
+        document(&h)
+    );
+    key_mod(&mut h, egui::Modifiers::CTRL, egui::Key::S);
+    assert!(
+        document(&h).contains("\"Saved\"=\"Yes\""),
+        "{}",
+        document(&h)
+    );
+    shot_at(&mut h, "xdoc-1-a-copied", &sizes);
+
+    // Document B is another file: the clipboard stays, and B maps no `#` of its own.
+    key(&mut h, egui::Key::Escape);
+    click(&mut h, "Map Editor");
+    wait_kind(&mut h, "editor");
+    let b = create_mapgen(&mut h, "zz_xdoc_b");
+    assert_ne!(a, b);
+    dump(&h, "B created");
+    shot_at(&mut h, "xdoc-2-b-opened", &sizes);
+    assert!(
+        !crate::live_editor::rows(&h, "editor:legend").contains(&"symbol:#".to_string()),
+        "B must start without the wall"
+    );
+    assert!(
+        document(&h).contains("\"Clipboard\"=\"3x2\""),
+        "{}",
+        document(&h)
+    );
+    shot_at(&mut h, "xdoc-2-b-opened", &sizes);
+
+    // Pasted with the paste tool on one square, high on the canvas where the window shows it: the wall squares arrive with their mapping.
+    type_text(&mut h, "v");
+    assert_eq!(selected_tool(&h).as_deref(), Some("Paste"));
+    paint(&mut h, 10, 4);
+    // The engine answers a paint after the client went idle.
+    run_until(&mut h, "the paste", 60, |h| glyph(h, 11, 4) == Some('#'));
+    shot_at(&mut h, "xdoc-3-b-pasted", &sizes);
+    // The copied region is `.##` over `.##`: its top-left square lands on the one pasted on.
+    for (x, y) in [(11, 4), (12, 4), (11, 5), (12, 5)] {
+        assert_eq!(glyph(&h, x, y), Some('#'), "pasted square {x},{y}");
+    }
+    assert_ne!(glyph(&h, 10, 4), Some('#'));
+    assert_ne!(glyph(&h, 13, 4), Some('#'));
+    assert!(
+        crate::live_editor::rows(&h, "editor:legend").contains(&"symbol:#".to_string()),
+        "the paste brings the mapping"
+    );
+    let pasted = canvas_glyphs(&h);
+
+    // One undo takes the whole paste back; redo brings it again.
+    key_mod(&mut h, egui::Modifiers::CTRL, egui::Key::Z);
+    assert_ne!(glyph(&h, 11, 4), Some('#'));
+    key_mod(&mut h, egui::Modifiers::CTRL, egui::Key::Y);
+    assert_eq!(canvas_glyphs(&h), pasted);
+
+    // Cut from B: the region leaves B and the cut region is on the clipboard.
+    type_text(&mut h, "s");
+    paint(&mut h, 11, 4);
+    paint(&mut h, 12, 5);
+    key_mod(&mut h, egui::Modifiers::CTRL, egui::Key::X);
+    run_until(&mut h, "the cut", 60, |h| glyph(h, 11, 4) != Some('#'));
+    shot_at(&mut h, "xdoc-4-b-cut", &sizes);
+    assert_ne!(glyph(&h, 11, 4), Some('#'), "cut leaves the square");
+    assert!(
+        canvas_glyphs(&h).iter().all(|r| !r.contains('#')),
+        "{:?}",
+        canvas_glyphs(&h)
+    );
+    assert!(
+        document(&h).contains("\"Clipboard\"=\"2x2\""),
+        "{}",
+        document(&h)
+    );
+    key_mod(&mut h, egui::Modifiers::CTRL, egui::Key::S);
+    let saved = std::fs::read_to_string(&b).unwrap();
+    assert!(saved.contains("t_brick_wall"), "{saved}");
+}
+
+/// A nested chunk made from the form, and a mapgen whose own legend moves into a new palette.
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn the_map_editor_makes_a_nested_chunk_and_moves_a_legend_into_a_palette() {
+    let sizes = [(1280.0, 800.0), (1920.0, 1080.0)];
+    let dir = std::env::temp_dir().join(format!("bn-walk-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let (mut h, _root) = start(&dir);
+    h.set_size(egui::vec2(1280.0, 800.0));
+    rest(&mut h);
+    open_map_editor(&mut h);
+
+    // The form's kind select names a nested chunk, relabels the id field and sizes the chunk.
+    click(&mut h, "Mapgen");
+    click(&mut h, "Nested chunk");
+    assert!(find(&h, "Chunk id").is_some(), "{:?}", labels(&h));
+    let nested = crate::common::live::profile_dir().join("mods/zz_nested.json");
+    click_beside(&mut h, "New file");
+    replace_text(&mut h, &nested.to_string_lossy());
+    click_beside(&mut h, "Chunk id");
+    replace_text(&mut h, "zz_walk_chunk");
+    click_beside(&mut h, "Chunk size");
+    replace_text(&mut h, "6");
+    shot_at(&mut h, "nc-1-form", &sizes);
+    click(&mut h, "Create");
+    if find(&h, "Continue").is_some() {
+        click(&mut h, "Continue");
+    }
+    wait_kind(&mut h, "editor");
+    rest(&mut h);
+    shot_at(&mut h, "nc-2-created", &sizes);
+    let chunk = canvas_glyphs(&h);
+    assert_eq!((chunk.len(), chunk[0].chars().count()), (6, 6));
+    let saved = std::fs::read_to_string(&nested).unwrap();
+    assert!(
+        saved.contains("zz_walk_chunk") && saved.contains("nested"),
+        "{saved}"
+    );
+
+    // A mapgen with a wall symbol of its own, whose legend moves into a palette the mapgen then names.
+    key(&mut h, egui::Key::Escape);
+    click(&mut h, "Map Editor");
+    wait_kind(&mut h, "editor");
+    click(&mut h, "Nested chunk");
+    click(&mut h, "Mapgen");
+    let path = create_mapgen(&mut h, "zz_extract");
+    map_wall(&mut h);
+    shot_at(&mut h, "nc-3-legend", &sizes);
+    click_footer(&mut h, "Extract legend to palette");
+    shot_at(&mut h, "nc-4-extract-asks", &sizes);
+    type_text(&mut h, "zz_walk_extracted");
+    key(&mut h, egui::Key::Enter);
+    rest(&mut h);
+    shot_at(&mut h, "nc-5-extracted", &sizes);
+    key_mod(&mut h, egui::Modifiers::CTRL, egui::Key::S);
+    let saved = std::fs::read_to_string(&path).unwrap();
+    let json = serde_json::from_str::<serde_json::Value>(&saved).unwrap();
+    assert!(
+        saved.contains("\"palettes\"") && saved.contains("zz_walk_extracted"),
+        "{saved}"
+    );
+    let palette = json
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["type"] == "palette")
+        .unwrap_or_else(|| panic!("no palette entry: {saved}"));
+    assert_eq!(palette["id"], "zz_walk_extracted");
+    assert_eq!(palette["terrain"]["#"], "t_brick_wall");
+    assert!(
+        json[0]["object"]
+            .get("terrain")
+            .is_none_or(|t| t.get("#").is_none()),
+        "{saved}"
+    );
+
+    // One undo takes the whole move back.
+    key_mod(&mut h, egui::Modifiers::CTRL, egui::Key::Z);
+    assert!(
+        crate::live_editor::rows(&h, "editor:legend").contains(&"symbol:#".to_string()),
+        "the wall is still mapped after the undo"
+    );
+}
+
+/// The in-game path: the toolbar's Map Editor answers without the Debug Editor trait, and opens with it.
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn the_toolbar_offers_the_map_editor_in_game_only_with_the_debug_trait() {
+    use crate::live_editor::{invoke, row, text};
+    use bn_client_egui::protocol::{InvokeArgs, ScreenRole};
+    let sizes = [(1280.0, 800.0), (1920.0, 1080.0)];
+    let dir = std::env::temp_dir().join(format!("bn-walk-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let (mut h, _root) = start(&dir);
+    h.set_size(egui::vec2(1280.0, 800.0));
+    rest(&mut h);
+    invoke(&mut h, "menu:tab", row("new_game"));
+    invoke(&mut h, "menu:entry", row("new_game:play_now_default"));
+    run_until(&mut h, "the map", 900, |h| h.state().model.size().x > 0);
+    run_until(&mut h, "the settled game", 300, |h| {
+        h.state().model.menu().is_none() && !h.state().model.busy()
+    });
+    crate::common::live::dismiss_popups(&mut h);
+    settle(&mut h);
+    shot_at(&mut h, "ig-1-map", &sizes);
+
+    // Without the trait the toolbar's button says so.
+    click(&mut h, "Map Editor");
+    shot_at(&mut h, "ig-2-denied", &sizes);
+    assert!(
+        find(&h, "You need the Debug Editor trait.").is_some(),
+        "{:?}",
+        labels(&h)
+    );
+    click(&mut h, "OK");
+
+    // The trait is given through the Lua console; then the same button opens the editor, and Escape returns.
+    assert!(h.state_mut().model.invoke_action("lua_console"));
+    wait_kind(&mut h, "lua_console");
+    invoke(&mut h, "EDIT", InvokeArgs::default());
+    wait_kind(&mut h, "text_editor");
+    invoke(
+        &mut h,
+        "editor:set",
+        text(r#"gapi.get_avatar():set_mutation(MutationBranchId.new("DEBUG_EDITOR"))"#),
+    );
+    invoke(&mut h, "TEXT.CONFIRM", InvokeArgs::default());
+    wait_kind(&mut h, "lua_console");
+    invoke(&mut h, "QUIT", InvokeArgs::default());
+    run_until(&mut h, "the map", 60, |h| {
+        h.state()
+            .model
+            .screens()
+            .last()
+            .is_some_and(|s| s.role == ScreenRole::Map)
+    });
+    click(&mut h, "Map Editor");
+    wait_kind(&mut h, "editor");
+    rest(&mut h);
+    shot_at(&mut h, "ig-3-editor", &sizes);
+
+    // The mapgen of the square the avatar stands on opens from the footer.
+    click_footer(&mut h, "Open mapgen here");
+    rest(&mut h);
+    shot_at(&mut h, "ig-4-here", &sizes);
+    dump(&h, "mapgen here");
+    key(&mut h, egui::Key::Escape);
+    rest(&mut h);
+    shot_at(&mut h, "ig-5-back-on-the-map", &sizes);
+    assert!(
+        h.state()
+            .model
+            .screens()
+            .last()
+            .is_some_and(|s| s.role == ScreenRole::Map),
+        "Escape did not return to the map"
+    );
+}
+
+/// The cells of the grid `id` on top: their squares and glyphs.
+fn grid_cells(h: &H, id: &str) -> Vec<((u32, u32), String)> {
+    let top = h.state().model.screens().last().unwrap();
+    let Some(bn_client_egui::protocol::Component::Grid(grid)) = top.root.as_ref().unwrap().find(id)
+    else {
+        panic!("no {id}");
+    };
+    grid.cells
+        .iter()
+        .map(|c| ((c.x, c.y), c.glyph.clone().unwrap_or_default()))
+        .collect()
+}
+
+/// The text of the vehicle editor's notice, empty when it shows none.
+fn vehicle_notice(h: &H) -> String {
+    let top = h.state().model.screens().last().unwrap();
+    serde_json::to_string(&top.root.as_ref().unwrap().find("vehicle:notice")).unwrap()
+}
+
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn the_vehicle_editor_turns_a_preview_reloads_a_file_and_asks_before_leaving() {
+    let sizes = [(1920.0, 1080.0), (1280.0, 800.0)];
+    let dir = std::env::temp_dir().join(format!("bn-walk-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let (mut h, _root) = start(&dir);
+    h.set_size(egui::vec2(1920.0, 1080.0));
+    rest(&mut h);
+    click(&mut h, "Editor");
+    click(&mut h, "Vehicle editor");
+    key(&mut h, egui::Key::Escape);
+    click(&mut h, "Yes");
+    wait_kind(&mut h, "vehicle_editor");
+    rest(&mut h);
+    click_input(&mut h, "Search");
+    type_text(&mut h, "bicycle");
+    key(&mut h, egui::Key::Enter);
+    double_click(&mut h, "Bicycle");
+    wait_kind(&mut h, "vehicle_editor");
+    rest(&mut h);
+    let path = crate::common::live::profile_dir().join("mods/zz_veh_reload.json");
+    click_footer(&mut h, "Save as");
+    type_text(&mut h, &path.to_string_lossy());
+    key(&mut h, egui::Key::Enter);
+    rest(&mut h);
+    shot_at(&mut h, "vr-1-saved", &sizes);
+    let text = std::fs::read_to_string(&path).unwrap();
+    println!("FILE {text}");
+
+    // The Spawn tab turns the design: the cells of the turned grid differ between facings 0 and 90.
+    click_tab(&mut h, "Spawn");
+    rest(&mut h);
+    shot_at(&mut h, "vr-2-spawn-tab", &sizes);
+    dump(&h, "spawn tab");
+    let north = grid_cells(&h, "vehicle:turned");
+    assert!(!north.is_empty(), "no turned preview");
+    click_beside(&mut h, "Facing");
+    replace_text(&mut h, "90");
+    key(&mut h, egui::Key::Enter);
+    rest(&mut h);
+    shot_at(&mut h, "vr-3-spawn-turned", &sizes);
+    let east = grid_cells(&h, "vehicle:turned");
+    println!("TURNED {north:?} -> {east:?}");
+    assert_ne!(north, east, "the preview did not turn");
+
+    // A clean document follows its file when a text editor changes it: the name on disk is the one shown.
+    let on_disk =
+        |name: &str| text.replacen("\"name\": \"Bicycle\"", &format!("\"name\": \"{name}\""), 1);
+    assert_ne!(on_disk("Disk Bike"), text, "no name to change in {text}");
+    std::fs::write(&path, on_disk("Disk Bike")).unwrap();
+    click_tab(&mut h, "Mount");
+    rest(&mut h);
+    shot_at(&mut h, "vr-4-reloaded", &sizes);
+    dump(&h, "after the file changed");
+    assert!(find(&h, "Disk Bike").is_some(), "{:?}", labels(&h));
+    assert!(
+        vehicle_notice(&h).contains("disk") || vehicle_notice(&h).contains("changed"),
+        "{}",
+        vehicle_notice(&h)
+    );
+
+    // An edited document keeps its edit, says so, and refuses to save over the other file.
+    click_tab(&mut h, "Vehicle");
+    click_beside(&mut h, "Name");
+    replace_text(&mut h, "Mine");
+    key(&mut h, egui::Key::Enter);
+    rest(&mut h);
+    std::fs::write(&path, on_disk("Disk Bike Again")).unwrap();
+    click_tab(&mut h, "Mount");
+    rest(&mut h);
+    shot_at(&mut h, "vr-5-kept-edit", &sizes);
+    assert!(find(&h, "Mine").is_some(), "{:?}", labels(&h));
+    assert!(
+        find(&h, "Disk Bike Again").is_none(),
+        "an edited document was overwritten"
+    );
+    println!("NOTICE {}", vehicle_notice(&h));
+    key_mod(&mut h, egui::Modifiers::CTRL, egui::Key::S);
+    shot_at(&mut h, "vr-6-save-refused", &sizes);
+    assert!(
+        !std::fs::read_to_string(&path).unwrap().contains("Mine"),
+        "the save overwrote a file changed on disk"
+    );
+
+    // Leaving with the edit unsaved asks; Stay keeps the editor, Leave without saving leaves it.
+    key(&mut h, egui::Key::Escape);
+    shot_at(&mut h, "vr-7-leave-asks", &sizes);
+    dump(&h, "leave prompt");
+    for choice in ["Save and leave", "Leave without saving", "Stay"] {
+        assert!(find(&h, choice).is_some(), "no {choice}: {:?}", labels(&h));
+    }
+    click(&mut h, "Stay");
+    assert_eq!(
+        h.state()
+            .model
+            .screens()
+            .last()
+            .and_then(|s| s.kind.clone())
+            .as_deref(),
+        Some("vehicle_editor")
+    );
+    key(&mut h, egui::Key::Escape);
+    click(&mut h, "Leave without saving");
+    rest(&mut h);
+    shot_at(&mut h, "vr-8-left", &sizes);
+    assert_ne!(
+        h.state()
+            .model
+            .screens()
+            .last()
+            .and_then(|s| s.kind.clone())
+            .as_deref(),
+        Some("vehicle_editor"),
+        "the editor stayed after Leave without saving"
+    );
+}
+
+/// A bicycle spawned from the vehicle editor stands in the world, and the map editor's export names its prototype.
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn the_map_editor_exports_a_spawned_vehicle_as_a_placement() {
+    let sizes = [(1280.0, 800.0), (1920.0, 1080.0)];
+    let dir = std::env::temp_dir().join(format!("bn-walk-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let (mut h, _root) = start(&dir);
+    h.set_size(egui::vec2(1280.0, 800.0));
+    rest(&mut h);
+    open_map_editor(&mut h);
+    click_footer(&mut h, "Vehicle editor");
+    wait_kind(&mut h, "vehicle_editor");
+    rest(&mut h);
+    click_input(&mut h, "Search");
+    type_text(&mut h, "bicycle");
+    key(&mut h, egui::Key::Enter);
+    double_click(&mut h, "Bicycle");
+    wait_kind(&mut h, "vehicle_editor");
+    rest(&mut h);
+    click_footer(&mut h, "Spawn");
+    rest(&mut h);
+    shot_at(&mut h, "xv-1-spawned", &sizes);
+    key(&mut h, egui::Key::Escape);
+    wait_kind(&mut h, "editor");
+    rest(&mut h);
+
+    // Two squares wide and high around the avatar's, so the bicycle east of it is inside whatever its square.
+    for (label, count) in [("Export width", "2"), ("Export height", "2")] {
+        click_footer(&mut h, label);
+        replace_text(&mut h, count);
+        click(&mut h, "OK");
+    }
+    let path = crate::common::live::profile_dir().join("mods/zz_export_vehicle.json");
+    click_footer(&mut h, "Export mapgen here");
+    type_text(&mut h, &path.to_string_lossy());
+    key(&mut h, egui::Key::Enter);
+    rest(&mut h);
+    shot_at(&mut h, "xv-2-exported", &sizes);
+    let exported = std::fs::read_to_string(&path).expect("the export file");
+    assert!(
+        exported.contains("place_vehicles") && exported.contains("\"bicycle\""),
+        "{exported}"
+    );
+}
+
+/// The label of the selected tab among the drawing tools.
+fn tool_tab(h: &H) -> Option<String> {
+    let names = [
+        "Pencil",
+        "Line",
+        "Rectangle",
+        "Filled rectangle",
+        "Ellipse",
+        "Room",
+        "Fill",
+        "Eyedropper",
+        "Select",
+        "Paste",
+        "Placements",
+    ];
+    h.root().children_recursive().find_map(|n| {
+        let a = n.accesskit_node();
+        (a.role() == egui::accesskit::Role::Tab && a.is_selected() == Some(true))
+            .then(|| a.label().map(|l| l.to_string()))
+            .flatten()
+            .filter(|l| names.contains(&l.as_str()))
+    })
+}
+
+/// Every drawing tool has its key, and undo, redo and save run from the keyboard on a document painted by the mouse.
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn the_map_editor_keys_pick_every_tool_and_undo_redo_and_save() {
+    let sizes = [(1280.0, 800.0), (1920.0, 1080.0)];
+    let dir = std::env::temp_dir().join(format!("bn-walk-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let (mut h, _root) = start(&dir);
+    h.set_size(egui::vec2(1920.0, 1080.0));
+    rest(&mut h);
+    open_map_editor(&mut h);
+    let path = create_mapgen(&mut h, "zz_keys");
+    for (typed, tool) in [
+        ("b", "Pencil"),
+        ("l", "Line"),
+        ("r", "Rectangle"),
+        ("u", "Filled rectangle"),
+        ("o", "Ellipse"),
+        ("m", "Room"),
+        ("f", "Fill"),
+        ("i", "Eyedropper"),
+        ("s", "Select"),
+        ("v", "Paste"),
+        ("p", "Placements"),
+    ] {
+        type_text(&mut h, typed);
+        assert_eq!(tool_tab(&h).as_deref(), Some(tool), "after {typed}");
+    }
+    shot_at(&mut h, "kb-1-tools", &sizes);
+    // The pictures leave the window at their last size's neighbour; the walk goes on in the tall one.
+    h.set_size(egui::vec2(1920.0, 1080.0));
+    settle(&mut h);
+
+    // A wall rectangle by the keys of the tools and two clicks; undo, redo and save by their keys.
+    map_wall(&mut h);
+    type_text(&mut h, "r");
+    assert_eq!(
+        tool_tab(&h).as_deref(),
+        Some("Rectangle"),
+        "{:?}",
+        labels(&h)
+    );
+    let blank = canvas_glyphs(&h);
+    paint(&mut h, 3, 2);
+    paint(&mut h, 8, 5);
+    // The engine answers a paint after the client went idle.
+    run_until(&mut h, "the rectangle", 60, |h| canvas_glyphs(h) != blank);
+    let walled = canvas_glyphs(&h);
+    key_mod(&mut h, egui::Modifiers::CTRL, egui::Key::Z);
+    assert_eq!(canvas_glyphs(&h), blank);
+    key_mod(&mut h, egui::Modifiers::CTRL, egui::Key::Y);
+    assert_eq!(canvas_glyphs(&h), walled);
+    assert!(
+        document(&h).contains("\"Saved\"=\"No\""),
+        "{}",
+        document(&h)
+    );
+    key_mod(&mut h, egui::Modifiers::CTRL, egui::Key::S);
+    assert!(
+        document(&h).contains("\"Saved\"=\"Yes\""),
+        "{}",
+        document(&h)
+    );
+    shot_at(&mut h, "kb-2-saved", &sizes);
+    assert!(
+        std::fs::read_to_string(&path)
+            .unwrap()
+            .contains("t_brick_wall")
+    );
+
+    // Apply, Stamp, Test and Preview carry no key: their affordances are offered but name none.
+    let top = h.state().model.screens().last().unwrap();
+    let unbound = [
+        "editor:apply",
+        "editor:stamp",
+        "editor:test",
+        "editor:preview",
+    ]
+    .into_iter()
+    .filter(|id| {
+        top.affordances
+            .iter()
+            .any(|a| a.id == *id && a.keys.is_empty())
+    })
+    .collect::<Vec<_>>();
+    println!("UNBOUND {unbound:?}");
+}
+
+/// A new overmap special from the form, a connection drawn to the square beside it, and the saved file.
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn the_map_editor_makes_a_new_overmap_special_and_connects_it() {
+    let sizes = [(1920.0, 1080.0), (1280.0, 800.0)];
+    let dir = std::env::temp_dir().join(format!("bn-walk-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let (mut h, _root) = start(&dir);
+    h.set_size(egui::vec2(1920.0, 1080.0));
+    rest(&mut h);
+    open_map_editor(&mut h);
+    click(&mut h, "Mapgen");
+    click(&mut h, "Overmap special");
+    let path = crate::common::live::profile_dir().join("mods/zz_new_special.json");
+    click_beside(&mut h, "New file");
+    replace_text(&mut h, &path.to_string_lossy());
+    click_beside(&mut h, "Special id");
+    replace_text(&mut h, "zz_walk_new_special");
+    click(&mut h, "Create");
+    shot_at(&mut h, "ns-1-created-or-asks", &sizes);
+    if find(&h, "Continue").is_some() {
+        click(&mut h, "Continue");
+    }
+    wait_kind(&mut h, "editor");
+    rest(&mut h);
+    shot_at(&mut h, "ns-2-created", &sizes);
+    let (_, _, cells) = canvas_grid(&h);
+    let own = cells
+        .iter()
+        .find(|c| !c.3.is_empty())
+        .expect("the special's own square")
+        .clone();
+    println!("OWN {own:?}");
+
+    // The connection tool, and a click on the square east of the special.
+    type_text(&mut h, "c");
+    assert_eq!(tabs_of(&h, "Connect").1.as_deref(), Some("Connect"));
+    let beside = square_from(&h, (own.0, own.1, &own.3), own.0 + 1, own.1).center();
+    click_at(&mut h, beside);
+    shot_at(&mut h, "ns-3-connected", &sizes);
+    let (_, _, after) = canvas_grid(&h);
+    println!("BEFORE {cells:?}\nAFTER {after:?}");
+    assert!(
+        after.iter().any(|c| c.3.contains("connection")),
+        "{after:?}"
+    );
+
+    key_mod(&mut h, egui::Modifiers::CTRL, egui::Key::S);
+    let saved = std::fs::read_to_string(&path).unwrap();
+    assert!(
+        saved.contains("zz_walk_new_special") && saved.contains("connections"),
+        "{saved}"
+    );
+}
+
+/// A placement made from a marked rectangle and the form, outlined on the canvas, and removed again.
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn the_map_editor_adds_a_placement_from_a_marked_rectangle_and_removes_it() {
+    let sizes = [(1920.0, 1080.0)];
+    let dir = std::env::temp_dir().join(format!("bn-walk-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let (mut h, _root) = start(&dir);
+    h.set_size(egui::vec2(1920.0, 1080.0));
+    rest(&mut h);
+    open_map_editor(&mut h);
+    let path = create_mapgen(&mut h, "zz_placement");
+    type_text(&mut h, "s");
+    paint(&mut h, 4, 3);
+    paint(&mut h, 7, 5);
+    assert_eq!(field(&h, "editor:place", "x"), "4-7");
+    assert_eq!(field(&h, "editor:place", "y"), "3-5");
+    shot_at(&mut h, "pl-1-marked", &sizes);
+    h.set_size(egui::vec2(1920.0, 1080.0));
+    settle(&mut h);
+
+    // An item placement: the form's default kind, its other members as JSON.
+    click_beside(&mut h, "Value");
+    type_text(&mut h, r#"{"item": "bedroom", "chance": 100}"#);
+    click(&mut h, "Add placement");
+    rest(&mut h);
+    shot_at(&mut h, "pl-2-added", &sizes);
+    h.set_size(egui::vec2(1920.0, 1080.0));
+    settle(&mut h);
+    let rows = crate::live_editor::rows(&h, "editor:placements");
+    assert_eq!(rows, ["placement:place_items:0"]);
+    key_mod(&mut h, egui::Modifiers::CTRL, egui::Key::S);
+    let saved = std::fs::read_to_string(&path).unwrap();
+    assert!(
+        saved.contains("place_items") && saved.contains("bedroom"),
+        "{saved}"
+    );
+
+    // The footer's Delete removes the picked placement with its array.
+    click_footer(&mut h, "Delete placement");
+    rest(&mut h);
+    assert!(crate::live_editor::rows(&h, "editor:placements").is_empty());
+}
+
+/// A mapgen drawn in the editor, generated into the world over the avatar's square, and the avatar put there.
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn the_map_editor_stamps_the_document_into_the_world_and_tests_it_there() {
+    use bn_client_egui::protocol::ScreenRole;
+    let sizes = [(1920.0, 1080.0), (1280.0, 800.0)];
+    let dir = std::env::temp_dir().join(format!("bn-walk-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let (mut h, _root) = start(&dir);
+    h.set_size(egui::vec2(1920.0, 1080.0));
+    rest(&mut h);
+    open_map_editor(&mut h);
+    create_mapgen(&mut h, "zz_stamp");
+    map_wall(&mut h);
+    click(&mut h, "Filled rectangle");
+    paint(&mut h, 2, 2);
+    paint(&mut h, 20, 20);
+    run_until(&mut h, "the wall", 60, |h| glyph(h, 10, 10) == Some('#'));
+    assert_eq!(enabled(&h, "editor:unstamp"), Some(false));
+    assert_eq!(enabled(&h, "editor:test"), Some(false));
+    click_overflow(&mut h, "Stamp");
+    rest(&mut h);
+    shot_at(&mut h, "st-1-stamped", &sizes);
+    assert_eq!(enabled(&h, "editor:unstamp"), Some(true));
+    assert_eq!(enabled(&h, "editor:test"), Some(true));
+    let canvas = canvas_glyphs(&h);
+
+    // Test leaves the editor on the map, with the avatar in the stamped square; the editor opens again as it was.
+    click_overflow(&mut h, "Test");
+    run_until(&mut h, "the map", 120, |h| {
+        h.state()
+            .model
+            .screens()
+            .last()
+            .is_some_and(|s| s.role == ScreenRole::Map)
+    });
+    rest(&mut h);
+    shot_at(&mut h, "st-2-tested", &sizes);
+    assert!(h.state_mut().model.invoke_action("editor"));
+    wait_kind(&mut h, "editor");
+    assert_eq!(canvas_glyphs(&h), canvas);
+    shot_at(&mut h, "st-3-editor-again", &sizes);
 }
