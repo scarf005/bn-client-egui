@@ -78,7 +78,7 @@ fn a_way_of_aiming_is_a_button_that_fires_with_it() {
     publish(&script, 0, aim_screen(&h, 0));
     h.run_steps(6);
     settle_windows(&mut h);
-    assert!(h.query_by_label("Great 13 %").is_some());
+    assert!(h.query_by_label("13 %").is_some());
     h.get_by_label("Regular Aim").click();
     h.run_steps(4);
     let aimed = invoked(&script);
@@ -93,10 +93,15 @@ fn painted(h: &H, text: &str) -> Vec<(f32, egui::Color32)> {
     let shapes = h.output().shapes.iter();
     shapes
         .filter_map(|clipped| match &clipped.shape {
-            egui::Shape::Text(t) if t.galley.text() == text => Some((
-                t.visual_bounding_rect().right(),
-                t.galley.job.sections[0].format.color,
-            )),
+            egui::Shape::Text(t) if t.galley.text() == text => {
+                let own = t.galley.job.sections[0].format.color;
+                let colour = if own == egui::Color32::PLACEHOLDER {
+                    t.fallback_color
+                } else {
+                    own
+                };
+                Some((t.visual_bounding_rect().right(), colour))
+            }
             _ => None,
         })
         .collect()
