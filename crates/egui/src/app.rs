@@ -543,19 +543,16 @@ impl<M: GameModel> App<M> {
         if !self.client_settings {
             return;
         }
+        let kind = input::KeyWindow::Settings.kind();
         let spec = WindowSpec {
             closable: true,
             place: Some(self.map_room(ctx)),
             movable: true,
             width: Some(420.0),
-            ..self.window_spec(
-                ctx,
-                Some(&input::KeyWindow::Settings.kind()),
-                &tr("Client settings"),
-            )
+            ..self.window_spec(ctx, Some(&kind), &tr("Client settings"))
         };
         let shown = windows::show(ctx, spec, |ui| self.display.controls(ui, take_focus));
-        self.client_settings = !shown.closed;
+        self.client_settings = !self.keep_window(ctx, Some(&kind), &shown);
     }
 
     /// The pressed control's name and stage, announced politely; stays until the next command.
