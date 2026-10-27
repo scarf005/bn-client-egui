@@ -65,6 +65,18 @@ pub(super) struct Placement {
     pub(super) column: bool,
 }
 
+impl<M: GameModel> App<M> {
+    /// Where a window of the client's own (the map, its settings, the action palette) first opens: the middle of
+    /// the map region, off the sidebar and the toolbars.
+    pub(in crate::app) fn map_room(&self, ctx: &egui::Context) -> Place {
+        Place::Center(
+            self.region
+                .unwrap_or_else(|| ctx.content_rect())
+                .shrink(REGION_MARGIN),
+        )
+    }
+}
+
 /// A window at the left or the right side of `region`, no wider than `share` of the region nor taller than it,
 /// and kept inside it.
 pub(super) fn side(region: egui::Rect, left: bool, share: f32) -> Place {

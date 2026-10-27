@@ -490,8 +490,8 @@ fn action_palette_does_not_blink_during_a_short_command() {
     h.run_steps(3);
     open_palette(&mut h);
     let before = h.get_by_label("Move right (RIGHT, l)").rect();
-    // Below the palette, which is open over the top of the map.
-    click_map(&mut h, (22.5, 40.5));
+    // Beside the palette, which is open over the middle of the map.
+    click_map(&mut h, (1.5, 12.5));
     h.run_steps(3);
     assert!(h.state().model.busy());
     let during = h.get_by_label("Move right (RIGHT, l)");
@@ -505,7 +505,7 @@ fn action_palette_keeps_its_layout_when_a_long_command_disables_it() {
     h.run_steps(3);
     open_palette(&mut h);
     let before = h.get_by_label("Move right (RIGHT, l)").rect();
-    click_map(&mut h, (22.5, 40.5));
+    click_map(&mut h, (1.5, 12.5));
     h.run_steps(2);
     h.state().clock().advance(SETTLE);
     h.run_steps(3);

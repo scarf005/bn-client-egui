@@ -536,6 +536,9 @@ impl<M: GameModel> App<M> {
         }
         let spec = WindowSpec {
             closable: true,
+            place: Some(self.map_room(ctx)),
+            movable: true,
+            width: Some(420.0),
             ..self.window_spec(
                 ctx,
                 Some(&input::KeyWindow::Settings.kind()),

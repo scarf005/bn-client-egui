@@ -198,11 +198,15 @@ fn every_dialog_opens_at_the_same_place() {
     let (mut h, _script) = harness(egui::vec2(1100.0, 800.0));
     h.run_steps(3);
     open_palette(&mut h);
-    let palette = h.get_by_label("Search actions").rect();
-    assert!(palette.min.y > 800.0 * 0.12, "12% down: {palette:?}");
+    let palette = h
+        .get_all_by_label("Actions")
+        .find(|n| n.accesskit_node().role() == egui::accesskit::Role::Dialog)
+        .unwrap()
+        .rect();
+    let map = h.get_by_label("Map").rect();
     assert!(
-        (palette.center().x - 550.0).abs() < 1.0,
-        "centered: {palette:?}"
+        (palette.center() - map.center()).abs().max_elem() < 20.0,
+        "in the middle of the map room: {palette:?} in {map:?}"
     );
 }
 
