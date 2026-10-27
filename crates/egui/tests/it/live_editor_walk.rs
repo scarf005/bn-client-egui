@@ -1569,7 +1569,9 @@ fn the_map_editor_shows_an_overmap_special_by_level_and_a_click_on_a_square_open
 }
 
 /// The grid cells of the canvas on top as (x, y, id, label, glyph).
-fn canvas_grid(h: &H) -> (u32, u32, Vec<(u32, u32, String, String, String)>) {
+type Cells = Vec<(u32, u32, String, String, String)>;
+
+fn canvas_grid(h: &H) -> (u32, u32, Cells) {
     let top = h.state().model.screens().last().unwrap();
     let Some(bn_client_egui::protocol::Component::Grid(grid)) =
         top.root.as_ref().unwrap().find("editor:canvas")
