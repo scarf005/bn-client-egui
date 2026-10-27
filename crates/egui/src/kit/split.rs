@@ -93,28 +93,35 @@ pub fn detail_widths(parts: &[Extent], room: f32, gap: f32) -> Vec<f32> {
         .collect()
 }
 
-/// The widths of peers of which `prose` is the only running text: the others take up to their natural
-/// widths, the prose the rest, and never less than an equal share of the room while its lines are longer. A text
-/// no longer than that share wraps its words to leave the others their natural widths, when it can.
+/// The widths of peers of which `prose` is the only running text. A text no longer than an equal share of the room
+/// takes its natural width, or wraps to leave the others theirs, and the others share the rest as `split_widths`
+/// does. A longer text takes the room the others leave of their natural widths, never less than an equal share.
 pub fn prose_widths(parts: &[Extent], prose: usize, room: f32, gap: f32) -> Vec<f32> {
-    let others = parts
-        .iter()
-        .enumerate()
-        .filter(|(i, _)| *i != prose)
-        .map(|(_, p)| Extent { grows: false, ..*p })
-        .collect::<Vec<_>>();
     let inner = room - gaps(parts.len(), gap);
     let text = parts[prose];
     let fair = inner / parts.len() as f32;
-    let spare = inner - others.iter().map(|p| p.natural).sum::<f32>();
-    let yields = text.natural <= fair && spare >= text.min;
-    let width = match yields {
-        true => spare,
+    let others = |grows: bool| {
+        parts
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| *i != prose)
+            .map(|(_, p)| Extent {
+                grows: p.grows && grows,
+                ..*p
+            })
+            .collect::<Vec<_>>()
+    };
+    let keeps = others(false);
+    let spare = inner - keeps.iter().map(|p| p.natural).sum::<f32>();
+    let short = text.natural <= fair && spare >= text.min;
+    let wanted = match short {
+        true => spare.min(text.natural),
         false => spare.max(fair.min(text.natural)),
-    }
-    .min(inner - others.iter().map(|p| p.min).sum::<f32>())
-    .max(text.min);
-    let mut widths = split_widths(&others, room - width - gap, gap);
+    };
+    let width = wanted
+        .min(inner - keeps.iter().map(|p| p.min).sum::<f32>())
+        .max(text.min);
+    let mut widths = split_widths(&others(short), room - width - gap, gap);
     widths.insert(prose, width);
     widths
 }
