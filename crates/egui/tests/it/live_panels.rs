@@ -164,3 +164,48 @@ fn a_closed_character_sheet_reopens_on_the_tab_it_was_left_on() {
         save(&mut h, &format!("sheet-reopened-{}.png", width as u32));
     }
 }
+
+#[test]
+#[ignore = "needs BN_ENGINE"]
+fn the_character_and_inventory_windows_at_150_percent_stay_on_screen() {
+    let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
+    let root = game_root(engine.as_ref(), None).expect("game root");
+    let dir = std::env::temp_dir().join(format!("bn-panels-scale-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let settings = dir.join("settings.json");
+    std::fs::write(
+        &settings,
+        r#"{"tiles":false,"tileset":null,"interface_scale":150}"#,
+    )
+    .unwrap();
+    let transport = crate::common::live::english_transport();
+    let app = App::new(EngineModel::new(Box::new(transport)))
+        .with_settings(settings)
+        .with_root(root);
+    let mut h = crate::common::shot_harness(egui::vec2(1920.0, 1080.0), app);
+    choose(&mut h, "menu:tab", "new_game");
+    choose(&mut h, "menu:entry", "new_game:play_now");
+    run_until(&mut h, "the map", 600, |h| h.state().model.size().x > 0);
+    dismiss_popups(&mut h);
+    safe_mode_off(&mut h);
+    dismiss_popups(&mut h);
+    let read = |panel| move |h: &H| h.state().model.watched_panel(panel).is_some();
+    key(&mut h, "@");
+    run_until(&mut h, "the sheet", 60, read(PanelKind::Character));
+    key(&mut h, "i");
+    run_until(&mut h, "the inventory", 60, read(PanelKind::Inventory));
+    h.run_steps(5);
+    crate::common::settle_windows(&mut h);
+    save(&mut h, "scale-150-1920.png");
+    // The window is 1920 / 1.5 points wide at 150 %.
+    let room = h.ctx.content_rect();
+    for panel in [PanelKind::Character, PanelKind::Inventory] {
+        let title = title(&h, panel);
+        let window = h.get_by_role_and_label(egui::accesskit::Role::Window, &title);
+        assert!(
+            room.contains_rect(window.rect()),
+            "{title}: {:?} in {room:?}",
+            window.rect()
+        );
+    }
+}
