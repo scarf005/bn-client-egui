@@ -13,9 +13,11 @@ mod measure;
 mod overmap;
 mod panel;
 mod placement;
+mod region;
 mod tabs;
 mod target;
 
+use self::drag::Square;
 use super::input::KeyWindow;
 use super::{App, sidebar};
 use crate::kit::section::{self, Fact};
@@ -26,9 +28,9 @@ use crate::{a11y, editor, text};
 use bn_client_core::interaction::{self, ArgKind, InvokeError};
 use bn_client_core::protocol::{
     Affordance, AffordanceRole, CanvasComponent, Component, Editor, EditorValue, FieldKind, Form,
-    FormField, Grid, GridDrag, GridRole, InvokeArgs, List, MapComponent, MapMode, OvermapTile,
-    OvermapWire, PanelStat, Relation, Row, Screen, ScreenDock, ScreenRole, Selection, SidebarSide,
-    Split, Text, TextBlock, TextRole, Tone, WorldPos,
+    FormField, Grid, GridDrag, GridRegion, GridRole, InvokeArgs, List, MapComponent, MapMode,
+    OvermapTile, OvermapWire, PanelStat, Relation, Row, Screen, ScreenDock, ScreenRole, Selection,
+    SidebarSide, Split, Text, TextBlock, TextRole, Tone, WorldPos,
 };
 use bn_client_core::{Cell, GameModel, Pos, Rgb, markup};
 use eframe::egui::{self, WidgetInfo, WidgetType};
@@ -94,6 +96,18 @@ struct Paint {
     /// The square's row; none for the affordance that opens or closes a drag.
     row: Option<String>,
     affordance: String,
+    /// The text the affordance takes with the row, when it takes one.
+    text: Option<String>,
+}
+
+/// Where a grid's squares were drawn.
+struct GridLayout {
+    /// The top left of the first square drawn, which is the column and the row `first` names.
+    origin: egui::Pos2,
+    first: Square,
+    size: egui::Vec2,
+    /// Clipped to what the grid shows.
+    painter: egui::Painter,
 }
 
 /// What a window kept off the cursor holds while its screen is open: its side, and the pass it was last shown in.
@@ -335,9 +349,23 @@ impl<M: GameModel> App<M> {
             if let Some(row) = &paint.row {
                 interaction.focus_row(&paint.component, row);
             }
-            let out = interaction.activate(top, &paint.affordance);
-            self.screens.denial = out.note();
-            if let Some((id, args)) = out.invoke {
+            // An affordance that takes the drag's text is called with it as it is; the core only builds the others.
+            let invoke = match &paint.text {
+                Some(text) => Some((
+                    paint.affordance.clone(),
+                    InvokeArgs {
+                        row: paint.row.clone(),
+                        text: Some(text.clone()),
+                        ..InvokeArgs::default()
+                    },
+                )),
+                None => {
+                    let out = interaction.activate(top, &paint.affordance);
+                    self.screens.denial = out.note();
+                    out.invoke
+                }
+            };
+            if let Some((id, args)) = invoke {
                 match self.model.invoke_affordance(&id, args) {
                     Err(InvokeError::Busy) => return ctx.request_repaint(),
                     Err(InvokeError::Disabled(denial)) => {
@@ -1037,6 +1065,7 @@ impl<M: GameModel> App<M> {
         let size = egui::vec2(cell, cell);
         let glyph_size = egui::TextStyle::Monospace.resolve(ui.style()).size * cell / GRID_CELL;
         let mut squares = HashMap::new();
+        let layout;
         if canvas {
             // The wheel scrolls it; a middle-button drag pans it, while the primary drag is left to painting.
             let pan = ui.input(|i| i.pointer.middle_down().then(|| i.pointer.delta()));
@@ -1058,16 +1087,21 @@ impl<M: GameModel> App<M> {
                     let cells = GridCells { size, glyph_size };
                     self.grid_cells(ui, grid, cells, &mut squares, out)
                 });
+            layout = Some(shown.inner);
             let delta = ui.input(|i| i.zoom_delta());
             if delta != 1.0 && ui.rect_contains_pointer(shown.inner_rect) {
                 let zoom = (zoom * delta).clamp(GRID_ZOOM.0, GRID_ZOOM.1);
                 ui.data_mut(|d| d.insert_temp(zoom_key, zoom));
             }
         } else {
-            self.grid_cells(ui, grid, GridCells { size, glyph_size }, &mut squares, out);
+            let cells = GridCells { size, glyph_size };
+            layout = Some(self.grid_cells(ui, grid, cells, &mut squares, out));
         }
         if let Some(mode) = grid.drag {
             self.drag_squares(ui, grid, mode, &squares, out);
+        }
+        if let (Some(affordance), Some(layout)) = (&grid.region_drag, layout) {
+            self.drag_region(ui, grid, affordance, (&squares, &layout), out);
         }
     }
 
@@ -1079,7 +1113,7 @@ impl<M: GameModel> App<M> {
         GridCells { size, glyph_size }: GridCells,
         squares: &mut HashMap<drag::Square, (egui::Rect, String, String)>,
         out: &mut Vec<Intent>,
-    ) {
+    ) -> GridLayout {
         let (xs, ys) = drawn_span(grid);
         let opacity = ui.opacity();
         let drawn = ui.scope(|ui| {
@@ -1182,8 +1216,23 @@ impl<M: GameModel> App<M> {
                 });
             }
         });
+        let origin = drawn.response.rect.min;
+        let layout = GridLayout {
+            origin,
+            first: (xs.start, ys.start),
+            size,
+            painter: ui.painter().clone(),
+        };
+        let outlines = grid
+            .regions
+            .iter()
+            .flat_map(|region| self.outline(ui, &layout, region))
+            .collect();
+        self.screens
+            .rules
+            .borrow_mut()
+            .push((layout.painter.clone(), outlines));
         if let Some(block) = grid.block.filter(|b| b.x > 0 && b.y > 0) {
-            let origin = drawn.response.rect.min;
             // A light line over a dark one, so it reads on pale and dark squares alike.
             let strokes = [
                 egui::Stroke::new(3.0, egui::Color32::from_black_alpha(160)),
@@ -1213,6 +1262,39 @@ impl<M: GameModel> App<M> {
                 .borrow_mut()
                 .push((ui.painter().clone(), lines));
         }
+        layout
+    }
+
+    /// The outline of `region` over the squares of `layout`, and its label in the top left when it fits.
+    fn outline(&self, ui: &egui::Ui, layout: &GridLayout, region: &GridRegion) -> Vec<egui::Shape> {
+        let rect = layout.rect([region.from.x, region.from.y, region.to.x, region.to.y]);
+        let picked = region.selected == Some(true);
+        let mut shapes = outline_shapes(
+            rect,
+            if picked {
+                tokens::REGION_PICKED
+            } else {
+                tokens::REGION
+            },
+        );
+        let label = region.label.as_deref().filter(|l| !l.is_empty());
+        if let Some(label) = label {
+            let font = egui::TextStyle::Small.resolve(ui.style());
+            let galley = layout
+                .painter
+                .layout_no_wrap(label.to_owned(), font, tokens::TEXT);
+            if galley.size().x + 4.0 <= rect.width() && galley.size().y + 4.0 <= rect.height() {
+                let at = rect.min + egui::vec2(3.0, 2.0);
+                let back = egui::Rect::from_min_size(at, galley.size()).expand(1.0);
+                shapes.push(egui::Shape::rect_filled(
+                    back,
+                    0.0,
+                    egui::Color32::from_black_alpha(170),
+                ));
+                shapes.push(egui::Shape::galley(at, galley, tokens::TEXT));
+            }
+        }
+        shapes
     }
 
     /// The component whose row `affordance` acts on: the one its row argument names, else `own`.
@@ -1222,6 +1304,65 @@ impl<M: GameModel> App<M> {
             .and_then(|a| a.args.as_ref()?.row.as_ref())
             .map_or(own, |of| of.component_id.as_str())
             .to_owned()
+    }
+
+    /// Runs `affordance` for a pointer drag of one of the grid's regions, and outlines where it would land.
+    fn drag_region(
+        &self,
+        ui: &egui::Ui,
+        grid: &Grid,
+        affordance: &str,
+        (squares, layout): (
+            &HashMap<drag::Square, (egui::Rect, String, String)>,
+            &GridLayout,
+        ),
+        out: &mut Vec<Intent>,
+    ) {
+        let key = egui::Id::new(("region-drag", &grid.head.id));
+        let pass = ui.ctx().cumulative_pass_nr();
+        let mut held = ui
+            .data(|d| d.get_temp::<(Option<region::Grab>, u64)>(key))
+            .filter(|(_, last)| last + 1 >= pass)
+            .and_then(|(held, _)| held);
+        let pointer = ui.input(|i| {
+            let at = i.pointer.interact_pos();
+            drag::Pointer {
+                over: at
+                    .and_then(|at| {
+                        squares
+                            .iter()
+                            .find(|(_, s)| s.0.contains(at) && ui.clip_rect().contains(at))
+                    })
+                    .map(|(&at, _)| at),
+                pressed: i.pointer.button_pressed(egui::PointerButton::Primary),
+                down: i.pointer.primary_down(),
+                released: i.pointer.button_released(egui::PointerButton::Primary),
+            }
+        });
+        let on_top = ui
+            .ctx()
+            .layer_id_at(ui.input(|i| i.pointer.interact_pos()).unwrap_or_default())
+            == Some(ui.layer_id());
+        let pointer = drag::Pointer {
+            pressed: pointer.pressed && on_top,
+            ..pointer
+        };
+        if let Some(moved) = region::advance(&grid.regions, &mut held, pointer) {
+            out.push(Intent::Paint(Paint {
+                component: self.row_component(affordance, &grid.head.id),
+                row: Some(moved.id),
+                affordance: affordance.to_owned(),
+                text: Some(moved.text),
+            }));
+        }
+        if let Some(grab) = held.as_ref().filter(|g| g.deltas() != [0; 4]) {
+            let color = tokens::REGION_PICKED;
+            self.screens.rules.borrow_mut().push((
+                layout.painter.clone(),
+                outline_shapes(layout.rect(grab.preview()), color),
+            ));
+        }
+        ui.data_mut(|d| d.insert_temp(key, (held, pass)));
     }
 
     /// Runs the affordance of the squares a pointer drag over `squares` crosses.
@@ -1275,6 +1416,7 @@ impl<M: GameModel> App<M> {
                     component: grid.head.id.clone(),
                     row: None,
                     affordance,
+                    text: None,
                 })
             })
         };
@@ -1298,12 +1440,43 @@ impl<M: GameModel> App<M> {
                 component: self.row_component(affordance, &grid.head.id),
                 row: Some(row.clone()),
                 affordance: affordance.clone(),
+                text: None,
             }));
         }
         out.extend(marker(&grid.drag_end).filter(|_| was_held && held.is_none()));
         let began = began.filter(|_| held.is_some());
         ui.data_mut(|d| d.insert_temp(key, (held, began, pass)));
     }
+}
+
+impl GridLayout {
+    /// The rectangle of the squares from the west and north ones to the east and south ones, both included.
+    fn rect(&self, [west, north, east, south]: [i32; 4]) -> egui::Rect {
+        let at = |x: i32, y: i32| {
+            self.origin
+                + egui::vec2(
+                    (x - self.first.0 as i32) as f32 * self.size.x,
+                    (y - self.first.1 as i32) as f32 * self.size.y,
+                )
+        };
+        let (a, b) = (
+            at(west.min(east), north.min(south)),
+            at(west.max(east) + 1, north.max(south) + 1),
+        );
+        egui::Rect::from_min_max(a, b)
+    }
+}
+
+/// A dark line under a light one, so the outline reads on pale and dark squares alike.
+fn outline_shapes(rect: egui::Rect, color: egui::Color32) -> Vec<egui::Shape> {
+    let rect = rect.shrink(1.0);
+    let strokes = [
+        egui::Stroke::new(4.0, egui::Color32::from_black_alpha(160)),
+        egui::Stroke::new(2.0, color),
+    ];
+    strokes
+        .map(|stroke| egui::Shape::rect_stroke(rect, 0.0, stroke, egui::StrokeKind::Middle))
+        .into()
 }
 
 /// The sizes a grid's cells are drawn at.

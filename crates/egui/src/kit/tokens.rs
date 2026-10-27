@@ -48,6 +48,9 @@ pub const GAUGE: Color32 = Color32::from_rgb(0x30, 0x30, 0x30);
 pub const TEXT: Color32 = Color32::from_rgb(0xd4, 0xd4, 0xd4);
 /// Captions, keys and what is not available.
 pub const WEAK: Color32 = Color32::from_rgb(0x8f, 0x8f, 0x8f);
+/// The outline of a region drawn over a canvas, and of the picked one.
+pub const REGION: Color32 = Color32::from_rgb(0xe8, 0xe8, 0xe8);
+pub const REGION_PICKED: Color32 = Color32::from_rgb(0xff, 0xb6, 0x2e);
 pub const GOOD: Color32 = Color32::from_rgb(110, 210, 110);
 pub const BAD: Color32 = Color32::from_rgb(235, 95, 95);
 
