@@ -141,6 +141,23 @@ fn a_grid_narrower_than_its_canvas_is_centred_in_it() {
     assert!((moved - 200.0).abs() < 1.5, "{moved}");
 }
 
+/// The middle of the drawn grid along the row of the fifth square.
+fn centre_of(h: &H) -> f32 {
+    (square(h, 0, 5).unwrap().min.x + square(h, SIDE - 1, 5).unwrap().max.x) / 2.0
+}
+
+#[test]
+fn a_zoomed_grid_is_centred_again_when_its_room_widens_past_it() {
+    let (fresh, _) = open_sized(screen(), egui::vec2(1700.0, 800.0));
+    let (mut h, _script) = open_sized(screen(), egui::vec2(1100.0, 800.0));
+    let at = square(&h, 5, 5).unwrap().center();
+    wheel(&mut h, at, 60.0);
+    h.set_size(egui::vec2(1700.0, 800.0));
+    crate::common::settle_windows(&mut h);
+    let (shown, wanted) = (centre_of(&h), centre_of(&fresh));
+    assert!((shown - wanted).abs() < 2.0, "{shown} {wanted}");
+}
+
 #[test]
 fn the_wheel_zooms_out_no_further_than_the_whole_grid_and_in_no_further_than_four_times_the_fit() {
     let (mut h, _script) = open(screen());
