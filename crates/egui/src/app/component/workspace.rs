@@ -96,7 +96,7 @@ impl<M: GameModel> App<M> {
             .show(ui, |ui| {
                 parts(root, Slot::Status)
                     .into_iter()
-                    .for_each(|c| self.component(ui, screen, c, out));
+                    .for_each(|c| self.status_line(ui, screen, c, out));
             });
         let tools = parts(root, Slot::Tools);
         if !tools.is_empty() {
@@ -133,6 +133,35 @@ impl<M: GameModel> App<M> {
                 .into_iter()
                 .for_each(|c| self.component(ui, screen, c, out));
         });
+    }
+
+    /// A status part on one line: a panel's title and its facts side by side; any other part as it is drawn
+    /// elsewhere.
+    fn status_line(
+        &self,
+        ui: &mut egui::Ui,
+        screen: &Screen,
+        c: &Component,
+        out: &mut Vec<Intent>,
+    ) {
+        let Component::Panel(panel) = c else {
+            return self.component(ui, screen, c, out);
+        };
+        ui.horizontal_wrapped(|ui| {
+            ui.label(egui::RichText::new(markup::plain(&panel.title.shown())).strong());
+            for stat in panel.stats.iter().flatten() {
+                ui.separator();
+                ui.weak(markup::plain(&stat.label.shown()));
+                let shown = stat_text(stat);
+                if !shown.is_empty() {
+                    let color = stat.tone.map_or(ui.visuals().text_color(), tone_color);
+                    ui.label(egui::RichText::new(shown).color(color));
+                }
+            }
+        });
+        if let Some(child) = &panel.child {
+            self.component(ui, screen, child, out);
+        }
     }
 
     /// `parts` one above the other in a column that scrolls, whole lines in view.
