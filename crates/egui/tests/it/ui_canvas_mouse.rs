@@ -159,6 +159,18 @@ fn the_wheel_zooms_out_no_further_than_the_whole_grid_and_in_no_further_than_fou
 }
 
 #[test]
+fn the_same_grid_of_another_screen_is_shown_fitted_anew() {
+    let (mut h, script, _) = zoomed();
+    let zoomed = square(&h, 5, 5).unwrap().width();
+    let mut other = screen();
+    other["screen_id"] = "screen:other".into();
+    restack(&script, 50, vec![other]);
+    h.run_steps(8);
+    let shown = square(&h, 5, 5).unwrap().width();
+    assert!(shown < zoomed / 1.5, "{zoomed} {shown}");
+}
+
+#[test]
 fn a_middle_drag_moves_the_zoomed_grid_by_the_drag() {
     let (mut h, _script, at) = zoomed();
     let (x, y) = under(&h, at);
