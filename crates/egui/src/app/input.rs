@@ -297,23 +297,14 @@ impl<M: GameModel> App<M> {
         let opened = keys.iter().filter_map(window).collect::<Vec<_>>();
         let zooms = keys.iter().filter_map(zoom).sum();
         let turns = keys.iter().filter_map(turn).sum::<f32>();
-        // In the 3D map a step goes the way its key points on the screen, and in first person W, A, S and D step
-        // ahead, left, back and right of the look; each is sent as a key of the step it becomes.
-        let first = self.display.first_person();
+        // In the 3D map a step goes the way its key points on the screen; it is sent as a key of the step it becomes.
         let camera = self.iso.camera;
         let bound = |token: &str| {
             let action = |token: &str| actions.iter().find(|a| a.keys.iter().any(|k| k == token));
             action(token).or_else(|| action(&keys::numpad(token)?))
         };
         let screen_step = |k: &FrameKey| {
-            let id = match (k.token.as_str(), k.key) {
-                ("w", None) if first => "UP",
-                ("a", None) if first => "LEFT",
-                ("s", None) if first => "DOWN",
-                ("d", None) if first => "RIGHT",
-                (token, _) => bound(token)?.id.as_str(),
-            };
-            let step = camera.screen_step(id)?;
+            let step = camera.screen_step(&bound(&k.token)?.id)?;
             actions.iter().find(|a| a.id == step)?.keys.first().cloned()
         };
         let rest = keys
