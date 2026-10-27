@@ -122,4 +122,5 @@ mod ui_vehicle_part_fit;
 mod ui_window_class;
 mod ui_window_class_shots;
 mod ui_windows;
+mod ui_workspace;
 mod ui_zoom;

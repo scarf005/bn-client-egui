@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: bn-client\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-23 19:32+0900\n"
+"POT-Creation-Date: 2026-10-28 01:02+0900\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -37,7 +37,7 @@ msgid "Right click"
 msgstr ""
 
 #: crates/core/src/engine_model/commands.rs:141
-#: crates/egui/src/app/component/form.rs:193 crates/egui/src/app/menu.rs:67
+#: crates/egui/src/app/component/form.rs:201 crates/egui/src/app/menu.rs:67
 msgid "Cancel"
 msgstr ""
 
@@ -45,7 +45,7 @@ msgstr ""
 msgid "Command"
 msgstr ""
 
-#: crates/core/src/engine_model/responses.rs:148
+#: crates/core/src/engine_model/responses.rs:153
 msgid "Bad snapshot: %s"
 msgstr ""
 
@@ -65,35 +65,35 @@ msgstr ""
 msgid "The engine stopped."
 msgstr ""
 
-#: crates/core/src/interaction.rs:113
+#: crates/core/src/interaction.rs:118
 msgid "Not available."
 msgstr ""
 
-#: crates/core/src/interaction.rs:114
+#: crates/core/src/interaction.rs:119
 msgid "Not for this row."
 msgstr ""
 
-#: crates/core/src/interaction.rs:115
+#: crates/core/src/interaction.rs:120
 msgid "Choose a row first."
 msgstr ""
 
-#: crates/core/src/interaction.rs:116
+#: crates/core/src/interaction.rs:121
 msgid "Enter a count first."
 msgstr ""
 
-#: crates/core/src/interaction.rs:117
+#: crates/core/src/interaction.rs:122
 msgid "Enter text first."
 msgstr ""
 
-#: crates/core/src/interaction.rs:118
+#: crates/core/src/interaction.rs:123
 msgid "Choose a square first."
 msgstr ""
 
-#: crates/core/src/interaction.rs:119
+#: crates/core/src/interaction.rs:124
 msgid "Choose a pane first."
 msgstr ""
 
-#: crates/core/src/interaction.rs:120
+#: crates/core/src/interaction.rs:125
 msgid "Busy."
 msgstr ""
 
@@ -127,92 +127,96 @@ msgstr ""
 msgid "cannot start engine %s: %s"
 msgstr ""
 
-#: crates/egui/src/app.rs:336 crates/tui/src/lib.rs:697
+#: crates/egui/src/app.rs:347 crates/tui/src/lib.rs:697
 msgid "Engine: %s"
 msgstr ""
 
-#: crates/egui/src/app.rs:341 crates/tui/src/lib.rs:703
+#: crates/egui/src/app.rs:352 crates/tui/src/lib.rs:703
 msgid "Last engine output:"
 msgstr ""
 
-#: crates/egui/src/app.rs:348
+#: crates/egui/src/app.rs:359
 msgid "Restart"
 msgstr ""
 
-#: crates/egui/src/app.rs:362
+#: crates/egui/src/app.rs:373
 msgid "%s: %s (%d of %d)"
 msgstr ""
 
-#: crates/egui/src/app.rs:378
+#: crates/egui/src/app.rs:389
 msgid "Loading image"
 msgstr ""
 
-#: crates/egui/src/app.rs:500
+#: crates/egui/src/app.rs:513
 msgid "Resize sidebar"
 msgstr ""
 
-#: crates/egui/src/app.rs:532 crates/egui/src/app.rs:544
+#: crates/egui/src/app.rs:552 crates/egui/src/app.rs:564
 msgid "Client settings"
 msgstr ""
 
-#: crates/egui/src/app.rs:541 crates/egui/src/app/palette.rs:57
-#: crates/egui/src/app/palette.rs:103 crates/tui/src/lib.rs:881
+#: crates/egui/src/app.rs:561 crates/egui/src/app/palette.rs:59
+#: crates/egui/src/app/palette.rs:105 crates/tui/src/lib.rs:881
 #: crates/tui/src/lib.rs:1050
 msgid "Actions"
 msgstr ""
 
-#: crates/egui/src/app.rs:559 crates/tui/src/lib.rs:666
+#: crates/egui/src/app.rs:579 crates/tui/src/lib.rs:666
 msgid "Ready"
 msgstr ""
 
-#: crates/egui/src/app.rs:598
+#: crates/egui/src/app.rs:618
 msgid "Interrupt"
 msgstr ""
 
-#: crates/egui/src/app/component/form.rs:168 crates/egui/src/editor.rs:116
+#: crates/egui/src/app/component/form.rs:170 crates/egui/src/editor.rs:137
 msgid "Press the new key"
 msgstr ""
 
-#: crates/egui/src/app/component/form.rs:190
+#: crates/egui/src/app/component/form.rs:198
 msgid "OK"
 msgstr ""
 
-#: crates/egui/src/app/component/list.rs:274 crates/egui/src/app/palette.rs:63
+#: crates/egui/src/app/component/list.rs:275 crates/egui/src/app/palette.rs:65
 msgid "Search"
 msgstr ""
 
-#: crates/egui/src/app/component/overmap.rs:376
-#: crates/egui/src/app/component/overmap.rs:552 crates/egui/src/app/map.rs:392
+#: crates/egui/src/app/component/overmap.rs:378
+#: crates/egui/src/app/component/overmap.rs:554 crates/egui/src/app/map.rs:444
 #: crates/tui/src/lib.rs:753
 msgid "Map"
 msgstr ""
 
-#: crates/egui/src/app/component/overmap.rs:382
+#: crates/egui/src/app/component/overmap.rs:384
 msgid "Centre"
 msgstr ""
 
-#: crates/egui/src/app/component/overmap.rs:387
+#: crates/egui/src/app/component/overmap.rs:389
 msgid "Travel and notes"
 msgstr ""
 
 #. TRANSLATORS: the overmap level the map window shows; %d is its z, 0 at the ground.
-#: crates/egui/src/app/component/overmap.rs:391
+#: crates/egui/src/app/component/overmap.rs:393
 msgid "Level %d"
 msgstr ""
 
-#: crates/egui/src/app/map.rs:302 crates/tui/src/lib.rs:763
+#: crates/egui/src/app/component/workspace.rs:117
+msgid "Resize workspace column"
+msgstr ""
+
+#: crates/egui/src/app/map.rs:349 crates/tui/src/lib.rs:763
 msgid "No map loaded"
 msgstr ""
 
-#: crates/egui/src/app/map.rs:496
+#: crates/egui/src/app/map.rs:549
 msgid "Player at (%d, %d). Cursor (%d, %d)."
 msgstr ""
 
-#: crates/egui/src/app/map.rs:499
+#: crates/egui/src/app/map.rs:552
 msgid "Player at (%d, %d). Cursor (%d, %d): %s."
 msgstr ""
 
-#: crates/egui/src/app/map.rs:797
+#: crates/egui/src/app/map.rs:852
 msgid "Map actions"
 msgstr ""
 
@@ -224,48 +228,48 @@ msgstr ""
 msgid "Load more (%d of %d)"
 msgstr ""
 
-#: crates/egui/src/app/palette.rs:67
+#: crates/egui/src/app/palette.rs:69
 msgid "Search actions"
 msgstr ""
 
-#: crates/egui/src/app/sidebar.rs:71
+#: crates/egui/src/app/sidebar.rs:72
 msgid "Resize message log"
 msgstr ""
 
-#: crates/egui/src/display.rs:523
+#: crates/egui/src/display.rs:529
 msgid "No tileset found in the game's gfx folder."
 msgstr ""
 
-#: crates/egui/src/display.rs:687
+#: crates/egui/src/display.rs:707
 msgid "Tiles"
 msgstr ""
 
-#: crates/egui/src/display.rs:696
+#: crates/egui/src/display.rs:717
 msgid "First person"
 msgstr ""
 
-#: crates/egui/src/display.rs:710
+#: crates/egui/src/display.rs:731
 msgid "none"
 msgstr ""
 
-#: crates/egui/src/display.rs:713
+#: crates/egui/src/display.rs:734
 msgid "Tileset"
 msgstr ""
 
-#: crates/egui/src/display.rs:729
+#: crates/egui/src/display.rs:750
 msgid "Tileset unavailable: %s"
 msgstr ""
 
-#: crates/egui/src/display.rs:733
+#: crates/egui/src/display.rs:754
 msgid "Reduced motion"
 msgstr ""
 
-#: crates/egui/src/display.rs:752
+#: crates/egui/src/display.rs:756
 msgid "Interface scale"
 msgstr ""
 
 #. TRANSLATORS: the mark of north on the compass of the 3D map.
-#: crates/egui/src/iso/mod.rs:241
+#: crates/egui/src/iso/mod.rs:248
 msgid "N"
 msgstr ""
 
@@ -289,31 +293,31 @@ msgstr ""
 msgid "%s is not an executable file"
 msgstr ""
 
-#: crates/egui/src/windows.rs:338
+#: crates/egui/src/windows.rs:357
 msgid "Close window"
 msgstr ""
 
-#: crates/egui/src/windows.rs:346
+#: crates/egui/src/windows.rs:365
 msgid "Restore"
 msgstr ""
 
-#: crates/egui/src/windows.rs:348
+#: crates/egui/src/windows.rs:367
 msgid "Maximize"
 msgstr ""
 
-#: crates/egui/src/windows.rs:367
+#: crates/egui/src/windows.rs:386
 msgid "Expand"
 msgstr ""
 
-#: crates/egui/src/windows.rs:369
+#: crates/egui/src/windows.rs:388
 msgid "Minimize"
 msgstr ""
 
-#: crates/egui/src/windows.rs:529
+#: crates/egui/src/windows.rs:564
 msgid "Move window"
 msgstr ""
 
-#: crates/egui/src/windows.rs:567
+#: crates/egui/src/windows.rs:602
 msgid "Resize window"
 msgstr ""
 

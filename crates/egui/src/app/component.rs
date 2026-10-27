@@ -16,6 +16,7 @@ mod placement;
 mod region;
 mod tabs;
 mod target;
+mod workspace;
 
 use self::drag::Square;
 use super::input::KeyWindow;
@@ -30,7 +31,7 @@ use bn_client_core::protocol::{
     Affordance, AffordanceRole, CanvasComponent, Component, Editor, EditorValue, FieldKind, Form,
     FormField, Grid, GridDrag, GridRegion, GridRole, InvokeArgs, List, MapComponent, MapMode,
     OvermapTile, OvermapWire, PanelStat, Relation, Row, Screen, ScreenDock, ScreenRole, Selection,
-    SidebarSide, Split, Text, TextBlock, TextRole, Tone, WorldPos,
+    SidebarSide, Slot, Split, Text, TextBlock, TextRole, Tone, WorldPos,
 };
 use bn_client_core::{Cell, GameModel, Pos, Rgb, markup};
 use eframe::egui::{self, WidgetInfo, WidgetType};
@@ -644,6 +645,10 @@ impl<M: GameModel> App<M> {
                     .frame(egui::Frame::NONE)
                     .show_separator_line(false)
                     .show(ui, |ui| footer(ui, out));
+                self.menu_bar(ui, screen, out);
+                if let Some(split) = workspace::laid_out(screen) {
+                    return self.workspace(ui, screen, split, out);
+                }
                 // A body taller than the room, a full-size grid over further parts, scrolls instead of being cut.
                 egui::CentralPanel::no_frame().show(ui, |ui| {
                     let scroll = egui::ScrollArea::vertical()
@@ -713,6 +718,17 @@ impl<M: GameModel> App<M> {
         if let (Some(label), false) = (&c.head().label, matches!(c, Component::Panel(_))) {
             ui.label(egui::RichText::new(markup::plain(&label.shown())).strong());
         }
+        self.component_body(ui, screen, c, out);
+    }
+
+    /// `c` without its label.
+    fn component_body(
+        &self,
+        ui: &mut egui::Ui,
+        screen: &Screen,
+        c: &Component,
+        out: &mut Vec<Intent>,
+    ) {
         match c {
             Component::List(list) => self.described_list(ui, screen, c, list, out),
             Component::Tabs(tabs) => {

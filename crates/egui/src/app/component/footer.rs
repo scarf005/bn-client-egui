@@ -104,7 +104,11 @@ pub(super) fn glyph_tip(a: &Affordance) -> String {
 
 /// Names `a`'s button `button` by the engine's label alone, with its first key as the shortcut, and lists every
 /// key on hover.
-fn described(ctx: &egui::Context, button: egui::Response, a: &Affordance) -> egui::Response {
+pub(super) fn described(
+    ctx: &egui::Context,
+    button: egui::Response,
+    a: &Affordance,
+) -> egui::Response {
     a11y::keyed_button(
         ctx,
         button.id,
@@ -250,14 +254,16 @@ pub(super) fn own_buttons<'a>(screen: &'a Screen, component: &Component) -> Vec<
 /// Whether `a` is drawn as a button: picking, moving, digits and text edits run from their rows and keys instead, and what
 /// only rearranges the native window changes nothing here.
 pub(super) fn drawn_button(a: &Affordance) -> bool {
-    !matches!(
-        a.role,
-        Some(
-            AffordanceRole::Select
-                | AffordanceRole::Navigate
-                | AffordanceRole::Digit
-                | AffordanceRole::Layout
-                | AffordanceRole::Edit
+    // A grouped affordance is an item of the workspace's menu bar.
+    a.group.is_none()
+        && !matches!(
+            a.role,
+            Some(
+                AffordanceRole::Select
+                    | AffordanceRole::Navigate
+                    | AffordanceRole::Digit
+                    | AffordanceRole::Layout
+                    | AffordanceRole::Edit
+            )
         )
-    )
 }
