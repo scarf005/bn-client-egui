@@ -219,9 +219,12 @@ impl<M: GameModel> App<M> {
             Component::Text(block) => {
                 let text = markup::plain(&block.markup.shown());
                 match block.role {
-                    Some(TextRole::TerminalOutput | TextRole::Banner) => {
+                    Some(role @ (TextRole::TerminalOutput | TextRole::Banner)) => {
                         let mono = egui::TextStyle::Monospace.resolve(ui.style());
-                        fixed(line_width(ui, &text, &mono))
+                        Extent {
+                            alone: role == TextRole::TerminalOutput,
+                            ..fixed(line_width(ui, &text, &mono))
+                        }
                     }
                     Some(TextRole::Prompt) | None => Extent {
                         grows: true,
