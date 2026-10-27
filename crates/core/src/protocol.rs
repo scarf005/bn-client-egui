@@ -2199,6 +2199,9 @@ pub struct Tab {
     /// Why the tab is off, in the engine's words.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub denial: Option<Text>,
+    /// The key that chooses the tab.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hotkey: Option<String>,
     /// Something in the tab is new to the player.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub unread: bool,

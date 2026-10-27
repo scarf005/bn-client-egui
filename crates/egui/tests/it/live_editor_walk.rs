@@ -1411,3 +1411,74 @@ fn the_map_editor_drags_a_placement_whole_and_by_its_corner() {
     assert_eq!(object["place_items"][0]["x"], serde_json::json!([10, 16]));
     assert_eq!(object["place_items"][0]["y"], serde_json::json!([10, 15]));
 }
+
+/// The label of the selected tab of the bar that has a tab labelled `of`.
+fn selected_tool(h: &H) -> Option<String> {
+    h.root().children_recursive().find_map(|n| {
+        let a = n.accesskit_node();
+        (a.role() == egui::accesskit::Role::Tab && a.is_selected() == Some(true))
+            .then(|| a.label().map(|l| l.to_string()))
+            .flatten()
+            .filter(|l| ["Pencil", "Line", "Rectangle", "Select", "Paste"].contains(&l.as_str()))
+    })
+}
+
+/// A mapgen opened as a player reopens a file; the tool keys choose the tools, and z turns the copied region.
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn the_map_editor_tool_keys_choose_tools_and_z_turns_the_clipboard() {
+    let sizes = [(1290.0, 830.0)];
+    let dir = std::env::temp_dir().join(format!("bn-walk-{}", std::process::id()));
+    let profile = std::env::temp_dir().join(format!("bn-live-{}-0", std::process::id()));
+    let moddir = profile.join("mods").join("walk_keys");
+    std::fs::create_dir_all(&moddir).unwrap();
+    std::fs::create_dir_all(&dir).unwrap();
+    let entries = serde_json::json!([
+        { "type": "mapgen", "method": "json", "om_terrain": "house_01",
+          "object": { "rows": vec![".".repeat(24); 24], "terrain": { ".": "t_floor" } } },
+    ]);
+    let file = moddir.join("keys.json");
+    std::fs::write(&file, entries.to_string()).unwrap();
+    let file = file.to_string_lossy().to_string();
+    let recent = serde_json::json!([{ "editor": "map", "name": file, "mods": ["bn"] }]);
+    let (mut h, _root) = start_with(&dir, &[("editor_recent.json", recent.to_string())]);
+    h.set_size(egui::vec2(1290.0, 830.0));
+    rest(&mut h);
+    click(&mut h, "Editor");
+    rest(&mut h);
+    click(&mut h, &file);
+    rest(&mut h);
+    key(&mut h, egui::Key::Escape);
+    click(&mut h, "Yes");
+    wait_kind(&mut h, "editor");
+    rest(&mut h);
+    assert_eq!(selected_tool(&h).as_deref(), Some("Pencil"));
+    shot_at(&mut h, "tk-1-opened", &sizes);
+
+    for (typed, tool) in [("l", "Line"), ("r", "Rectangle"), ("s", "Select")] {
+        type_text(&mut h, typed);
+        assert_eq!(selected_tool(&h).as_deref(), Some(tool), "after {typed}");
+        shot_at(&mut h, &format!("tk-2-{typed}"), &sizes);
+    }
+
+    // A 3x2 region selected by its two corners and copied; z turns it to 2x3.
+    paint(&mut h, 2, 2);
+    paint(&mut h, 4, 3);
+    shot_at(&mut h, "tk-3-select", &sizes);
+    key_mod(&mut h, egui::Modifiers::CTRL, egui::Key::C);
+    println!("DOC after copy: {}", document(&h));
+    assert!(
+        document(&h).contains("\"Clipboard\"=\"3x2\""),
+        "{}",
+        document(&h)
+    );
+    shot_at(&mut h, "tk-4-copied", &sizes);
+    type_text(&mut h, "z");
+    println!("DOC after z: {}", document(&h));
+    assert!(
+        document(&h).contains("\"Clipboard\"=\"2x3\""),
+        "{}",
+        document(&h)
+    );
+    shot_at(&mut h, "tk-5-rotated", &sizes);
+}

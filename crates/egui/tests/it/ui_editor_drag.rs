@@ -9,10 +9,10 @@ use egui_kittest::Harness;
 use egui_kittest::kittest::Queryable;
 use serde_json::{Value, json};
 
-type H<'a> = Harness<'a, App<EngineModel>>;
+pub(crate) type H<'a> = Harness<'a, App<EngineModel>>;
 
 /// The editor with a 12×12 canvas that drags as `drag`.
-fn editor(drag: Option<&str>) -> Value {
+pub(crate) fn editor(drag: Option<&str>) -> Value {
     editor_of(drag, 12)
 }
 
@@ -54,7 +54,7 @@ fn find<'a>(value: &'a mut Value, id: &str) -> Option<&'a mut Value> {
     }
 }
 
-fn open<'a>(screen: Value) -> (H<'a>, ScriptHandle) {
+pub(crate) fn open<'a>(screen: Value) -> (H<'a>, ScriptHandle) {
     open_sized(screen, egui::vec2(1280.0, 1600.0))
 }
 
@@ -100,7 +100,7 @@ fn painted(script: &ScriptHandle) -> Vec<String> {
 }
 
 /// The affordances of the invokes sent so far, in order.
-fn sent(script: &ScriptHandle) -> Vec<String> {
+pub(crate) fn sent(script: &ScriptHandle) -> Vec<String> {
     script
         .sent()
         .into_iter()

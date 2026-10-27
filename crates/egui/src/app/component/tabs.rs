@@ -94,6 +94,10 @@ impl<M: GameModel> App<M> {
         let button = self.control(ui, text, &tab.id, on, tab.selected);
         let button = match (&tab.denial, on) {
             (Some(denial), false) => button.on_disabled_hover_text(markup::plain(&denial.shown())),
+            (None, true) | (Some(_), true) => match &tab.hotkey {
+                Some(key) => button.on_hover_text(key),
+                None => button,
+            },
             _ => button,
         };
         a11y::tab(ui.ctx(), button.id, tab.selected);
