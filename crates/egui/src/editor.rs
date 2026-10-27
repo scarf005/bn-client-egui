@@ -288,7 +288,8 @@ fn typing(
     let name = label.to_string();
     ui.ctx()
         .accesskit_node_builder(response.id, move |b| b.set_label(name));
-    if search.is_none() && !state.entered {
+    // A window that is not shown yet cannot take it.
+    if search.is_none() && !state.entered && ui.is_enabled() {
         response.request_focus();
         state.entered = response.has_focus();
     }

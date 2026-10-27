@@ -41,8 +41,10 @@ impl Origin {
 pub enum Place {
     /// The whole of `rect`.
     Fill(egui::Rect),
-    /// The middle of `rect`.
+    /// The middle of `rect`; first as tall as its room at least, as a screen read beside the map is.
     Center(egui::Rect),
+    /// The middle of `rect`; first as tall as its content, as a dialog is.
+    Fit(egui::Rect),
     /// `pivot` of the window at `pos`, no larger than `max`; moved, it stays in `within`.
     Side {
         pivot: egui::Align2,
@@ -56,7 +58,7 @@ impl Place {
     /// The most a window this first puts may take.
     pub fn room(self) -> egui::Vec2 {
         match self {
-            Place::Fill(rect) | Place::Center(rect) => rect.size(),
+            Place::Fill(rect) | Place::Center(rect) | Place::Fit(rect) => rect.size(),
             Place::Side { max, .. } => max,
         }
     }
@@ -64,7 +66,7 @@ impl Place {
     /// Where a window this puts first lies.
     fn bounds(self) -> egui::Rect {
         match self {
-            Place::Fill(rect) | Place::Center(rect) => rect,
+            Place::Fill(rect) | Place::Center(rect) | Place::Fit(rect) => rect,
             Place::Side { within, .. } => within,
         }
     }
@@ -114,6 +116,8 @@ const FIRST_WIDTH: f32 = 0.5;
 const FIT_HEIGHT: f32 = 0.9;
 /// A remembered window shorter than this share of its room is not a readable size to open at: it opens as a new one.
 const READABLE_HEIGHT: f32 = 0.6;
+/// The frames a window fit to its content is laid out unseen before it is fit.
+const VEIL_FRAMES: u8 = 3;
 /// The smallest a window may be dragged to.
 const LEAST: egui::Vec2 = egui::vec2(240.0, 120.0);
 /// How far inside a window's edge its resize handles reach, and how far along it a corner's does.
@@ -138,6 +142,8 @@ struct Geometry {
     held: f32,
     /// `rect` is what an earlier session remembered, which the content's height moves down, not centres.
     remembered: bool,
+    /// How many more frames a window fit to its content stays unpainted before it takes its height.
+    veiled: u8,
 }
 
 /// What the scroll areas drawn in a window hold past their viewports, by the window's layer.
@@ -261,20 +267,28 @@ fn cap(spec: &WindowSpec, screen: egui::Rect) -> egui::Vec2 {
     }
 }
 
-/// Where a window the player has not touched first lies, `least` tall at least (and no taller than its room).
+/// Where a window the player has not touched first lies, `least` tall at least (and no taller than its room): a
+/// window a layout fits to its content (`Place::Fit`) is `least` tall once that is known, the others and a
+/// window whose content is not yet known `FIRST_HEIGHT` of their room at least.
 fn first_rect(spec: &WindowSpec, screen: egui::Rect, least: f32) -> egui::Rect {
     if let Some(Place::Fill(rect)) = spec.place {
         return rect;
     }
     let room = spec.place.map_or(screen, Place::bounds);
     let cap = cap(spec, screen);
+    let first = match spec.place {
+        Some(Place::Fit(_)) if least > 0.0 => 0.0,
+        _ => FIRST_HEIGHT * room.height(),
+    };
     let size = egui::vec2(
         spec.width.unwrap_or(FIRST_WIDTH * room.width()),
-        (FIRST_HEIGHT * room.height()).max(least),
+        first.max(least),
     )
     .min(cap);
     let (pivot, pos) = match spec.place {
-        Some(Place::Center(rect)) => (egui::Align2::CENTER_CENTER, rect.center()),
+        Some(Place::Center(rect) | Place::Fit(rect)) => {
+            (egui::Align2::CENTER_CENTER, rect.center())
+        }
         Some(Place::Side { pivot, pos, .. }) => (pivot, pos),
         _ => (spec.origin.pivot, spec.origin.pos),
     };
@@ -426,6 +440,7 @@ pub fn show<R>(
                     wanted: 0.0,
                     held: 0.0,
                     remembered: true,
+                    veiled: VEIL_FRAMES,
                 }
             }
             None => Geometry {
@@ -436,11 +451,17 @@ pub fn show<R>(
                 wanted: 0.0,
                 held: 0.0,
                 remembered: false,
+                veiled: VEIL_FRAMES,
             },
         });
+    // A window fit to its content is laid out tall and unseen for a few frames, so that the lists in it learn how
+    // tall their rows are; the last of them gives it the height the content wanted, and it is shown from the next.
+    let veil =
+        matches!(spec.place, Some(Place::Fit(_))) && !geometry.remembered && geometry.veiled > 0;
+    geometry.veiled = geometry.veiled.saturating_sub(1);
     if let Some(last) = geometry
         .fit
-        .filter(|_| geometry.wanted > 0.0 && !geometry.minimized)
+        .filter(|_| !veil && geometry.wanted > 0.0 && !geometry.minimized)
     {
         // What the content holds out of sight is more than it wanted when it was laid out too tight to show it.
         let room = cap(&spec, screen).y;
@@ -479,7 +500,7 @@ pub fn show<R>(
                 within,
             )
         }
-        (Some(Place::Center(rect)), false) => {
+        (Some(Place::Center(rect) | Place::Fit(rect)), false) => {
             egui::Rect::from_center_size(rect.center(), geometry.rect.size().min(rect.size()))
         }
         _ => inside(geometry.rect, screen),
@@ -511,6 +532,9 @@ pub fn show<R>(
         .fixed_pos(shown_rect.min)
         .constrain(false)
         .show(ctx, |ui| {
+            if veil {
+                ui.set_invisible();
+            }
             let background = ui.painter().add(egui::Shape::Noop);
             // The area is exactly the window, whatever the contents ask for, so a press on any of it raises it.
             ui.allocate_rect(shown_rect, egui::Sense::hover());
@@ -575,8 +599,13 @@ pub fn show<R>(
                     }
                 }
             }
-            ui.painter().set(background, frame.paint(content));
+            if !veil {
+                ui.painter().set(background, frame.paint(content));
+            }
         });
+    if veil {
+        ctx.request_repaint();
+    }
     area.response
         .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Window, true, &spec.title));
     let rect = match dragged {
@@ -602,6 +631,11 @@ pub fn show<R>(
     geometry.minimized ^= pressed.minimize;
     geometry.wanted = wanted;
     geometry.held = held;
+    if veil && geometry.veiled == 0 {
+        geometry.rect = first_rect(&spec, screen, wanted.min(cap(&spec, screen).y));
+        // Fit again from here: the content may want more once it has the height it wanted.
+        geometry.fit = Some(0.0);
+    }
     ctx.data_mut(|d| d.insert_temp(key, geometry));
     let state = free.then(|| WindowState {
         pos: [geometry.rect.min.x, geometry.rect.min.y],

@@ -465,13 +465,19 @@ fn themed<'a>(
     builder: egui_kittest::HarnessBuilder<bn_client_egui::App<EngineModel>>,
     app: bn_client_egui::App<EngineModel>,
 ) -> egui_kittest::Harness<'a, bn_client_egui::App<EngineModel>> {
-    let h = builder.build_ui_state(
-        |ui, app: &mut bn_client_egui::App<EngineModel>| app.show(ui),
+    // Themed from the first frame, as the client starts, so that a window fit to its content is fit to the rows
+    // the player sees.
+    let mut themed = false;
+    builder.build_ui_state(
+        move |ui, app: &mut bn_client_egui::App<EngineModel>| {
+            if !std::mem::replace(&mut themed, true) {
+                bn_client_egui::kit::tokens::apply(ui.ctx());
+                bn_client_egui::fonts::install_bundled(ui.ctx());
+            }
+            app.show(ui)
+        },
         app,
-    );
-    bn_client_egui::kit::tokens::apply(&h.ctx);
-    bn_client_egui::fonts::install_bundled(&h.ctx);
-    h
+    )
 }
 pub mod legible;
 pub mod live;

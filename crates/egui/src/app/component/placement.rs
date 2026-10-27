@@ -130,7 +130,7 @@ pub(super) fn placement(screen: &Screen, room: &Room) -> Placement {
         ),
         (Some(ScreenDock::Cursor), _) => (Class::Side, away()),
         _ if keeps_off_cursor(screen) => (Class::Side, away()),
-        (None, ScreenRole::Dialog) => (Class::Dialog, Place::Center(inner)),
+        (None, ScreenRole::Dialog) => (Class::Dialog, Place::Fit(inner)),
         _ if !room.map || draws_world(screen) => (Class::Full, Place::Fill(inner)),
         _ => (Class::Screen, Place::Center(inner)),
     };

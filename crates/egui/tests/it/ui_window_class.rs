@@ -616,19 +616,21 @@ fn a_dialog_opens_as_tall_as_its_content() {
             "",
         ),
     ];
-    let margin = egui::Frame::window(&egui::Style::default())
-        .total_margin()
-        .bottom;
     let mut loose = vec![];
     for size in SIZES {
         for (file, name, kind) in dialogs {
             let (h, _) = playing(size, example(file, name), None);
+            let margin = egui::Frame::window(&h.ctx.global_style())
+                .total_margin()
+                .bottom;
             let window = match kind {
                 "" => h.get_by_role(egui::accesskit::Role::Window).rect(),
                 _ => window_of(&h, kind),
             };
             let spare = window.bottom() - lowest_widget(&h, window);
-            if spare > margin + 2.0 {
+            // Under the last widget lie the gap a row leaves after itself and the window's margin.
+            let gap = h.ctx.global_style().spacing.item_spacing.y;
+            if spare > margin + gap + 1.0 {
                 loose.push(format!(
                     "{kind:?} at {size:?}: {spare} pt empty under the content in {window:?}"
                 ));
@@ -640,23 +642,32 @@ fn a_dialog_opens_as_tall_as_its_content() {
 
 #[test]
 fn a_dialog_is_first_painted_at_the_size_it_keeps() {
+    let dialogs = [
+        ("generic", "query popup screen", "popup", "Save and quit?"),
+        (
+            "tutorial",
+            "wait menu screen",
+            "uilist",
+            "Wait for how long?",
+        ),
+    ];
     for size in SIZES {
-        let (mut h, _) = pushed(size, example("generic", "query popup screen"), None);
-        let id = egui::Id::new(("dialog", "screen:popup"));
-        let mut painted = vec![];
-        for frame in 0..12 {
-            h.step();
-            let shown = painted_text(&h)
-                .iter()
-                .any(|t| t.contains("Confirm Choice"));
-            if let (true, Some(rect)) = (shown, h.ctx.memory(|m| m.area_rect(id))) {
-                painted.push((frame, rect));
+        for (file, name, kind, prompt) in dialogs {
+            let (mut h, _) = pushed(size, example(file, name), None);
+            let id = egui::Id::new(("dialog", format!("screen:{kind}")));
+            let mut painted = vec![];
+            for frame in 0..12 {
+                h.step();
+                let shown = painted_text(&h).iter().any(|t| t.contains(prompt));
+                if let (true, Some(rect)) = (shown, h.ctx.memory(|m| m.area_rect(id))) {
+                    painted.push((frame, rect));
+                }
             }
+            assert!(!painted.is_empty(), "{kind} at {size:?}: never painted");
+            assert!(
+                painted.iter().all(|(_, r)| *r == painted[0].1),
+                "{kind} at {size:?}: painted at {painted:?}"
+            );
         }
-        assert!(!painted.is_empty(), "{size:?}: the dialog is never painted");
-        assert!(
-            painted.iter().all(|(_, r)| *r == painted[0].1),
-            "{size:?}: the dialog is painted at {painted:?}"
-        );
     }
 }
