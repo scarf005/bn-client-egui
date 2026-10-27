@@ -1127,10 +1127,11 @@ impl<M: GameModel> App<M> {
         let view = ui
             .data(|d| d.get_temp::<canvas::View>(view_key))
             .filter(|v| v.span == (xs.len(), ys.len()));
-        let (zoom, offset) = view
-            .and_then(|view| canvas::zoomed(ui, view, base, limits))
-            .map_or((view.map_or(1.0, |v| v.zoom), None), |(z, o)| (z, Some(o)));
-        let zoom = zoom.clamp(limits.0, limits.1);
+        let anchor = view.and_then(|view| canvas::zoomed(ui, view, limits));
+        let zoom = anchor
+            .as_ref()
+            .map_or(view.map_or(1.0, |v| v.zoom), |a| a.zoom)
+            .clamp(limits.0, limits.1);
         let cell = match canvas {
             true => base * zoom,
             false => fit.clamp(GRID_CELL, GRID_MAX_CELL),
@@ -1148,6 +1149,18 @@ impl<M: GameModel> App<M> {
             });
             // The viewport is a whole number of cells tall, so none is cut across.
             let rows = (ui.available_height() / cell).floor().max(1.0);
+            let room = egui::vec2(ui.available_width(), rows * cell);
+            let grid_size = egui::vec2(xs.len() as f32, ys.len() as f32) * cell;
+            // The area clamps an asked offset to last frame's content, so the margins of a new zoom take it only
+            // the frame after: it is asked for again then.
+            let placed = canvas::place(
+                (view, anchor.as_ref()),
+                zoom > limits.0 + 1e-3,
+                (room, grid_size),
+                cell,
+            );
+            let offset = placed.offset;
+            let asked = anchor.is_some().then_some(offset).flatten();
             let mut area = egui::ScrollArea::both()
                 .id_salt(("grid", &grid.head.id))
                 .max_height(rows * cell)
@@ -1166,7 +1179,19 @@ impl<M: GameModel> App<M> {
                     ui.scroll_with_delta(pan);
                 }
                 let cells = GridCells { size, glyph_size };
-                self.grid_cells(ui, grid, cells, &mut squares, out)
+                // The cells sit `lead` in from the corner, and the area runs on `tail` past them.
+                let corner = ui.cursor().min;
+                let laid = ui.scope_builder(
+                    egui::UiBuilder::new()
+                        .max_rect(egui::Rect::from_min_size(corner + placed.lead, grid_size)),
+                    |ui| self.grid_cells(ui, grid, cells, &mut squares, out),
+                );
+                let whole = placed.lead + grid_size + placed.tail;
+                ui.allocate_rect(
+                    egui::Rect::from_min_size(corner, whole),
+                    egui::Sense::hover(),
+                );
+                laid.inner
             });
             layout = Some(shown.inner);
             let view = canvas::View {
@@ -1176,6 +1201,8 @@ impl<M: GameModel> App<M> {
                 rect: shown.inner_rect,
                 // While zooming, the offset asked for: one a smaller square clamped must not drift the anchor.
                 offset: offset.unwrap_or(shown.state.offset),
+                pending: asked,
+                lead: placed.lead,
             };
             ui.data_mut(|d| d.insert_temp(view_key, view));
             self.hover_outline(ui, &squares);
