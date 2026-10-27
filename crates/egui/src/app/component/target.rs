@@ -46,7 +46,7 @@ pub(super) fn split_levels<'a>(
 }
 
 /// The id of the rating a chance stat `aim:<id>:<rating>` is of.
-fn rating_id<'a>(stat: &'a PanelStat) -> &'a str {
+fn rating_id(stat: &PanelStat) -> &str {
     stat.key.rsplit(':').next().unwrap_or_default()
 }
 
