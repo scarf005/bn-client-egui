@@ -169,6 +169,7 @@ impl Interaction {
             _ => None,
         };
         outcome
+            .or_else(|| self.press_tab_hotkey(screen, key))
             .or_else(|| self.press_hotkey(screen, key, rows))
             .or_else(|| self.press_move(screen, key, page, rows, true))
             .or_else(|| {
@@ -400,6 +401,28 @@ impl Interaction {
             }
             _ => None,
         }
+    }
+
+    /// A key that is a tab's hotkey, in either case, chooses that tab with the tabs' `select` affordance, as a click does.
+    fn press_tab_hotkey(&mut self, screen: &Screen, key: &str) -> Option<Outcome> {
+        let (tabs, tab, select) = screen.components().into_iter().find_map(|c| match c {
+            Component::Tabs(tabs) => {
+                let hot = |t: &&crate::protocol::Tab| {
+                    t.hotkey
+                        .as_deref()
+                        .is_some_and(|k| k.eq_ignore_ascii_case(key))
+                };
+                let tab = tabs.tabs.iter().find(hot)?;
+                Some((tabs, tab, tabs.select.as_deref()?))
+            }
+            _ => None,
+        })?;
+        self.focus_row(&tabs.head.id, &tab.id);
+        Some(Outcome {
+            revealed: Some(tab.id.clone()),
+            consumed: true,
+            ..self.activate(screen, select)
+        })
     }
 
     /// A key that is a row's hotkey chooses that row.
