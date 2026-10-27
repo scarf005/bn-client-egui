@@ -78,9 +78,11 @@ fn the_catalog_under_a_full_canvas_scrolls_into_the_window() {
         .map(|r| r["label"].as_str().unwrap().to_owned())
         .collect::<Vec<_>>();
     let mut h = open(screen, size);
-    // The window fills the map region, from under its title bar to the bottom of the screen.
-    let close = h.get_by_label("Close window").rect();
-    let room = egui::Rect::from_x_y_ranges(0.0..=close.right(), close.bottom()..=size.y);
+    // The workspace fills the view, from under its menu bar to the bottom of the screen.
+    let bar = h
+        .get_by_role_and_label(egui::accesskit::Role::Button, "File")
+        .rect();
+    let room = egui::Rect::from_x_y_ranges(0.0..=size.x, bar.bottom()..=size.y);
     let shown = |h: &H| {
         catalog
             .iter()

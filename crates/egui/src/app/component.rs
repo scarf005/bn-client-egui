@@ -605,7 +605,9 @@ impl<M: GameModel> App<M> {
         let placement = placement(screen, &room);
         let place = placement.place;
         let base = self.window_spec(ctx, self.window_kind(screen).as_deref(), &title);
-        let title_bar = base.title_bar;
+        // A workspace is the whole view, with no title bar: its title, help and leave end its menu bar.
+        let workspace = workspace::laid_out(screen).is_some();
+        let title_bar = base.title_bar || workspace;
         let named = screen.root.as_ref().map_or_else(HashSet::new, claimed);
         let rest = screen
             .affordances
@@ -614,8 +616,9 @@ impl<M: GameModel> App<M> {
             .collect::<Vec<_>>();
         // The help sits in the title bar, or last in the footer of a window that has none.
         let titled = interaction::with_role(screen, AffordanceRole::Help)
-            .filter(|a| a.enabled && base.title_bar);
+            .filter(|a| a.enabled && base.title_bar && !workspace);
         let spec = WindowSpec {
+            title_bar: base.title_bar && !workspace,
             closable: interaction::with_role(screen, AffordanceRole::Cancel).is_some(),
             frame: Some(frame),
             place: Some(place),
@@ -646,7 +649,7 @@ impl<M: GameModel> App<M> {
                     .frame(egui::Frame::NONE)
                     .show_separator_line(false)
                     .show(ui, |ui| footer(ui, out));
-                self.menu_bar(ui, screen, out);
+                self.menu_bar(ui, screen, &title, out);
                 if let Some(split) = workspace::laid_out(screen) {
                     return self.workspace(ui, screen, split, out);
                 }

@@ -142,7 +142,7 @@ impl<M: GameModel> App<M> {
     }
 
     /// One affordance as a button labelled with the engine's name and the key bound to it.
-    fn affordance_button(
+    pub(super) fn affordance_button(
         &self,
         ui: &mut egui::Ui,
         a: &Affordance,

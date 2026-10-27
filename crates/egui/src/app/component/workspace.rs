@@ -32,7 +32,14 @@ pub(super) fn laid_out(screen: &Screen) -> Option<&Split> {
 
 impl<M: GameModel> App<M> {
     /// One menu per group of the screen's affordances, in the order the groups first appear.
-    pub(super) fn menu_bar(&self, ui: &mut egui::Ui, screen: &Screen, out: &mut Vec<Intent>) {
+    /// A workspace's ends with its title, help and leave, which a window has in its title bar.
+    pub(super) fn menu_bar(
+        &self,
+        ui: &mut egui::Ui,
+        screen: &Screen,
+        title: &str,
+        out: &mut Vec<Intent>,
+    ) {
         let groups = screen
             .affordances
             .iter()
@@ -43,7 +50,8 @@ impl<M: GameModel> App<M> {
                 }
                 groups
             });
-        if groups.is_empty() {
+        let workspace = laid_out(screen).is_some();
+        if groups.is_empty() && !workspace {
             return;
         }
         egui::Panel::top(egui::Id::new(("menu bar", &screen.screen_id))).show(ui, |ui| {
@@ -71,6 +79,15 @@ impl<M: GameModel> App<M> {
                                 ui.close();
                             }
                         }
+                    });
+                }
+                if workspace {
+                    let ends = [AffordanceRole::Cancel, AffordanceRole::Help]
+                        .into_iter()
+                        .filter_map(|role| interaction::with_role(screen, role));
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ends.for_each(|a| self.affordance_button(ui, a, None, out));
+                        ui.label(egui::RichText::new(title).strong());
                     });
                 }
             });
