@@ -125,7 +125,7 @@ impl<M: GameModel> App<M> {
                 ui.horizontal(|ui| {
                     icon(ui, &mut self.display, &creature.cell, season.as_deref());
                     let line = format!("{} {}", creature.name, creature.distance);
-                    ui.add(egui::Label::new(text(line)).truncate());
+                    ui.add(egui::Label::new(text(line)).wrap());
                 });
             }
         }
@@ -209,7 +209,7 @@ impl<M: GameModel> App<M> {
                                                 );
                                                 ui.add(
                                                     egui::Label::new(label)
-                                                        .truncate()
+                                                        .wrap()
                                                         .sense(egui::Sense::DRAG),
                                                 )
                                             })

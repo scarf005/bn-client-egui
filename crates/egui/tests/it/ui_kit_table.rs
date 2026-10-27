@@ -229,24 +229,22 @@ fn shots() {
 }
 
 #[test]
-fn a_trade_label_cut_at_1280_shows_its_whole_text_on_hover() {
+fn a_trade_label_too_long_at_1280_wraps_whole_between_words() {
     let screen = example("trade", "trade screen");
     let labels = ["list:npc", "list:you"]
         .into_iter()
         .flat_map(|id| row_labels(&screen, id))
         .collect::<Vec<_>>();
-    let mut h = open(screen, egui::vec2(1280.0, 800.0));
-    let cut = painted_labels(&h, &labels)
-        .into_iter()
-        .find(|t| t.galley.elided)
-        .expect("a label cut short at 1280");
-    let whole = cut.galley.text().to_string();
-    h.hover_at(cut.pos + cut.galley.rect.center().to_vec2());
-    h.run_steps(4);
-    let shown = texts(&h)
-        .into_iter()
-        .any(|t| t.galley.text() == whole && !t.galley.elided);
-    assert!(shown, "{whole:?} on hover");
+    let h = open(screen, egui::vec2(1280.0, 800.0));
+    let painted = painted_labels(&h, &labels);
+    assert!(
+        painted.iter().all(|t| !t.galley.elided),
+        "a label cut short"
+    );
+    assert!(
+        painted.iter().any(|t| t.galley.rows.len() > 1),
+        "no label wraps at 1280"
+    );
 }
 
 #[test]
@@ -345,7 +343,7 @@ fn with_long_word(mut screen: Value) -> Value {
 }
 
 #[test]
-fn a_list_too_narrow_for_its_columns_cuts_its_label_and_keeps_the_last_column_clear_of_the_bar() {
+fn a_list_too_narrow_for_its_columns_wraps_its_label_and_keeps_the_last_column_clear_of_the_bar() {
     for width in [700.0, 880.0, 1000.0] {
         let screen = with_long_word(prototypes(
             "vehicle editor with a prototype open on a mount",
@@ -358,3 +356,55 @@ fn a_list_too_narrow_for_its_columns_cuts_its_label_and_keeps_the_last_column_cl
         );
     }
 }
+
+/// The plain values of the rows of the list `id` in `screen`.
+fn row_values(screen: &Value, id: &str) -> Vec<String> {
+    fn find<'a>(c: &'a Value, id: &str) -> Option<&'a Value> {
+        if c["id"] == id {
+            return Some(c);
+        }
+        let children = c["children"].as_array().into_iter().flatten();
+        children
+            .chain(c.get("child"))
+            .find_map(|child| find(child, id))
+    }
+    let list = find(&screen["root"], id).unwrap_or_else(|| panic!("no list {id}"));
+    (list["rows"].as_array().unwrap().iter())
+        .flat_map(|r| r["columns"].as_array().into_iter().flatten())
+        .map(|c| markup::plain(c["value"].as_str().unwrap_or_default()))
+        .filter(|v| !v.trim().is_empty())
+        .collect()
+}
+
+/// The least room between a painted text in `from` and the next of the texts `to` to its right on the same line.
+fn least_gap_after(h: &H, from: &[String], to: &[String]) -> f32 {
+    let next = painted_labels(h, to);
+    let line = |t: &epaint::TextShape| t.pos.y + t.galley.rows[0].rect().center().y;
+    painted_labels(h, from)
+        .iter()
+        .filter_map(|t| {
+            let right = t.pos.x + t.galley.rect.max.x;
+            next.iter()
+                .filter(|n| (line(n) - line(t)).abs() < 2.0 && left(n) > right - 0.5)
+                .map(|n| left(n) - right)
+                .min_by(f32::total_cmp)
+        })
+        .min_by(f32::total_cmp)
+        .unwrap_or_else(|| panic!("none of {from:?} has a text after it"))
+}
+
+#[test]
+fn a_tables_label_and_value_columns_stand_a_column_gap_apart() {
+    use bn_client_egui::kit::tokens::COLUMN_GAP;
+    let screen = example("keybindings", "keybindings screen");
+    let labels = row_labels(&screen, "keybindings:actions");
+    let values = row_values(&screen, "keybindings:actions");
+    let h = open(screen, egui::vec2(1280.0, 800.0));
+    let after_label = least_gap_after(&h, &labels, &values);
+    let after_value = least_gap_after(&h, &["Unbound locally!".to_string()], &values);
+    assert!(
+        after_label >= COLUMN_GAP - 0.5 && after_value >= COLUMN_GAP - 0.5,
+        "label to value {after_label}, value to value {after_value}, column gap {COLUMN_GAP}"
+    );
+}
+

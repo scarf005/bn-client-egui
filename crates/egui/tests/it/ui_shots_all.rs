@@ -4,7 +4,7 @@
 //! a person to look at, which needs a Vulkan adapter, so it only runs when asked:
 //! `cargo test --test it ui_shots_all:: -- --ignored`.
 use crate::common::fixture;
-use crate::common::legible::{Kind, cut_text, legible, wrapped_labels};
+use crate::common::legible::{Kind, broken_words, cut_text, elided_text, legible, wrapped_labels};
 use bn_client_egui::{App, EngineModel};
 use eframe::egui;
 use egui_kittest::Harness;
@@ -26,8 +26,6 @@ const TITLE_FLOW: &[&str] = &[
 /// finding. A fixed one must leave the list.
 #[rustfmt::skip]
 const KNOWN: &[(&str, Kind, &str)] = &[
-    ("overmap/overmap screen for a client that draws tiles@1920x1080", Kind::Cut, "the first row of tile glyphs overshoots the viewport top by 1 pt"),
-    ("overmap/overmap screen@1920x1080", Kind::Cut, "the first row of tile glyphs overshoots the viewport top by 1 pt"),
 ];
 
 /// One screen of the examples, keyed `file/name`.
@@ -192,14 +190,15 @@ fn shots() {
     }
 }
 
-/// A frame of `labels` at `width`, the second of them half out of the clip rectangle and the third wholly out.
+/// A frame of `labels` at `width`, the letters of the second of them half out of the clip rectangle and the third
+/// wholly out.
 fn clipped<'a>(width: f32, labels: [&'static str; 3]) -> Harness<'a> {
     Harness::builder()
         .with_size(egui::vec2(400.0, 200.0))
         .build_ui(move |ui| {
             ui.set_max_width(width);
             let top = ui.max_rect().top();
-            ui.set_clip_rect(egui::Rect::from_x_y_ranges(0.0..=400.0, top..=top + 30.0));
+            ui.set_clip_rect(egui::Rect::from_x_y_ranges(0.0..=400.0, top..=top + 25.0));
             for label in labels {
                 ui.label(label);
             }
@@ -215,6 +214,23 @@ fn a_line_half_out_of_its_clip_is_cut_and_one_wholly_out_is_scrolled_away() {
 }
 
 #[test]
+fn a_line_whose_letters_lie_inside_its_clip_is_not_cut() {
+    // "ace" has no ascender or descender: its line reaches past the clip by 1.5 pt above and below, its letters do not.
+    let h = Harness::builder()
+        .with_size(egui::vec2(400.0, 100.0))
+        .build_ui(|ui| {
+            let font = egui::FontId::proportional(16.0);
+            let color = ui.visuals().text_color();
+            let galley = ui.painter().layout_no_wrap("ace".into(), font, color);
+            let at = ui.max_rect().min + egui::vec2(10.0, 10.0);
+            let clip = galley.rect.translate(at.to_vec2()).shrink2(egui::vec2(0.0, 1.5));
+            ui.painter().with_clip_rect(clip).galley(at, galley, color);
+        });
+    let cut = cut_text(&h.output().shapes, h.ctx.content_rect());
+    assert!(cut.is_empty(), "{cut:?}");
+}
+
+#[test]
 fn a_label_on_more_lines_than_it_holds_is_wrapped() {
     let labels = ["a long row label".to_string()];
     let narrow = clipped(40.0, ["a long row label", "", ""]);
@@ -222,3 +238,36 @@ fn a_label_on_more_lines_than_it_holds_is_wrapped() {
     assert_eq!(wrapped_labels(&narrow.output().shapes, &labels).len(), 1);
     assert!(wrapped_labels(&wide.output().shapes, &labels).is_empty());
 }
+
+/// A frame of `text` in a label `width` wide, wrapped or `cut` short.
+fn one_label<'a>(width: f32, text: &'static str, cut: bool) -> Harness<'a> {
+    Harness::builder()
+        .with_size(egui::vec2(400.0, 100.0))
+        .build_ui(move |ui| {
+            ui.set_max_width(width);
+            let label = egui::Label::new(text);
+            ui.add(match cut {
+                true => label.truncate(),
+                false => label.wrap(),
+            });
+        })
+}
+
+#[test]
+fn a_line_cut_short_with_an_ellipsis_is_a_fault_and_a_whole_one_is_not() {
+    let text = "a row label too long for its room";
+    assert_eq!(
+        elided_text(&one_label(60.0, text, true).output().shapes, &[]).len(),
+        1
+    );
+    assert!(elided_text(&one_label(400.0, text, true).output().shapes, &[]).is_empty());
+}
+
+#[test]
+fn a_word_broken_over_two_lines_is_a_fault_and_a_break_between_words_is_not() {
+    let word = one_label(40.0, "abcdefghijklmnopqrstuvwxyz", false);
+    let words = one_label(60.0, "some short words in a row", false);
+    assert!(!broken_words(&word.output().shapes).is_empty());
+    assert!(broken_words(&words.output().shapes).is_empty());
+}
+

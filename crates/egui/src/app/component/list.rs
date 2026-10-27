@@ -20,8 +20,6 @@ pub(super) struct RowIcon {
 /// How this frame lays out a list's rows.
 struct RowLayout<'a> {
     widths: &'a table::Widths,
-    /// The label's whole text wraps, in a list without columns; else it is cut.
-    wraps: bool,
     /// The table's body, which a category row's band spans.
     across: egui::Rect,
     /// The list is the one of a top screen with no detail beside it, whose rows a single click answers; a panel's
@@ -107,8 +105,8 @@ impl<M: GameModel> App<M> {
         // The rows sit in a scroll area, which keeps room for its bar.
         let room = ui.available_width() - ui.spacing().scroll.allocated_width();
         let widths = self.list_widths(ui, list, &rows);
-        let wraps = list.columns.is_empty();
-        let label = match wraps {
+        // Without columns to keep beside it, the label takes the room.
+        let label = match list.columns.is_empty() {
             true => widths.wrapped_label_in(room, spacing.x),
             false => widths.label_in(room, spacing.x),
         };
@@ -143,13 +141,10 @@ impl<M: GameModel> App<M> {
             .any(|r| !r.enabled && !r.denial.shown().is_empty());
         let buttons = own.iter().any(|a| drawn_button(a));
         let below = usize::from(refused) + 2 * usize::from(buttons);
-        // A label that wraps makes its row taller; every other row is one line high.
+        // A label too long for its width wraps between words and makes its row taller.
         let heights = rows
             .iter()
-            .map(|row| match wraps {
-                true => self.wrapped_height(ui, row, label).max(height),
-                false => height,
-            })
+            .map(|row| self.wrapped_height(ui, row, label).max(height))
             .collect::<Vec<_>>();
         let starts = heights
             .iter()
@@ -207,7 +202,6 @@ impl<M: GameModel> App<M> {
         let body = |body: egui_extras::TableBody| {
             let layout = RowLayout {
                 widths: &widths,
-                wraps,
                 across: body.max_rect(),
                 answers: !self.screens.passive && Self::asks(screen),
                 filter: form::filter_submit(screen).is_some(),
@@ -397,11 +391,7 @@ impl<M: GameModel> App<M> {
             if row.parent_id.is_some() {
                 ui.add_space(tokens::INDENT);
             }
-            let wrap = match layout.wraps {
-                true => egui::TextWrapMode::Wrap,
-                false => egui::TextWrapMode::Truncate,
-            };
-            ui.style_mut().wrap_mode = Some(wrap);
+            ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
             let label = Self::row_label(row);
             // A refused row is plain dim text: the game's colours would hide that it is.
             let text = match row.enabled {
@@ -411,20 +401,12 @@ impl<M: GameModel> App<M> {
                     .into(),
             };
             let justified = egui::Layout::top_down_justified(egui::Align::Min);
-            let shown = ui
-                .with_layout(justified, |ui| {
+            button = Some(
+                ui.with_layout(justified, |ui| {
                     self.control(ui, text, &row.id, on, highlighted)
                 })
-                .inner;
-            // A label cut short shows its whole text on hover.
-            let font = egui::TextStyle::Body.resolve(ui.style());
-            let whole = text_width(ui, &markup::plain(&label), &font);
-            let cut =
-                !layout.wraps && whole + 2.0 * ui.spacing().button_padding.x > shown.rect.width();
-            button = Some(match cut {
-                true => shown.on_hover_text(markup::plain(&label)),
-                false => shown,
-            });
+                .inner,
+            );
         });
         for (column, w) in list.columns.iter().zip(&widths.values) {
             table::cell(&mut cells, *w, |ui| {
