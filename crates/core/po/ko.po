@@ -257,6 +257,10 @@ msgstr "타일셋을 쓸 수 없습니다: %s"
 msgid "Reduced motion"
 msgstr "움직임 줄이기"
 
+#: crates/egui/src/display.rs:752
+msgid "Interface scale"
+msgstr "인터페이스 크기"
+
 #. TRANSLATORS: the mark of north on the compass of the 3D map.
 #: crates/egui/src/iso/mod.rs:241
 msgid "N"

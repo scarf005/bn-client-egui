@@ -270,7 +270,7 @@ fn the_interface_scale_enlarges_every_text_and_is_kept_after_a_restart() {
     h.run_steps(5);
     let (height, ppp) = (painted(&h), h.ctx.pixels_per_point());
     crate::common::open_client_settings(&mut h);
-    h.get_by_label("100 %").click();
+    h.get_by_label("Interface scale").click();
     h.run_steps(3);
     h.get_by_label("150 %").click();
     h.run_steps(5);

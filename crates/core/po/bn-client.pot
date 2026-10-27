@@ -260,6 +260,10 @@ msgstr ""
 msgid "Reduced motion"
 msgstr ""
 
+#: crates/egui/src/display.rs:752
+msgid "Interface scale"
+msgstr ""
+
 #. TRANSLATORS: the mark of north on the compass of the 3D map.
 #: crates/egui/src/iso/mod.rs:241
 msgid "N"
