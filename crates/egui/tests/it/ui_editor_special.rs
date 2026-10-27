@@ -288,3 +288,18 @@ fn has_outline(shape: &egui::Shape, want: egui::Rect) -> bool {
         _ => false,
     }
 }
+
+#[test]
+fn a_blank_square_that_shows_something_is_not_outlined() {
+    let mut screen = drawing();
+    // Open air in a mapgen's rows: a blank glyph that still names what the square shows.
+    let canvas = find(&mut screen["root"], "editor:canvas").unwrap();
+    canvas["cells"][0]["looks"] = json!([1]);
+    let (h, _) = open(screen);
+    let cell = h.get_by_label("house").rect();
+    let want = egui::Rect::from_center_size(square(&h, 0, 0), cell.size());
+    assert!(
+        !h.output().shapes.iter().any(|c| has_outline(&c.shape, want)),
+        "a square that shows something is outlined as empty"
+    );
+}
