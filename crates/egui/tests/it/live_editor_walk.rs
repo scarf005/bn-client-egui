@@ -171,7 +171,8 @@ fn reveal_rect(h: &mut H, what: &str, rect_of: impl Fn(&H) -> Option<egui::Rect>
             wheel(h, if down { -150.0 } else { 150.0 });
             continue;
         };
-        if r.top() > 70.0 && r.bottom() < size.y - 50.0 && r.bottom() > 0.0 {
+        // The footer's buttons and the window's edge clip what lies lower than this.
+        if r.top() > 70.0 && r.bottom() < size.y - 75.0 && r.bottom() > 0.0 {
             return;
         }
         wheel(
@@ -308,7 +309,23 @@ fn click_tab(h: &mut H, label: &str) {
         // A tab that did not fit the bar is in the menu of its `⋯`.
         open_more_tabs(h);
     }
-    click(h, label);
+    // A footer button can carry the tab's name, so the tab itself is the one aimed at when the bar shows it.
+    let tab = |h: &H| {
+        h.root()
+            .children_recursive()
+            .find(|n| {
+                n.accesskit_node().role() == egui::accesskit::Role::Tab
+                    && n.accesskit_node().label().as_deref() == Some(label)
+            })
+            .map(|n| n.rect())
+    };
+    match tab(h) {
+        Some(_) => {
+            let at = click_stable(h, label, tab);
+            click_at(h, at.center());
+        }
+        None => click(h, label),
+    }
     run_until(h, label, 30, |h| {
         h.root().children_recursive().any(|n| {
             let a = n.accesskit_node();
@@ -1185,11 +1202,22 @@ fn the_map_editor_outlines_overmap_squares_and_shows_the_level_below_faded() {
     assert!(faded.iter().all(|&(x, _)| x < 12), "{faded:?}");
 
     // A faded square takes a paint like any other.
-    double_click(&mut h, "\"t_flat_roof\"");
+    // The roof's own symbol is picked off a roof square with the eyedropper key, then drawn with the pencil key.
+    type_text(&mut h, "i");
+    paint(&mut h, 14, 3);
+    type_text(&mut h, "b");
+    assert!(
+        document(&h).contains("\"Symbol\"=\"r\""),
+        "{}",
+        document(&h)
+    );
     shot_at(&mut h, "lv-2b-roof-symbol-picked", &sizes);
     let before = canvas_glyphs(&h);
-    let at = square(&h, 3, 3).center();
-    click_at(&mut h, at);
+    paint(&mut h, 3, 3);
+    // The engine answers a paint after the client went idle.
+    run_until(&mut h, "the painted roof", 60, |h| {
+        canvas_glyphs(h) != before
+    });
     shot_at(&mut h, "lv-3-painted-on-faded", &sizes);
     assert_ne!(canvas_glyphs(&h), before, "the paint changed no square");
     assert_eq!(canvas_glyphs(&h)[3].chars().nth(3), Some('r'));
@@ -1247,9 +1275,9 @@ fn the_map_editor_shows_the_squares_beside_the_entry_and_a_click_on_one_opens_it
     assert!(rows[0].ends_with('#'), "{}", rows[0]);
 
     // A click on a faded square, as a player makes it, opens that entry.
-    let (x, y) = faded[faded.len() / 2];
-    let at = square(&h, x as usize, y as usize).center();
-    click_at(&mut h, at);
+    // A square of the sixth row: one a window of this height shows inside the canvas's own scroll area.
+    let (x, y) = *faded.iter().find(|&&(x, y)| y == 6 && x > 24).unwrap();
+    paint(&mut h, x as usize, y as usize);
     shot_at(&mut h, "nb-2-second-entry", &sizes);
     dump(&h, "second entry");
     let (faded, _) = faded_squares(&h);
@@ -1285,10 +1313,16 @@ fn canvas_regions(h: &H) -> Regions {
 
 /// Presses on square `from`, moves the pointer through `via` and releases on the last one, a frame or two apart, as
 /// a hand drags; the engine's answer is waited for.
-fn drag_squares(h: &mut H, shot: &str, from: (usize, usize), via: &[(usize, usize)]) {
+fn drag_squares(
+    h: &mut H,
+    shot: &str,
+    from: (usize, usize),
+    via: &[(usize, usize)],
+    grip: egui::Vec2,
+) {
     let end = via.last().copied().unwrap_or(from);
     scroll_to(h, (from.0 + end.0) / 2, (from.1 + end.1) / 2);
-    let at = square(h, from.0, from.1).center();
+    let at = square(h, from.0, from.1).center() + grip;
     h.hover_at(at);
     h.run_steps(2);
     let button = |h: &mut H, pos: egui::Pos2, pressed: bool| {
@@ -1371,6 +1405,7 @@ fn the_map_editor_drags_a_placement_whole_and_by_its_corner() {
         "pr-3-preview-move",
         (mx, my),
         &[(mx + 1, my + 1), (mx + 3, my + 2)],
+        egui::Vec2::ZERO,
     );
     let moved = canvas_regions(&h);
     println!("REGIONS after move {moved:?}");
@@ -1392,6 +1427,8 @@ fn the_map_editor_drags_a_placement_whole_and_by_its_corner() {
         "pr-4-preview-stretch",
         corner,
         &[(corner.0 + 1, corner.1 + 1), (corner.0 + 2, corner.1 + 2)],
+        // The outer half of the corner square: a press in its middle moves the whole placement.
+        egui::vec2(6.0, 6.0),
     );
     let stretched = canvas_regions(&h);
     println!("REGIONS after stretch {stretched:?}");
