@@ -121,6 +121,7 @@ impl<M: GameModel> App<M> {
             egui::Panel::left(egui::Id::new(&tools_id))
                 .default_size(TOOLS_WIDTH)
                 .show(ui, |ui| self.column(ui, screen, &tools, out));
+            crate::app::label_resize_handle(ui.ctx(), &tools_id, &tr("Resize workspace column"));
         }
         let side = [Slot::Palette, Slot::Outline, Slot::Inspector]
             .into_iter()
@@ -130,9 +131,7 @@ impl<M: GameModel> App<M> {
             egui::Panel::right(egui::Id::new(&side_id))
                 .default_size(SIDE_WIDTH)
                 .show(ui, |ui| self.column(ui, screen, &side, out));
-        }
-        for name in [&tools_id, &side_id] {
-            crate::app::label_resize_handle(ui.ctx(), name, &tr("Resize workspace column"));
+            crate::app::label_resize_handle(ui.ctx(), &side_id, &tr("Resize workspace column"));
         }
         let log = parts(root, Slot::Log);
         if !log.is_empty() {
