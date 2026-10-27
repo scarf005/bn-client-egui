@@ -40,13 +40,24 @@ impl<M: GameModel> App<M> {
         let Some(mut focus) = self.panels.remove(&panel) else {
             return self.model.watch_panel(panel, None);
         };
-        let row = focus.focus().row_id.clone();
+        // A window opened afresh is read on the tab its last one was left on.
+        let left = egui::Id::new(("panel tab", panel));
+        let row = focus
+            .focus()
+            .row_id
+            .clone()
+            .or_else(|| ctx.data(|d| d.get_temp::<String>(left)));
         self.model.watch_panel(panel, Some(PanelWatch { row }));
         let Some(screen) = self.model.watched_panel(panel) else {
             self.panels.insert(panel, focus);
             return;
         };
         focus.sync(std::slice::from_ref(screen));
+        if let Some(Component::Tabs(tabs)) = &screen.root
+            && let Some(tab) = tabs.tabs.iter().find(|t| t.selected)
+        {
+            ctx.data_mut(|d| d.insert_temp(left, tab.id.clone()));
+        }
         std::mem::swap(&mut self.screens.interaction, &mut focus);
         self.screens.passive = true;
         let kind = KeyWindow::Panel(panel).kind();
