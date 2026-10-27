@@ -18,7 +18,7 @@ const OPEN: [(&str, &str); 4] = [
     ("editor", "map editor with a placement picked"),
     (
         "editor_menu",
-        "map editor reopened on the document it was left with",
+        "map editor of the main menu with a document open",
     ),
 ];
 
@@ -89,7 +89,8 @@ fn the_editor_window_fills_the_map_region_as_the_overmap_does() {
     let mut wrong = vec![];
     for size in SIZES {
         let full = overmap_window(size);
-        for (file, name) in OPEN {
+        // The main menu's editor is a workspace, the whole view: see below.
+        for (file, name) in OPEN.into_iter().filter(|(file, _)| *file == "editor") {
             let window = window(&shown(&example(file, name), size));
             if (window.min - full.min).length() > 1.0 || (window.max - full.max).length() > 1.0 {
                 wrong.push(format!(
@@ -133,6 +134,26 @@ fn a_screen_of_a_grid_the_player_does_not_draw_on_leaves_the_map_visible() {
         assert!(
             window.height() < full.height() - 1.0,
             "{size:?}: {window:?} fills the region as {full:?}"
+        );
+    }
+}
+
+/// The main menu's editor is the whole view: no map, sidebar or toolbar of the game under it, and its window as wide
+/// as the client.
+#[test]
+fn a_workspace_over_the_map_hides_the_game_and_fills_the_client() {
+    for size in SIZES {
+        let mut screen = example("editor", "map editor with a drawn room and a new mapping");
+        screen["role"] = "workspace".into();
+        let h = shown(&screen, size);
+        assert!(
+            h.query_by_label("Resize sidebar").is_none(),
+            "{size:?}: the sidebar is drawn"
+        );
+        let window = window(&h);
+        assert!(
+            window.left() < 20.0 && window.right() > size.x - 20.0,
+            "{size:?}: {window:?} is narrower than the client"
         );
     }
 }

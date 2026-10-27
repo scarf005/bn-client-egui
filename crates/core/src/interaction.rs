@@ -24,6 +24,11 @@ pub fn titled(stack: &[Screen]) -> bool {
     !stack.is_empty() && stack.iter().all(|s| s.role != ScreenRole::Map)
 }
 
+/// Whether the running game is out of view: no map is in `stack`, or a workspace covers it.
+pub fn game_hidden(stack: &[Screen]) -> bool {
+    titled(stack) || stack.iter().any(|s| s.role == ScreenRole::Workspace)
+}
+
 /// The top screen when the engine describes it by components and it is not the map, which the map view draws.
 pub fn described(stack: &[Screen]) -> Option<&Screen> {
     stack

@@ -2614,6 +2614,8 @@ pub enum ScreenRole {
     Screen,
     /// A question over another screen that the player answers and leaves.
     Dialog,
+    /// A place that is the whole view, such as the main menu's editors: the running game under it is not shown.
+    Workspace,
 }
 
 /// The side of the window a list window asked to sit at.

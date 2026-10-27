@@ -471,8 +471,8 @@ impl<M: GameModel> App<M> {
         egui::Panel::top("bar").show(ui, |ui| self.bar(ui));
         // Without a map the room is what the top bar leaves; with one, what the sidebar leaves.
         self.region = Some(ui.available_rect_before_wrap());
-        if interaction::titled(self.model.screens()) {
-            // The title screen is only its menu: no map, sidebar or log of a game that is not running.
+        if interaction::game_hidden(self.model.screens()) {
+            // The title screen and a workspace are only themselves: no map, sidebar or log of the game.
             return self.windows(ui.ctx());
         }
         let room = ui.available_width();

@@ -597,7 +597,7 @@ impl<M: GameModel> App<M> {
             region,
             sidebar: self.sidebar,
             avoid: &avoid,
-            map: !interaction::titled(self.model.screens()),
+            map: !interaction::game_hidden(self.model.screens()),
             kept_left: anchor.map(|a| a.left),
         };
         let placement = placement(screen, &room);
