@@ -1194,8 +1194,9 @@ impl<M: GameModel> App<M> {
                             egui::Button::new(shown).min_size(size).selected(marked),
                         );
                         queue(ui, button.rect);
-                        // An empty square to draw on shows as an outlined one, not a gap in the grid.
-                        if glyph.trim().is_empty() && sprite.is_none() {
+                        // An empty square to draw on shows as an outlined one, not a gap in the grid;
+                        // a blank glyph that shows something, such as open air, is no empty square.
+                        if glyph.trim().is_empty() && looks.is_empty() {
                             ui.painter().rect_stroke(
                                 button.rect,
                                 0.0,

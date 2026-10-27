@@ -299,7 +299,10 @@ fn a_blank_square_that_shows_something_is_not_outlined() {
     let cell = h.get_by_label("house").rect();
     let want = egui::Rect::from_center_size(square(&h, 0, 0), cell.size());
     assert!(
-        !h.output().shapes.iter().any(|c| has_outline(&c.shape, want)),
+        !h.output()
+            .shapes
+            .iter()
+            .any(|c| has_outline(&c.shape, want)),
         "a square that shows something is outlined as empty"
     );
 }
