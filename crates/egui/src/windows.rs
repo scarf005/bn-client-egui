@@ -105,6 +105,7 @@ pub struct Shown<R> {
     pub closed: bool,
     /// The title bar's help button was pressed.
     pub help: bool,
+    /// Where the player left a free window, to keep; none until they move, resize, maximize or minimize it.
     pub state: Option<WindowState>,
 }
 
@@ -144,6 +145,10 @@ struct Geometry {
     remembered: bool,
     /// How many more frames a window fit to its content stays unpainted before it takes its height.
     veiled: u8,
+    /// The pass it was last shown in: a window missing from a pass was closed, and opens again as a new one.
+    pass: u64,
+    /// The player moved, resized, maximized or minimized it, or `remembered` holds: only then is where it is kept.
+    placed: bool,
 }
 
 /// What the scroll areas drawn in a window hold past their viewports, by the window's layer.
@@ -424,8 +429,10 @@ pub fn show<R>(
     let fills = matches!(spec.place, Some(Place::Fill(_))) && !spec.movable;
     let key = spec.id.with("geometry");
     let fitting = !matches!(spec.place, Some(Place::Fill(_)));
+    let pass = ctx.cumulative_pass_nr();
     let mut geometry = ctx
         .data_mut(|d| d.get_temp::<Geometry>(key))
+        .filter(|g| g.pass + 1 >= pass)
         .unwrap_or_else(|| match spec.saved {
             Some(s) => {
                 // A remembered height too short to read is no size to open at: the window opens as a new one is tall.
@@ -441,6 +448,8 @@ pub fn show<R>(
                     held: 0.0,
                     remembered: true,
                     veiled: VEIL_FRAMES,
+                    pass,
+                    placed: true,
                 }
             }
             None => Geometry {
@@ -452,6 +461,8 @@ pub fn show<R>(
                 held: 0.0,
                 remembered: false,
                 veiled: VEIL_FRAMES,
+                pass,
+                placed: false,
             },
         });
     // A window fit to its content is laid out tall and unseen for a few frames, so that the lists in it learn how
@@ -612,12 +623,14 @@ pub fn show<R>(
         Some((g, delta)) => g.drag(geometry.rect, delta, screen),
         None => inside(geometry.rect.translate(moved), screen),
     };
+    geometry.placed |= dragged.is_some() || moved != egui::Vec2::ZERO;
     if rect != geometry.rect {
         geometry.fit = None;
         geometry.restore = None;
         geometry.rect = rect;
     }
     if pressed.maximize {
+        geometry.placed = true;
         geometry.fit = None;
         geometry.rect = match geometry.restore.take() {
             Some(before) => inside(before, screen),
@@ -629,6 +642,7 @@ pub fn show<R>(
         geometry.minimized = false;
     }
     geometry.minimized ^= pressed.minimize;
+    geometry.placed |= pressed.minimize;
     geometry.wanted = wanted;
     geometry.held = held;
     if veil && geometry.veiled == 0 {
@@ -636,8 +650,9 @@ pub fn show<R>(
         // Fit again from here: the content may want more once it has the height it wanted.
         geometry.fit = Some(0.0);
     }
+    geometry.pass = pass;
     ctx.data_mut(|d| d.insert_temp(key, geometry));
-    let state = free.then(|| WindowState {
+    let state = (free && geometry.placed).then(|| WindowState {
         pos: [geometry.rect.min.x, geometry.rect.min.y],
         size: [geometry.rect.width(), geometry.rect.height()],
         collapsed: geometry.minimized,

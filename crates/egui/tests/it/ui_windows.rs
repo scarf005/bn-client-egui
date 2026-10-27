@@ -693,10 +693,21 @@ fn a_window_smaller_than_the_least_size_is_dragged_by_a_corner_at_the_screens_co
 #[test]
 fn a_window_maximized_on_a_screen_of_fractional_points_is_restored() {
     let mut h = bare_window(egui::vec2(1092.8, 614.4), || bare_spec(None, None, None));
-    let before = (*h.state()).expect("a free window is kept");
+    let before = h.get_by_role(egui::accesskit::Role::Window).rect();
     let maximize = h.get_by_label("Maximize").rect().center();
     click(&mut h, maximize);
     let restore = h.get_by_label("Restore").rect().center();
     click(&mut h, restore);
-    assert_eq!(h.state(), &Some(before));
+    let kept = (*h.state()).expect("a window the player maximized is kept");
+    let kept = egui::Rect::from_min_size(kept.pos.into(), kept.size.into());
+    assert_eq!(
+        egui::Rect::from_min_max(kept.min.round(), kept.max.round()),
+        before
+    );
+}
+
+#[test]
+fn a_window_the_player_has_not_placed_is_not_kept() {
+    let h = bare_window(egui::vec2(1100.0, 800.0), || bare_spec(None, None, None));
+    assert_eq!(h.state(), &None);
 }
