@@ -438,6 +438,10 @@ pub(super) fn message_log(ui: &mut egui::Ui, options: LogOptions) {
     super::sounds::show(ui, sounds);
     let height = ui.next_widget_position().y - bottom;
     ui.data_mut(|d| d.insert_temp(below_key, height));
+    // Lines laid out for another height of what is below them are laid out again before the frame is shown.
+    if (height - below).abs() > 0.5 {
+        ui.ctx().request_discard("the log's commands or sounds changed height");
+    }
 }
 
 /// The height for a scroll area of lines starting at `tops` (`total` high in all) that holds at most
