@@ -164,12 +164,15 @@ impl<M: GameModel> App<M> {
             ui.label(egui::RichText::new(markup::plain(&panel.title.shown())).strong());
             for stat in panel.stats.iter().flatten() {
                 ui.separator();
-                ui.weak(markup::plain(&stat.label.shown()));
-                let shown = stat_text(stat);
-                if !shown.is_empty() {
-                    let color = stat.tone.map_or(ui.visuals().text_color(), tone_color);
-                    ui.label(egui::RichText::new(shown).color(color));
-                }
+                // A fact wraps to the next line whole, its value beside its label.
+                ui.horizontal(|ui| {
+                    ui.weak(markup::plain(&stat.label.shown()));
+                    let shown = stat_text(stat);
+                    if !shown.is_empty() {
+                        let color = stat.tone.map_or(ui.visuals().text_color(), tone_color);
+                        ui.label(egui::RichText::new(shown).color(color));
+                    }
+                });
             }
         });
         if let Some(child) = &panel.child {
