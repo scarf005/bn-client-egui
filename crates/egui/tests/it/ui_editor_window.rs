@@ -1,4 +1,4 @@
-//! The map editor over a game: its window fills the map region like any screen of its own map or canvas, and every
+//! The map editor over a game is a workspace as the main menu's is: the whole view under the top bar, and every
 //! field shows the whole value the engine published for it.
 use crate::common::legible::cut_text;
 use bn_client_egui::{App, EngineModel};
@@ -85,16 +85,17 @@ fn overmap_window(size: egui::Vec2) -> egui::Rect {
 }
 
 #[test]
-fn the_editor_window_fills_the_map_region_as_the_overmap_does() {
+fn the_editor_over_a_game_is_the_whole_view_as_the_main_menus_is() {
     let mut wrong = vec![];
     for size in SIZES {
-        let full = overmap_window(size);
-        // The main menu's editor is a workspace, the whole view: see below.
+        let (file, name) = OPEN[3];
+        let full = window(&shown(&example(file, name), size));
+        assert!(full.width() > size.x - 40.0, "{size:?}: {full:?}");
         for (file, name) in OPEN.into_iter().filter(|(file, _)| *file == "editor") {
             let window = window(&shown(&example(file, name), size));
             if (window.min - full.min).length() > 1.0 || (window.max - full.max).length() > 1.0 {
                 wrong.push(format!(
-                    "{name} at {size:?}: {window:?}, the overmap {full:?}"
+                    "{name} at {size:?}: {window:?}, the main menu's {full:?}"
                 ));
             }
         }

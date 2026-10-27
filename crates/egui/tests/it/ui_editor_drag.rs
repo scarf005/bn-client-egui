@@ -119,6 +119,8 @@ fn square(h: &H, x: u32, y: u32) -> egui::Pos2 {
     let first = h
         .get_all_by_label(".")
         .map(|n| n.rect())
+        // A canvas square is as wide as it is tall; a list row naming `.` is wider.
+        .filter(|r| (r.width() - r.height()).abs() < 1.0)
         .min_by(|a, b| (a.min.y, a.min.x).partial_cmp(&(b.min.y, b.min.x)).unwrap())
         .unwrap();
     let cell = first.width();
@@ -277,6 +279,8 @@ fn a_press_on_a_neighbour_paints_nothing_on_the_entry_it_opens() {
 pub(crate) fn first_square(h: &H) -> egui::Rect {
     h.get_all_by_label(".")
         .map(|n| n.rect())
+        // A canvas square is as wide as it is tall; a list row naming `.` is wider.
+        .filter(|r| (r.width() - r.height()).abs() < 1.0)
         .min_by(|a, b| (a.min.y, a.min.x).partial_cmp(&(b.min.y, b.min.x)).unwrap())
         .unwrap()
 }
