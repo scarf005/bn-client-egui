@@ -243,8 +243,8 @@ impl<M: GameModel> App<M> {
                         let mut state = output.state;
                         let settled =
                             state.offset.y == offset && !ui.input(|i| i.pointer.any_down());
-                        let top = nearest_top(&output.inner, state.offset.y);
-                        if settled && top != state.offset.y {
+                        let snap = snapped(&output.inner, state.offset.y).filter(|_| settled);
+                        if let Some(top) = snap {
                             state.offset.y = top;
                             state.store(ui.ctx(), output.id);
                             ui.ctx().request_repaint();
@@ -440,7 +440,8 @@ pub(super) fn message_log(ui: &mut egui::Ui, options: LogOptions) {
     ui.data_mut(|d| d.insert_temp(below_key, height));
     // Lines laid out for another height of what is below them are laid out again before the frame is shown.
     if (height - below).abs() > 0.5 {
-        ui.ctx().request_discard("the log's commands or sounds changed height");
+        ui.ctx()
+            .request_discard("the log's commands or sounds changed height");
     }
 }
 
@@ -471,18 +472,19 @@ fn whole_rows_height(tops: &[f32], total: f32, offset: f32, max: f32) -> f32 {
     fits.or_else(|| ends().next()).map_or(max, |e| e - offset)
 }
 
-/// The top of the row in `tops` nearest to `offset`, or `offset` when there are no rows.
-fn nearest_top(tops: &[f32], offset: f32) -> f32 {
+/// The top of the row in `tops` nearest to `offset`, when the view at `offset` starts more than half a point from
+/// it; the scroll area's own clamping moves an offset by less, so a snapped one is not snapped again.
+fn snapped(tops: &[f32], offset: f32) -> Option<f32> {
     let distance = |t: &&f32| (**t - offset).abs();
-    tops.iter()
-        .min_by(|a, b| distance(a).total_cmp(&distance(b)))
-        .copied()
-        .unwrap_or(offset)
+    let top = tops
+        .iter()
+        .min_by(|a, b| distance(a).total_cmp(&distance(b)))?;
+    ((top - offset).abs() > 0.5).then_some(*top)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{nearest_top, whole_lines_height, whole_rows_height};
+    use super::{snapped, whole_lines_height, whole_rows_height};
 
     #[test]
     fn a_scrolled_list_is_cut_between_rows_below_the_first_one_in_view() {
@@ -513,9 +515,14 @@ mod tests {
             40.0,
             "a row taller than the room still shows"
         );
-        assert_eq!(nearest_top(&tops, 45.0), 60.0);
-        assert_eq!(nearest_top(&tops, 35.0), 20.0);
-        assert_eq!(nearest_top(&[], 35.0), 35.0);
+        assert_eq!(snapped(&tops, 45.0), Some(60.0));
+        assert_eq!(snapped(&tops, 35.0), Some(20.0));
+        assert_eq!(
+            snapped(&tops, 60.0 - 1e-4),
+            None,
+            "a row top the clamp moved by an ulp"
+        );
+        assert_eq!(snapped(&[], 35.0), None);
     }
 
     #[test]
