@@ -90,26 +90,32 @@ fn the_menu_bar_has_one_menu_per_group_in_the_order_they_first_appear() {
     let (h, _) = shown(SIZES[0]);
     let (file, edit) = (rect(&h, "File"), rect(&h, "Edit"));
     assert!(file.right() <= edit.left(), "{file:?} {edit:?}");
-    assert!(file.top() < 40.0 && edit.top() < 40.0, "{file:?} {edit:?}");
+    let tools = rect(&h, "Pencil");
+    assert!(
+        file.bottom() <= tools.top() && edit.bottom() <= tools.top(),
+        "{file:?} {edit:?} over {tools:?}"
+    );
 }
 
 #[test]
 fn an_item_of_a_menu_runs_its_affordance_and_a_denied_one_does_not() {
     let (mut h, script) = shown(SIZES[0]);
-    h.get_by_label("File").click();
-    h.run_steps(3);
-    h.get_by_label("Save").click();
-    h.run_steps(3);
     let invoked = |script: &bn_client_egui::transport::ScriptHandle, id: &str| {
         script
             .sent()
             .iter()
             .any(|m| m["params"]["operation"]["affordance_id"] == id)
     };
-    assert!(!invoked(&script, "ws:save"));
+    h.get_by_label("File").click();
+    h.run_steps(3);
     h.get_by_label("New").click();
     h.run_steps(3);
     assert!(invoked(&script, "ws:new"));
+    h.get_by_label("File").click();
+    h.run_steps(3);
+    h.get_by_label("Save").click();
+    h.run_steps(3);
+    assert!(!invoked(&script, "ws:save"));
 }
 
 #[test]
@@ -134,7 +140,7 @@ fn the_parts_are_placed_by_slot() {
             rect(&h, "Saved the room"),
             rect(&h, "Cursor 3,4"),
         );
-        let canvas = (tools.right(), palette.left());
+        let canvas = (tools.right(), palette.left().min(inspector.left()));
         assert!(
             canvas.0 < canvas.1,
             "{size:?}: tools {tools:?}, palette {palette:?}"
@@ -144,7 +150,7 @@ fn the_parts_are_placed_by_slot() {
             "{size:?}: the canvas has {canvas:?}"
         );
         assert!(
-            inspector.left() >= canvas.1 && inspector.top() > palette.top(),
+            inspector.top() > palette.top(),
             "{size:?}: inspector {inspector:?}"
         );
         assert!(

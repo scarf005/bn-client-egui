@@ -666,6 +666,7 @@ const CLIENT_OWNED: &[&str] = &[
     "crates/egui/src/app/component/region.rs",
     "crates/egui/src/app/component/tabs.rs",
     "crates/egui/src/app/component/target.rs",
+    "crates/egui/src/app/component/workspace.rs",
     "crates/egui/src/app/input.rs",
     "crates/egui/src/app/map.rs",
     "crates/egui/src/app/palette.rs",
