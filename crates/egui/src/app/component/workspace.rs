@@ -135,7 +135,7 @@ impl<M: GameModel> App<M> {
         });
     }
 
-    /// `parts` one above the other in a column that scrolls.
+    /// `parts` one above the other in a column that scrolls, whole lines in view.
     fn column(
         &self,
         ui: &mut egui::Ui,
@@ -143,10 +143,11 @@ impl<M: GameModel> App<M> {
         parts: &[&Component],
         out: &mut Vec<Intent>,
     ) {
-        egui::ScrollArea::vertical()
+        let scroll = egui::ScrollArea::vertical()
             .id_salt(ui.id().with("column"))
-            .auto_shrink([false, false])
-            .show(ui, |ui| self.stack(ui, screen, parts, out));
+            .auto_shrink([false, false]);
+        let room = ui.available_height();
+        body_scroll(ui, scroll, room, |ui| self.stack(ui, screen, parts, out));
     }
 
     /// `parts` one above the other, each under its label as a heading that collapses it.
