@@ -76,7 +76,7 @@ pub fn value_editor(
             }
             _ => {
                 ui.label(label);
-                // A one-line field widens to its whole value rather than cut it.
+                // A one-line field widens to its whole value rather than cut it, up to the room it has.
                 let edit = match editor.multiline {
                     // A long text scrolls in a box of a few lines, as wide as the room left.
                     true => {
@@ -95,12 +95,36 @@ pub fn value_editor(
                             })
                             .inner
                     }
-                    false => ui.add(
-                        egui::TextEdit::singleline(&mut draft.text)
-                            .desired_width(ui.spacing().text_edit_width.min(ui.available_width()))
-                            .clip_text(false)
-                            .margin(FIELD_MARGIN),
-                    ),
+                    // Wider than the room, it wraps its value onto further lines instead of running past the
+                    // room's edge.
+                    false => {
+                        let room = ui.available_width();
+                        let width = field_width(ui, &draft.text)
+                            .max(ui.spacing().text_edit_width)
+                            .min(room);
+                        let font = egui::TextStyle::Body.resolve(ui.style());
+                        let mut wrapped =
+                            |ui: &egui::Ui, text: &dyn egui::TextBuffer, wrap: f32| {
+                                let color = ui
+                                    .visuals()
+                                    .override_text_color
+                                    .unwrap_or_else(|| ui.visuals().widgets.inactive.text_color());
+                                let mut job = egui::text::LayoutJob::simple(
+                                    text.as_str().to_owned(),
+                                    font.clone(),
+                                    color,
+                                    wrap,
+                                );
+                                job.keep_trailing_whitespace = true;
+                                ui.fonts_mut(|f| f.layout_job(job))
+                            };
+                        ui.add(
+                            egui::TextEdit::singleline(&mut draft.text)
+                                .desired_width(width)
+                                .layouter(&mut wrapped)
+                                .margin(FIELD_MARGIN),
+                        )
+                    }
                 };
                 edit.widget_info(|| {
                     egui::WidgetInfo::text_edit(true, draft.text.clone(), draft.text.clone(), label)
