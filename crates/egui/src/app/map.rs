@@ -731,8 +731,8 @@ impl<M: GameModel> App<M> {
                         (true, "creature") => p.detail.iter().collect(),
                         _ => std::iter::once(&p.text).chain(&p.detail).collect(),
                     })
-                    .map(|text| markup::plain(text))
-                    .filter(|l| !l.trim().is_empty())
+                    .filter(|text| !markup::plain(text).trim().is_empty())
+                    .cloned()
                     .collect(),
             };
             // A tooltip at the pointer gets almost no width to wrap in: its text takes its widest line's width, up
@@ -741,8 +741,9 @@ impl<M: GameModel> App<M> {
             let name = creature.map(|c| markup::plain(&c.text));
             let widest = lines
                 .iter()
-                .chain(&name)
-                .map(|l| super::component::text_width(ui, l, &font))
+                .map(|l| markup::plain(l))
+                .chain(name.clone())
+                .map(|l| super::component::text_width(ui, &l, &font))
                 .fold(0.0, f32::max);
             ui.set_width(widest.ceil().min(TOOLTIP_WIDTH));
             if let Some(name) = name {
@@ -785,6 +786,7 @@ impl<M: GameModel> App<M> {
                 ui.add(bar);
             }
             for line in lines {
+                let line = self.rich(ui, &line);
                 ui.add(egui::Label::new(line).wrap_mode(egui::TextWrapMode::Wrap));
             }
         });

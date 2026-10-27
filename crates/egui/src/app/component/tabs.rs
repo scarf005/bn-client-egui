@@ -1,6 +1,5 @@
-//! A tabs component's strip: the engine's tabs on one row attached to the pane under them, unchosen ones on the
-//! panel ground and the chosen one on the pane's ground under a bar; the tabs the row has no room for are in a
-//! menu at its end.
+//! A tabs component's strip: the engine's tabs attached to the pane under them, unchosen ones on the panel ground
+//! and the chosen one on the pane's ground under a bar; the tabs a row has no room for wrap to further rows.
 
 use super::*;
 use bn_client_core::protocol::{Tab, Tabs};
@@ -8,28 +7,28 @@ use bn_client_core::protocol::{Tab, Tabs};
 /// The height of the bar over the chosen tab.
 const BAR: f32 = 2.0;
 
-/// The tabs, by index, that a row `room` wide shows: all when they fit, else the first ones that fit beside the
-/// chosen one and the menu button `more` wide.
-fn shown_tabs(widths: &[f32], chosen: Option<usize>, more: f32, room: f32) -> Vec<usize> {
-    if widths.iter().sum::<f32>() <= room + 0.5 {
-        return (0..widths.len()).collect();
-    }
-    let budget = room - more - chosen.map_or(0.0, |i| widths[i]);
+/// The tabs, by index, on each row of a strip `room` wide: in order, a new row when the next tab does not fit.
+/// A tab wider than the room has a row of its own.
+fn tab_rows(widths: &[f32], room: f32) -> Vec<Vec<usize>> {
+    let mut rows = Vec::<Vec<usize>>::new();
     let mut used = 0.0;
-    let mut shown = (0..widths.len())
-        .filter(|i| Some(*i) != chosen)
-        .take_while(|i| {
-            used += widths[*i];
-            used <= budget + 0.5
-        })
-        .chain(chosen)
-        .collect::<Vec<_>>();
-    shown.sort_unstable();
-    shown
+    for (i, width) in widths.iter().enumerate() {
+        match rows.last_mut() {
+            Some(row) if used + width <= room + 0.5 => {
+                row.push(i);
+                used += width;
+            }
+            _ => {
+                rows.push(vec![i]);
+                used = *width;
+            }
+        }
+    }
+    rows
 }
 
 impl<M: GameModel> App<M> {
-    /// The strip of `tabs` on one row as wide as the room left to it.
+    /// The strip of `tabs` in rows as wide as the room left to it.
     pub(super) fn tab_strip(
         &self,
         ui: &mut egui::Ui,
@@ -51,31 +50,22 @@ impl<M: GameModel> App<M> {
             .iter()
             .map(|l| width(&markup::plain(l), egui::TextStyle::Body))
             .collect::<Vec<_>>();
-        let chosen = tabs.tabs.iter().position(|t| t.selected);
-        let more = width(MORE, egui::TextStyle::Button);
-        let shown = shown_tabs(&widths, chosen, more, ui.available_width());
+        let rows = tab_rows(&widths, ui.available_width());
         egui::Frame::NONE
             .fill(crate::kit::tokens::PANEL)
             .show(ui, |ui| {
-                ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing.x = 0.0;
-                    let visuals = ui.visuals_mut();
-                    visuals.selection.bg_fill = crate::kit::tokens::DIALOG;
-                    visuals.widgets.inactive.weak_bg_fill = crate::kit::tokens::PANEL;
-                    for i in &shown {
-                        self.tab(ui, tabs, select, &tabs.tabs[*i], &labels[*i], out);
-                    }
-                    if shown.len() < tabs.tabs.len() {
-                        ui.menu_button(MORE, |ui| {
-                            let hidden = (0..tabs.tabs.len()).filter(|i| !shown.contains(i));
-                            for i in hidden {
-                                if self.tab(ui, tabs, select, &tabs.tabs[i], &labels[i], out) {
-                                    ui.close();
-                                }
-                            }
-                        });
-                    }
-                });
+                ui.spacing_mut().item_spacing.y = 0.0;
+                let visuals = ui.visuals_mut();
+                visuals.selection.bg_fill = crate::kit::tokens::DIALOG;
+                visuals.widgets.inactive.weak_bg_fill = crate::kit::tokens::PANEL;
+                for row in rows {
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 0.0;
+                        for i in row {
+                            self.tab(ui, tabs, select, &tabs.tabs[i], &labels[i], out);
+                        }
+                    });
+                }
             });
     }
 
@@ -120,30 +110,26 @@ impl<M: GameModel> App<M> {
 
 #[cfg(test)]
 mod tests {
-    use super::shown_tabs;
+    use super::tab_rows;
 
     #[test]
-    fn a_row_with_room_for_every_tab_shows_them_all() {
+    fn a_row_with_room_for_every_tab_holds_them_all() {
+        assert_eq!(tab_rows(&[10.0, 20.0, 30.0], 60.0), [[0, 1, 2]]);
+    }
+
+    #[test]
+    fn a_narrow_strip_puts_the_tabs_that_do_not_fit_on_further_rows_in_order() {
         assert_eq!(
-            shown_tabs(&[10.0, 20.0, 30.0], Some(2), 5.0, 60.0),
-            [0, 1, 2]
+            tab_rows(&[10.0, 20.0, 30.0, 40.0, 5.0], 55.0),
+            vec![vec![0, 1], vec![2], vec![3, 4]]
         );
     }
 
     #[test]
-    fn a_narrow_row_keeps_the_chosen_tab_and_the_first_that_fit_beside_the_menu() {
+    fn a_tab_wider_than_the_room_has_a_row_of_its_own() {
         assert_eq!(
-            shown_tabs(&[10.0, 20.0, 30.0, 40.0], Some(3), 5.0, 70.0),
-            [0, 3]
+            tab_rows(&[10.0, 50.0, 10.0], 20.0),
+            [vec![0], vec![1], vec![2]]
         );
-        assert_eq!(
-            shown_tabs(&[10.0, 20.0, 30.0, 40.0], None, 5.0, 40.0),
-            [0, 1]
-        );
-    }
-
-    #[test]
-    fn a_row_narrower_than_the_chosen_tab_still_shows_it() {
-        assert_eq!(shown_tabs(&[10.0, 50.0], Some(1), 5.0, 20.0), [1]);
     }
 }

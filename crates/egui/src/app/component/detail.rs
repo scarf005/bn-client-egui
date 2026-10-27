@@ -57,6 +57,7 @@ impl<M: GameModel> App<M> {
             min: 0.0,
             natural: 0.0,
             grows: true,
+            alone: false,
         };
         let widths = split::detail_widths(&[self.extent(ui, screen, c, room), detail], room, gap);
         let height = ui.available_height();

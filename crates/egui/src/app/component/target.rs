@@ -45,27 +45,74 @@ pub(super) fn split_levels<'a>(
     (levels, others)
 }
 
+/// The id of the rating a chance stat `aim:<id>:<rating>` is of.
+fn rating_id(stat: &PanelStat) -> &str {
+    stat.key.rsplit(':').next().unwrap_or_default()
+}
+
 impl<M: GameModel> App<M> {
-    /// The ways of aiming as buttons that fire with them, each over the chances of its ratings.
+    /// The ways of aiming as buttons that fire with them, a table: the button, its moves, then the chance of each
+    /// rating under the rating's caption, right-aligned.
     pub(super) fn aim_levels(&self, ui: &mut egui::Ui, levels: &[Level], out: &mut Vec<Intent>) {
-        egui::Grid::new("aim levels").num_columns(2).show(ui, |ui| {
-            for level in levels {
-                let label = markup::plain(&level.stat.label.shown());
-                let button = ui.add_enabled(level.action.enabled, egui::Button::new(label));
-                if button.clicked() {
-                    out.push(Intent::Run(level.action.id.clone()));
-                }
-                ui.label(stat_text(level.stat));
-                ui.end_row();
-                let chances = level.ratings.iter().map(|rating| {
-                    let label = markup::plain(&rating.label.shown());
-                    format!("{label} {}", stat_text(rating))
-                });
-                ui.label("");
-                ui.weak(chances.collect::<Vec<_>>().join("  "));
-                ui.end_row();
+        let mut ratings = Vec::<&PanelStat>::new();
+        for rating in levels.iter().flat_map(|l| &l.ratings) {
+            if !ratings.iter().any(|r| rating_id(r) == rating_id(rating)) {
+                ratings.push(rating);
             }
-        });
+        }
+        let caption = std::iter::once(String::new())
+            .chain(ratings.iter().map(|r| markup::plain(&r.label.shown())))
+            .collect::<Vec<_>>();
+        let rows = levels
+            .iter()
+            .map(|level| {
+                let chance = |rating: &&PanelStat| {
+                    let found = level
+                        .ratings
+                        .iter()
+                        .find(|r| rating_id(r) == rating_id(rating));
+                    found.map_or_else(String::new, |r| stat_text(r))
+                };
+                std::iter::once(stat_text(level.stat))
+                    .chain(ratings.iter().map(chance))
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        let font = egui::TextStyle::Body.resolve(ui.style());
+        let widths = (0..caption.len())
+            .map(|n| {
+                let cells = std::iter::once(&caption).chain(&rows);
+                cells
+                    .map(|row| text_width(ui, &row[n], &font))
+                    .fold(0.0, f32::max)
+            })
+            .collect::<Vec<_>>();
+        let height = ui.spacing().interact_size.y;
+        let right = |ui: &mut egui::Ui, width: f32, text: &str| {
+            let text = egui::RichText::new(text).color(crate::kit::tokens::TEXT);
+            let layout = egui::Layout::right_to_left(egui::Align::Center);
+            ui.allocate_ui_with_layout(egui::vec2(width, height), layout, |ui| ui.label(text));
+        };
+        egui::Grid::new("aim levels")
+            .num_columns(1 + caption.len())
+            .show(ui, |ui| {
+                ui.label("");
+                for (width, text) in widths.iter().zip(&caption) {
+                    right(ui, *width, text);
+                }
+                ui.end_row();
+                for (level, row) in levels.iter().zip(&rows) {
+                    let label = markup::plain(&level.stat.label.shown());
+                    let button = ui.add_enabled(level.action.enabled, egui::Button::new(label));
+                    if button.clicked() {
+                        out.push(Intent::Run(level.action.id.clone()));
+                    }
+                    for (width, text) in widths.iter().zip(row) {
+                        right(ui, *width, text);
+                    }
+                    ui.end_row();
+                }
+            });
     }
 
     /// The creatures the cursor can jump to, the one it is on selected; a click moves it there.

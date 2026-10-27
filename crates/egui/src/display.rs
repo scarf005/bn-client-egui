@@ -52,10 +52,16 @@ pub struct Settings {
     /// The map zoom in steps from the tileset's own size, which the zoom keys and the wheel move.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub zoom: i8,
+    /// The size of the whole interface in percent of its natural size, one of `SCALES`; 100 when absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub interface_scale: Option<u16>,
     /// Where each kind of window sits, how large it is and whether it is collapsed.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub windows: BTreeMap<String, WindowState>,
 }
+
+/// The interface sizes the player can choose, in percent.
+const SCALES: [u16; 6] = [75, 100, 125, 150, 175, 200];
 
 fn is_zero(n: &i8) -> bool {
     *n == 0
@@ -647,6 +653,11 @@ impl Display {
             .is_some_and(|a| a.sheets.iter().flatten().any(|s| s.loading > 0))
     }
 
+    /// The size of the whole interface as a factor of its natural size.
+    pub fn interface_scale(&self) -> u16 {
+        self.settings.interface_scale.unwrap_or(100)
+    }
+
     /// The side of a map square in points: a tile of the tileset, or the glyph square.
     pub fn cell(&self, glyph: f32) -> f32 {
         self.atlas.as_ref().map_or(glyph, |a| {
@@ -737,6 +748,17 @@ impl Display {
                 ));
             }
             ui.checkbox(&mut self.settings.reduced_motion, tr("Reduced motion"));
+            let scale = self.interface_scale();
+            egui::ComboBox::from_label(tr("Interface scale"))
+                .selected_text(format!("{scale} %"))
+                .show_ui(ui, |ui| {
+                    for choice in SCALES {
+                        let label = format!("{choice} %");
+                        if ui.selectable_label(scale == choice, label).clicked() {
+                            self.settings.interface_scale = Some(choice);
+                        }
+                    }
+                });
         });
         if self.settings != before {
             self.save();

@@ -207,6 +207,34 @@ fn a_click_on_a_sheet_tab_reads_the_sheet_again_with_the_tab() {
 }
 
 #[test]
+fn a_closed_sheet_reopens_on_the_tab_it_was_left_on() {
+    let (mut h, script) = open();
+    let mut answered = 0;
+    key(&mut h, "@");
+    serve(&mut h, &script, &mut answered);
+    h.get_by_role_and_label(egui::accesskit::Role::Tab, "ENCUMBRANCE AND WARMTH")
+        .click();
+    h.run_steps(2);
+    // The engine answers with the chosen tab selected.
+    let chosen = |panel: &str| {
+        let mut view = panel_view(panel);
+        for tab in view["root"]["tabs"].as_array_mut().unwrap() {
+            tab["selected"] = json!(tab["id"] == "encumbrance");
+        }
+        view
+    };
+    serve_with(&mut h, &script, &mut answered, &chosen);
+    key(&mut h, "@");
+    serve(&mut h, &script, &mut answered);
+    let before = panel_reads(&script).len();
+    key(&mut h, "@");
+    serve(&mut h, &script, &mut answered);
+    let first = panel_reads(&script).swap_remove(before);
+    assert_eq!(first["params"]["panel"], "character");
+    assert_eq!(first["params"]["row"], "encumbrance", "{first}");
+}
+
+#[test]
 fn the_sheets_button_opens_the_engines_own_screen() {
     let (mut h, script) = open();
     let mut answered = 0;

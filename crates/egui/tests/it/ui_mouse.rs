@@ -686,3 +686,55 @@ fn keys_go_to_the_square_menu_and_not_to_the_game_under_it() {
     assert!(h.query_by_label("Open [o]").is_none(), "the menu closes");
     assert_eq!(operations(&script), Vec::<Value>::new());
 }
+
+#[test]
+fn the_hover_tooltip_keeps_the_engines_colours() {
+    let (t, _h) = session();
+    let reply =
+        |parts: Value| vec![json!({"jsonrpc":"2.0","id":0,"result":{"parts":parts,"actions":[]}})];
+    let t = t
+        .on(
+            "bn.world.describe",
+            reply(json!([{"kind":"terrain","text":"Floor"}])),
+        )
+        .on(
+            "bn.world.describe",
+            reply(json!([
+                {"kind":"description","text":"It is <color_c_light_red>angry</color> now."}
+            ])),
+        );
+    let clock = Clock::manual();
+    let model = EngineModel::new(Box::new(t)).with_clock(clock.clone());
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(1100.0, 800.0))
+        .build_ui_state(
+            |ui, app: &mut App<EngineModel>| app.show(ui),
+            App::new(model).with_clock(clock),
+        );
+    h.run_steps(3);
+    let at = square(&mut h, (22.5, 12.5));
+    h.hover_at(at);
+    h.run_steps(8);
+    h.get_by_label("It is angry now.");
+    let colours = h
+        .output()
+        .shapes
+        .iter()
+        .find_map(|c| match &c.shape {
+            egui::Shape::Text(t) if t.galley.text() == "It is angry now." => Some(
+                t.galley
+                    .job
+                    .sections
+                    .iter()
+                    .map(|s| s.format.color)
+                    .collect::<Vec<_>>(),
+            ),
+            _ => None,
+        })
+        .expect("the tooltip text is painted");
+    let [plain, red, ..] = colours[..] else {
+        panic!("{colours:?}");
+    };
+    assert_eq!(plain, egui::Color32::PLACEHOLDER, "{colours:?}");
+    assert!(red.r() > red.g() + 40, "the red run is red: {red:?}");
+}

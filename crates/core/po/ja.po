@@ -257,6 +257,10 @@ msgstr "タイルセットを使えません: %s"
 msgid "Reduced motion"
 msgstr "動きを減らす"
 
+#: crates/egui/src/display.rs:752
+msgid "Interface scale"
+msgstr "インターフェースの大きさ"
+
 #. TRANSLATORS: the mark of north on the compass of the 3D map.
 #: crates/egui/src/iso/mod.rs:241
 msgid "N"
