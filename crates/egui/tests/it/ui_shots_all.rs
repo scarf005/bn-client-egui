@@ -27,8 +27,6 @@ const TITLE_FLOW: &[&str] = &[
 #[rustfmt::skip]
 const KNOWN: &[(&str, Kind, &str)] = &[
     ("options/options screen with the editor of an integer option@1280x800", Kind::Cut, "a scrolled list shows part of the row at its edge"),
-    ("overmap/overmap screen for a client that draws tiles@1920x1080", Kind::Cut, "the first row of tile glyphs overshoots the viewport top by 1 pt"),
-    ("overmap/overmap screen@1920x1080", Kind::Cut, "the first row of tile glyphs overshoots the viewport top by 1 pt"),
 ];
 
 /// One screen of the examples, keyed `file/name`.
@@ -213,6 +211,23 @@ fn a_line_half_out_of_its_clip_is_cut_and_one_wholly_out_is_scrolled_away() {
     let cut = cut_text(&h.output().shapes, h.ctx.content_rect());
     assert_eq!(cut.len(), 1, "{cut:?}");
     assert!(cut[0].starts_with("\"second\""), "{cut:?}");
+}
+
+#[test]
+fn a_line_whose_letters_lie_inside_its_clip_is_not_cut() {
+    // "ace" has no ascender or descender: its line reaches past the clip by 1.5 pt above and below, its letters do not.
+    let h = Harness::builder()
+        .with_size(egui::vec2(400.0, 100.0))
+        .build_ui(|ui| {
+            let font = egui::FontId::proportional(16.0);
+            let color = ui.visuals().text_color();
+            let galley = ui.painter().layout_no_wrap("ace".into(), font, color);
+            let at = ui.max_rect().min + egui::vec2(10.0, 10.0);
+            let clip = galley.rect.translate(at.to_vec2()).shrink2(egui::vec2(0.0, 1.5));
+            ui.painter().with_clip_rect(clip).galley(at, galley, color);
+        });
+    let cut = cut_text(&h.output().shapes, h.ctx.content_rect());
+    assert!(cut.is_empty(), "{cut:?}");
 }
 
 #[test]
