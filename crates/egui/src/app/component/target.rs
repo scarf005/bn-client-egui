@@ -60,34 +60,55 @@ impl<M: GameModel> App<M> {
                 ratings.push(rating);
             }
         }
-        let right = |ui: &mut egui::Ui, text: String| {
+        let caption = std::iter::once(String::new())
+            .chain(ratings.iter().map(|r| markup::plain(&r.label.shown())))
+            .collect::<Vec<_>>();
+        let rows = levels
+            .iter()
+            .map(|level| {
+                let chance = |rating: &&PanelStat| {
+                    let found = level
+                        .ratings
+                        .iter()
+                        .find(|r| rating_id(r) == rating_id(rating));
+                    found.map_or_else(String::new, |r| stat_text(r))
+                };
+                std::iter::once(stat_text(level.stat))
+                    .chain(ratings.iter().map(chance))
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        let font = egui::TextStyle::Body.resolve(ui.style());
+        let widths = (0..caption.len())
+            .map(|n| {
+                let cells = std::iter::once(&caption).chain(&rows);
+                cells
+                    .map(|row| text_width(ui, &row[n], &font))
+                    .fold(0.0, f32::max)
+            })
+            .collect::<Vec<_>>();
+        let height = ui.spacing().interact_size.y;
+        let right = |ui: &mut egui::Ui, width: f32, text: &str| {
             let text = egui::RichText::new(text).color(crate::kit::tokens::TEXT);
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.label(text)
-            });
+            let layout = egui::Layout::right_to_left(egui::Align::Center);
+            ui.allocate_ui_with_layout(egui::vec2(width, height), layout, |ui| ui.label(text));
         };
         egui::Grid::new("aim levels")
-            .num_columns(2 + ratings.len())
+            .num_columns(1 + caption.len())
             .show(ui, |ui| {
                 ui.label("");
-                ui.label("");
-                for rating in &ratings {
-                    right(ui, markup::plain(&rating.label.shown()));
+                for (width, text) in widths.iter().zip(&caption) {
+                    right(ui, *width, text);
                 }
                 ui.end_row();
-                for level in levels {
+                for (level, row) in levels.iter().zip(&rows) {
                     let label = markup::plain(&level.stat.label.shown());
                     let button = ui.add_enabled(level.action.enabled, egui::Button::new(label));
                     if button.clicked() {
                         out.push(Intent::Run(level.action.id.clone()));
                     }
-                    right(ui, stat_text(level.stat));
-                    for rating in &ratings {
-                        let chance = level
-                            .ratings
-                            .iter()
-                            .find(|r| rating_id(r) == rating_id(rating));
-                        right(ui, chance.map_or_else(String::new, |r| stat_text(r)));
+                    for (width, text) in widths.iter().zip(row) {
+                        right(ui, *width, text);
                     }
                     ui.end_row();
                 }
