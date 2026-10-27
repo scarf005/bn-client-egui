@@ -643,19 +643,19 @@ fn steps_sent(script: &ScriptHandle) -> Vec<String> {
 }
 
 #[test]
-fn a_step_key_goes_the_way_it_points_on_the_turned_3d_map_and_wasd_follows_the_first_person_look() {
+fn a_step_key_goes_the_way_it_points_on_the_turned_3d_map_and_wasd_keeps_its_own_actions_in_first_person()
+ {
     // The engine is busy with a step until it is done, so each case is a client of its own.
     let cases = [
         ("2D", "k", "UP"),
         ("3D", "k", "RIGHT"),
         ("3D", "h", "UP"),
-        ("First person", "w", "RIGHT"),
-        ("First person", "a", "UP"),
-        ("First person", "d", "DOWN"),
+        ("First person", "k", "RIGHT"),
+        ("First person", "w", "drink"),
     ];
     for (n, (view, key, step)) in cases.into_iter().enumerate() {
         let root = iso_root(&format!("screen-steps-{n}"));
-        let (mut h, script) = harness(&root, &root.join("settings.json"), true);
+        let (mut h, script) = harness_bound(&root, &root.join("settings.json"), true, &["w"]);
         settle(&mut h);
         open_client_settings(&mut h);
         h.get_by_label(view).click();
