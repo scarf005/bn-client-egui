@@ -310,6 +310,28 @@ fn a_log_list_shows_several_rows_over_the_status_line() {
     }
 }
 
+#[test]
+fn a_status_fact_too_long_for_the_line_wraps_whole_with_its_value() {
+    let facts = (0..10)
+        .map(|n| (format!("Fact number {n}"), format!("Value {n}")))
+        .collect::<Vec<_>>();
+    let h = shown_with(SIZES[0], |parts| {
+        let stats = facts
+            .iter()
+            .map(|(label, value)| json!({"key": label, "label": label, "value": value}))
+            .collect::<Vec<_>>();
+        parts[5] = json!({"id": "ws:status", "kind": "panel", "slot": "status",
+            "title": "/home/someone/games/cataclysm/data/json/mapgen/house/2Story01.json", "stats": stats});
+    });
+    let apart = facts
+        .iter()
+        .filter(|(label, value)| {
+            (rect(&h, label).center().y - rect(&h, value).center().y).abs() > 2.0
+        })
+        .collect::<Vec<_>>();
+    assert!(apart.is_empty(), "{apart:?}");
+}
+
 /// Writes PNGs of the workspace to `$SHOT_DIR`; needs a Vulkan adapter, so it only runs when asked:
 /// `cargo test --test it ui_workspace::shots -- --ignored`.
 #[test]
