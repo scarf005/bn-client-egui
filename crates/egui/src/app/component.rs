@@ -366,7 +366,7 @@ impl<M: GameModel> App<M> {
             out.push(Intent::Run(cancel));
         }
         self.paint_icons();
-        self.paint_overmap(ctx);
+        self.paint_overmap();
         out.into_iter().for_each(|intent| self.apply(intent));
         self.send_paints(ctx);
     }
