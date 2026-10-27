@@ -164,6 +164,23 @@ fn a_zoomed_grid_is_centred_again_when_its_room_widens_past_it() {
 }
 
 #[test]
+fn the_wheel_over_an_open_menu_does_not_zoom_the_canvas_under_it() {
+    let (mut h, _script) = open(screen());
+    let before = square(&h, 0, 0).unwrap().width();
+    h.get_by_role_and_label(egui::accesskit::Role::Button, "File")
+        .click();
+    h.run_steps(4);
+    let item = h.get_by_label("Export mapgen here").rect();
+    let covered = (0..SIDE)
+        .flat_map(|y| (0..SIDE).map(move |x| (x, y)))
+        .filter_map(|(x, y)| square(&h, x, y))
+        .any(|r| r.intersects(item));
+    assert!(covered, "the menu is over the canvas: {item:?}");
+    wheel(&mut h, item.center(), 120.0);
+    assert_eq!(square(&h, 0, 0).unwrap().width(), before);
+}
+
+#[test]
 fn the_wheel_zooms_out_no_further_than_the_whole_grid_and_in_no_further_than_four_times_the_fit() {
     let (mut h, _script) = open(screen());
     let at = square(&h, 5, 5).unwrap().center();
