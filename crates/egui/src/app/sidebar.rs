@@ -172,13 +172,14 @@ impl<M: GameModel> App<M> {
                             ItemListId::Ground => room * 0.4,
                             ItemListId::Inventory => room,
                         };
-                        // The tops of last frame's rows, so the area ends between two of them.
+                        // The tops of last frame's rows and its scroll offset, so the area ends between two
+                        // rows below the first one in view.
                         let key = egui::Id::new(("item_list_tops", &title));
-                        let (tops, total): (Vec<f32>, f32) =
+                        let (tops, total, offset): (Vec<f32>, f32, f32) =
                             ui.data(|d| d.get_temp(key)).unwrap_or_default();
                         let output = egui::ScrollArea::vertical()
                             .id_salt(&title)
-                            .max_height(whole_lines_height(&tops, total, room))
+                            .max_height(whole_rows_height(&tops, total, offset, room))
                             .min_scrolled_height(0.0)
                             .auto_shrink([false, true])
                             .show(ui, |ui| {
@@ -236,7 +237,19 @@ impl<M: GameModel> App<M> {
                                 }
                                 tops
                             });
-                        ui.data_mut(|d| d.insert_temp(key, (output.inner, output.content_size.y)));
+                        // Once the scrolling stops, the view starts at the top of a row, as a native list
+                        // always does, so no row shows in part.
+                        let mut state = output.state;
+                        let settled =
+                            state.offset.y == offset && !ui.input(|i| i.pointer.any_down());
+                        let top = nearest_top(&output.inner, state.offset.y);
+                        if settled && top != state.offset.y {
+                            state.offset.y = top;
+                            state.store(ui.ctx(), output.id);
+                            ui.ctx().request_repaint();
+                        }
+                        let total = output.content_size.y;
+                        ui.data_mut(|d| d.insert_temp(key, (output.inner, total, state.offset.y)));
                     })
                 })
                 .inner;
@@ -432,9 +445,69 @@ fn whole_lines_height(tops: &[f32], total: f32, max: f32) -> f32 {
     first.or(tops.last()).map_or(max, |t| total - t)
 }
 
+/// The height for a scroll area of rows starting at `tops` (`total` high in all), scrolled down to `offset`, that
+/// holds at most `max`: the whole rows from the first one in view down, so no row is cut through.
+fn whole_rows_height(tops: &[f32], total: f32, offset: f32, max: f32) -> f32 {
+    if total <= max {
+        return max;
+    }
+    let ends = || {
+        tops.iter()
+            .skip(1)
+            .copied()
+            .chain([total])
+            .filter(|e| *e > offset)
+    };
+    let fits = ends().take_while(|e| e - offset <= max).last();
+    fits.or_else(|| ends().next()).map_or(max, |e| e - offset)
+}
+
+/// The top of the row in `tops` nearest to `offset`, or `offset` when there are no rows.
+fn nearest_top(tops: &[f32], offset: f32) -> f32 {
+    let distance = |t: &&f32| (**t - offset).abs();
+    tops.iter()
+        .min_by(|a, b| distance(a).total_cmp(&distance(b)))
+        .copied()
+        .unwrap_or(offset)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::whole_lines_height;
+    use super::{nearest_top, whole_lines_height, whole_rows_height};
+
+    #[test]
+    fn a_scrolled_list_is_cut_between_rows_below_the_first_one_in_view() {
+        // Rows of 20 and 40 points: tops at 0, 20, 60, 80; 100 points in all.
+        let tops = [0.0, 20.0, 60.0, 80.0];
+        assert_eq!(
+            whole_rows_height(&tops, 100.0, 0.0, 200.0),
+            200.0,
+            "all of it fits"
+        );
+        assert_eq!(
+            whole_rows_height(&tops, 100.0, 0.0, 70.0),
+            60.0,
+            "the first two rows"
+        );
+        assert_eq!(
+            whole_rows_height(&tops, 100.0, 20.0, 70.0),
+            60.0,
+            "the second and third rows"
+        );
+        assert_eq!(
+            whole_rows_height(&tops, 100.0, 60.0, 70.0),
+            40.0,
+            "the last two rows"
+        );
+        assert_eq!(
+            whole_rows_height(&tops, 100.0, 20.0, 30.0),
+            40.0,
+            "a row taller than the room still shows"
+        );
+        assert_eq!(nearest_top(&tops, 45.0), 60.0);
+        assert_eq!(nearest_top(&tops, 35.0), 20.0);
+        assert_eq!(nearest_top(&[], 35.0), 35.0);
+    }
 
     #[test]
     fn a_scroll_area_is_cut_between_lines_never_through_one() {
