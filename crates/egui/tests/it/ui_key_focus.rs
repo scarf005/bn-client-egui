@@ -390,3 +390,38 @@ fn the_search_box_of_a_screen_keeps_the_focus_it_takes_while_the_client_settings
     h.run_steps(6);
     assert!(h.ctx.text_edit_focused(), "the search box has the focus");
 }
+
+#[test]
+fn the_client_settings_window_opens_again_where_the_player_moved_it() {
+    let (mut h, _script) = game();
+    let window = |h: &H| {
+        h.get_by_role_and_label(egui::accesskit::Role::Window, "Client settings")
+            .rect()
+    };
+    h.get_by_role_and_label(egui::accesskit::Role::Button, "Client settings")
+        .click();
+    h.run_steps(4);
+    let from = window(&h).left_top() + egui::vec2(40.0, 12.0);
+    let to = from + egui::vec2(-60.0, 40.0);
+    h.hover_at(from);
+    h.run_steps(2);
+    for (at, pressed) in [(from, true), (to, false)] {
+        h.hover_at(at);
+        h.run_steps(2);
+        h.event(egui::Event::PointerButton {
+            pos: at,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        });
+        h.run_steps(2);
+    }
+    let moved = window(&h);
+    h.get_by_role_and_label(egui::accesskit::Role::Button, "Client settings")
+        .click();
+    h.run_steps(4);
+    h.get_by_role_and_label(egui::accesskit::Role::Button, "Client settings")
+        .click();
+    h.run_steps(4);
+    assert_eq!(window(&h), moved);
+}
