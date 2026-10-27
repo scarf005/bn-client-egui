@@ -291,10 +291,15 @@ fn every_navigation_key_of_every_client_window_stays_with_the_window() {
 
 /// The engine's yes or no popup opened over the map, as an event.
 fn open_a_popup(h: &mut H, script: &ScriptHandle) {
+    open_screen(h, script, "query popup screen");
+}
+
+/// The engine's example screen `name` opened over the map, as an event.
+fn open_screen(h: &mut H, script: &ScriptHandle, name: &str) {
     script.push(fixture("events_41_walk"));
     h.run_steps(4);
     let map = fixture("subscribe_result")["result"]["interaction"]["stack"][0].clone();
-    let popup = crate::ui_window_class::example("generic", "query popup screen");
+    let popup = crate::ui_window_class::example("generic", name);
     script.push(json!({"jsonrpc": "2.0", "method": "bn.events", "params": {"epoch": "e7f3", "events": [{
         "sequence": "42", "revision": "33", "type": "interaction.changed", "changes": {"interaction": {
         "boundary_id": "b:60",
@@ -373,4 +378,15 @@ fn the_keys_of_the_client_settings_window_reach_no_engine_screen_under_it() {
         press(&mut h, k);
     }
     assert_eq!(operations(&script).len(), sent, "no key reached the screen");
+}
+
+#[test]
+fn the_search_box_of_a_screen_keeps_the_focus_it_takes_while_the_client_settings_window_is_open() {
+    let (mut h, script) = game();
+    open_screen(&mut h, &script, "filterable list screen");
+    h.get_by_label("Client settings").click();
+    h.run_steps(4);
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::F);
+    h.run_steps(6);
+    assert!(h.ctx.text_edit_focused(), "the search box has the focus");
 }
