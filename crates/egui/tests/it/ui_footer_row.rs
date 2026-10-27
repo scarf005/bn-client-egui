@@ -292,7 +292,7 @@ fn strip_counts(screen: &Value) -> Vec<usize> {
 }
 
 #[test]
-fn every_tab_strip_of_crafting_keeps_one_row_inside_its_window() {
+fn every_tab_of_crafting_is_drawn_inside_its_window() {
     let screens = [
         (example("crafting", "Crafting screen"), "Crafting"),
         (crafting_weapons(), "Crafting"),
@@ -307,23 +307,13 @@ fn every_tab_strip_of_crafting_keeps_one_row_inside_its_window() {
                 .query_all_by_role(egui::accesskit::Role::Tab)
                 .map(|t| (t.rect(), t.accesskit_node().is_selected() == Some(true)))
                 .collect::<Vec<_>>();
-            let rows = tabs
-                .iter()
-                .map(|(r, _)| r.top() as i32)
-                .collect::<HashSet<_>>();
-            assert_eq!(rows.len(), counts.len(), "{size:?}: {tabs:?}");
             let chosen = tabs.iter().filter(|(_, on)| *on).count();
             assert_eq!(
                 chosen,
                 counts.len(),
                 "{size:?}: a strip hides its chosen tab"
             );
-            if tabs.len() < counts.iter().sum::<usize>() {
-                assert!(
-                    !buttons(&h, MORE).is_empty(),
-                    "{size:?}: tabs neither drawn nor in {MORE}"
-                );
-            }
+            assert_eq!(tabs.len(), counts.iter().sum::<usize>(), "{size:?}");
             for (r, _) in &tabs {
                 assert!(
                     window.contains_rect(*r),
