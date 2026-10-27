@@ -556,9 +556,7 @@ fn vehicle_editor_demo() {
 
     r.say("장착 칸을 눌러 고른다");
     r.click("bicycle wheel");
-    r.say("Install 탭을 연다");
-    r.click("Install");
-    r.say("부품 목록을 검색한다");
+    r.say("부품 팔레트를 검색한다");
     r.click_input("Search");
     r.type_slowly("headlight");
     r.key(egui::Key::Enter);
@@ -566,8 +564,7 @@ fn vehicle_editor_demo() {
     r.double_click("headlight");
     r.say("편집 메뉴에서 되돌린다");
     r.menu("Edit", "Undo");
-    r.say("Install 탭에서 다시 설치한다");
-    r.click("Install");
+    r.say("팔레트에서 다시 설치한다");
     if find(&r.h, "headlight").is_none() {
         r.click_input("Search");
         r.type_slowly("headlight");
