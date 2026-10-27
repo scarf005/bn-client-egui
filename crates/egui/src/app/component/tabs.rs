@@ -1,6 +1,5 @@
-//! A tabs component's strip: the engine's tabs on one row attached to the pane under them, unchosen ones on the
-//! panel ground and the chosen one on the pane's ground under a bar; the tabs the row has no room for are in a
-//! menu at its end.
+//! A tabs component's strip: the engine's tabs attached to the pane under them, unchosen ones on the panel ground
+//! and the chosen one on the pane's ground under a bar; the tabs a row has no room for wrap to further rows.
 
 use super::*;
 use bn_client_core::protocol::{Tab, Tabs};
@@ -8,28 +7,28 @@ use bn_client_core::protocol::{Tab, Tabs};
 /// The height of the bar over the chosen tab.
 const BAR: f32 = 2.0;
 
-/// The tabs, by index, that a row `room` wide shows: all when they fit, else the first ones that fit beside the
-/// chosen one and the menu button `more` wide.
-fn shown_tabs(widths: &[f32], chosen: Option<usize>, more: f32, room: f32) -> Vec<usize> {
-    if widths.iter().sum::<f32>() <= room + 0.5 {
-        return (0..widths.len()).collect();
-    }
-    let budget = room - more - chosen.map_or(0.0, |i| widths[i]);
+/// The tabs, by index, on each row of a strip `room` wide: in order, a new row when the next tab does not fit.
+/// A tab wider than the room has a row of its own.
+fn tab_rows(widths: &[f32], room: f32) -> Vec<Vec<usize>> {
+    let mut rows = Vec::<Vec<usize>>::new();
     let mut used = 0.0;
-    let mut shown = (0..widths.len())
-        .filter(|i| Some(*i) != chosen)
-        .take_while(|i| {
-            used += widths[*i];
-            used <= budget + 0.5
-        })
-        .chain(chosen)
-        .collect::<Vec<_>>();
-    shown.sort_unstable();
-    shown
+    for (i, width) in widths.iter().enumerate() {
+        match rows.last_mut() {
+            Some(row) if used + width <= room + 0.5 => {
+                row.push(i);
+                used += width;
+            }
+            _ => {
+                rows.push(vec![i]);
+                used = *width;
+            }
+        }
+    }
+    rows
 }
 
 impl<M: GameModel> App<M> {
-    /// The strip of `tabs` on one row as wide as the room left to it.
+    /// The strip of `tabs` in rows as wide as the room left to it.
     pub(super) fn tab_strip(
         &self,
         ui: &mut egui::Ui,
@@ -51,31 +50,22 @@ impl<M: GameModel> App<M> {
             .iter()
             .map(|l| width(&markup::plain(l), egui::TextStyle::Body))
             .collect::<Vec<_>>();
-        let chosen = tabs.tabs.iter().position(|t| t.selected);
-        let more = width(MORE, egui::TextStyle::Button);
-        let shown = shown_tabs(&widths, chosen, more, ui.available_width());
+        let rows = tab_rows(&widths, ui.available_width());
         egui::Frame::NONE
             .fill(crate::kit::tokens::PANEL)
             .show(ui, |ui| {
-                ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing.x = 0.0;
-                    let visuals = ui.visuals_mut();
-                    visuals.selection.bg_fill = crate::kit::tokens::DIALOG;
-                    visuals.widgets.inactive.weak_bg_fill = crate::kit::tokens::PANEL;
-                    for i in &shown {
-                        self.tab(ui, tabs, select, &tabs.tabs[*i], &labels[*i], out);
-                    }
-                    if shown.len() < tabs.tabs.len() {
-                        ui.menu_button(MORE, |ui| {
-                            let hidden = (0..tabs.tabs.len()).filter(|i| !shown.contains(i));
-                            for i in hidden {
-                                if self.tab(ui, tabs, select, &tabs.tabs[i], &labels[i], out) {
-                                    ui.close();
-                                }
-                            }
-                        });
-                    }
-                });
+                ui.spacing_mut().item_spacing.y = 0.0;
+                let visuals = ui.visuals_mut();
+                visuals.selection.bg_fill = crate::kit::tokens::DIALOG;
+                visuals.widgets.inactive.weak_bg_fill = crate::kit::tokens::PANEL;
+                for row in rows {
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 0.0;
+                        for i in row {
+                            self.tab(ui, tabs, select, &tabs.tabs[i], &labels[i], out);
+                        }
+                    });
+                }
             });
     }
 
