@@ -14,12 +14,17 @@ type H<'a> = Harness<'a, App<EngineModel>>;
 
 /// A game offering the character sheet (`@`), the inventory (`i`), the map (`m`), the stairs (`<` and `>`) and
 /// the steps, whose map answers every read with a 3 by 3 overmap.
-fn game<'a>() -> (H<'a>, ScriptHandle) {
+pub(crate) fn game<'a>() -> (H<'a>, ScriptHandle) {
     game_on_level(0)
 }
 
 /// `game`, its map answering every read with the squares of level `z`.
 fn game_on_level<'a>(z: i64) -> (H<'a>, ScriptHandle) {
+    game_in(egui::vec2(1600.0, 1000.0), z)
+}
+
+/// `game_on_level(z)` in a window of `size`.
+pub(crate) fn game_in<'a>(size: egui::Vec2, z: i64) -> (H<'a>, ScriptHandle) {
     let mut subscribed = fixture("subscribe_result");
     subscribed["result"]["interaction"]["actions"]
         .as_array_mut()
@@ -55,12 +60,10 @@ fn game_on_level<'a>(z: i64) -> (H<'a>, ScriptHandle) {
     }
     let clock = Clock::manual();
     let model = EngineModel::new(Box::new(t)).with_clock(clock.clone());
-    let mut h = Harness::builder()
-        .with_size(egui::vec2(1600.0, 1000.0))
-        .build_ui_state(
-            |ui, app: &mut App<EngineModel>| app.show(ui),
-            App::new(model).with_clock(clock),
-        );
+    let mut h = Harness::builder().with_size(size).build_ui_state(
+        |ui, app: &mut App<EngineModel>| app.show(ui),
+        App::new(model).with_clock(clock),
+    );
     h.run_steps(3);
     (h, script)
 }

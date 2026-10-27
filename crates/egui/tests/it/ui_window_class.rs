@@ -671,3 +671,35 @@ fn a_dialog_is_first_painted_at_the_size_it_keeps() {
         }
     }
 }
+
+#[test]
+fn the_map_settings_and_action_windows_first_open_in_the_map_region() {
+    let mut outside = vec![];
+    for size in SIZES {
+        for opened in ["Map", "Client settings", "Actions"] {
+            let (mut h, _) = crate::ui_key_focus::game_in(size, 0);
+            match opened {
+                "Map" => crate::ui_panels::key(&mut h, "m"),
+                _ => h.get_by_label(opened).click(),
+            }
+            h.run_steps(6);
+            crate::common::settle_windows(&mut h);
+            // The action palette is a dialog to a screen reader, the others windows.
+            let window = h
+                .get_all_by_label(opened)
+                .find(|n| {
+                    matches!(
+                        n.accesskit_node().role(),
+                        egui::accesskit::Role::Window | egui::accesskit::Role::Dialog
+                    )
+                })
+                .unwrap_or_else(|| panic!("{size:?}: no window {opened}"))
+                .rect();
+            let room = region(&h);
+            if !room.expand(1.0).contains_rect(window) {
+                outside.push(format!("{size:?}: {opened} at {window:?} outside {room:?}"));
+            }
+        }
+    }
+    assert!(outside.is_empty(), "{outside:#?}");
+}
