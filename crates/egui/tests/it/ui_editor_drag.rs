@@ -58,7 +58,7 @@ pub(crate) fn open<'a>(screen: Value) -> (H<'a>, ScriptHandle) {
     open_sized(screen, egui::vec2(1280.0, 1600.0))
 }
 
-fn open_sized<'a>(screen: Value, size: egui::Vec2) -> (H<'a>, ScriptHandle) {
+pub(crate) fn open_sized<'a>(screen: Value, size: egui::Vec2) -> (H<'a>, ScriptHandle) {
     let mut subscribe = fixture("subscribe_result");
     subscribe["result"]["interaction"]["stack"] = json!([screen]);
     let reply = vec![

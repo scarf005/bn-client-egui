@@ -1,6 +1,6 @@
 //! The editor canvas is mouse-first: the wheel zooms about the pointer, a middle drag or Space with the primary
 //! drag pans, the square under the pointer is outlined and named, and every click still lands on that square.
-use crate::ui_editor_drag::{H, editor, open, painted, sent};
+use crate::ui_editor_drag::{H, editor, open, open_sized, painted, sent};
 use eframe::egui;
 use egui_kittest::kittest::{NodeT, Queryable};
 
@@ -93,11 +93,12 @@ fn zoomed<'a>() -> (H<'a>, bn_client_egui::transport::ScriptHandle, egui::Pos2) 
 
 #[test]
 fn the_wheel_zooms_the_canvas_about_the_pointer() {
-    let (mut h, _script) = open(screen());
-    let at = square(&h, 7, 4).unwrap().min + egui::vec2(9.0, 5.0);
-    let before = square(&h, 7, 4).unwrap();
+    // A scrolled view cannot show past the grid's edge, so the square is near it; the rest of the grid then fills the room.
+    let (mut h, _script) = open_sized(screen(), egui::vec2(1280.0, 800.0));
+    let at = square(&h, 1, 3).unwrap().center();
+    let before = square(&h, 1, 3).unwrap();
     wheel(&mut h, at, 120.0);
-    let after = square(&h, 7, 4).unwrap();
+    let after = square(&h, 1, 3).unwrap();
     assert!(after.width() > 1.5 * before.width(), "{before:?} {after:?}");
     assert!(after.contains(at), "{at:?} left {after:?}");
     // The same offset inside the square: the point of the grid under the pointer did not move.
@@ -131,13 +132,13 @@ fn a_middle_drag_moves_the_zoomed_grid_by_the_drag() {
     drag_by(
         &mut h,
         at,
-        egui::vec2(-37.0, -23.0),
+        egui::vec2(-37.0, 23.0),
         egui::PointerButton::Middle,
     );
     let after = square(&h, x, y).unwrap();
     let moved = after.min - before.min;
     assert!(
-        (moved - egui::vec2(-37.0, -23.0)).length() < 1.5,
+        (moved - egui::vec2(-37.0, 23.0)).length() < 1.5,
         "{moved:?}"
     );
 }
@@ -184,7 +185,7 @@ fn space_with_a_primary_drag_pans_and_sends_nothing() {
     drag_by(
         &mut h,
         at,
-        egui::vec2(-37.0, -23.0),
+        egui::vec2(-37.0, 23.0),
         egui::PointerButton::Primary,
     );
     space(&mut h, false);

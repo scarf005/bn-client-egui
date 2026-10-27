@@ -4,6 +4,7 @@
 //! Drawing reads the engine's data and collects what the player did as `Intent`s. Applying an intent only
 //! calls the interaction core (`bn_client_core::interaction`), which decides what is sent.
 
+mod canvas;
 mod detail;
 mod drag;
 mod footer;
@@ -57,8 +58,8 @@ const GRID_CELL: f32 = 26.0;
 const GRID_MAX_CELL: f32 = 2.0 * GRID_CELL;
 /// The opacity of the squares a grid marks faded.
 const GRID_FADED: f32 = 0.45;
-/// The least and the most the zoom gesture scales a canvas grid's cells from the size that fills its room.
-const GRID_ZOOM: (f32, f32) = (0.5, 4.0);
+/// The most the zoom gesture scales a canvas grid's cells from the size that fills its room.
+const GRID_ZOOM_MAX: f32 = 4.0;
 
 /// The client-local state of the top screen: what the interaction core keeps, and what the player is asked.
 #[derive(Default)]
@@ -1073,10 +1074,19 @@ impl<M: GameModel> App<M> {
         let fit = (ui.available_width() / xs.len().max(1) as f32)
             .min(ui.available_height() / ys.len().max(1) as f32);
         let canvas = grid.role == Some(GridRole::Canvas);
-        let zoom_key = egui::Id::new(("grid zoom", &grid.head.id));
-        let zoom = ui.data(|d| d.get_temp::<f32>(zoom_key)).unwrap_or(1.0);
+        // A canvas zooms from the size that fills its room, no smaller than the whole grid fitting in it.
+        let base = fit.max(GRID_CELL);
+        let limits = ((fit / base).min(1.0), GRID_ZOOM_MAX);
+        let view_key = egui::Id::new(("grid view", &grid.head.id));
+        let view = ui
+            .data(|d| d.get_temp::<canvas::View>(view_key))
+            .filter(|v| v.span == (xs.len(), ys.len()));
+        let (zoom, offset) = view
+            .and_then(|view| canvas::zoomed(ui, view, base, limits))
+            .map_or((view.map_or(1.0, |v| v.zoom), None), |(z, o)| (z, Some(o)));
+        let zoom = zoom.clamp(limits.0, limits.1);
         let cell = match canvas {
-            true => fit.max(GRID_CELL) * zoom,
+            true => base * zoom,
             false => fit.clamp(GRID_CELL, GRID_MAX_CELL),
         };
         let size = egui::vec2(cell, cell);
@@ -1084,32 +1094,44 @@ impl<M: GameModel> App<M> {
         let mut squares = HashMap::new();
         let layout;
         if canvas {
-            // The wheel scrolls it; a middle-button drag pans it, while the primary drag is left to painting.
-            let pan = ui.input(|i| i.pointer.middle_down().then(|| i.pointer.delta()));
+            // The wheel zooms it; a middle-button drag, or Space and the primary one, pans it.
+            let panning = canvas::panning(ui);
+            let pan = ui.input(|i| {
+                (i.pointer.middle_down() || (panning && i.pointer.primary_down()))
+                    .then(|| i.pointer.delta())
+            });
             // The viewport is a whole number of cells tall, so none is cut across.
             let rows = (ui.available_height() / cell).floor().max(1.0);
-            let shown = egui::ScrollArea::both()
+            let mut area = egui::ScrollArea::both()
                 .id_salt(("grid", &grid.head.id))
                 .max_height(rows * cell)
                 .auto_shrink([true, true])
                 .scroll_source(egui::scroll_area::ScrollSource {
                     drag: egui::scroll_area::DragScroll::Never,
-                    mouse_wheel: true,
+                    mouse_wheel: false,
                     scroll_bar: true,
-                })
-                .show(ui, |ui| {
-                    if let Some(pan) = pan.filter(|_| ui.rect_contains_pointer(ui.clip_rect())) {
-                        ui.scroll_with_delta(pan);
-                    }
-                    let cells = GridCells { size, glyph_size };
-                    self.grid_cells(ui, grid, cells, &mut squares, out)
                 });
-            layout = Some(shown.inner);
-            let delta = ui.input(|i| i.zoom_delta());
-            if delta != 1.0 && ui.rect_contains_pointer(shown.inner_rect) {
-                let zoom = (zoom * delta).clamp(GRID_ZOOM.0, GRID_ZOOM.1);
-                ui.data_mut(|d| d.insert_temp(zoom_key, zoom));
+            if let Some(offset) = offset {
+                area = area.scroll_offset(offset);
             }
+            let shown = area.show(ui, |ui| {
+                if let Some(pan) = pan.filter(|_| ui.rect_contains_pointer(ui.clip_rect())) {
+                    ui.scroll_with_delta(pan);
+                }
+                let cells = GridCells { size, glyph_size };
+                self.grid_cells(ui, grid, cells, &mut squares, out)
+            });
+            layout = Some(shown.inner);
+            let view = canvas::View {
+                span: (xs.len(), ys.len()),
+                zoom,
+                cell,
+                rect: shown.inner_rect,
+                // While zooming, the offset asked for: one a smaller square clamped must not drift the anchor.
+                offset: offset.unwrap_or(shown.state.offset),
+            };
+            ui.data_mut(|d| d.insert_temp(view_key, view));
+            self.hover_outline(ui, &squares);
         } else {
             let cells = GridCells { size, glyph_size };
             layout = Some(self.grid_cells(ui, grid, cells, &mut squares, out));
@@ -1120,6 +1142,23 @@ impl<M: GameModel> App<M> {
         if let (Some(affordance), Some(layout)) = (&grid.region_drag, layout) {
             self.drag_region(ui, grid, affordance, (&squares, &layout), out);
         }
+    }
+
+    /// The square under the pointer, outlined over the sprites.
+    fn hover_outline(
+        &self,
+        ui: &egui::Ui,
+        squares: &HashMap<drag::Square, (egui::Rect, String, String)>,
+    ) {
+        let at = ui.input(|i| i.pointer.hover_pos());
+        let Some((rect, ..)) = at.and_then(|at| squares.values().find(|s| s.0.contains(at))) else {
+            return;
+        };
+        let shapes = outline_shapes(*rect, tokens::TEXT);
+        self.screens
+            .rules
+            .borrow_mut()
+            .push((ui.painter().clone(), shapes));
     }
 
     /// The cells of `grid`, each `size`, their glyphs `glyph_size` large; a cell names what it holds on hover.
@@ -1231,7 +1270,7 @@ impl<M: GameModel> App<M> {
                         let pointer_click =
                             grid.drag.is_some() && ui.input(|i| i.pointer.any_released());
                         if let (true, Some(id), Some(a)) = (
-                            button.clicked() && !pointer_click,
+                            button.clicked() && !pointer_click && !canvas::panning(ui),
                             &cell.id,
                             &cell.affordance,
                         ) {
@@ -1461,12 +1500,13 @@ fn grid_pointer(
             .map(|(&square, s)| (square, (at - s.0.min) / s.0.size()))
     });
     let on_top = ui.ctx().layer_id_at(at.unwrap_or_default()) == Some(ui.layer_id());
+    let panning = canvas::panning(ui);
     ui.input(|i| drag::Pointer {
         over: on.map(|(square, _)| square),
         spot: on.map(|(_, spot)| (spot.x, spot.y)),
-        pressed: i.pointer.button_pressed(egui::PointerButton::Primary) && on_top,
-        down: i.pointer.primary_down(),
-        released: i.pointer.button_released(egui::PointerButton::Primary),
+        pressed: i.pointer.button_pressed(egui::PointerButton::Primary) && on_top && !panning,
+        down: i.pointer.primary_down() && !panning,
+        released: i.pointer.button_released(egui::PointerButton::Primary) && !panning,
     })
 }
 
