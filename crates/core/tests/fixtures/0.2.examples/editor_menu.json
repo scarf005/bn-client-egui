@@ -3672,6 +3672,13 @@
             "expect": "boundary"
           },
           {
+            "id": "editor:export_area",
+            "label": "Mark squares to export",
+            "keys": [],
+            "enabled": true,
+            "expect": "screen"
+          },
+          {
             "id": "editor:export_width",
             "label": "Export width",
             "keys": [],
@@ -4155,7 +4162,9 @@
           {
             "id": "editor:apply",
             "label": "Apply to game",
-            "keys": [],
+            "keys": [
+              "F7"
+            ],
             "enabled": true,
             "expect": "screen"
           },
@@ -4169,14 +4178,18 @@
           {
             "id": "editor:stamp",
             "label": "Stamp",
-            "keys": [],
+            "keys": [
+              "F6"
+            ],
             "enabled": true,
             "expect": "screen"
           },
           {
             "id": "editor:test",
             "label": "Test",
-            "keys": [],
+            "keys": [
+              "F5"
+            ],
             "enabled": false,
             "denial": "Not available now.",
             "expect": "screen"
@@ -4184,7 +4197,9 @@
           {
             "id": "editor:preview",
             "label": "Preview",
-            "keys": [],
+            "keys": [
+              "F8"
+            ],
             "enabled": true,
             "args": {
               "count": {
