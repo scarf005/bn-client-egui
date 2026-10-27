@@ -10,6 +10,10 @@ pub const U: f32 = 4.0;
 pub const WINDOW_MARGIN: i8 = 12;
 /// How far a nested row is indented.
 pub const INDENT: f32 = 4.0 * U;
+/// Room between two things side by side.
+pub const ITEM_GAP: f32 = 2.0 * U;
+/// Room between two columns of a table, wider than between things so a column reads as one.
+pub const COLUMN_GAP: f32 = 4.0 * U;
 /// The height of a control and of a list row without an item.
 pub const ROW: f32 = 6.0 * U;
 /// The height of a list row that draws its item in a square.
@@ -62,7 +66,7 @@ pub fn apply(ctx: &egui::Context) {
         style.animation_time = 0.0;
         // Solid scroll bars always show that a list goes on, instead of fading in when hovered.
         style.spacing.scroll = egui::style::ScrollStyle::solid();
-        style.spacing.item_spacing = egui::vec2(2.0 * U, U);
+        style.spacing.item_spacing = egui::vec2(ITEM_GAP, U);
         style.spacing.button_padding = egui::vec2(2.0 * U, U);
         style.spacing.window_margin = egui::Margin::same(WINDOW_MARGIN);
         style.spacing.indent = INDENT;
