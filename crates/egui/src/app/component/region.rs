@@ -1,5 +1,6 @@
-//! A pointer drag of a canvas grid's region: pressed inside it moves the whole region, pressed on a corner square
-//! moves only that corner. The engine takes how far the top-left and bottom-right squares moved.
+//! A pointer drag of a canvas grid's region: pressed on the outer half of a square at its side it moves that side
+//! (two at a corner), anywhere else the whole region. The engine takes how far the top-left and bottom-right squares
+//! moved.
 
 use super::drag::{Pointer, Square};
 use bn_client_core::protocol::GridRegion;
@@ -26,24 +27,27 @@ fn at(square: Square) -> (i32, i32) {
     (square.0 as i32, square.1 as i32)
 }
 
-/// Which of the edges (west, north, east, south) a press on `square` drags: all four to move the whole region, or
-/// the two meeting at the corner square pressed.
-fn edges(region: &GridRegion, square: Square) -> [bool; 4] {
+/// Which of the edges (west, north, east, south) a press at `spot` of `square` drags: the sides whose outer half it
+/// is on, or all four to move the whole region. A side the region does not span along has no outer half.
+fn edges(region: &GridRegion, square: Square, (fx, fy): (f32, f32)) -> [bool; 4] {
     let (x, y) = at(square);
     let (from, to) = (region.from, region.to);
-    let (wide, tall) = (from.x != to.x, from.y != to.y);
-    let on = |a: i32, lo: i32, hi: i32, varies: bool| (varies && a == lo, varies && a == hi);
-    let ((west, east), (north, south)) = (on(x, from.x, to.x, wide), on(y, from.y, to.y, tall));
-    // A corner is an end square on every axis the region spans; one spanning no axis is moved whole.
-    let corner = (west || east || !wide) && (north || south || !tall) && (wide || tall);
-    match corner {
-        true => [west, north, east, south],
+    let side = |a: i32, lo: i32, hi: i32, f: f32| {
+        (
+            lo != hi && a == lo && f < 0.5,
+            lo != hi && a == hi && f > 0.5,
+        )
+    };
+    let ((west, east), (north, south)) = (side(x, from.x, to.x, fx), side(y, from.y, to.y, fy));
+    let sides = [west, north, east, south];
+    match sides.contains(&true) {
+        true => sides,
         false => [true; 4],
     }
 }
 
-/// The last region of `regions` that holds `square` (the one drawn on top), grabbed there.
-pub(super) fn grab(regions: &[GridRegion], square: Square) -> Option<Grab> {
+/// The last region of `regions` that holds `square` (the one drawn on top), grabbed at `spot` of it.
+pub(super) fn grab(regions: &[GridRegion], square: Square, spot: (f32, f32)) -> Option<Grab> {
     let (x, y) = at(square);
     let region = regions
         .iter()
@@ -53,23 +57,25 @@ pub(super) fn grab(regions: &[GridRegion], square: Square) -> Option<Grab> {
         region: region.clone(),
         press: square,
         now: square,
-        edges: edges(region, square),
+        edges: edges(region, square, spot),
     })
 }
 
 impl Grab {
-    /// How far the west, north, east and south edges moved.
+    /// How far the west, north, east and south edges moved; a side moved alone stops at the opposite one.
     pub fn deltas(&self) -> [i32; 4] {
         let ((px, py), (nx, ny)) = (at(self.press), at(self.now));
-        let (dx, dy) = (nx - px, ny - py);
+        let (from, to) = (self.region.from, self.region.to);
         let [west, north, east, south] = self.edges;
-        [west, north, east, south]
-            .into_iter()
-            .zip([dx, dy, dx, dy])
-            .map(|(on, d)| if on { d } else { 0 })
-            .collect::<Vec<_>>()
-            .try_into()
-            .unwrap()
+        let along = |d: i32, (low, high): (bool, bool), span: i32| match (low, high) {
+            (true, true) => (d, d),
+            (true, false) => (d.min(span), 0),
+            (false, true) => (0, d.max(-span)),
+            (false, false) => (0, 0),
+        };
+        let (w, e) = along(nx - px, (west, east), to.x - from.x);
+        let (n, s) = along(ny - py, (north, south), to.y - from.y);
+        [w, n, e, s]
     }
 
     /// The region as the drag leaves it now, as (west, north, east, south) squares.
@@ -96,7 +102,7 @@ pub(super) fn advance(
     pointer: Pointer,
 ) -> Option<Moved> {
     if let (true, Some(over)) = (pointer.pressed, pointer.over) {
-        *held = grab(regions, over);
+        *held = grab(regions, over, pointer.spot.unwrap_or((0.5, 0.5)));
         return None;
     }
     let grabbed = held.as_mut()?;

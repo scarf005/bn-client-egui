@@ -1341,30 +1341,7 @@ impl<M: GameModel> App<M> {
             .data(|d| d.get_temp::<(Option<region::Grab>, u64)>(key))
             .filter(|(_, last)| last + 1 >= pass)
             .and_then(|(held, _)| held);
-        let pointer = ui.input(|i| {
-            let at = i.pointer.interact_pos();
-            drag::Pointer {
-                over: at
-                    .and_then(|at| {
-                        squares
-                            .iter()
-                            .find(|(_, s)| s.0.contains(at) && ui.clip_rect().contains(at))
-                    })
-                    .map(|(&at, _)| at),
-                pressed: i.pointer.button_pressed(egui::PointerButton::Primary),
-                down: i.pointer.primary_down(),
-                released: i.pointer.button_released(egui::PointerButton::Primary),
-                spot: None,
-            }
-        });
-        let on_top = ui
-            .ctx()
-            .layer_id_at(ui.input(|i| i.pointer.interact_pos()).unwrap_or_default())
-            == Some(ui.layer_id());
-        let pointer = drag::Pointer {
-            pressed: pointer.pressed && on_top,
-            ..pointer
-        };
+        let pointer = grid_pointer(ui, squares);
         if let Some(moved) = region::advance(&grid.regions, &mut held, pointer) {
             out.push(Intent::Paint(Paint {
                 component: self.row_component(affordance, &grid.head.id),
@@ -1400,35 +1377,8 @@ impl<M: GameModel> App<M> {
             .filter(|(_, _, last)| last + 1 >= pass)
             .map(|(held, began, _)| (held, began))
             .unwrap_or_default();
-        let pointer = ui.input(|i| {
-            let at = i.pointer.interact_pos();
-            drag::Pointer {
-                over: at
-                    .and_then(|at| {
-                        squares
-                            .iter()
-                            .find(|(_, s)| s.0.contains(at) && ui.clip_rect().contains(at))
-                    })
-                    .map(|(&at, _)| at),
-                pressed: i.pointer.button_pressed(egui::PointerButton::Primary),
-                down: i.pointer.primary_down(),
-                released: i.pointer.button_released(egui::PointerButton::Primary),
-                spot: None,
-            }
-        });
-        let on_top = ui
-            .ctx()
-            .layer_id_at(ui.input(|i| i.pointer.interact_pos()).unwrap_or_default())
-            == Some(ui.layer_id());
         let was_held = held.is_some();
-        let run = drag::advance(
-            mode,
-            &mut held,
-            drag::Pointer {
-                pressed: pointer.pressed && on_top,
-                ..pointer
-            },
-        );
+        let run = drag::advance(mode, &mut held, grid_pointer(ui, squares));
         let marker = |affordance: &Option<String>| {
             affordance.clone().map(|affordance| {
                 Intent::Paint(Paint {
@@ -1484,6 +1434,28 @@ impl GridLayout {
         );
         egui::Rect::from_min_max(a, b)
     }
+}
+
+/// The pointer over the drawn squares of a grid this frame; a press counts only on the grid's own layer.
+fn grid_pointer(
+    ui: &egui::Ui,
+    squares: &HashMap<drag::Square, (egui::Rect, String, String)>,
+) -> drag::Pointer {
+    let at = ui.input(|i| i.pointer.interact_pos());
+    let on = at.and_then(|at| {
+        squares
+            .iter()
+            .find(|(_, s)| s.0.contains(at) && ui.clip_rect().contains(at))
+            .map(|(&square, s)| (square, (at - s.0.min) / s.0.size()))
+    });
+    let on_top = ui.ctx().layer_id_at(at.unwrap_or_default()) == Some(ui.layer_id());
+    ui.input(|i| drag::Pointer {
+        over: on.map(|(square, _)| square),
+        spot: on.map(|(_, spot)| (spot.x, spot.y)),
+        pressed: i.pointer.button_pressed(egui::PointerButton::Primary) && on_top,
+        down: i.pointer.primary_down(),
+        released: i.pointer.button_released(egui::PointerButton::Primary),
+    })
 }
 
 /// A dark line under a light one, so the outline reads on pale and dark squares alike.
