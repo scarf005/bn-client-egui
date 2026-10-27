@@ -131,6 +131,22 @@ fn grouped_affordances_are_not_in_the_footer_and_the_others_are() {
 }
 
 #[test]
+fn a_docked_workspace_keeps_its_menus_for_the_grouped_affordances() {
+    let mut screen = workspace();
+    screen["dock"] = "left".into();
+    let (app, _) = crate::common::staged(crate::common::over_map(screen));
+    let mut h = crate::common::themed_harness(SIZES[0], app);
+    h.run_steps(7);
+    crate::common::settle_windows(&mut h);
+    for menu in ["File", "Edit"] {
+        assert!(h.query_by_label(menu).is_some(), "no {menu} menu");
+    }
+    h.get_by_label("File").click();
+    h.run_steps(3);
+    assert!(h.query_by_label("New").is_some());
+}
+
+#[test]
 fn the_parts_are_placed_by_slot() {
     for size in SIZES {
         let (h, _) = shown(size);
