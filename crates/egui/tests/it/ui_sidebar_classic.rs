@@ -382,3 +382,33 @@ fn heard_sounds_under_a_full_log_show_whole_in_the_log_panel() {
     }
     assert!(cut.is_empty(), "{cut:#?}");
 }
+
+#[test]
+fn a_sound_heard_under_a_full_log_shows_whole_in_the_frame_it_arrives() {
+    let mut cut = vec![];
+    for size in SIZES {
+        let map = fixture("subscribe_result")["result"]["interaction"]["stack"][0].clone();
+        let (app, script) = crate::common::staged(json!([map]));
+        let mut h = crate::common::themed_harness(size, app);
+        h.run_steps(3);
+        script.push(classic());
+        for n in 0..30 {
+            script.push(logged(42 + n, &format!("You hear something {n}.")));
+        }
+        h.run_steps(4);
+        crate::common::settle_windows(&mut h);
+        script.push(
+            json!({"jsonrpc": "2.0", "method": "bn.events", "params": {"epoch": "e7f3",
+            "events": [{"sequence": "72", "revision": "32", "type": "sound.heard",
+            "data": {"text": "footsteps", "volume": 52, "logged": false}}]}}),
+        );
+        h.step();
+        let (sound, log) = (rect(&h, "footsteps"), rect(&h, "Log"));
+        if !log.contains_rect(sound) {
+            cut.push(format!(
+                "{size:?}: the sound {sound:?} is out of the log {log:?}"
+            ));
+        }
+    }
+    assert!(cut.is_empty(), "{cut:#?}");
+}
