@@ -1796,3 +1796,77 @@ fn the_map_editor_draws_and_erases_the_squares_of_an_overmap_special_and_saves_t
         "{overmaps:?}"
     );
 }
+
+/// Whether the editor screen on top offers the affordance `id` and has it enabled.
+fn enabled(h: &H, id: &str) -> Option<bool> {
+    let top = h.state().model.screens().last()?;
+    top.affordances
+        .iter()
+        .find(|a| a.id == id)
+        .map(|a| a.enabled)
+}
+
+/// A mod file with one overmap special, opened as a player reopens a file. "Place in world" puts it on land near the
+/// avatar and enables "Test", which leaves the editor for the map with the avatar moved to the special's origin.
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn the_map_editor_places_an_overmap_special_in_the_world_and_tests_it_there() {
+    let sizes = [(1920.0, 1080.0)];
+    let dir = std::env::temp_dir().join(format!("bn-walk-{}", std::process::id()));
+    let profile = std::env::temp_dir().join(format!("bn-live-{}-0", std::process::id()));
+    let moddir = profile.join("mods").join("walk_place");
+    std::fs::create_dir_all(&moddir).unwrap();
+    std::fs::create_dir_all(&dir).unwrap();
+    let entries = serde_json::json!([{
+        "type": "overmap_special", "id": "walk_place", "subtype": "fixed",
+        "locations": ["land"], "city_distance": [0, 20], "city_sizes": [1, 20], "occurrences": [0, 1],
+        "overmaps": [
+            { "point": [0, 0, 0], "overmap": "house_01_north" },
+            { "point": [1, 0, 0], "overmap": "field" }
+        ]
+    }]);
+    let file = moddir.join("place.json");
+    std::fs::write(&file, entries.to_string()).unwrap();
+    let path = file.to_string_lossy().to_string();
+    let recent = serde_json::json!([{ "editor": "map", "name": path, "mods": ["bn"] }]);
+    let (mut h, _root) = start_with(&dir, &[("editor_recent.json", recent.to_string())]);
+    h.set_size(egui::vec2(1920.0, 1080.0));
+    rest(&mut h);
+    let before = h.state().model.origin();
+    println!("view origin before {before:?}");
+
+    click(&mut h, "Editor");
+    rest(&mut h);
+    click(&mut h, &path);
+    rest(&mut h);
+    key(&mut h, egui::Key::Escape);
+    click(&mut h, "Yes");
+    wait_kind(&mut h, "editor");
+    rest(&mut h);
+    shot_at(&mut h, "ep-1-opened", &sizes);
+    dump(&h, "opened");
+    assert_eq!(enabled(&h, "editor:place_special"), Some(true));
+    assert_eq!(enabled(&h, "editor:test"), Some(false));
+
+    click_footer(&mut h, "Place in world");
+    rest(&mut h);
+    shot_at(&mut h, "ep-2-placed", &sizes);
+    dump(&h, "placed");
+    assert_eq!(enabled(&h, "editor:test"), Some(true));
+
+    click_footer(&mut h, "Test");
+    run_until(&mut h, "the map", 60, |h| {
+        !h.state().model.busy()
+            && h.state()
+                .model
+                .screens()
+                .last()
+                .is_none_or(|s| s.kind.as_deref() != Some("editor"))
+    });
+    rest(&mut h);
+    shot_at(&mut h, "ep-3-tested", &sizes);
+    let after = h.state().model.origin();
+    println!("view origin after {after:?}");
+
+    assert_ne!(after, before);
+}
