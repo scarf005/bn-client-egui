@@ -80,9 +80,7 @@ pub(super) fn place(
 /// The zoom after this frame's wheel with the pointer over `view`, and the point of the grid under the pointer, which
 /// stays under it. `None` when the pointer is elsewhere or the zoom does not change.
 pub(super) fn zoomed(ui: &egui::Ui, view: View, limits: (f32, f32)) -> Option<Anchor> {
-    let pointer = ui
-        .input(|i| i.pointer.hover_pos())
-        .filter(|p| view.rect.contains(*p))?;
+    let pointer = pointer_over(ui, view.rect)?;
     let wheel = ui.input_mut(|i| std::mem::take(&mut i.smooth_scroll_delta).y);
     let factor = ui.input(|i| i.zoom_delta()) * (wheel * WHEEL_ZOOM).exp();
     let zoom = (view.zoom * factor).clamp(limits.0, limits.1);
@@ -102,14 +100,16 @@ pub(super) fn panning(ui: &egui::Ui) -> bool {
     ui.input(|i| i.key_down(egui::Key::Space))
 }
 
+/// The pointer, when it is over `rect` on the layer of `ui`: a popup over the canvas has it instead.
+pub(super) fn pointer_over(ui: &egui::Ui, rect: egui::Rect) -> Option<egui::Pos2> {
+    let at = ui.input(|i| i.pointer.hover_pos())?;
+    (rect.contains(at) && ui.ctx().layer_id_at(at) == Some(ui.layer_id())).then_some(at)
+}
+
 /// Notes that the pointer is over the canvas `ui` draws in, on its own layer: Space pans it there.
 pub(super) fn note_hover(ui: &egui::Ui) {
     let ctx = ui.ctx();
-    let at = ui.input(|i| i.pointer.hover_pos());
-    let over = at.is_some_and(|at| {
-        ui.clip_rect().contains(at) && ctx.layer_id_at(at) == Some(ui.layer_id())
-    });
-    if over {
+    if pointer_over(ui, ui.clip_rect()).is_some() {
         let pass = ctx.cumulative_pass_nr();
         ctx.data_mut(|d| d.insert_temp(egui::Id::new("canvas hover"), pass));
     }

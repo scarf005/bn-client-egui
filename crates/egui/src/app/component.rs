@@ -1209,7 +1209,7 @@ impl<M: GameModel> App<M> {
                 room_width: room.x,
             };
             ui.data_mut(|d| d.insert_temp(view_key, view));
-            self.hover_outline(ui, &squares);
+            self.hover_outline(ui, shown.inner_rect, &squares);
         } else {
             let cells = GridCells { size, glyph_size };
             layout = Some(self.grid_cells(ui, grid, cells, &mut squares, out));
@@ -1226,17 +1226,18 @@ impl<M: GameModel> App<M> {
     fn hover_outline(
         &self,
         ui: &egui::Ui,
+        viewport: egui::Rect,
         squares: &HashMap<drag::Square, (egui::Rect, String, String)>,
     ) {
-        let at = ui.input(|i| i.pointer.hover_pos());
+        let at = canvas::pointer_over(ui, viewport);
         let Some((rect, ..)) = at.and_then(|at| squares.values().find(|s| s.0.contains(at))) else {
             return;
         };
         let shapes = outline_shapes(*rect, tokens::TEXT);
-        self.screens
-            .rules
-            .borrow_mut()
-            .push((ui.painter().clone(), shapes));
+        let painter = ui
+            .painter()
+            .with_clip_rect(viewport.intersect(ui.clip_rect()));
+        self.screens.rules.borrow_mut().push((painter, shapes));
     }
 
     /// The cells of `grid`, each `size`, their glyphs `glyph_size` large; a cell names what it holds on hover.
