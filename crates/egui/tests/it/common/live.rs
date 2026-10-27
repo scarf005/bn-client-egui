@@ -228,8 +228,9 @@ pub fn save(h: &mut H, name: &str) {
 
 /// The faults that keep the frame last drawn from being read, against the screen on top.
 pub fn faults(h: &H) -> Vec<String> {
-    let screen = (h.state().model.screens().last())
-        .map_or(serde_json::Value::Null, |s| serde_json::to_value(s).unwrap());
+    let screen = (h.state().model.screens().last()).map_or(serde_json::Value::Null, |s| {
+        serde_json::to_value(s).unwrap()
+    });
     crate::common::legible::legible(h, &screen)
         .into_iter()
         .map(|f| format!("{:?} {}", f.kind, f.what))

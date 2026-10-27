@@ -223,7 +223,10 @@ fn a_line_whose_letters_lie_inside_its_clip_is_not_cut() {
             let color = ui.visuals().text_color();
             let galley = ui.painter().layout_no_wrap("ace".into(), font, color);
             let at = ui.max_rect().min + egui::vec2(10.0, 10.0);
-            let clip = galley.rect.translate(at.to_vec2()).shrink2(egui::vec2(0.0, 1.5));
+            let clip = galley
+                .rect
+                .translate(at.to_vec2())
+                .shrink2(egui::vec2(0.0, 1.5));
             ui.painter().with_clip_rect(clip).galley(at, galley, color);
         });
     let cut = cut_text(&h.output().shapes, h.ctx.content_rect());
@@ -270,4 +273,3 @@ fn a_word_broken_over_two_lines_is_a_fault_and_a_break_between_words_is_not() {
     assert!(!broken_words(&word.output().shapes).is_empty());
     assert!(broken_words(&words.output().shapes).is_empty());
 }
-

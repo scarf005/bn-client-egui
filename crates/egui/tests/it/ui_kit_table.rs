@@ -407,4 +407,3 @@ fn a_tables_label_and_value_columns_stand_a_column_gap_apart() {
         "label to value {after_label}, value to value {after_value}, column gap {COLUMN_GAP}"
     );
 }
-
