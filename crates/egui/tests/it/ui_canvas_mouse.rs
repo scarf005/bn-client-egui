@@ -152,6 +152,11 @@ fn a_zoomed_grid_is_centred_again_when_its_room_widens_past_it() {
     let (mut h, _script) = open_sized(screen(), egui::vec2(1100.0, 800.0));
     let at = square(&h, 5, 5).unwrap().center();
     wheel(&mut h, at, 60.0);
+    // Scrolled back to the grid's start, so that only the room before it can move it.
+    for _ in 0..4 {
+        let pull = egui::vec2(300.0, 0.0);
+        drag_by(&mut h, at, pull, egui::PointerButton::Middle);
+    }
     h.set_size(egui::vec2(1700.0, 800.0));
     crate::common::settle_windows(&mut h);
     let (shown, wanted) = (centre_of(&h), centre_of(&fresh));

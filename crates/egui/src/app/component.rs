@@ -1206,6 +1206,7 @@ impl<M: GameModel> App<M> {
                 offset: offset.unwrap_or(shown.state.offset),
                 pending: asked,
                 lead: placed.lead,
+                room_width: room.x,
             };
             ui.data_mut(|d| d.insert_temp(view_key, view));
             self.hover_outline(ui, &squares);

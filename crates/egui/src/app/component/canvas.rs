@@ -18,6 +18,8 @@ pub(super) struct View {
     pub offset: egui::Vec2,
     /// The room left before the first cell, which centres a grid narrower than the room.
     pub lead: egui::Vec2,
+    /// The width of the room that `lead` was made for.
+    pub room_width: f32,
     /// The offset a zoom asked for, which the scrolled area may have clamped to the content of the frame before.
     pub pending: Option<egui::Vec2>,
 }
@@ -55,7 +57,10 @@ pub(super) fn place(
         };
     }
     let tail = (room - egui::vec2(cell, cell)).max(egui::Vec2::ZERO);
-    let lead = view.map_or(centred, |v| v.lead);
+    // A lead kept from a room of another width is a blank margin, or none where one is wanted.
+    let lead = view
+        .filter(|v| (v.room_width - room.x).abs() < 0.5)
+        .map_or(centred, |v| v.lead);
     let Some(anchor) = anchor else {
         return Placement {
             lead,
