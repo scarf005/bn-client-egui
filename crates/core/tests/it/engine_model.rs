@@ -116,15 +116,15 @@ fn a_rejected_command_is_reported_in_the_engines_words() {
     let (t, h) = session();
     let mut m = connected(t.on("bn.command.submit", walk_reply()));
     m.invoke_action("RIGHT");
-    h.push(fixture("command_rejected"));
+    let mut refused = fixture("command_rejected");
+    refused["params"]["error"] = json!("not_ready");
+    refused["params"]["error_text"] = json!("The game is not ready.");
+    h.push(refused);
     m.poll();
-    assert_eq!(
-        m.messages().last().unwrap(),
-        "The screen changed, try again."
-    );
+    assert_eq!(m.messages().last().unwrap(), "The game is not ready.");
     let status = m.command().unwrap();
     assert_eq!(status.stage, "rejected");
-    assert_eq!(status.text, "Refused. The screen changed, try again.");
+    assert_eq!(status.text, "Refused. The game is not ready.");
 }
 
 #[test]
@@ -2680,10 +2680,7 @@ fn a_key_rejected_stale_on_a_screen_without_refresh_is_not_resent() {
     ));
     m.poll();
     assert_eq!(submits(&h).len(), 1);
-    assert_eq!(
-        m.messages().last().unwrap(),
-        "The screen changed, try again."
-    );
+    assert_eq!(m.messages(), Vec::<String>::new());
 }
 
 #[test]

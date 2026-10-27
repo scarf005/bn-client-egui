@@ -24,6 +24,7 @@ impl EngineModel {
         if self.command_id.as_deref() == Some(&n.command_id) {
             let reason = n.error.as_ref().map(error_kind);
             let swap = reason.as_deref() == Some("stale_epoch");
+            let stale = reason.as_deref().is_some_and(is_stale);
             let stage = match n.stage.as_str() {
                 "validated" => "accepted",
                 "completed" => "done",
@@ -36,7 +37,9 @@ impl EngineModel {
                 (Some(why), false) => format!("{} {why}", n.stage_text).trim().into(),
                 (None, false) => n.stage_text.clone(),
             };
-            if let Some(s) = &mut self.status {
+            if stale {
+                self.status = None;
+            } else if let Some(s) = &mut self.status {
                 s.set_stage(stage, text, n.is_terminal());
             }
         }
@@ -55,7 +58,9 @@ impl EngineModel {
             if n.stage != "completed" && !swap {
                 let reason = n.error.as_ref().map(error_kind);
                 // A kept resend is the latest command; an earlier queued one is only reported.
-                if !(latest && self.stale_resend(reason.as_deref())) {
+                let stale = reason.as_deref().is_some_and(is_stale);
+                let kept = latest && self.stale_resend(reason.as_deref());
+                if !(kept || stale) {
                     self.report_failure(n.error_text.as_deref().unwrap_or(&n.stage));
                 }
             }
@@ -165,10 +170,15 @@ impl EngineModel {
             Err(e) => {
                 let kind = e.data.as_ref().map_or(e.message.clone(), error_kind);
                 self.stale_resend(Some(&kind));
-                if let Some(s) = &mut self.status {
-                    s.set_stage("rejected", reason_of(&e), true);
+                // A screen change raced the command: nothing the player did wrong, so nothing to tell.
+                if is_stale(&kind) {
+                    self.status = None;
+                } else {
+                    if let Some(s) = &mut self.status {
+                        s.set_stage("rejected", reason_of(&e), true);
+                    }
+                    self.report_failure(&reason_of(&e));
                 }
-                self.report_failure(&reason_of(&e));
             }
         }
         self.busy = self.unanswered > 0 || !self.running.is_empty();
