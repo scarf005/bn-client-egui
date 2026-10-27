@@ -2686,6 +2686,27 @@ fn a_key_rejected_stale_on_a_screen_without_refresh_is_not_resent() {
     );
 }
 
+#[test]
+fn a_command_the_screen_change_made_stale_adds_no_message_and_no_refusal() {
+    // Refused when the engine answers the submit.
+    let (t, _) = session();
+    let mut m = connected(t.on("bn.command.submit", vec![stale_boundary()]));
+    m.invoke_action("RIGHT");
+    m.poll();
+    assert_eq!(m.messages(), Vec::<String>::new());
+    assert_ne!(m.command().map(|c| c.stage), Some("rejected".into()));
+    assert!(!m.busy());
+    // Refused by the command's own notice, as the engine does when the revision moved after the send.
+    let (t, h) = session();
+    let mut m = connected(t.on("bn.command.submit", walk_reply()));
+    m.invoke_action("RIGHT");
+    h.push(fixture("command_rejected"));
+    m.poll();
+    assert_eq!(m.messages(), Vec::<String>::new());
+    assert_ne!(m.command().map(|c| c.stage), Some("rejected".into()));
+    assert!(!m.busy());
+}
+
 fn heard(sequence: u32, text: &str, logged: Option<bool>) -> serde_json::Value {
     let mut data = serde_json::json!({"text": text, "volume": 52});
     if let Some(logged) = logged {
