@@ -318,3 +318,40 @@ fn a_grid_of_another_size_is_shown_fitted_anew() {
     let (fresh, _script) = open(editor_of(Some("trail"), 8));
     assert_eq!(first_square(&h).width(), first_square(&fresh).width());
 }
+
+#[test]
+fn a_space_typed_into_a_focused_text_box_is_kept_with_the_pointer_over_the_canvas() {
+    let (mut h, script) = open(screen());
+    h.get_by_role_and_label(egui::accesskit::Role::Button, "File")
+        .click();
+    h.run_steps(3);
+    h.get_by_label("Save as").click();
+    h.run_steps(4);
+    h.hover_at(square(&h, 5, 5).unwrap().center());
+    h.run_steps(4);
+    h.event(egui::Event::Text("a".into()));
+    h.run_steps(2);
+    h.event(egui::Event::Key {
+        key: egui::Key::Space,
+        physical_key: Some(egui::Key::Space),
+        pressed: true,
+        repeat: false,
+        modifiers: egui::Modifiers::NONE,
+    });
+    h.event(egui::Event::Text(" ".into()));
+    h.run_steps(2);
+    h.event(egui::Event::Text("b".into()));
+    h.run_steps(2);
+    h.key_press(egui::Key::Enter);
+    h.run_steps(4);
+    let typed = script
+        .sent()
+        .iter()
+        .find(|m| m["params"]["operation"]["affordance_id"] == "editor:save_as")
+        .map(|m| m["params"]["operation"]["args"]["text"].to_string());
+    assert!(
+        typed.is_some_and(|t| t.ends_with("a b\"")),
+        "{:?}",
+        script.sent()
+    );
+}
