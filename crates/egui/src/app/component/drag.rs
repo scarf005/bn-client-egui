@@ -8,6 +8,8 @@ pub(super) type Square = (u32, u32);
 #[derive(Clone, Copy, Default)]
 pub(super) struct Pointer {
     pub over: Option<Square>,
+    /// How far across and down `over` the pointer is, from 0 to 1; unknown counts as its middle.
+    pub spot: Option<(f32, f32)>,
     pub pressed: bool,
     pub down: bool,
     pub released: bool,

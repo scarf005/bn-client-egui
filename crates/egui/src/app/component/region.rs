@@ -134,13 +134,27 @@ mod tests {
             pressed,
             down: !released,
             released,
+            ..Pointer::default()
         }
     }
 
-    /// Presses on `from`, moves to `to`, and releases there.
+    /// Presses on the middle of `from`, moves to `to`, and releases there.
     fn drag(regions: &[GridRegion], from: Square, to: Square) -> Option<Moved> {
+        drag_at(regions, (from, (0.5, 0.5)), to)
+    }
+
+    /// Presses on `from` at `spot` (how far across and down the square), moves to `to`, and releases there.
+    fn drag_at(
+        regions: &[GridRegion],
+        (from, spot): (Square, (f32, f32)),
+        to: Square,
+    ) -> Option<Moved> {
         let mut held = None;
-        advance(regions, &mut held, frame(from, true, false));
+        let press = Pointer {
+            spot: Some(spot),
+            ..frame(from, true, false)
+        };
+        advance(regions, &mut held, press);
         advance(regions, &mut held, frame(to, false, false));
         advance(regions, &mut held, frame(to, false, true))
     }
@@ -160,7 +174,7 @@ mod tests {
     fn a_press_on_the_top_left_corner_moves_that_corner() {
         let regions = [region("a", (2, 2), (6, 5))];
         assert_eq!(
-            text(drag(&regions, (2, 2), (1, 4))).as_deref(),
+            text(drag_at(&regions, ((2, 2), (0.1, 0.1)), (1, 4))).as_deref(),
             Some("-1,2,0,0")
         );
     }
@@ -169,7 +183,7 @@ mod tests {
     fn a_press_on_the_bottom_right_corner_moves_that_corner() {
         let regions = [region("a", (2, 2), (6, 5))];
         assert_eq!(
-            text(drag(&regions, (6, 5), (8, 6))).as_deref(),
+            text(drag_at(&regions, ((6, 5), (0.9, 0.9)), (8, 6))).as_deref(),
             Some("0,0,2,1")
         );
     }
@@ -178,7 +192,7 @@ mod tests {
     fn a_press_on_the_top_right_corner_moves_the_top_and_the_right_edges() {
         let regions = [region("a", (2, 2), (6, 5))];
         assert_eq!(
-            text(drag(&regions, (6, 2), (7, 1))).as_deref(),
+            text(drag_at(&regions, ((6, 2), (0.9, 0.1)), (7, 1))).as_deref(),
             Some("0,-1,1,0")
         );
     }
@@ -187,7 +201,7 @@ mod tests {
     fn a_press_on_the_bottom_left_corner_moves_the_left_and_the_bottom_edges() {
         let regions = [region("a", (2, 2), (6, 5))];
         assert_eq!(
-            text(drag(&regions, (2, 5), (3, 7))).as_deref(),
+            text(drag_at(&regions, ((2, 5), (0.1, 0.9)), (3, 7))).as_deref(),
             Some("1,0,0,2")
         );
     }
@@ -214,7 +228,7 @@ mod tests {
     fn an_end_of_a_one_wide_region_stretches_it_along_its_length_only() {
         let regions = [region("a", (3, 1), (3, 4))];
         assert_eq!(
-            text(drag(&regions, (3, 4), (5, 6))).as_deref(),
+            text(drag_at(&regions, ((3, 4), (0.5, 0.9)), (5, 6))).as_deref(),
             Some("0,0,0,2")
         );
     }
@@ -223,11 +237,44 @@ mod tests {
     fn a_release_where_it_pressed_is_a_click_and_sends_nothing() {
         let regions = [region("a", (2, 2), (6, 5))];
         assert_eq!(drag(&regions, (4, 3), (4, 3)), None);
+        assert_eq!(drag_at(&regions, ((2, 2), (0.1, 0.1)), (2, 2)), None);
+    }
+
+    #[test]
+    fn a_press_on_the_inner_part_of_a_corner_square_moves_the_whole_region() {
+        let regions = [region("a", (2, 2), (6, 5))];
         assert_eq!(
-            drag(&regions, (2, 2), (4, 3)).map(|m| m.id),
-            Some("a".into())
+            text(drag(&regions, (2, 2), (4, 3))).as_deref(),
+            Some("2,1,2,1")
         );
-        assert_eq!(drag(&regions, (2, 2), (2, 2)), None);
+    }
+
+    #[test]
+    fn a_two_square_wide_region_moves_whole_from_any_of_its_squares() {
+        let regions = [region("a", (2, 2), (3, 3))];
+        for at in [(2, 2), (3, 2), (2, 3), (3, 3)] {
+            assert_eq!(
+                text(drag(&regions, at, (at.0 + 1, at.1))).as_deref(),
+                Some("1,0,1,0")
+            );
+        }
+        assert_eq!(
+            text(drag_at(&regions, ((3, 3), (0.9, 0.9)), (4, 5))).as_deref(),
+            Some("0,0,1,2")
+        );
+    }
+
+    #[test]
+    fn a_corner_stops_at_its_opposite_edge() {
+        let regions = [region("a", (2, 2), (6, 5))];
+        assert_eq!(
+            text(drag_at(&regions, ((6, 5), (0.9, 0.9)), (0, 0))).as_deref(),
+            Some("0,0,-4,-3")
+        );
+        assert_eq!(
+            text(drag_at(&regions, ((2, 2), (0.1, 0.1)), (9, 9))).as_deref(),
+            Some("4,3,0,0")
+        );
     }
 
     #[test]
@@ -269,7 +316,11 @@ mod tests {
     fn the_preview_follows_the_pointer_before_the_release() {
         let regions = [region("a", (2, 2), (6, 5))];
         let mut held = None;
-        advance(&regions, &mut held, frame((6, 5), true, false));
+        let press = Pointer {
+            spot: Some((0.9, 0.9)),
+            ..frame((6, 5), true, false)
+        };
+        advance(&regions, &mut held, press);
         advance(&regions, &mut held, frame((9, 7), false, false));
         assert_eq!(held.unwrap().preview(), [2, 2, 9, 7]);
     }

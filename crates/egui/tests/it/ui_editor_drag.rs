@@ -137,7 +137,11 @@ fn button(h: &mut H, at: egui::Pos2, pressed: bool) {
 
 /// Presses on `from`, moves through `via`, and releases on the last square.
 fn drag(h: &mut H, from: (u32, u32), via: &[(u32, u32)]) {
-    let at = square(h, from.0, from.1);
+    drag_from(h, square(h, from.0, from.1), via);
+}
+
+/// Presses at `at`, moves through the squares `via`, and releases on the last one.
+fn drag_from(h: &mut H, at: egui::Pos2, via: &[(u32, u32)]) {
     h.hover_at(at);
     h.run_steps(2);
     button(h, at, true);
@@ -454,13 +458,42 @@ fn a_drag_inside_a_region_sends_how_far_both_corners_moved() {
 }
 
 #[test]
-fn a_drag_from_a_corner_square_sends_only_that_corners_move() {
+fn a_drag_from_the_outer_part_of_a_corner_square_sends_only_that_corners_move() {
     let (mut h, script) = open(editor_with_regions(None));
-    drag(&mut h, (5, 4), &[(7, 6)]);
+    let quarter = first_square(&h).width() / 4.0;
+    let at = square(&h, 5, 4) + egui::vec2(quarter, quarter);
+    drag_from(&mut h, at, &[(7, 6)]);
     assert_eq!(
         spans(&script),
         [("placement:place_items:0".into(), "0,0,2,2".into())]
     );
+}
+
+#[test]
+fn a_drag_from_the_middle_of_a_corner_square_moves_the_whole_region() {
+    let (mut h, script) = open(editor_with_regions(None));
+    drag(&mut h, (5, 4), &[(7, 6)]);
+    assert_eq!(
+        spans(&script),
+        [("placement:place_items:0".into(), "2,2,2,2".into())]
+    );
+}
+
+#[test]
+fn a_drag_of_a_region_whose_move_is_off_sends_nothing_and_says_why() {
+    let mut screen = editor_with_regions(None);
+    let span = screen["affordances"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|a| a["id"] == "editor:placement_span")
+        .unwrap();
+    span["enabled"] = json!(false);
+    span["denial"] = json!("Nothing to move here.");
+    let (mut h, script) = open(screen);
+    drag(&mut h, (3, 3), &[(4, 3)]);
+    assert!(spans(&script).is_empty());
+    assert!(h.query_by_label_contains("Nothing to move here.").is_some());
 }
 
 #[test]

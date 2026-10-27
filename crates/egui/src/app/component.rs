@@ -1354,6 +1354,7 @@ impl<M: GameModel> App<M> {
                 pressed: i.pointer.button_pressed(egui::PointerButton::Primary),
                 down: i.pointer.primary_down(),
                 released: i.pointer.button_released(egui::PointerButton::Primary),
+                spot: None,
             }
         });
         let on_top = ui
@@ -1412,6 +1413,7 @@ impl<M: GameModel> App<M> {
                 pressed: i.pointer.button_pressed(egui::PointerButton::Primary),
                 down: i.pointer.primary_down(),
                 released: i.pointer.button_released(egui::PointerButton::Primary),
+                spot: None,
             }
         });
         let on_top = ui
