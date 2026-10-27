@@ -88,7 +88,7 @@ fn open_sized<'a>(screen: Value, size: egui::Vec2) -> (H<'a>, ScriptHandle) {
 }
 
 /// The rows of the paint invokes sent so far.
-fn painted(script: &ScriptHandle) -> Vec<String> {
+pub(crate) fn painted(script: &ScriptHandle) -> Vec<String> {
     script
         .sent()
         .into_iter()
