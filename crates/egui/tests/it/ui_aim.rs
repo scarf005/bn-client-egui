@@ -88,6 +88,49 @@ fn a_way_of_aiming_is_a_button_that_fires_with_it() {
     );
 }
 
+/// The painted texts equal to `text`: their right edge and colour.
+fn painted(h: &H, text: &str) -> Vec<(f32, egui::Color32)> {
+    let shapes = h.output().shapes.iter();
+    shapes
+        .filter_map(|clipped| match &clipped.shape {
+            egui::Shape::Text(t) if t.galley.text() == text => Some((
+                t.visual_bounding_rect().right(),
+                t.galley.job.sections[0].format.color,
+            )),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn the_chances_of_each_way_of_aiming_line_up_under_their_captions_in_body_text() {
+    let (mut h, script) = playing(egui::vec2(1280.0, 800.0), None);
+    let mut screen = aim_screen(&h, 0);
+    let stat = |key: &str, label: &str, value: &str| json!({"key": key, "label": label, "value": value, "unit": "%"});
+    screen["root"]["stats"] = json!([
+        {"key": "aim:FIRE", "label": "Current Aim", "value": "75", "unit": "Moves"},
+        stat("aim:FIRE:Good", "Good", "5"),
+        stat("aim:FIRE:Great", "Great", "2"),
+        {"key": "aim:AIMED_SHOT", "label": "Regular Aim", "value": "201", "unit": "Moves"},
+        stat("aim:AIMED_SHOT:Good", "Good", "40"),
+        stat("aim:AIMED_SHOT:Great", "Great", "13"),
+    ]);
+    publish(&script, 0, screen);
+    h.run_steps(6);
+    settle_windows(&mut h);
+    for (short, long) in [("5 %", "40 %"), ("2 %", "13 %")] {
+        let (short, long) = (painted(&h, short), painted(&h, long));
+        assert_eq!((short.len(), long.len()), (1, 1), "{short:?} {long:?}");
+        assert!((short[0].0 - long[0].0).abs() <= 1.0, "{short:?} {long:?}");
+        for (_, colour) in short.iter().chain(&long) {
+            assert_eq!(*colour, bn_client_egui::kit::tokens::TEXT);
+        }
+    }
+    for caption in ["Good", "Great"] {
+        assert_eq!(painted(&h, caption).len(), 1, "{caption} is a header, once");
+    }
+}
+
 #[test]
 fn a_creature_row_moves_the_cursor_to_it_and_the_rows_keep_their_places() {
     let (mut h, script) = playing(egui::vec2(1280.0, 800.0), None);
