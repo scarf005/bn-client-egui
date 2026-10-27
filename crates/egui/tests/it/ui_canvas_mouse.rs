@@ -1,6 +1,8 @@
 //! The editor canvas is mouse-first: the wheel zooms about the pointer, a middle drag or Space with the primary
 //! drag pans, the square under the pointer is outlined and named, and every click still lands on that square.
-use crate::ui_editor_drag::{H, editor, open, open_sized, painted, sent};
+use crate::ui_editor_drag::{
+    H, editor, editor_of, first_square, open, open_sized, painted, restack, sent,
+};
 use eframe::egui;
 use egui_kittest::kittest::{NodeT, Queryable};
 
@@ -227,4 +229,13 @@ fn a_zoomed_canvas_with_a_hovered_square_renders() {
             .save(std::path::Path::new(&dir).join("zoomed-hover.png"))
             .unwrap();
     }
+}
+
+#[test]
+fn a_grid_of_another_size_is_shown_fitted_anew() {
+    let (mut h, script, _) = zoomed();
+    restack(&script, 41, vec![editor_of(Some("trail"), 8)]);
+    h.run_steps(8);
+    let (fresh, _script) = open(editor_of(Some("trail"), 8));
+    assert_eq!(first_square(&h).width(), first_square(&fresh).width());
 }

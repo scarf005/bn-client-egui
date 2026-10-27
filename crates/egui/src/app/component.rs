@@ -1115,6 +1115,7 @@ impl<M: GameModel> App<M> {
                 area = area.scroll_offset(offset);
             }
             let shown = area.show(ui, |ui| {
+                canvas::note_clip(ui.ctx(), ui.clip_rect());
                 if let Some(pan) = pan.filter(|_| ui.rect_contains_pointer(ui.clip_rect())) {
                     ui.scroll_with_delta(pan);
                 }

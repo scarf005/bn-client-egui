@@ -43,3 +43,21 @@ pub(super) fn zoomed(
 pub(super) fn panning(ui: &egui::Ui) -> bool {
     ui.input(|i| i.key_down(egui::Key::Space))
 }
+
+/// The clips of the canvases drawn in this pass: their text scrolls on its own, so it is no line of the body.
+pub(super) fn clips(ctx: &egui::Context) -> Vec<egui::Rect> {
+    let pass = ctx.cumulative_pass_nr();
+    let key = egui::Id::new("canvas clips");
+    let (at, clips) = ctx
+        .data(|d| d.get_temp::<(u64, Vec<egui::Rect>)>(key))
+        .unwrap_or_default();
+    if at == pass { clips } else { vec![] }
+}
+
+/// Notes the clip of a canvas drawn in this pass.
+pub(super) fn note_clip(ctx: &egui::Context, clip: egui::Rect) {
+    let pass = ctx.cumulative_pass_nr();
+    let mut clips = clips(ctx);
+    clips.push(clip);
+    ctx.data_mut(|d| d.insert_temp(egui::Id::new("canvas clips"), (pass, clips)));
+}

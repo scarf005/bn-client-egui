@@ -17,7 +17,7 @@ pub(crate) fn editor(drag: Option<&str>) -> Value {
 }
 
 /// The editor with a `side`×`side` canvas that drags as `drag`.
-fn editor_of(drag: Option<&str>, side: u32) -> Value {
+pub(crate) fn editor_of(drag: Option<&str>, side: u32) -> Value {
     let path = concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../core/tests/fixtures/0.2.examples/editor.json"
@@ -274,7 +274,7 @@ fn a_press_on_a_neighbour_paints_nothing_on_the_entry_it_opens() {
     assert!(painted(&script).is_empty(), "{:?}", painted(&script));
 }
 
-fn first_square(h: &H) -> egui::Rect {
+pub(crate) fn first_square(h: &H) -> egui::Rect {
     h.get_all_by_label(".")
         .map(|n| n.rect())
         .min_by(|a, b| (a.min.y, a.min.x).partial_cmp(&(b.min.y, b.min.x)).unwrap())
@@ -295,12 +295,12 @@ fn the_wheel_with_ctrl_zooms_the_canvas_and_a_middle_drag_pans_it() {
         "{before:?} {zoomed:?}"
     );
 
-    // Zoomed past its room the canvas scrolls: a middle drag moves the squares with the pointer.
+    // Zoomed past its room the canvas scrolls: a middle drag moves the squares with the pointer, here to the right as the view is at its far edge.
     h.event(egui::Event::Zoom(2.0));
     h.run_steps(3);
     let big = first_square(&h);
     assert!(big.width() > 3.9 * before.width(), "{before:?} {big:?}");
-    let start = big.center() + egui::vec2(300.0, 0.0);
+    let start = before.center() + egui::vec2(100.0, 100.0);
     h.hover_at(start);
     h.run_steps(2);
     let middle = |pressed| egui::Event::PointerButton {
@@ -311,21 +311,18 @@ fn the_wheel_with_ctrl_zooms_the_canvas_and_a_middle_drag_pans_it() {
     };
     h.event(middle(true));
     h.run_steps(2);
-    h.hover_at(start - egui::vec2(120.0, 0.0));
+    h.hover_at(start + egui::vec2(120.0, 0.0));
     h.run_steps(3);
     h.event(middle(false));
     h.run_steps(2);
     let panned = first_square(&h);
     // The squares left of the view are not drawn: the first one shown is the next, a whole square further on.
     let moved = (panned.min.x - big.min.x).rem_euclid(big.width());
-    assert!(
-        (moved - (big.width() - 120.0).rem_euclid(big.width())).abs() < 1.5,
-        "{big:?} {panned:?}"
-    );
+    assert!((moved - 120.0).abs() < 1.5, "{big:?} {panned:?}");
 }
 
 /// Replaces the engine's screen stack, as the engine's next event.
-fn restack(script: &ScriptHandle, sequence: u64, stack: Vec<Value>) {
+pub(crate) fn restack(script: &ScriptHandle, sequence: u64, stack: Vec<Value>) {
     script.push(
         json!({"jsonrpc": "2.0", "method": "bn.events", "params": {"epoch": "e7f3", "events": [{
         "sequence": sequence.to_string(), "revision": (sequence - 9).to_string(),
