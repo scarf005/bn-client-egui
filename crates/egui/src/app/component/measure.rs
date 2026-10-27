@@ -356,3 +356,30 @@ impl<M: GameModel> App<M> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::word_width;
+    use eframe::egui;
+
+    #[test]
+    fn a_label_as_wide_as_its_longest_word_breaks_only_between_words() {
+        // A no-break space binds the mark to the name the way egui lays it out.
+        let text = "||\u{a0}Foodperson's cape";
+        let font = egui::FontId::proportional(15.0);
+        let mut rows = vec![];
+        let mut output = egui::Context::default().run_ui(Default::default(), |ui| {
+            let width = word_width(ui, text, &font);
+            let job = egui::text::LayoutJob::simple(
+                text.into(),
+                font.clone(),
+                egui::Color32::WHITE,
+                width,
+            );
+            let galley = ui.painter().layout_job(job);
+            rows = galley.rows.iter().map(|r| r.text()).collect::<Vec<_>>();
+        });
+        output.textures_delta.clear();
+        assert_eq!(rows, ["||\u{a0}Foodperson's ", "cape"]);
+    }
+}
