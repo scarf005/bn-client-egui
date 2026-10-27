@@ -653,9 +653,11 @@ impl Display {
             .is_some_and(|a| a.sheets.iter().flatten().any(|s| s.loading > 0))
     }
 
-    /// The size of the whole interface as a factor of its natural size.
+    /// The size of the whole interface as a factor of its natural size; 100 for one the settings file holds that is
+    /// none of `SCALES`.
     pub fn interface_scale(&self) -> u16 {
-        self.settings.interface_scale.unwrap_or(100)
+        let scale = self.settings.interface_scale.filter(|s| SCALES.contains(s));
+        scale.unwrap_or(100)
     }
 
     /// The side of a map square in points: a tile of the tileset, or the glyph square.
