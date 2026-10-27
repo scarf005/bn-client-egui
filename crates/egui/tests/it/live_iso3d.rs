@@ -388,3 +388,88 @@ fn the_town_in_3d_from_every_side_and_what_a_frame_costs() {
     let load = std::fs::read_to_string("/proc/loadavg").unwrap_or_default();
     println!("LIVE load {}", load.trim());
 }
+
+/// The map square the avatar stands on.
+fn avatar_square(h: &H) -> (i32, i32) {
+    let m = &h.state().model;
+    (m.origin().x + m.player().x, m.origin().y + m.player().y)
+}
+
+/// Presses the key the engine binds to `action`, and returns the squares the avatar moved from and to.
+fn press_step(h: &mut H, action: &str) -> ((i32, i32), (i32, i32)) {
+    let token = h
+        .state()
+        .model
+        .actions()
+        .into_iter()
+        .find(|a| a.id == action)
+        .and_then(|a| a.keys.first().cloned())
+        .expect("a key for the step");
+    let from = avatar_square(h);
+    h.event(egui::Event::Text(token));
+    h.run_steps(2);
+    run_until(h, "the step", 60, |h| !h.state().model.busy());
+    dismiss_popups(h);
+    h.run_steps(3);
+    (from, avatar_square(h))
+}
+
+#[test]
+#[ignore = "requires BN_ENGINE and a game root with the Ultica_iso tileset"]
+fn a_step_key_moves_the_avatar_the_way_it_points_on_the_screen_at_every_yaw() {
+    let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
+    let root =
+        game_root(engine.as_ref(), std::env::var_os("BN_ROOT").map(Into::into)).expect("game root");
+    let dir = std::env::temp_dir().join(format!("bn-iso3d-steps-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let settings = dir.join("settings.json");
+    std::fs::write(&settings, r#"{"tiles":true,"tileset":"Ultica_iso"}"#).unwrap();
+    let transport = crate::common::live::english_transport();
+    let app = App::new(EngineModel::new(Box::new(transport)))
+        .with_settings(settings)
+        .with_root(root)
+        .with_target_format(eframe::wgpu::TextureFormat::Rgba8Unorm);
+    let mut h = crate::common::shot_harness(egui::vec2(1280.0, 800.0), app);
+    choose(&mut h, "menu:tab", "new_game");
+    choose(&mut h, "menu:entry", "new_game:play_now");
+    run_until(&mut h, "the map", 900, |h| h.state().model.size().x > 0);
+    run_until(&mut h, "the settled game", 300, |h| {
+        h.state().model.menu().is_none() && !h.state().model.busy()
+    });
+    dismiss_popups(&mut h);
+    crate::common::live::safe_mode_off(&mut h);
+    dismiss_popups(&mut h);
+    // The camera starts at yaw 135 and turns 15 degrees a press: to 180, 270, 0 and 90.
+    for (yaw, turns) in [(180.0_f32, 3), (270.0, 6), (0.0, 6), (90.0, 6)] {
+        turn(&mut h, turns);
+        let camera = h.state().camera();
+        let at = camera.yaw.to_degrees().rem_euclid(360.0);
+        assert!(
+            (at - yaw).abs() < 0.5 || (at - yaw).abs() > 359.5,
+            "the camera is at {at}, not {yaw}"
+        );
+        // A blocked way is tried the other way round: the key for up, else the key for down.
+        let (up, down) = (("UP", 1.0), ("DOWN", -1.0));
+        let moved = [up, down].into_iter().find_map(|(key, side)| {
+            let (from, to) = press_step(&mut h, key);
+            (from != to).then_some((from, to, side))
+        });
+        let (from, to, side) = moved.unwrap_or_else(|| panic!("yaw {yaw}: no way open"));
+        let view = bn_client_egui::iso::camera::Viewport {
+            camera,
+            target: glam::Vec3::new(from.0 as f32 + 0.5, from.1 as f32 + 0.5, 0.0),
+            scale: 1.0,
+            size: glam::Vec2::new(200.0, 200.0),
+        };
+        let at = |square: (i32, i32)| {
+            let world = glam::Vec3::new(square.0 as f32 + 0.5, square.1 as f32 + 0.5, 0.0);
+            view.project(world).expect("in view")
+        };
+        let (start, end) = (at(from), at(to));
+        let (dx, dy) = (end.x - start.x, (end.y - start.y) * side);
+        assert!(
+            dy < 0.0 && dx.abs() < dy.abs(),
+            "yaw {yaw}: {from:?} -> {to:?} is ({dx}, {dy}) on the screen"
+        );
+    }
+}
