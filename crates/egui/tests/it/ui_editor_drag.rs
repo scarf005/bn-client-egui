@@ -379,12 +379,7 @@ fn a_click_on_the_middle_row_of_a_24_square_canvas_paints_it_in_a_laptop_window(
 /// The rows of the symbols picked by double clicks on the legend row of `#`, at its label or at its value.
 fn picked_by_double_click_on(label: bool) -> Vec<String> {
     let (mut h, script) = open(editor(Some("span")));
-    let value = h
-        .get_all_by_label("\"t_wall\"")
-        .next()
-        .unwrap()
-        .rect()
-        .center();
+    let value = h.get_all_by_label("t_wall").next().unwrap().rect().center();
     let symbol = h
         .get_all_by_label("#")
         .map(|n| n.rect().center())

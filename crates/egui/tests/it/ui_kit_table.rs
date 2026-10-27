@@ -346,7 +346,7 @@ fn bar_gap(h: &H, id: &str) -> f32 {
 /// `prototypes` with a label of one long word among its rows.
 fn with_long_word(mut screen: Value) -> Value {
     let list = list_mut(&mut screen["root"], "vehicle:prototypes").unwrap();
-    list["rows"][3]["label"] = json!("Supercalifragilisticexpialidocious");
+    list["rows"][0]["label"] = json!("Supercalifragilisticexpialidocious");
     screen
 }
 
@@ -357,7 +357,8 @@ fn a_list_too_narrow_for_its_columns_wraps_its_label_and_keeps_the_last_column_c
             "vehicle editor with a prototype open on a mount",
         ));
         let h = open(screen, egui::vec2(width, 830.0));
-        let gap = bar_gap(&h, "bicycle_plastic_airliner");
+        // The ids in view, whole or shortened.
+        let gap = bar_gap(&h, "bicycle_");
         assert!(
             gap >= 0.0,
             "at {width} the ID column ends {gap} before the scroll bar, under it if negative"
