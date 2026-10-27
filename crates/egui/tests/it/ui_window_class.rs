@@ -25,7 +25,7 @@ const HEIGHT_SIZES: [egui::Vec2; 4] = [
 /// The space a window keeps from the edge of the map region.
 const MARGIN: f32 = 8.0;
 
-fn example(file: &str, name: &str) -> Value {
+pub(crate) fn example(file: &str, name: &str) -> Value {
     let path = format!(
         "{}/../core/tests/fixtures/0.2.examples/{file}.json",
         env!("CARGO_MANIFEST_DIR")

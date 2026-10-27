@@ -288,3 +288,71 @@ fn every_navigation_key_of_every_client_window_stays_with_the_window() {
         );
     }
 }
+
+/// The engine's yes or no popup opened over the map, as an event.
+fn open_a_popup(h: &mut H, script: &ScriptHandle) {
+    script.push(fixture("events_41_walk"));
+    h.run_steps(4);
+    let map = fixture("subscribe_result")["result"]["interaction"]["stack"][0].clone();
+    let popup = crate::ui_window_class::example("generic", "query popup screen");
+    script.push(json!({"jsonrpc": "2.0", "method": "bn.events", "params": {"epoch": "e7f3", "events": [{
+        "sequence": "42", "revision": "33", "type": "interaction.changed", "changes": {"interaction": {
+        "boundary_id": "b:60",
+        "readiness": {"phase": "playing", "game_ready": true, "accepts_interaction_commands": true,
+            "accepts_registered_actions": true},
+        "actions": [], "interaction": null, "stack": [map, popup]}}}]}}));
+    h.run_steps(6);
+}
+
+/// A press on the title bar of the window titled `title`.
+fn click_window(h: &mut H, title: &str) {
+    let window = h
+        .get_by_role_and_label(egui::accesskit::Role::Window, title)
+        .rect();
+    let at = window.left_top() + egui::vec2(40.0, 12.0);
+    h.event(egui::Event::PointerMoved(at));
+    h.event(egui::Event::PointerButton {
+        pos: at,
+        button: egui::PointerButton::Primary,
+        pressed: true,
+        modifiers: egui::Modifiers::NONE,
+    });
+    h.run_steps(3);
+}
+
+#[test]
+fn down_in_the_clicked_inventory_window_moves_its_cursor_while_an_engine_screen_is_open() {
+    let (mut h, script) = game();
+    let mut answered = 0;
+    key(&mut h, "i");
+    serve_with(&mut h, &script, &mut answered, &two_items);
+    open_a_popup(&mut h, &script);
+    click_window(&mut h, "Inventory");
+    let sent = operations(&script).len();
+    press(&mut h, egui::Key::ArrowDown);
+    press(&mut h, egui::Key::ArrowDown);
+    serve_with(&mut h, &script, &mut answered, &two_items);
+    assert_eq!(
+        panel_reads(&script).pop().unwrap()["params"]["row"],
+        "item:3",
+        "the second Down is on the second item"
+    );
+    assert_eq!(operations(&script).len(), sent, "no key reached the screen");
+}
+
+#[test]
+fn an_engine_screen_that_opens_takes_the_keys_from_a_client_window() {
+    let (mut h, script) = game();
+    let mut answered = 0;
+    key(&mut h, "i");
+    serve_with(&mut h, &script, &mut answered, &two_items);
+    open_a_popup(&mut h, &script);
+    press(&mut h, egui::Key::ArrowDown);
+    serve_with(&mut h, &script, &mut answered, &two_items);
+    assert!(
+        panel_reads(&script)
+            .iter()
+            .all(|r| r["params"]["row"].is_null()),
+        "the inventory window did not move its cursor"
+    );
+}
