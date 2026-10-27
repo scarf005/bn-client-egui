@@ -342,3 +342,43 @@ fn the_inventory_shows_only_whole_rows_at_rest_however_far_it_is_scrolled() {
     }
     assert!(cut.is_empty(), "{cut:#?}");
 }
+
+#[test]
+fn heard_sounds_under_a_full_log_show_whole_in_the_log_panel() {
+    let mut cut = vec![];
+    for size in SIZES {
+        let map = fixture("subscribe_result")["result"]["interaction"]["stack"][0].clone();
+        let (app, script) = crate::common::staged(json!([map]));
+        let mut h = crate::common::themed_harness(size, app);
+        h.run_steps(3);
+        script.push(classic());
+        for n in 0..30 {
+            script.push(logged(42 + n, &format!("You hear something {n}.")));
+        }
+        for (n, sound) in ["footsteps", "a door slamming", "gargling grunting"]
+            .iter()
+            .enumerate()
+        {
+            script.push(json!({"jsonrpc": "2.0", "method": "bn.events", "params": {"epoch": "e7f3",
+                "events": [{"sequence": (72 + n).to_string(), "revision": "32", "type": "sound.heard",
+                "data": {"text": sound, "volume": 52, "logged": false}}]}}));
+        }
+        h.run_steps(6);
+        crate::common::settle_windows(&mut h);
+        let (sound, log) = (rect(&h, "footsteps"), rect(&h, "Log"));
+        if !log.contains_rect(sound) {
+            cut.push(format!(
+                "{size:?}: the sound {sound:?} is out of the log {log:?}"
+            ));
+        }
+        let sidebar = egui::Rect::from_x_y_ranges(
+            rect(&h, "Health").x_range(),
+            h.ctx.content_rect().y_range(),
+        );
+        let lines = cut_text(&h.output().shapes, sidebar);
+        if !lines.is_empty() {
+            cut.push(format!("{size:?}: {lines:?}"));
+        }
+    }
+    assert!(cut.is_empty(), "{cut:#?}");
+}
