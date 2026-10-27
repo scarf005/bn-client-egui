@@ -212,3 +212,19 @@ fn hovering_a_square_shows_its_label_near_the_pointer() {
     assert!(shown.len() > drawn, "the label shows in a tooltip");
     assert!(shown.iter().any(|n| n.rect().min.distance(at) < 120.0));
 }
+
+#[test]
+fn a_zoomed_canvas_with_a_hovered_square_renders() {
+    let (mut h, _script) = open_sized(screen(), egui::vec2(1920.0, 1080.0));
+    let at = square(&h, 5, 5).unwrap().center();
+    wheel(&mut h, at, 120.0);
+    h.hover_at(at);
+    h.run_steps(12);
+    let image = h.render().expect("renders");
+    if let Some(dir) = std::env::var_os("SHOT_DIR") {
+        std::fs::create_dir_all(&dir).unwrap();
+        image
+            .save(std::path::Path::new(&dir).join("zoomed-hover.png"))
+            .unwrap();
+    }
+}
