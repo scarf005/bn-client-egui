@@ -191,14 +191,15 @@ fn shots() {
     }
 }
 
-/// A frame of `labels` at `width`, the second of them half out of the clip rectangle and the third wholly out.
+/// A frame of `labels` at `width`, the letters of the second of them half out of the clip rectangle and the third
+/// wholly out.
 fn clipped<'a>(width: f32, labels: [&'static str; 3]) -> Harness<'a> {
     Harness::builder()
         .with_size(egui::vec2(400.0, 200.0))
         .build_ui(move |ui| {
             ui.set_max_width(width);
             let top = ui.max_rect().top();
-            ui.set_clip_rect(egui::Rect::from_x_y_ranges(0.0..=400.0, top..=top + 30.0));
+            ui.set_clip_rect(egui::Rect::from_x_y_ranges(0.0..=400.0, top..=top + 25.0));
             for label in labels {
                 ui.label(label);
             }
@@ -270,3 +271,4 @@ fn a_word_broken_over_two_lines_is_a_fault_and_a_break_between_words_is_not() {
     assert!(!broken_words(&word.output().shapes).is_empty());
     assert!(broken_words(&words.output().shapes).is_empty());
 }
+

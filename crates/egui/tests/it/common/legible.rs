@@ -46,15 +46,22 @@ fn texts(shapes: &[epaint::ClippedShape]) -> Vec<(egui::Rect, &epaint::TextShape
     out
 }
 
-/// Lines of text in `area` painted partly outside their clip rectangle: shown in part, so neither read nor known
-/// to be hidden. A line wholly outside its clip, or only touching its edge, is scrolled out of view and not counted.
+/// Lines of text in `area` whose letters are painted partly outside their clip rectangle: shown in part, so
+/// neither read nor known to be hidden. A line wholly outside its clip, or only touching its edge, is scrolled out
+/// of view and not counted; the room a line leaves above and below its letters may lie outside.
 pub fn cut_text(shapes: &[epaint::ClippedShape], area: egui::Rect) -> Vec<String> {
     texts(shapes)
         .into_iter()
         .filter(|(clip, _)| clip.intersects(area))
         .flat_map(|(clip, text)| {
             text.galley.rows.iter().filter_map(move |row| {
-                let at = row.rect().translate(text.pos.to_vec2());
+                let ink = (row.row.glyphs.iter())
+                    .filter(|g| g.uv_rect.size.x > 0.0 && g.uv_rect.size.y > 0.0)
+                    .map(|g| egui::Rect::from_min_size(g.pos + g.uv_rect.offset, g.uv_rect.size))
+                    .reduce(|a, b| a.union(b))?;
+                // A glyph's box has room around its letter, which may reach past the line.
+                let ink = ink.translate(row.pos.to_vec2()).intersect(row.rect());
+                let at = ink.translate(text.pos.to_vec2());
                 (clip.intersect(at).is_positive() && !clip.expand(1.0).contains_rect(at))
                     .then(|| format!("{:?} at {at:?} in {clip:?}", row.text()))
             })
