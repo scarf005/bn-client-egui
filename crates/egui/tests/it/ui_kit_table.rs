@@ -365,6 +365,22 @@ fn a_list_too_narrow_for_its_columns_wraps_its_label_and_keeps_the_last_column_c
     }
 }
 
+#[test]
+fn a_value_column_cut_at_the_rooms_edge_shows_its_values_whole_or_shortened_never_cut() {
+    for width in [700.0, 880.0] {
+        let screen = prototypes("vehicle editor with a prototype open on a mount");
+        let h = open(screen, egui::vec2(width, 830.0));
+        let cut = crate::common::legible::cut_text(
+            &h.output().shapes,
+            egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(width, 830.0)),
+        )
+        .into_iter()
+        .filter(|line| line.contains("airliner"))
+        .collect::<Vec<_>>();
+        assert!(cut.is_empty(), "at {width}: {cut:#?}");
+    }
+}
+
 /// The plain values of the rows of the list `id` in `screen`.
 fn row_values(screen: &Value, id: &str) -> Vec<String> {
     fn find<'a>(c: &'a Value, id: &str) -> Option<&'a Value> {
