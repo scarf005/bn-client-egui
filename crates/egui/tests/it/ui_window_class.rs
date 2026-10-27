@@ -40,9 +40,9 @@ fn example(file: &str, name: &str) -> Value {
         .clone()
 }
 
-/// A game in progress in a window of `size`, in the client's theme and fonts, with `screen` pushed onto the map,
-/// the client's settings kept in `settings`.
-fn playing<'a>(
+/// A game in progress in a window of `size`, in the client's theme and fonts, with `screen` pushed onto the map
+/// but not yet drawn, the client's settings kept in `settings`.
+fn pushed<'a>(
     size: egui::Vec2,
     screen: Value,
     settings: Option<&std::path::Path>,
@@ -68,6 +68,16 @@ fn playing<'a>(
         "readiness": {"phase": "playing", "game_ready": true, "accepts_interaction_commands": true,
             "accepts_registered_actions": true},
         "actions": [], "interaction": null, "stack": [map, screen]}}}]}}));
+    (h, script)
+}
+
+/// `pushed`, with the screen drawn and its window settled.
+fn playing<'a>(
+    size: egui::Vec2,
+    screen: Value,
+    settings: Option<&std::path::Path>,
+) -> (H<'a>, ScriptHandle) {
+    let (mut h, script) = pushed(size, screen, settings);
     h.run_steps(6);
     crate::common::settle_windows(&mut h);
     (h, script)
@@ -553,5 +563,100 @@ fn a_remembered_height_the_player_left_readable_is_kept() {
         );
         h.run_steps(8);
         assert_eq!(window_of(&h, "uilist").height(), height, "{size:?}");
+    }
+}
+
+/// The painted lines of text in the last frame.
+fn painted_text(h: &H) -> Vec<String> {
+    fn walk(shape: &egui::Shape, out: &mut Vec<String>) {
+        match shape {
+            egui::Shape::Text(t) => out.push(t.galley.text().to_string()),
+            egui::Shape::Vec(shapes) => shapes.iter().for_each(|s| walk(s, out)),
+            _ => {}
+        }
+    }
+    let mut out = vec![];
+    h.output()
+        .shapes
+        .iter()
+        .for_each(|c| walk(&c.shape, &mut out));
+    out
+}
+
+/// The bottom of the lowest widget inside `window`: what the player reads or presses, not the window's own
+/// frame, title bar or resize handles.
+fn lowest_widget(h: &H, window: egui::Rect) -> f32 {
+    use egui::accesskit::Role;
+    h.root()
+        .children_recursive()
+        .filter(|n| {
+            !matches!(
+                n.accesskit_node().role(),
+                Role::Window
+                    | Role::Splitter
+                    | Role::TitleBar
+                    | Role::Group
+                    | Role::GenericContainer
+            )
+        })
+        .map(|n| n.rect())
+        .filter(|r| window.contains_rect(*r) && r.height() > 0.0)
+        .map(|r| r.bottom())
+        .fold(window.top(), f32::max)
+}
+
+#[test]
+fn a_dialog_opens_as_tall_as_its_content() {
+    let dialogs = [
+        ("generic", "query popup screen", "popup"),
+        ("tutorial", "wait menu screen", "uilist"),
+        (
+            "terminal",
+            "terminal output with an answer row at a security query",
+            "",
+        ),
+    ];
+    let margin = egui::Frame::window(&egui::Style::default())
+        .total_margin()
+        .bottom;
+    let mut loose = vec![];
+    for size in SIZES {
+        for (file, name, kind) in dialogs {
+            let (h, _) = playing(size, example(file, name), None);
+            let window = match kind {
+                "" => h.get_by_role(egui::accesskit::Role::Window).rect(),
+                _ => window_of(&h, kind),
+            };
+            let spare = window.bottom() - lowest_widget(&h, window);
+            if spare > margin + 2.0 {
+                loose.push(format!(
+                    "{kind:?} at {size:?}: {spare} pt empty under the content in {window:?}"
+                ));
+            }
+        }
+    }
+    assert!(loose.is_empty(), "{loose:#?}");
+}
+
+#[test]
+fn a_dialog_is_first_painted_at_the_size_it_keeps() {
+    for size in SIZES {
+        let (mut h, _) = pushed(size, example("generic", "query popup screen"), None);
+        let id = egui::Id::new(("dialog", "screen:popup"));
+        let mut painted = vec![];
+        for frame in 0..12 {
+            h.step();
+            let shown = painted_text(&h)
+                .iter()
+                .any(|t| t.contains("Confirm Choice"));
+            if let (true, Some(rect)) = (shown, h.ctx.memory(|m| m.area_rect(id))) {
+                painted.push((frame, rect));
+            }
+        }
+        assert!(!painted.is_empty(), "{size:?}: the dialog is never painted");
+        assert!(
+            painted.iter().all(|(_, r)| *r == painted[0].1),
+            "{size:?}: the dialog is painted at {painted:?}"
+        );
     }
 }
