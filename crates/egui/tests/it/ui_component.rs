@@ -1103,7 +1103,7 @@ fn an_auto_pickup_row_runs_the_edit_with_the_rule_serial_as_its_row() {
 fn an_auto_pickup_tab_runs_the_tab_affordance_by_its_token() {
     let screen = example("autopickup.json", "auto pickup manager with two rules");
     let (mut h, script) = harness(screen);
-    h.get_by_label("[<Character>]").click();
+    h.get_by_label("Character").click();
     h.run_steps(3);
     assert_eq!(
         submits(&script),
