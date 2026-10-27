@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: bn-client\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-28 01:02+0900\n"
+"POT-Creation-Date: 2026-10-28 03:01+0900\n"
 "PO-Revision-Date: 2026-10-18 09:30+0900\n"
 "Language-Team: Japanese\n"
 "Language: ja\n"
@@ -144,29 +144,29 @@ msgstr "%s: %s (%d/%d)"
 msgid "Loading image"
 msgstr "読み込み画像"
 
-#: crates/egui/src/app.rs:513
+#: crates/egui/src/app.rs:515
 msgid "Resize sidebar"
 msgstr "サイドバーのサイズ変更"
 
-#: crates/egui/src/app.rs:552 crates/egui/src/app.rs:564
+#: crates/egui/src/app.rs:554 crates/egui/src/app.rs:566
 msgid "Client settings"
 msgstr "クライアント設定"
 
-#: crates/egui/src/app.rs:561 crates/egui/src/app/palette.rs:59
+#: crates/egui/src/app.rs:563 crates/egui/src/app/palette.rs:59
 #: crates/egui/src/app/palette.rs:105 crates/tui/src/lib.rs:881
 #: crates/tui/src/lib.rs:1050
 msgid "Actions"
 msgstr "行動"
 
-#: crates/egui/src/app.rs:579 crates/tui/src/lib.rs:666
+#: crates/egui/src/app.rs:581 crates/tui/src/lib.rs:666
 msgid "Ready"
 msgstr "待機中"
 
-#: crates/egui/src/app.rs:618
+#: crates/egui/src/app.rs:620
 msgid "Interrupt"
 msgstr "中断"
 
-#: crates/egui/src/app/component/form.rs:170 crates/egui/src/editor.rs:137
+#: crates/egui/src/app/component/form.rs:170 crates/egui/src/editor.rs:163
 msgid "Press the new key"
 msgstr "新しいキーを押してください"
 
@@ -174,12 +174,12 @@ msgstr "新しいキーを押してください"
 msgid "OK"
 msgstr "OK"
 
-#: crates/egui/src/app/component/list.rs:275 crates/egui/src/app/palette.rs:65
+#: crates/egui/src/app/component/list.rs:283 crates/egui/src/app/palette.rs:65
 msgid "Search"
 msgstr "検索"
 
 #: crates/egui/src/app/component/overmap.rs:378
-#: crates/egui/src/app/component/overmap.rs:554 crates/egui/src/app/map.rs:444
+#: crates/egui/src/app/component/overmap.rs:553 crates/egui/src/app/map.rs:443
 #: crates/tui/src/lib.rs:753
 msgid "Map"
 msgstr "地図"
@@ -197,23 +197,27 @@ msgstr "移動とメモ"
 msgid "Level %d"
 msgstr "階層 %d"
 
-#: crates/egui/src/app/component/workspace.rs:117
+#: crates/egui/src/app/component/workspace.rs:135
 msgid "Resize workspace column"
 msgstr "作業領域の列のサイズ変更"
 
-#: crates/egui/src/app/map.rs:349 crates/tui/src/lib.rs:763
+#: crates/egui/src/app/component/workspace.rs:142
+msgid "Resize workspace log"
+msgstr "作業領域のログのサイズ変更"
+
+#: crates/egui/src/app/map.rs:348 crates/tui/src/lib.rs:763
 msgid "No map loaded"
 msgstr "地図が読み込まれていません"
 
-#: crates/egui/src/app/map.rs:549
+#: crates/egui/src/app/map.rs:548
 msgid "Player at (%d, %d). Cursor (%d, %d)."
 msgstr "プレイヤー (%d, %d)。カーソル (%d, %d)。"
 
-#: crates/egui/src/app/map.rs:552
+#: crates/egui/src/app/map.rs:551
 msgid "Player at (%d, %d). Cursor (%d, %d): %s."
 msgstr "プレイヤー (%d, %d)。カーソル (%d, %d): %s。"
 
-#: crates/egui/src/app/map.rs:852
+#: crates/egui/src/app/map.rs:851
 msgid "Map actions"
 msgstr "地図の行動"
 

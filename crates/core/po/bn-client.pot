@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: bn-client\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-28 01:02+0900\n"
+"POT-Creation-Date: 2026-10-28 03:01+0900\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -147,29 +147,29 @@ msgstr ""
 msgid "Loading image"
 msgstr ""
 
-#: crates/egui/src/app.rs:513
+#: crates/egui/src/app.rs:515
 msgid "Resize sidebar"
 msgstr ""
 
-#: crates/egui/src/app.rs:552 crates/egui/src/app.rs:564
+#: crates/egui/src/app.rs:554 crates/egui/src/app.rs:566
 msgid "Client settings"
 msgstr ""
 
-#: crates/egui/src/app.rs:561 crates/egui/src/app/palette.rs:59
+#: crates/egui/src/app.rs:563 crates/egui/src/app/palette.rs:59
 #: crates/egui/src/app/palette.rs:105 crates/tui/src/lib.rs:881
 #: crates/tui/src/lib.rs:1050
 msgid "Actions"
 msgstr ""
 
-#: crates/egui/src/app.rs:579 crates/tui/src/lib.rs:666
+#: crates/egui/src/app.rs:581 crates/tui/src/lib.rs:666
 msgid "Ready"
 msgstr ""
 
-#: crates/egui/src/app.rs:618
+#: crates/egui/src/app.rs:620
 msgid "Interrupt"
 msgstr ""
 
-#: crates/egui/src/app/component/form.rs:170 crates/egui/src/editor.rs:137
+#: crates/egui/src/app/component/form.rs:170 crates/egui/src/editor.rs:163
 msgid "Press the new key"
 msgstr ""
 
@@ -177,12 +177,12 @@ msgstr ""
 msgid "OK"
 msgstr ""
 
-#: crates/egui/src/app/component/list.rs:275 crates/egui/src/app/palette.rs:65
+#: crates/egui/src/app/component/list.rs:283 crates/egui/src/app/palette.rs:65
 msgid "Search"
 msgstr ""
 
 #: crates/egui/src/app/component/overmap.rs:378
-#: crates/egui/src/app/component/overmap.rs:554 crates/egui/src/app/map.rs:444
+#: crates/egui/src/app/component/overmap.rs:553 crates/egui/src/app/map.rs:443
 #: crates/tui/src/lib.rs:753
 msgid "Map"
 msgstr ""
@@ -200,23 +200,27 @@ msgstr ""
 msgid "Level %d"
 msgstr ""
 
-#: crates/egui/src/app/component/workspace.rs:117
+#: crates/egui/src/app/component/workspace.rs:135
 msgid "Resize workspace column"
 msgstr ""
 
-#: crates/egui/src/app/map.rs:349 crates/tui/src/lib.rs:763
+#: crates/egui/src/app/component/workspace.rs:142
+msgid "Resize workspace log"
+msgstr ""
+
+#: crates/egui/src/app/map.rs:348 crates/tui/src/lib.rs:763
 msgid "No map loaded"
 msgstr ""
 
-#: crates/egui/src/app/map.rs:549
+#: crates/egui/src/app/map.rs:548
 msgid "Player at (%d, %d). Cursor (%d, %d)."
 msgstr ""
 
-#: crates/egui/src/app/map.rs:552
+#: crates/egui/src/app/map.rs:551
 msgid "Player at (%d, %d). Cursor (%d, %d): %s."
 msgstr ""
 
-#: crates/egui/src/app/map.rs:852
+#: crates/egui/src/app/map.rs:851
 msgid "Map actions"
 msgstr ""
 

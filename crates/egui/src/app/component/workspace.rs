@@ -8,7 +8,7 @@ use bn_client_core::localise::tr;
 /// The width the tools' column and the right column first have, which the player can change.
 const TOOLS_WIDTH: f32 = 180.0;
 const SIDE_WIDTH: f32 = 300.0;
-/// The most the log's strip is tall before it scrolls.
+/// The height the log's strip first has, which the player can change.
 const LOG_HEIGHT: f32 = 160.0;
 
 /// The parts of `root` in `slot`; a part with none is the inspector.
@@ -104,9 +104,10 @@ impl<M: GameModel> App<M> {
     ) {
         let id = |name: &str| egui::Id::new((name, &screen.screen_id));
         // The columns' ids are strings, which `label_resize_handle` names the drag handles by.
-        let (tools_id, side_id) = (
+        let (tools_id, side_id, log_id) = (
             format!("workspace-tools {}", screen.screen_id),
             format!("workspace-side {}", screen.screen_id),
+            format!("workspace-log {}", screen.screen_id),
         );
         egui::Panel::bottom(id("status"))
             .resizable(false)
@@ -135,15 +136,10 @@ impl<M: GameModel> App<M> {
         }
         let log = parts(root, Slot::Log);
         if !log.is_empty() {
-            egui::Panel::bottom(id("log"))
-                .resizable(false)
-                .show(ui, |ui| {
-                    egui::ScrollArea::vertical()
-                        .id_salt(id("log scroll"))
-                        .max_height(LOG_HEIGHT)
-                        .auto_shrink([false, true])
-                        .show(ui, |ui| self.stack(ui, screen, &log, out));
-                });
+            egui::Panel::bottom(egui::Id::new(&log_id))
+                .default_size(LOG_HEIGHT)
+                .show(ui, |ui| self.column(ui, screen, &log, out));
+            crate::app::label_resize_handle(ui.ctx(), &log_id, &tr("Resize workspace log"));
         }
         egui::CentralPanel::no_frame().show(ui, |ui| {
             parts(root, Slot::Canvas)

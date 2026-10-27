@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: bn-client\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-28 01:02+0900\n"
+"POT-Creation-Date: 2026-10-28 03:01+0900\n"
 "PO-Revision-Date: 2026-10-18 09:30+0900\n"
 "Language-Team: Korean\n"
 "Language: ko\n"
@@ -144,29 +144,29 @@ msgstr "%s: %s (%d/%d)"
 msgid "Loading image"
 msgstr "불러오기 그림"
 
-#: crates/egui/src/app.rs:513
+#: crates/egui/src/app.rs:515
 msgid "Resize sidebar"
 msgstr "사이드바 크기 조절"
 
-#: crates/egui/src/app.rs:552 crates/egui/src/app.rs:564
+#: crates/egui/src/app.rs:554 crates/egui/src/app.rs:566
 msgid "Client settings"
 msgstr "클라이언트 설정"
 
-#: crates/egui/src/app.rs:561 crates/egui/src/app/palette.rs:59
+#: crates/egui/src/app.rs:563 crates/egui/src/app/palette.rs:59
 #: crates/egui/src/app/palette.rs:105 crates/tui/src/lib.rs:881
 #: crates/tui/src/lib.rs:1050
 msgid "Actions"
 msgstr "행동"
 
-#: crates/egui/src/app.rs:579 crates/tui/src/lib.rs:666
+#: crates/egui/src/app.rs:581 crates/tui/src/lib.rs:666
 msgid "Ready"
 msgstr "준비"
 
-#: crates/egui/src/app.rs:618
+#: crates/egui/src/app.rs:620
 msgid "Interrupt"
 msgstr "중단"
 
-#: crates/egui/src/app/component/form.rs:170 crates/egui/src/editor.rs:137
+#: crates/egui/src/app/component/form.rs:170 crates/egui/src/editor.rs:163
 msgid "Press the new key"
 msgstr "새 키를 누르세요"
 
@@ -174,12 +174,12 @@ msgstr "새 키를 누르세요"
 msgid "OK"
 msgstr "확인"
 
-#: crates/egui/src/app/component/list.rs:275 crates/egui/src/app/palette.rs:65
+#: crates/egui/src/app/component/list.rs:283 crates/egui/src/app/palette.rs:65
 msgid "Search"
 msgstr "검색"
 
 #: crates/egui/src/app/component/overmap.rs:378
-#: crates/egui/src/app/component/overmap.rs:554 crates/egui/src/app/map.rs:444
+#: crates/egui/src/app/component/overmap.rs:553 crates/egui/src/app/map.rs:443
 #: crates/tui/src/lib.rs:753
 msgid "Map"
 msgstr "지도"
@@ -197,23 +197,27 @@ msgstr "이동과 메모"
 msgid "Level %d"
 msgstr "계층 %d"
 
-#: crates/egui/src/app/component/workspace.rs:117
+#: crates/egui/src/app/component/workspace.rs:135
 msgid "Resize workspace column"
 msgstr "작업 영역 열 크기 조절"
 
-#: crates/egui/src/app/map.rs:349 crates/tui/src/lib.rs:763
+#: crates/egui/src/app/component/workspace.rs:142
+msgid "Resize workspace log"
+msgstr "작업 영역 기록 크기 조절"
+
+#: crates/egui/src/app/map.rs:348 crates/tui/src/lib.rs:763
 msgid "No map loaded"
 msgstr "불러온 지도가 없습니다"
 
-#: crates/egui/src/app/map.rs:549
+#: crates/egui/src/app/map.rs:548
 msgid "Player at (%d, %d). Cursor (%d, %d)."
 msgstr "플레이어 (%d, %d). 커서 (%d, %d)."
 
-#: crates/egui/src/app/map.rs:552
+#: crates/egui/src/app/map.rs:551
 msgid "Player at (%d, %d). Cursor (%d, %d): %s."
 msgstr "플레이어 (%d, %d). 커서 (%d, %d): %s."
 
-#: crates/egui/src/app/map.rs:852
+#: crates/egui/src/app/map.rs:851
 msgid "Map actions"
 msgstr "지도 행동"
 
