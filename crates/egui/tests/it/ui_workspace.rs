@@ -184,6 +184,35 @@ fn no_text_of_the_workspace_is_cut() {
     }
 }
 
+/// `workspace()` with `edit` applied to its root's parts.
+fn shown_with<'a>(size: egui::Vec2, edit: impl FnOnce(&mut Vec<Value>)) -> H<'a> {
+    let mut screen = workspace();
+    edit(screen["root"]["children"].as_array_mut().unwrap());
+    let (app, _) = crate::common::staged(crate::common::over_map(screen));
+    let mut h = crate::common::themed_harness(size, app);
+    h.run_steps(7);
+    crate::common::settle_windows(&mut h);
+    h
+}
+
+#[test]
+fn a_status_panel_is_one_line_of_its_facts() {
+    for size in SIZES {
+        let h = shown_with(size, |parts| {
+            parts[5] = json!({"id": "ws:status", "kind": "panel", "slot": "status", "title": "room.json",
+                "stats": [{"key": "saved", "label": "Saved", "value": "Yes"},
+                    {"key": "symbol", "label": "Symbol", "value": "#"},
+                    {"key": "brush", "label": "Brush", "value": "2"}]});
+        });
+        let line = ["room.json", "Saved", "Yes", "Symbol", "Brush", "2"].map(|l| rect(&h, l));
+        assert!(
+            line.iter()
+                .all(|r| (r.center().y - line[0].center().y).abs() < 2.0),
+            "{size:?}: {line:?}"
+        );
+    }
+}
+
 /// Writes PNGs of the workspace to `$SHOT_DIR`; needs a Vulkan adapter, so it only runs when asked:
 /// `cargo test --test it ui_workspace::shots -- --ignored`.
 #[test]
