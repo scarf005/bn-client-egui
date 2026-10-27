@@ -250,3 +250,37 @@ fn the_sidebar_follows_the_clamp_when_the_window_shrinks() {
     let map = h.get_by_label("Map").rect();
     assert!(map.width() >= 900.0 * 0.55, "{map:?}");
 }
+
+#[test]
+fn the_interface_scale_enlarges_every_text_and_is_kept_after_a_restart() {
+    let path = std::env::temp_dir().join(format!("bn-scale-{}/settings.json", std::process::id()));
+    let _ = std::fs::remove_file(&path);
+    let start = |path: &std::path::Path| {
+        let (t, _) = session();
+        Harness::builder()
+            .with_size(egui::vec2(1280.0, 800.0))
+            .build_ui_state(
+                |ui, app: &mut App<EngineModel>| app.show(ui),
+                App::new(EngineModel::new(Box::new(t))).with_settings(path.to_path_buf()),
+            )
+    };
+    // A body label's height as it is painted, in pixels.
+    let painted = |h: &H| h.get_by_label("Ground").rect().height() * h.ctx.pixels_per_point();
+    let mut h = start(&path);
+    h.run_steps(5);
+    let (height, ppp) = (painted(&h), h.ctx.pixels_per_point());
+    crate::common::open_client_settings(&mut h);
+    h.get_by_label("100 %").click();
+    h.run_steps(3);
+    h.get_by_label("150 %").click();
+    h.run_steps(5);
+    assert!((h.ctx.pixels_per_point() - 1.5 * ppp).abs() < 1e-3);
+    assert!(
+        (painted(&h) - 1.5 * height).abs() < 1.0,
+        "{height} -> {}",
+        painted(&h)
+    );
+    let mut again = start(&path);
+    again.run_steps(5);
+    assert!((again.ctx.pixels_per_point() - 1.5 * ppp).abs() < 1e-3);
+}
