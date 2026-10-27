@@ -220,11 +220,13 @@ pub(super) fn keeps_off_cursor(screen: &Screen) -> bool {
 struct Painted(Vec<(f32, f32)>);
 
 /// The lines of text painted in `layer` since its shape number `from`, in view, as (top, bottom) from `top`.
+/// Text a scroll area of its own clips, such as a canvas's, is no line of the body: it scrolls on its own.
 fn painted_lines(
     ctx: &egui::Context,
     layer: egui::LayerId,
     from: usize,
     top: f32,
+    canvases: &[egui::Rect],
 ) -> Vec<(f32, f32)> {
     fn walk(clip: egui::Rect, shape: &egui::Shape, top: f32, out: &mut Vec<(f32, f32)>) {
         match shape {
@@ -243,7 +245,8 @@ fn painted_lines(
         let shapes = g
             .get(layer)
             .into_iter()
-            .flat_map(|l| l.all_entries().skip(from));
+            .flat_map(|l| l.all_entries().skip(from))
+            .filter(|s| !canvases.contains(&s.clip_rect));
         shapes.for_each(|s| walk(s.clip_rect, &s.shape, top, &mut out));
     });
     out
@@ -269,7 +272,7 @@ pub(super) fn body_scroll(
         // The lines in view are as painted now; those past the viewport stay as they were last seen.
         let past = ui.clip_rect().top() - top + height;
         let kept = seen.0.iter().filter(|(line, _)| *line >= past - 0.5);
-        let lines = painted_lines(&ctx, layer, from, top)
+        let lines = painted_lines(&ctx, layer, from, top, &canvas::clips(&ctx))
             .into_iter()
             .chain(kept.copied())
             .collect::<Vec<_>>();

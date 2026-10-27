@@ -49,6 +49,7 @@ mod ui;
 mod ui_a11y;
 mod ui_affordance_once;
 mod ui_aim;
+mod ui_canvas_mouse;
 mod ui_character;
 mod ui_component;
 mod ui_editmap;

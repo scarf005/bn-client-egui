@@ -92,7 +92,8 @@ fn the_catalog_under_a_full_canvas_scrolls_into_the_window() {
             .any(|r| room.contains_rect(r))
     };
     // The canvas scrolls inside its pane, so the catalog may be in view already; scrolling the window keeps it so.
-    let over = egui::pos2(room.center().x, room.bottom() - 60.0);
+    // The wheel over the canvas zooms it, so the window scrolls under the pointer above it.
+    let over = egui::pos2(room.left() + 40.0, room.top() + 80.0);
     for _ in 0..40 {
         h.hover_at(over);
         h.event(egui::Event::MouseWheel {
@@ -116,7 +117,8 @@ fn the_legend_under_a_full_canvas_shows_most_of_a_dozen_symbols_at_once() {
             .collect();
         legend["total"] = json!(12);
         let mut h = open(screen, size);
-        let over = egui::pos2(size.x * 0.45, 150.0);
+        // Above the canvas, which the window scrolls under: the wheel over it zooms it.
+        let over = egui::pos2(40.0, 90.0);
         // Scrolling the window a notch at a time, the most symbols in view at once.
         let mut drawn = 0;
         for _ in 0..60 {
