@@ -72,3 +72,38 @@ fn an_affordance_key_runs_the_affordance() {
     type_text(&mut h, "Z");
     assert_eq!(sent(&script), ["editor:rotate"]);
 }
+
+/// The editor whose canvas also drags regions as `editor:placement_span`.
+fn with_region_drag() -> Value {
+    let mut screen = editor(Some("trail"));
+    let mut stack = vec![&mut screen];
+    while let Some(v) = stack.pop() {
+        match v {
+            Value::Object(m) => {
+                if m.get("id") == Some(&json!("editor:canvas")) {
+                    m.insert("region_drag".into(), json!("editor:placement_span"));
+                }
+                stack.extend(m.values_mut());
+            }
+            Value::Array(a) => stack.extend(a.iter_mut()),
+            _ => {}
+        }
+    }
+    screen["affordances"].as_array_mut().unwrap().push(json!({
+        "id": "editor:placement_span", "label": "Move placement", "enabled": true,
+        "keys": [], "expect": "screen"
+    }));
+    screen
+}
+
+#[test]
+fn an_affordance_only_a_drag_runs_has_no_button() {
+    let (mut h, _) = open(with_region_drag());
+    h.get_by_label("⋯").click();
+    h.run_steps(4);
+    // The overflow menu lists the affordances no drag runs.
+    assert!(h.query_by_label_contains("Redo").is_some());
+    for label in ["Begin stroke", "End stroke", "Move placement"] {
+        assert!(h.query_by_label_contains(label).is_none(), "{label}");
+    }
+}

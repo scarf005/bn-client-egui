@@ -210,11 +210,17 @@ fn claimed(root: &Component) -> HashSet<&str> {
         .into_iter()
         .flat_map(|c| {
             let extra = match c {
-                Component::Tabs(t) => t.select.as_deref(),
-                Component::Form(f) => f.submit.as_deref(),
+                Component::Tabs(t) => vec![t.select.as_deref()],
+                Component::Form(f) => vec![f.submit.as_deref()],
+                // A grid's drags run these, so no button does.
+                Component::Grid(g) => vec![
+                    g.drag_begin.as_deref(),
+                    g.drag_end.as_deref(),
+                    g.region_drag.as_deref(),
+                ],
                 // Its rows run it on a double click or Enter, so it is no button.
-                Component::List(l) => l.activate.as_deref(),
-                _ => None,
+                Component::List(l) => vec![l.activate.as_deref()],
+                _ => vec![],
             };
             // A row that does what an affordance does offers it, so it is no button either.
             let rows = match c {
@@ -229,7 +235,7 @@ fn claimed(root: &Component) -> HashSet<&str> {
                 .affordances
                 .iter()
                 .map(String::as_str)
-                .chain(extra)
+                .chain(extra.into_iter().flatten())
                 .chain(rows)
         })
         .collect()
@@ -243,6 +249,17 @@ const FILTER: &str = "FILTER";
 fn searched(screen: &Screen, list: &List, a: &Affordance) -> bool {
     list.search(screen)
         .is_some_and(|search| search.id == a.id || a.id == FILTER)
+}
+
+/// Whether a drag over one of the screen's grids runs the affordance, so no button does.
+fn gesture(screen: &Screen, affordance: &Affordance) -> bool {
+    let id = Some(affordance.id.as_str());
+    screen.components().into_iter().any(|c| match c {
+        Component::Grid(g) => [&g.drag_begin, &g.drag_end, &g.region_drag]
+            .into_iter()
+            .any(|gesture| gesture.as_deref() == id),
+        _ => false,
+    })
 }
 
 /// Whether a component's own widgets run the affordance, so it needs no button; a click on the map moves
