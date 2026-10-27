@@ -34,6 +34,12 @@ fn key(h: &mut H, text: &str) {
 #[test]
 #[ignore = "needs BN_ENGINE"]
 fn the_player_walks_with_the_map_window_open() {
+    for size in [egui::vec2(1280.0, 800.0), egui::vec2(1920.0, 1080.0)] {
+        walk_with_the_map_open(size);
+    }
+}
+
+fn walk_with_the_map_open(size: egui::Vec2) {
     let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
     let root = game_root(engine.as_ref(), None).expect("game root");
     let dir = std::env::temp_dir().join(format!("bn-world-map-{}", std::process::id()));
@@ -44,7 +50,7 @@ fn the_player_walks_with_the_map_window_open() {
     let app = App::new(EngineModel::new(Box::new(transport)))
         .with_settings(settings)
         .with_root(root);
-    let mut h = crate::common::shot_harness(egui::vec2(1280.0, 800.0), app);
+    let mut h = crate::common::shot_harness(size, app);
     choose(&mut h, "menu:tab", "new_game");
     choose(&mut h, "menu:entry", "new_game:play_now");
     run_until(&mut h, "the map", 600, |h| h.state().model.size().x > 0);
@@ -68,12 +74,12 @@ fn the_player_walks_with_the_map_window_open() {
     // The window names the level of the squares it shows: the avatar's, until a level key moves it.
     let level = h.state().model.watched_overmap().unwrap().origin.z;
     h.get_by_label(&format!("Level {level}"));
-    save(&mut h, "map-open.png");
+    save(&mut h, &format!("map-open-{}.png", size.x));
     key(&mut h, "<");
     run_until(&mut h, "the level above", 60, |h| {
         h.query_by_label(&format!("Level {}", level + 1)).is_some()
     });
-    save(&mut h, "map-level-up.png");
+    save(&mut h, &format!("map-level-up-{}.png", size.x));
     key(&mut h, ">");
     run_until(&mut h, "the avatar's level", 60, |h| {
         h.query_by_label(&format!("Level {level}")).is_some()
@@ -93,5 +99,5 @@ fn the_player_walks_with_the_map_window_open() {
     assert_ne!(square(&h), before, "the player moved with the map open");
     h.run_steps(5);
     h.get_by_label("Travel and notes");
-    save(&mut h, "map-walked.png");
+    save(&mut h, &format!("map-walked-{}.png", size.x));
 }
