@@ -1194,6 +1194,15 @@ impl<M: GameModel> App<M> {
                             egui::Button::new(shown).min_size(size).selected(marked),
                         );
                         queue(ui, button.rect);
+                        // An empty square to draw on shows as an outlined one, not a gap in the grid.
+                        if glyph.trim().is_empty() && sprite.is_none() {
+                            ui.painter().rect_stroke(
+                                button.rect,
+                                0.0,
+                                egui::Stroke::new(1.0, tokens::HOVER),
+                                egui::StrokeKind::Inside,
+                            );
+                        }
                         if let (true, Some(id), Some(a)) =
                             (cell.enabled, &cell.id, &cell.affordance)
                         {
@@ -1212,7 +1221,9 @@ impl<M: GameModel> App<M> {
                             (Some(why), _) if !cell.enabled => {
                                 button.on_disabled_hover_text(why.shown())
                             }
-                            (_, Some(_)) => button.on_hover_text(markup::plain(&name)),
+                            (_, Some(label)) if !label.shown().is_empty() => {
+                                button.on_hover_text(markup::plain(&name))
+                            }
                             _ => button,
                         };
                         // A pointer click on a draggable canvas is the drag's press and release.

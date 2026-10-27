@@ -1567,3 +1567,102 @@ fn the_map_editor_shows_an_overmap_special_by_level_and_a_click_on_a_square_open
     let path = field(&h, "editor:file", "path");
     assert!(path.ends_with("house01.json"), "{path}");
 }
+
+/// The grid cells of the canvas on top as (x, y, id, label, glyph).
+fn canvas_grid(h: &H) -> (u32, u32, Vec<(u32, u32, String, String, String)>) {
+    let top = h.state().model.screens().last().unwrap();
+    let Some(bn_client_egui::protocol::Component::Grid(grid)) =
+        top.root.as_ref().unwrap().find("editor:canvas")
+    else {
+        panic!("no canvas");
+    };
+    let cells = grid
+        .cells
+        .iter()
+        .map(|c| {
+            (
+                c.x,
+                c.y,
+                c.id.clone().unwrap_or_default(),
+                c.label.as_ref().map(|l| l.shown()).unwrap_or_default(),
+                c.glyph.clone().unwrap_or_default(),
+            )
+        })
+        .collect();
+    (grid.cols, grid.rows, cells)
+}
+
+/// Where the canvas square (`x`, `y`) is drawn, from the square of the cell `anchor` (its grid x, y and label).
+fn square_from(h: &H, anchor: (u32, u32, &str), x: u32, y: u32) -> egui::Rect {
+    let at = find(h, anchor.2).unwrap_or_else(|| panic!("no anchor {}: {:?}", anchor.2, labels(h)));
+    at.translate(egui::vec2(
+        (x as f32 - anchor.0 as f32) * at.width(),
+        (y as f32 - anchor.1 as f32) * at.height(),
+    ))
+}
+
+/// The ids of the tabs of the bar that has the tab `of`, and the label of the selected one.
+fn tabs_of(h: &H, of: &str) -> (Vec<String>, Option<String>) {
+    let tabs = h
+        .root()
+        .children_recursive()
+        .filter(|n| n.accesskit_node().role() == egui::accesskit::Role::Tab)
+        .map(|n| {
+            (
+                n.accesskit_node().label().unwrap_or_default().to_string(),
+                n.accesskit_node().is_selected() == Some(true),
+            )
+        })
+        .collect::<Vec<_>>();
+    assert!(tabs.iter().any(|t| t.0 == of), "no tab {of}: {tabs:?}");
+    let selected = tabs.iter().find(|t| t.1).map(|t| t.0.clone());
+    (tabs.into_iter().map(|t| t.0).collect(), selected)
+}
+
+/// A mod file with one overmap special: a house and a field. Point draws a forest from the catalog on a square of
+/// the room around the special and on one beside it with a drag, one undo takes the drag back, erase removes a
+/// square, and the saved file holds the result.
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn the_map_editor_draws_and_erases_the_squares_of_an_overmap_special_and_saves_them() {
+    let sizes = [(1920.0, 1080.0)];
+    let dir = std::env::temp_dir().join(format!("bn-walk-{}", std::process::id()));
+    let profile = std::env::temp_dir().join(format!("bn-live-{}-0", std::process::id()));
+    let moddir = profile.join("mods").join("walk_draw");
+    std::fs::create_dir_all(&moddir).unwrap();
+    std::fs::create_dir_all(&dir).unwrap();
+    let entries = serde_json::json!([{
+        "type": "overmap_special", "id": "walk_draw", "subtype": "fixed",
+        "locations": ["land"], "city_distance": [0, 20], "city_sizes": [1, 20], "occurrences": [0, 1],
+        "overmaps": [
+            { "point": [0, 0, 0], "overmap": "house_01_north" },
+            { "point": [1, 0, 0], "overmap": "field" }
+        ]
+    }]);
+    let file = moddir.join("draw.json");
+    std::fs::write(&file, entries.to_string()).unwrap();
+    let path = file.to_string_lossy().to_string();
+    let recent = serde_json::json!([{ "editor": "map", "name": path, "mods": ["bn"] }]);
+    let (mut h, _root) = start_with(&dir, &[("editor_recent.json", recent.to_string())]);
+    h.set_size(egui::vec2(1920.0, 1080.0));
+    rest(&mut h);
+    click(&mut h, "Editor");
+    rest(&mut h);
+    click(&mut h, &path);
+    rest(&mut h);
+    key(&mut h, egui::Key::Escape);
+    click(&mut h, "Yes");
+    wait_kind(&mut h, "editor");
+    rest(&mut h);
+    shot_at(&mut h, "sd-1-opened", &sizes);
+    dump(&h, "opened");
+    println!("grid {:?}", canvas_grid(&h));
+    assert_eq!(tabs_of(&h, "Open mapgen").1.as_deref(), Some("Open mapgen"));
+    type_text(&mut h, "b");
+    rest(&mut h);
+    assert_eq!(tabs_of(&h, "Pencil").1.as_deref(), Some("Pencil"));
+    shot_at(&mut h, "sd-2-point", &sizes);
+    dump(&h, "point");
+    println!("grid {:?}", canvas_grid(&h));
+    panic!("probe");
+}
