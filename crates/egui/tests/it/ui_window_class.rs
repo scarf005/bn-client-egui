@@ -703,3 +703,43 @@ fn the_map_settings_and_action_windows_first_open_in_the_map_region() {
     }
     assert!(outside.is_empty(), "{outside:#?}");
 }
+
+/// The engine's stack becomes `stack`, at event `sequence`.
+fn stacked(sequence: u32, stack: Vec<Value>) -> Value {
+    json!({"jsonrpc": "2.0", "method": "bn.events", "params": {"epoch": "e7f3", "events": [{
+        "sequence": sequence.to_string(), "revision": (sequence - 9).to_string(), "type": "interaction.changed",
+        "changes": {"interaction": {"boundary_id": "b:60",
+        "readiness": {"phase": "playing", "game_ready": true, "accepts_interaction_commands": true,
+            "accepts_registered_actions": true},
+        "actions": [], "interaction": null, "stack": stack}}}]}})
+}
+
+#[test]
+fn a_dialog_opened_again_with_more_rows_opens_as_tall_as_its_new_content() {
+    let full = example("tutorial", "wait menu screen");
+    let mut short = full.clone();
+    short["root"]["children"][1]["rows"]
+        .as_array_mut()
+        .unwrap()
+        .truncate(2);
+    let mut again = full.clone();
+    again["screen_id"] = json!("screen:9");
+    let map = fixture("subscribe_result")["result"]["interaction"]["stack"][0].clone();
+    let mut grown = vec![];
+    for size in SIZES {
+        let fresh = window_of(&playing(size, full.clone(), None).0, "uilist").height();
+        let (mut h, script) = playing(size, short.clone(), None);
+        script.push(stacked(43, vec![map.clone()]));
+        h.run_steps(6);
+        script.push(stacked(44, vec![map.clone(), again.clone()]));
+        h.run_steps(6);
+        crate::common::settle_windows(&mut h);
+        let height = window_of(&h, "uilist").height();
+        if (height - fresh).abs() > 1.0 {
+            grown.push(format!(
+                "{size:?}: {height} opened again, {fresh} opened fresh"
+            ));
+        }
+    }
+    assert!(grown.is_empty(), "{grown:#?}");
+}
