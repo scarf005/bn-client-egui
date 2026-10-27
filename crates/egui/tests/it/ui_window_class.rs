@@ -25,7 +25,7 @@ const HEIGHT_SIZES: [egui::Vec2; 4] = [
 /// The space a window keeps from the edge of the map region.
 const MARGIN: f32 = 8.0;
 
-fn example(file: &str, name: &str) -> Value {
+pub(crate) fn example(file: &str, name: &str) -> Value {
     let path = format!(
         "{}/../core/tests/fixtures/0.2.examples/{file}.json",
         env!("CARGO_MANIFEST_DIR")
@@ -40,9 +40,9 @@ fn example(file: &str, name: &str) -> Value {
         .clone()
 }
 
-/// A game in progress in a window of `size`, in the client's theme and fonts, with `screen` pushed onto the map,
-/// the client's settings kept in `settings`.
-fn playing<'a>(
+/// A game in progress in a window of `size`, in the client's theme and fonts, with `screen` pushed onto the map
+/// but not yet drawn, the client's settings kept in `settings`.
+fn pushed<'a>(
     size: egui::Vec2,
     screen: Value,
     settings: Option<&std::path::Path>,
@@ -68,6 +68,16 @@ fn playing<'a>(
         "readiness": {"phase": "playing", "game_ready": true, "accepts_interaction_commands": true,
             "accepts_registered_actions": true},
         "actions": [], "interaction": null, "stack": [map, screen]}}}]}}));
+    (h, script)
+}
+
+/// `pushed`, with the screen drawn and its window settled.
+fn playing<'a>(
+    size: egui::Vec2,
+    screen: Value,
+    settings: Option<&std::path::Path>,
+) -> (H<'a>, ScriptHandle) {
+    let (mut h, script) = pushed(size, screen, settings);
     h.run_steps(6);
     crate::common::settle_windows(&mut h);
     (h, script)
@@ -554,4 +564,142 @@ fn a_remembered_height_the_player_left_readable_is_kept() {
         h.run_steps(8);
         assert_eq!(window_of(&h, "uilist").height(), height, "{size:?}");
     }
+}
+
+/// The painted lines of text in the last frame.
+fn painted_text(h: &H) -> Vec<String> {
+    fn walk(shape: &egui::Shape, out: &mut Vec<String>) {
+        match shape {
+            egui::Shape::Text(t) => out.push(t.galley.text().to_string()),
+            egui::Shape::Vec(shapes) => shapes.iter().for_each(|s| walk(s, out)),
+            _ => {}
+        }
+    }
+    let mut out = vec![];
+    h.output()
+        .shapes
+        .iter()
+        .for_each(|c| walk(&c.shape, &mut out));
+    out
+}
+
+/// The bottom of the lowest widget inside `window`: what the player reads or presses, not the window's own
+/// frame, title bar or resize handles.
+fn lowest_widget(h: &H, window: egui::Rect) -> f32 {
+    use egui::accesskit::Role;
+    h.root()
+        .children_recursive()
+        .filter(|n| {
+            !matches!(
+                n.accesskit_node().role(),
+                Role::Window
+                    | Role::Splitter
+                    | Role::TitleBar
+                    | Role::Group
+                    | Role::GenericContainer
+            )
+        })
+        .map(|n| n.rect())
+        .filter(|r| window.contains_rect(*r) && r.height() > 0.0)
+        .map(|r| r.bottom())
+        .fold(window.top(), f32::max)
+}
+
+#[test]
+fn a_dialog_opens_as_tall_as_its_content() {
+    let dialogs = [
+        ("generic", "query popup screen", "popup"),
+        ("tutorial", "wait menu screen", "uilist"),
+        (
+            "terminal",
+            "terminal output with an answer row at a security query",
+            "",
+        ),
+    ];
+    let mut loose = vec![];
+    for size in SIZES {
+        for (file, name, kind) in dialogs {
+            let (h, _) = playing(size, example(file, name), None);
+            let margin = egui::Frame::window(&h.ctx.global_style())
+                .total_margin()
+                .bottom;
+            let window = match kind {
+                "" => h.get_by_role(egui::accesskit::Role::Window).rect(),
+                _ => window_of(&h, kind),
+            };
+            let spare = window.bottom() - lowest_widget(&h, window);
+            // Under the last widget lie the gap a row leaves after itself and the window's margin.
+            let gap = h.ctx.global_style().spacing.item_spacing.y;
+            if spare > margin + gap + 1.0 {
+                loose.push(format!(
+                    "{kind:?} at {size:?}: {spare} pt empty under the content in {window:?}"
+                ));
+            }
+        }
+    }
+    assert!(loose.is_empty(), "{loose:#?}");
+}
+
+#[test]
+fn a_dialog_is_first_painted_at_the_size_it_keeps() {
+    let dialogs = [
+        ("generic", "query popup screen", "popup", "Save and quit?"),
+        (
+            "tutorial",
+            "wait menu screen",
+            "uilist",
+            "Wait for how long?",
+        ),
+    ];
+    for size in SIZES {
+        for (file, name, kind, prompt) in dialogs {
+            let (mut h, _) = pushed(size, example(file, name), None);
+            let id = egui::Id::new(("dialog", format!("screen:{kind}")));
+            let mut painted = vec![];
+            for frame in 0..12 {
+                h.step();
+                let shown = painted_text(&h).iter().any(|t| t.contains(prompt));
+                if let (true, Some(rect)) = (shown, h.ctx.memory(|m| m.area_rect(id))) {
+                    painted.push((frame, rect));
+                }
+            }
+            assert!(!painted.is_empty(), "{kind} at {size:?}: never painted");
+            assert!(
+                painted.iter().all(|(_, r)| *r == painted[0].1),
+                "{kind} at {size:?}: painted at {painted:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn the_map_settings_and_action_windows_first_open_in_the_map_region() {
+    let mut outside = vec![];
+    for size in SIZES {
+        for opened in ["Map", "Client settings", "Actions"] {
+            let (mut h, _) = crate::ui_key_focus::game_in(size, 0);
+            match opened {
+                "Map" => crate::ui_panels::key(&mut h, "m"),
+                _ => h.get_by_label(opened).click(),
+            }
+            h.run_steps(6);
+            crate::common::settle_windows(&mut h);
+            // The action palette is a dialog to a screen reader, the others windows.
+            let window = h
+                .get_all_by_label(opened)
+                .find(|n| {
+                    matches!(
+                        n.accesskit_node().role(),
+                        egui::accesskit::Role::Window | egui::accesskit::Role::Dialog
+                    )
+                })
+                .unwrap_or_else(|| panic!("{size:?}: no window {opened}"))
+                .rect();
+            let room = region(&h);
+            if !room.expand(1.0).contains_rect(window) {
+                outside.push(format!("{size:?}: {opened} at {window:?} outside {room:?}"));
+            }
+        }
+    }
+    assert!(outside.is_empty(), "{outside:#?}");
 }

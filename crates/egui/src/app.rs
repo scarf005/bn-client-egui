@@ -147,6 +147,8 @@ pub struct App<M: GameModel> {
     key_window: Option<input::KeyWindow>,
     /// The client's own windows that were open last frame, to tell a window just opened.
     known_windows: Vec<input::KeyWindow>,
+    /// An engine screen was shown last frame, to tell one that just opened.
+    screen_shown: bool,
     /// The message log's height once the user has dragged its edge.
     log_height: Option<f32>,
     /// Title of the menu that last took focus, so a menu is entered once, not on every frame.
@@ -225,6 +227,7 @@ impl<M: GameModel> App<M> {
             panels: Default::default(),
             key_window: None,
             known_windows: Vec::new(),
+            screen_shown: false,
             log_height: None,
             menu_title: None,
             focus_menu: false,
@@ -536,6 +539,9 @@ impl<M: GameModel> App<M> {
         }
         let spec = WindowSpec {
             closable: true,
+            place: Some(self.map_room(ctx)),
+            movable: true,
+            width: Some(420.0),
             ..self.window_spec(
                 ctx,
                 Some(&input::KeyWindow::Settings.kind()),

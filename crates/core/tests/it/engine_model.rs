@@ -116,15 +116,15 @@ fn a_rejected_command_is_reported_in_the_engines_words() {
     let (t, h) = session();
     let mut m = connected(t.on("bn.command.submit", walk_reply()));
     m.invoke_action("RIGHT");
-    h.push(fixture("command_rejected"));
+    let mut refused = fixture("command_rejected");
+    refused["params"]["error"] = json!("not_ready");
+    refused["params"]["error_text"] = json!("The game is not ready.");
+    h.push(refused);
     m.poll();
-    assert_eq!(
-        m.messages().last().unwrap(),
-        "The screen changed, try again."
-    );
+    assert_eq!(m.messages().last().unwrap(), "The game is not ready.");
     let status = m.command().unwrap();
     assert_eq!(status.stage, "rejected");
-    assert_eq!(status.text, "Refused. The screen changed, try again.");
+    assert_eq!(status.text, "Refused. The game is not ready.");
 }
 
 #[test]
@@ -2680,10 +2680,28 @@ fn a_key_rejected_stale_on_a_screen_without_refresh_is_not_resent() {
     ));
     m.poll();
     assert_eq!(submits(&h).len(), 1);
-    assert_eq!(
-        m.messages().last().unwrap(),
-        "The screen changed, try again."
-    );
+    assert_eq!(m.messages(), Vec::<String>::new());
+}
+
+#[test]
+fn a_command_the_screen_change_made_stale_adds_no_message_and_no_refusal() {
+    // Refused when the engine answers the submit.
+    let (t, _) = session();
+    let mut m = connected(t.on("bn.command.submit", vec![stale_boundary()]));
+    m.invoke_action("RIGHT");
+    m.poll();
+    assert_eq!(m.messages(), Vec::<String>::new());
+    assert_ne!(m.command().map(|c| c.stage), Some("rejected".into()));
+    assert!(!m.busy());
+    // Refused by the command's own notice, as the engine does when the revision moved after the send.
+    let (t, h) = session();
+    let mut m = connected(t.on("bn.command.submit", walk_reply()));
+    m.invoke_action("RIGHT");
+    h.push(fixture("command_rejected"));
+    m.poll();
+    assert_eq!(m.messages(), Vec::<String>::new());
+    assert_ne!(m.command().map(|c| c.stage), Some("rejected".into()));
+    assert!(!m.busy());
 }
 
 fn heard(sequence: u32, text: &str, logged: Option<bool>) -> serde_json::Value {

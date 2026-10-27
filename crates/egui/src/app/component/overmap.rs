@@ -373,6 +373,8 @@ impl<M: GameModel> App<M> {
         let kind = Some(kind.as_str());
         let spec = WindowSpec {
             closable: true,
+            place: Some(self.map_room(ctx)),
+            movable: true,
             ..self.window_spec(ctx, kind, &tr("Map"))
         };
         let cell = self.display.cell(CELL);

@@ -234,19 +234,6 @@ fn a_window_restored_off_the_screen_is_moved_onto_it() {
     assert_eq!(window.size(), egui::vec2(361.0, 1019.0));
 }
 
-#[test]
-fn a_short_dialog_is_as_tall_as_every_other_window() {
-    let size = egui::vec2(1920.0, 1080.0);
-    let (mut h, _) = playing(size, Some(example("generic", "query popup screen")));
-    crate::common::settle_windows(&mut h);
-    let window = window_of(&h, "popup");
-    let map = h.get_by_label("Map").rect();
-    assert!(
-        window.height() >= 0.6 * map.height(),
-        "{window:?} in {map:?}"
-    );
-}
-
 /// The crafting screen the engine published for a new character's weapon recipes: the recipe list beside the
 /// detail of the one under the cursor, whose description is empty.
 fn crafting_weapons() -> Value {

@@ -125,10 +125,11 @@ fn measure(h: &mut H, name: &str, faults: &mut Vec<String>) {
         .and_then(|s| s.kind.clone())
         .unwrap_or_default();
     if let Some(dir) = std::env::var_os("SHOT_DIR") {
-        std::fs::create_dir_all(&dir).unwrap();
         let image = h.render().expect("renders");
+        let dir = std::path::Path::new(&dir).join(image.width().to_string());
+        std::fs::create_dir_all(&dir).unwrap();
         image
-            .save(std::path::Path::new(&dir).join(format!("{}.png", name.replace(' ', "_"))))
+            .save(dir.join(format!("{}.png", name.replace(' ', "_"))))
             .unwrap();
     }
     let grew = first
@@ -149,6 +150,12 @@ fn measure(h: &mut H, name: &str, faults: &mut Vec<String>) {
 #[test]
 #[ignore = "needs BN_ENGINE"]
 fn every_toolbar_and_manager_screen_keeps_its_size_and_closes_to_the_map() {
+    for size in [egui::vec2(1280.0, 800.0), egui::vec2(1920.0, 1080.0)] {
+        sweep(size);
+    }
+}
+
+fn sweep(size: egui::Vec2) {
     let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
     let root = game_root(engine.as_ref(), None).expect("game root");
     let dir = std::env::temp_dir().join(format!("bn-sweep-{}", std::process::id()));
@@ -159,7 +166,7 @@ fn every_toolbar_and_manager_screen_keeps_its_size_and_closes_to_the_map() {
     let app = App::new(EngineModel::new(Box::new(transport)))
         .with_settings(settings)
         .with_root(root);
-    let mut h = crate::common::shot_harness(egui::vec2(1280.0, 800.0), app);
+    let mut h = crate::common::shot_harness(size, app);
     choose(&mut h, "menu:tab", "new_game");
     choose(&mut h, "menu:entry", "new_game:play_now");
     assert!(run_until(&mut h, "the map", 600, |h| h
@@ -215,5 +222,11 @@ fn every_toolbar_and_manager_screen_keeps_its_size_and_closes_to_the_map() {
         run_until(&mut h, entry, 60, |h| !h.state().model.busy());
         measure(&mut h, entry, &mut faults);
     }
-    assert!(faults.is_empty(), "{faults:#?}");
+    assert!(faults.is_empty(), "{size:?}: {faults:#?}");
+    let log = h.state().model.messages();
+    assert!(
+        log.iter()
+            .all(|line| line != "The screen changed, try again."),
+        "{size:?}: {log:?}"
+    );
 }
