@@ -93,20 +93,44 @@ fn zoomed<'a>() -> (H<'a>, bn_client_egui::transport::ScriptHandle, egui::Pos2) 
     (h, script, at)
 }
 
-#[test]
-fn the_wheel_zooms_the_canvas_about_the_pointer() {
+/// Zooms in with the wheel on the square (`x`, `y`) of a window of `size`: the point of it under the pointer stays.
+fn zoom_keeps_the_point_under_the_pointer(size: egui::Vec2, (x, y): (u32, u32)) {
     // A scrolled view cannot show past the grid's edge, so the square is near it; the rest of the grid then fills the room.
-    let (mut h, _script) = open_sized(screen(), egui::vec2(1280.0, 800.0));
-    let at = square(&h, 1, 3).unwrap().center();
-    let before = square(&h, 1, 3).unwrap();
+    let (mut h, _script) = open_sized(screen(), size);
+    let before = square(&h, x, y).unwrap();
+    let at = before.center();
     wheel(&mut h, at, 120.0);
-    let after = square(&h, 1, 3).unwrap();
+    let after = square(&h, x, y).unwrap();
     assert!(after.width() > 1.5 * before.width(), "{before:?} {after:?}");
     assert!(after.contains(at), "{at:?} left {after:?}");
     // The same offset inside the square: the point of the grid under the pointer did not move.
     let spot = (at - after.min) / after.size();
     let was = (at - before.min) / before.size();
     assert!((spot - was).length() < 0.02, "{was:?} {spot:?}");
+}
+
+#[test]
+fn the_wheel_zooms_the_canvas_about_the_pointer() {
+    zoom_keeps_the_point_under_the_pointer(egui::vec2(1280.0, 800.0), (1, 3));
+}
+
+#[test]
+fn the_wheel_zooms_a_short_wide_canvas_about_the_pointer() {
+    // The grid is narrower than the room, so it cannot scroll sideways until the zoom has made it wider.
+    for square in [(1, 3), (10, 3), (6, 0)] {
+        zoom_keeps_the_point_under_the_pointer(egui::vec2(1700.0, 560.0), square);
+    }
+}
+
+#[test]
+fn a_grid_narrower_than_its_canvas_is_centred_in_it() {
+    let centre = |width: f32| {
+        let (h, _script) = open_sized(screen(), egui::vec2(width, 800.0));
+        (square(&h, 0, 5).unwrap().min.x + square(&h, SIDE - 1, 5).unwrap().max.x) / 2.0
+    };
+    // The canvas room grows by what the window does, and the grid stays in the middle of it.
+    let moved = centre(1700.0) - centre(1300.0);
+    assert!((moved - 200.0).abs() < 1.5, "{moved}");
 }
 
 #[test]
