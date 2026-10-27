@@ -219,9 +219,9 @@ mod tests {
     }
 
     #[test]
-    fn columns_no_row_uses_take_no_room() {
-        assert_eq!(widths().drawn(200.0), vec![12.0, 16.0, 200.0, 40.0, 50.0]);
-        assert_eq!(widths().natural(8.0), 318.0 + 4.0 * 8.0);
+    fn columns_no_row_uses_take_no_room_and_value_columns_take_a_column_gap() {
+        assert_eq!(widths().drawn(200.0), vec![12.0, 16.0, 200.0, 48.0, 58.0]);
+        assert_eq!(widths().natural(8.0), 334.0 + 4.0 * 8.0);
     }
 
     #[test]
@@ -229,8 +229,8 @@ mod tests {
      {
         let w = widths();
         assert_eq!(w.label_in(1000.0, 8.0), 200.0);
-        assert_eq!(w.label_in(250.0, 8.0), 250.0 - 150.0);
+        assert_eq!(w.label_in(250.0, 8.0), 250.0 - 166.0);
         assert_eq!(w.label_in(100.0, 8.0), 0.0);
-        assert_eq!(w.wrapped_label_in(1000.0, 8.0), 1000.0 - 150.0);
+        assert_eq!(w.wrapped_label_in(1000.0, 8.0), 1000.0 - 166.0);
     }
 }
