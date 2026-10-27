@@ -147,7 +147,7 @@ impl Rec {
         self.done();
     }
 
-    /// Clicks the text box labelled `label`, such as a list's search box.
+    /// Clicks the first text box labelled `label`, such as a list's search box: the palette's over the outline's.
     fn click_input(&mut self, label: &str) {
         let rect_of = |h: &H| {
             h.root()
@@ -157,7 +157,7 @@ impl Rec {
                     a.role() == egui::accesskit::Role::TextInput
                         && a.label().as_deref() == Some(label)
                 })
-                .last()
+                .next()
                 .map(|n| n.rect())
         };
         let at = self.stable(label, rect_of).center();
