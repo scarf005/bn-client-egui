@@ -27,9 +27,11 @@ fn line_width(ui: &egui::Ui, text: &str, font: &egui::FontId) -> f32 {
         .fold(0.0, f32::max)
 }
 
-/// The width of the longest word of `text`: the least a wrapped label can be without breaking inside one.
+/// The width of the longest word of `text`: the least a wrapped label can be without breaking inside one. Words
+/// part where egui breaks a line, at any space but a no-break one, and a word keeps the space after it, which egui
+/// fits on the word's line.
 fn word_width(ui: &egui::Ui, text: &str, font: &egui::FontId) -> f32 {
-    text.split_whitespace()
+    text.split_inclusive(|c: char| c.is_whitespace() && c != '\u{a0}')
         .map(|word| text_width(ui, word, font))
         .fold(0.0, f32::max)
 }
