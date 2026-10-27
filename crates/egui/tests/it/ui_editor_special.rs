@@ -71,10 +71,12 @@ fn open<'a>(screen: Value) -> (H<'a>, ScriptHandle) {
         .on("bn.hello", vec![fixture("hello_result")])
         .on("bn.subscribe", reply.clone())
         .on("bn.subscribe", reply);
-    t = t.on(
-        "bn.command.submit",
-        vec![fixture("submit_result"), fixture("command_completed")],
-    );
+    for _ in 0..16 {
+        t = t.on(
+            "bn.command.submit",
+            vec![fixture("submit_result"), fixture("command_completed")],
+        );
+    }
     let clock = Clock::manual();
     let model = EngineModel::open(Box::new(t), ConnectOptions::default()).with_clock(clock.clone());
     let mut h = Harness::builder()
@@ -125,4 +127,164 @@ fn a_click_on_an_overmap_square_runs_open_square_with_that_squares_row() {
         .map(|o| o["args"]["row"].as_str().unwrap().to_owned())
         .collect::<Vec<_>>();
     assert_eq!(rows, ["square:1,0"]);
+}
+
+/// The special's editor with a drawing tool: its tabs are open, point and erase, and the canvas holds a square of
+/// room around the house and the field, empty cells with the glyph ` ` and no label, all painted with a trail drag.
+fn drawing() -> Value {
+    let mut screen = special();
+    let tab = |id: &str, label: &str, selected: bool, key: &str| json!({ "id": id, "label": label, "selected": selected, "enabled": true, "hotkey": key });
+    let tools = find(&mut screen["root"], "editor:tools").unwrap();
+    tools["tabs"] = json!([
+        tab("tool:open", "Open mapgen", false, "o"),
+        tab("tool:point", "Pencil", true, "b"),
+        tab("tool:erase", "Eraser", false, "e")
+    ]);
+    for (id, label) in [
+        ("editor:paint", "Paint"),
+        ("editor:stroke_begin", "Begin stroke"),
+        ("editor:stroke_end", "End stroke"),
+    ] {
+        screen["affordances"].as_array_mut().unwrap().push(json!({
+            "id": id, "label": label, "keys": [], "enabled": true, "expect": "screen",
+            "args": { "row": { "component_id": "editor:canvas" } }
+        }));
+    }
+    let canvas = find(&mut screen["root"], "editor:canvas").unwrap();
+    canvas["cols"] = json!(4);
+    canvas["rows"] = json!(3);
+    canvas["drag"] = json!("trail");
+    canvas["drag_begin"] = json!("editor:stroke_begin");
+    canvas["drag_end"] = json!("editor:stroke_end");
+    let cell = |x: i32, y: i32| match (x, y) {
+        (1, 1) => {
+            json!({ "x": 1, "y": 1, "id": "square:0,0", "glyph": "H", "color": "light_red", "label": "house", "looks": [0], "affordance": "editor:paint", "enabled": true })
+        }
+        (2, 1) => {
+            json!({ "x": 2, "y": 1, "id": "square:1,0", "glyph": "~", "color": "brown", "label": "field", "looks": [1], "affordance": "editor:paint", "enabled": true })
+        }
+        _ => {
+            json!({ "x": x, "y": y, "id": format!("square:{},{}", x - 1, y - 1), "glyph": " ", "label": "", "affordance": "editor:paint", "enabled": true })
+        }
+    };
+    canvas["cells"] = (0..3)
+        .flat_map(|y| (0..4).map(move |x| cell(x, y)))
+        .collect();
+    screen
+}
+
+fn sent_rows(script: &ScriptHandle, affordance: &str) -> Vec<String> {
+    script
+        .sent()
+        .into_iter()
+        .filter(|m| m["method"] == "bn.command.submit")
+        .map(|m| m["params"]["operation"].clone())
+        .filter(|o| o["affordance_id"] == affordance)
+        .filter_map(|o| o["args"]["row"].as_str().map(str::to_owned))
+        .collect()
+}
+
+/// The centre of the canvas square (`x`, `y`) of `drawing`, from the house's button, the square (1, 1).
+fn square(h: &H, x: i32, y: i32) -> egui::Pos2 {
+    let house = h.get_by_label("house").rect();
+    house.center()
+        + egui::vec2(
+            (x - 1) as f32 * house.width(),
+            (y - 1) as f32 * house.height(),
+        )
+}
+
+fn press(h: &mut H, at: egui::Pos2, pressed: bool) {
+    h.event(egui::Event::PointerButton {
+        pos: at,
+        button: egui::PointerButton::Primary,
+        pressed,
+        modifiers: egui::Modifiers::NONE,
+    });
+    h.run_steps(2);
+}
+
+#[test]
+fn the_special_tools_choose_with_their_hotkeys() {
+    let (mut h, script) = open(drawing());
+    for key in ["o", "b", "e"] {
+        h.event(egui::Event::Text(key.into()));
+        h.run_steps(4);
+    }
+    assert_eq!(
+        sent_rows(&script, "editor:tool"),
+        ["tool:open", "tool:point", "tool:erase"]
+    );
+}
+
+#[test]
+fn a_click_on_an_empty_square_of_the_room_paints_it() {
+    let (mut h, script) = open(drawing());
+    let at = square(&h, 0, 0);
+    h.hover_at(at);
+    h.run_steps(2);
+    press(&mut h, at, true);
+    press(&mut h, at, false);
+    h.run_steps(4);
+    assert_eq!(sent_rows(&script, "editor:paint"), ["square:-1,-1"]);
+}
+
+#[test]
+fn a_drag_from_the_room_over_the_special_paints_each_square_in_one_stroke() {
+    let (mut h, script) = open(drawing());
+    let from = square(&h, 0, 1);
+    h.hover_at(from);
+    h.run_steps(2);
+    press(&mut h, from, true);
+    for x in 1..=3 {
+        h.hover_at(square(&h, x, 1));
+        h.run_steps(2);
+    }
+    let last = square(&h, 3, 1);
+    press(&mut h, last, false);
+    h.run_steps(4);
+    assert_eq!(
+        sent_rows(&script, "editor:paint"),
+        ["square:-1,0", "square:0,0", "square:1,0", "square:2,0"]
+    );
+    let sent = script
+        .sent()
+        .into_iter()
+        .filter_map(|m| {
+            m["params"]["operation"]["affordance_id"]
+                .as_str()
+                .map(str::to_owned)
+        })
+        .filter(|a| a.starts_with("editor:stroke"))
+        .collect::<Vec<_>>();
+    assert_eq!(sent, ["editor:stroke_begin", "editor:stroke_end"]);
+}
+
+#[test]
+fn an_empty_square_of_the_room_is_drawn_as_an_outlined_square() {
+    let (h, _) = open(drawing());
+    let cell = h.get_by_label("house").rect();
+    let outlined = |at: egui::Pos2| {
+        let want = egui::Rect::from_center_size(at, cell.size());
+        h.output()
+            .shapes
+            .iter()
+            .any(|c| has_outline(&c.shape, want))
+    };
+    for (x, y) in [(0, 0), (3, 0), (0, 2), (3, 2), (3, 1)] {
+        assert!(outlined(square(&h, x, y)), "square {x},{y} has no outline");
+    }
+}
+
+/// Whether `shape` is a stroked rectangle that fills `want` to within a pixel.
+fn has_outline(shape: &egui::Shape, want: egui::Rect) -> bool {
+    match shape {
+        egui::Shape::Vec(items) => items.iter().any(|s| has_outline(s, want)),
+        egui::Shape::Rect(r) => {
+            !r.stroke.is_empty()
+                && (r.rect.min - want.min).abs().max_elem() < 1.5
+                && (r.rect.max - want.max).abs().max_elem() < 1.5
+        }
+        _ => false,
+    }
 }
