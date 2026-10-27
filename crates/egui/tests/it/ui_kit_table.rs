@@ -229,24 +229,22 @@ fn shots() {
 }
 
 #[test]
-fn a_trade_label_cut_at_1280_shows_its_whole_text_on_hover() {
+fn a_trade_label_too_long_at_1280_wraps_whole_between_words() {
     let screen = example("trade", "trade screen");
     let labels = ["list:npc", "list:you"]
         .into_iter()
         .flat_map(|id| row_labels(&screen, id))
         .collect::<Vec<_>>();
-    let mut h = open(screen, egui::vec2(1280.0, 800.0));
-    let cut = painted_labels(&h, &labels)
-        .into_iter()
-        .find(|t| t.galley.elided)
-        .expect("a label cut short at 1280");
-    let whole = cut.galley.text().to_string();
-    h.hover_at(cut.pos + cut.galley.rect.center().to_vec2());
-    h.run_steps(4);
-    let shown = texts(&h)
-        .into_iter()
-        .any(|t| t.galley.text() == whole && !t.galley.elided);
-    assert!(shown, "{whole:?} on hover");
+    let h = open(screen, egui::vec2(1280.0, 800.0));
+    let painted = painted_labels(&h, &labels);
+    assert!(
+        painted.iter().all(|t| !t.galley.elided),
+        "a label cut short"
+    );
+    assert!(
+        painted.iter().any(|t| t.galley.rows.len() > 1),
+        "no label wraps at 1280"
+    );
 }
 
 #[test]
@@ -345,7 +343,7 @@ fn with_long_word(mut screen: Value) -> Value {
 }
 
 #[test]
-fn a_list_too_narrow_for_its_columns_cuts_its_label_and_keeps_the_last_column_clear_of_the_bar() {
+fn a_list_too_narrow_for_its_columns_wraps_its_label_and_keeps_the_last_column_clear_of_the_bar() {
     for width in [700.0, 880.0, 1000.0] {
         let screen = with_long_word(prototypes(
             "vehicle editor with a prototype open on a mount",

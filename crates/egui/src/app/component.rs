@@ -698,10 +698,7 @@ impl<M: GameModel> App<M> {
     /// `line` drawn on `ground`.
     fn line_on(&self, ui: &egui::Ui, markup: &str, ground: egui::Color32) -> egui::WidgetText {
         let font = egui::TextStyle::Body.resolve(ui.style());
-        let mut job = text::job(&self.model.styled(markup), &font, ground);
-        job.wrap.max_rows = 1;
-        job.wrap.break_anywhere = true;
-        job.into()
+        text::job(&self.model.styled(markup), &font, ground).into()
     }
 
     /// The game colour as a colour of the screen.

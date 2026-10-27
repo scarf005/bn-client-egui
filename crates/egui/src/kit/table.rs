@@ -5,7 +5,7 @@
 //! The pick column holds a drawn checkbox, the engine's mark and the favourite; the key column the row's key,
 //! right-aligned so the labels line up. Columns no row uses take no room. A label takes its natural width when the
 //! table has it, so the values sit right after it and the spare width goes to the empty last column; with less
-//! room it is cut, and the whole text shows on hover.
+//! room it wraps between words.
 
 use super::tokens;
 use eframe::egui;
@@ -51,14 +51,14 @@ impl Widths {
     }
 
     /// The label's width in `room`: its natural width when that fits beside the other columns, else what they
-    /// leave it. Short of room for the longest word it is cut below that, so the columns after it stay beside the
-    /// scroll bar.
+    /// leave it, where it wraps. Short of room for its longest word that word breaks, so the columns after it stay
+    /// beside the scroll bar.
     pub fn label_in(&self, room: f32, gap: f32) -> f32 {
         let others = self.natural(gap) - self.label;
         (room - others).min(self.label).max(0.0)
     }
 
-    /// The label's width in `room` for a list whose labels wrap: all the other columns leave it.
+    /// The label's width in `room` for a list without columns: all the other columns leave it.
     pub fn wrapped_label_in(&self, room: f32, gap: f32) -> f32 {
         (room - (self.natural(gap) - self.label)).max(0.0)
     }
@@ -127,10 +127,16 @@ pub fn section(mut row: TableRow, widths: &Widths, across: egui::Rect, title: St
             .layer_painter(ui.layer_id())
             .with_clip_rect(shown)
             .rect_filled(rect, 0.0, tokens::BAND);
-        ui.label(
-            egui::RichText::new(title)
-                .size(tokens::SECTION)
-                .color(tokens::TEXT),
+        // The title spans the row as its band does, not only the label's column.
+        let mut over = ui.new_child(egui::UiBuilder::new().max_rect(rect));
+        over.set_clip_rect(shown);
+        over.add(
+            egui::Label::new(
+                egui::RichText::new(title)
+                    .size(tokens::SECTION)
+                    .color(tokens::TEXT),
+            )
+            .extend(),
         );
     });
 }
@@ -140,7 +146,8 @@ pub fn right_aligned(ui: &mut egui::Ui, text: impl Into<egui::WidgetText>) {
     let layout = egui::Layout::right_to_left(egui::Align::Center);
     // Not selectable: a click on the text is a click on its row.
     ui.with_layout(layout, |ui| {
-        ui.add(egui::Label::new(text).truncate().selectable(false))
+        // A value column is measured to its widest value, so a value never wraps.
+        ui.add(egui::Label::new(text).extend().selectable(false))
     });
 }
 
@@ -216,7 +223,7 @@ mod tests {
     }
 
     #[test]
-    fn a_label_keeps_its_natural_width_when_there_is_room_and_is_cut_below_its_longest_word_when_there_is_none()
+    fn a_label_keeps_its_natural_width_when_there_is_room_and_takes_what_the_other_columns_leave_when_there_is_none()
      {
         let w = widths();
         assert_eq!(w.label_in(1000.0, 8.0), 200.0);
