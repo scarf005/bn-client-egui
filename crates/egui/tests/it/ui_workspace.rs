@@ -147,6 +147,22 @@ fn a_docked_workspace_keeps_its_menus_for_the_grouped_affordances() {
 }
 
 #[test]
+fn only_the_columns_shown_have_resize_handles() {
+    let mut screen = workspace();
+    let kept = ["ws:canvas", "ws:tools"];
+    screen["root"]["children"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|c| kept.contains(&c["id"].as_str().unwrap()));
+    let (app, _) = crate::common::staged(crate::common::over_map(screen));
+    let mut h = crate::common::themed_harness(SIZES[0], app);
+    h.run_steps(7);
+    crate::common::settle_windows(&mut h);
+    assert_eq!(h.get_all_by_label("Resize workspace column").count(), 1);
+    assert!(h.query_by_label("Resize workspace log").is_none());
+}
+
+#[test]
 fn the_parts_are_placed_by_slot() {
     for size in SIZES {
         let (h, _) = shown(size);
