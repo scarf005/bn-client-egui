@@ -10,7 +10,7 @@ use bn_client_egui::watchdog::Watchdog;
 use bn_client_egui::{App, EngineModel, GameModel};
 use eframe::egui;
 use egui_kittest::Harness;
-use egui_kittest::kittest::Queryable;
+use egui_kittest::kittest::{NodeT, Queryable};
 use std::time::Duration;
 
 type H<'a> = Harness<'a, App<EngineModel>>;
@@ -109,4 +109,58 @@ fn the_player_walks_with_the_character_and_inventory_windows_open() {
     save(&mut h, "panels-walked.png");
     window(&h, &sheet);
     window(&h, &inventory);
+}
+
+/// The id of the tab selected in the screen last read for `panel`.
+fn selected_tab(h: &H, panel: PanelKind) -> Option<String> {
+    let screen = h.state().model.watched_panel(panel)?;
+    match screen.root.as_ref()? {
+        bn_client_egui::protocol::Component::Tabs(tabs) => {
+            tabs.tabs.iter().find(|t| t.selected).map(|t| t.id.clone())
+        }
+        _ => None,
+    }
+}
+
+#[test]
+#[ignore = "needs BN_ENGINE"]
+fn a_closed_character_sheet_reopens_on_the_tab_it_was_left_on() {
+    let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
+    for (width, height) in [(1280.0, 800.0), (1920.0, 1080.0)] {
+        let root = game_root(engine.as_ref(), None).expect("game root");
+        let dir = std::env::temp_dir().join(format!("bn-panel-tab-{}-{width}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let settings = dir.join("settings.json");
+        std::fs::write(&settings, r#"{"tiles":false,"tileset":null}"#).unwrap();
+        let transport = crate::common::live::english_transport();
+        let app = App::new(EngineModel::new(Box::new(transport)))
+            .with_settings(settings)
+            .with_root(root);
+        let mut h = crate::common::shot_harness(egui::vec2(width, height), app);
+        choose(&mut h, "menu:tab", "new_game");
+        choose(&mut h, "menu:entry", "new_game:play_now");
+        run_until(&mut h, "the map", 600, |h| h.state().model.size().x > 0);
+        dismiss_popups(&mut h);
+        safe_mode_off(&mut h);
+        dismiss_popups(&mut h);
+        let tab = |h: &H| selected_tab(h, PanelKind::Character);
+        key(&mut h, "@");
+        run_until(&mut h, "the character sheet", 60, |h| tab(h).is_some());
+        h.get_all_by_label_contains("ENCUMBRANCE")
+            .find(|n| n.accesskit_node().role() == egui::accesskit::Role::Tab)
+            .expect("the tab")
+            .click();
+        run_until(&mut h, "the chosen tab", 60, |h| {
+            tab(h).as_deref() == Some("encumbrance")
+        });
+        key(&mut h, "@");
+        h.run_steps(5);
+        key(&mut h, "@");
+        run_until(&mut h, "the reopened sheet", 60, |h| {
+            tab(h).as_deref() == Some("encumbrance")
+        });
+        h.run_steps(5);
+        crate::common::settle_windows(&mut h);
+        save(&mut h, &format!("sheet-reopened-{}.png", width as u32));
+    }
 }
