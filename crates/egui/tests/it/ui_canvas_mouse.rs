@@ -74,14 +74,22 @@ fn drag_by(h: &mut H, from: egui::Pos2, by: egui::Vec2, button: egui::PointerBut
     h.run_steps(3);
 }
 
+/// Space as winit delivers it: the key and the typed space, again for a held key's repeat.
 fn space(h: &mut H, pressed: bool) {
-    h.event(egui::Event::Key {
+    let key = |repeat| egui::Event::Key {
         key: egui::Key::Space,
         physical_key: Some(egui::Key::Space),
         pressed,
-        repeat: false,
+        repeat,
         modifiers: egui::Modifiers::NONE,
-    });
+    };
+    h.event(key(false));
+    if pressed {
+        h.event(egui::Event::Text(" ".into()));
+        h.run_steps(2);
+        h.event(key(true));
+        h.event(egui::Event::Text(" ".into()));
+    }
     h.run_steps(2);
 }
 
@@ -220,11 +228,7 @@ fn space_with_a_primary_drag_pans_and_sends_nothing() {
         (after.min - before.min).length() > 20.0,
         "{before:?} {after:?}"
     );
-    assert!(
-        sent(&script).iter().all(|a| a != "editor:paint"),
-        "{:?}",
-        sent(&script)
-    );
+    assert!(sent(&script).is_empty(), "{:?}", sent(&script));
 }
 
 #[test]
