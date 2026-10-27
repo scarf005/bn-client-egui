@@ -406,3 +406,107 @@ fn a_double_click_on_a_legend_rows_label_runs_its_symbol() {
 fn a_double_click_on_a_legend_rows_value_runs_its_symbol() {
     assert_eq!(picked_by_double_click_on(false), ["symbol:#"]);
 }
+
+/// The editor on its placements tool: a 4×3 region at (2,2) with its corner squares, a lone square at (9,9), and the
+/// affordance a drag of either runs.
+fn editor_with_regions(drag: Option<&str>) -> Value {
+    let mut screen = editor(drag);
+    screen["affordances"].as_array_mut().unwrap().push(json!({
+        "id": "editor:placement_span", "label": "Move placement", "keys": [], "enabled": true,
+        "args": {"row": {"component_id": "editor:canvas"}, "text": {}}, "expect": "boundary"
+    }));
+    let canvas = find(&mut screen["root"], "editor:canvas").unwrap();
+    canvas["affordances"] = json!(["editor:paint", "editor:placement_span"]);
+    canvas["region_drag"] = json!("editor:placement_span");
+    canvas["regions"] = json!([
+        {"id": "placement:place_items:0", "from": {"x": 2, "y": 2}, "to": {"x": 5, "y": 4}, "label": "place_items"},
+        {"id": "placement:place_monster:0", "from": {"x": 9, "y": 9}, "to": {"x": 9, "y": 9}, "selected": true}
+    ]);
+    screen
+}
+
+/// The row and the text of the region drags sent so far.
+fn spans(script: &ScriptHandle) -> Vec<(String, String)> {
+    script
+        .sent()
+        .into_iter()
+        .filter(|m| m["method"] == "bn.command.submit")
+        .map(|m| m["params"]["operation"].clone())
+        .filter(|o| o["affordance_id"] == "editor:placement_span")
+        .map(|o| {
+            (
+                o["args"]["row"].as_str().unwrap().to_owned(),
+                o["args"]["text"].as_str().unwrap().to_owned(),
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn a_drag_inside_a_region_sends_how_far_both_corners_moved() {
+    let (mut h, script) = open(editor_with_regions(None));
+    drag(&mut h, (3, 3), &[(4, 3), (6, 2)]);
+    assert_eq!(
+        spans(&script),
+        [("placement:place_items:0".into(), "3,-1,3,-1".into())]
+    );
+    assert!(painted(&script).is_empty());
+}
+
+#[test]
+fn a_drag_from_a_corner_square_sends_only_that_corners_move() {
+    let (mut h, script) = open(editor_with_regions(None));
+    drag(&mut h, (5, 4), &[(7, 6)]);
+    assert_eq!(
+        spans(&script),
+        [("placement:place_items:0".into(), "0,0,2,2".into())]
+    );
+}
+
+#[test]
+fn a_press_and_release_on_a_region_picks_its_square_and_sends_no_move() {
+    let (mut h, script) = open(editor_with_regions(None));
+    drag(&mut h, (3, 3), &[]);
+    assert!(spans(&script).is_empty());
+    assert_eq!(painted(&script), ["square:3,3"]);
+}
+
+#[test]
+fn a_drag_outside_every_region_sends_no_move() {
+    let (mut h, script) = open(editor_with_regions(None));
+    drag(&mut h, (7, 7), &[(8, 7)]);
+    assert!(spans(&script).is_empty());
+}
+
+#[test]
+fn a_region_drag_leaves_a_trail_canvas_without_region_drag_unchanged() {
+    let mut screen = editor_with_regions(Some("trail"));
+    find(&mut screen["root"], "editor:canvas").unwrap()["region_drag"] = Value::Null;
+    let (mut h, script) = open(screen);
+    drag(&mut h, (3, 3), &[(4, 3)]);
+    assert!(spans(&script).is_empty());
+    assert_eq!(painted(&script), ["square:3,3", "square:4,3"]);
+}
+
+#[test]
+fn the_outline_of_a_dragged_region_follows_the_pointer() {
+    let (mut h, _script) = open(editor_with_regions(None));
+    let at = square(&h, 3, 3);
+    h.hover_at(at);
+    h.run_steps(2);
+    button(&mut h, at, true);
+    let over = square(&h, 6, 3);
+    h.hover_at(over);
+    h.run_steps(3);
+    let amber = h.render().unwrap();
+    let picked = egui::Color32::from_rgb(0xff, 0xb6, 0x2e);
+    let cell = first_square(&h).width();
+    // The moved outline's right edge is at the right of column 8 (the region spans 4 columns from 5 to 8).
+    let right = square(&h, 8, 3).x + cell / 2.0;
+    let found = (0..amber.height()).any(|y| {
+        (-3..=0).any(|dx| {
+            amber.get_pixel((right as i32 + dx) as u32, y) == &image::Rgba(picked.to_array())
+        })
+    });
+    assert!(found);
+}

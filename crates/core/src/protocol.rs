@@ -2360,6 +2360,32 @@ pub struct Grid {
     /// The size in cells of the blocks a client outlines, counted from the top left; none: no outline.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub block: Option<GridBlock>,
+    /// Rectangles of squares a client outlines over the cells; none: no outline.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub regions: Vec<GridRegion>,
+    /// The affordance a drag of a region runs, on the region's `id` with how far its corners moved; none: regions
+    /// are not dragged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub region_drag: Option<String>,
+}
+
+/// A square of a canvas grid, counted from the same origin as its cells.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GridSquare {
+    pub x: i32,
+    pub y: i32,
+}
+
+/// A rectangle of squares from `from` to `to`, both included.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GridRegion {
+    pub id: String,
+    pub from: GridSquare,
+    pub to: GridSquare,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected: Option<bool>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
