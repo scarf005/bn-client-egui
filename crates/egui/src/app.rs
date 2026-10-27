@@ -548,7 +548,15 @@ impl<M: GameModel> App<M> {
                 &tr("Client settings"),
             )
         };
-        self.client_settings = !windows::show(ctx, spec, |ui| self.display.controls(ui)).closed;
+        // With the keyboard, the window keeps the focus too, so that no widget outside it takes Enter or Space.
+        let layer = egui::LayerId::new(egui::Order::Middle, spec.id);
+        let outside = ctx
+            .memory(|m| m.focused())
+            .and_then(|id| ctx.read_response(id))
+            .is_none_or(|r| r.layer_id != layer);
+        let take_focus = outside && self.key_window == Some(input::KeyWindow::Settings);
+        let shown = windows::show(ctx, spec, |ui| self.display.controls(ui, take_focus));
+        self.client_settings = !shown.closed;
     }
 
     /// The pressed control's name and stage, announced politely; stays until the next command.

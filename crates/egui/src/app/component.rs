@@ -421,7 +421,10 @@ impl<M: GameModel> App<M> {
         // A text box has the typing; its keys are not the screen's, except Escape, which closes the screen (a filled filter box clears first).
         let typing = ctx.text_edit_focused();
         self.search_keys(ctx, typing);
-        let keys = super::input::frame_keys(ctx).into_iter().map(|k| k.token);
+        let keys = super::input::frame_keys(ctx)
+            .into_iter()
+            .filter(|k| !self.settings_key(k))
+            .map(|k| k.token);
         let clears = crate::editor::clears_on_escape(ctx);
         let keys = keys
             .filter(|key| !typing || (key == "ESC" && !clears))

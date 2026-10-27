@@ -696,16 +696,18 @@ impl Display {
         }
     }
 
-    /// Mode, tileset and motion choice, kept as soon as they change.
-    pub fn controls(&mut self, ui: &mut egui::Ui) {
+    /// Mode, tileset and motion choice, kept as soon as they change; `take_focus` puts the keyboard focus on the
+    /// first of them.
+    pub fn controls(&mut self, ui: &mut egui::Ui, take_focus: bool) {
         let before = self.settings.clone();
         ui.vertical(|ui| {
             ui.horizontal(|ui| {
                 for (tiles, label) in [(true, tr("Tiles")), (false, "ASCII".into())] {
-                    if ui
-                        .selectable_label(self.wants_tiles() == tiles, label)
-                        .clicked()
-                    {
+                    let choice = ui.selectable_label(self.wants_tiles() == tiles, label);
+                    if take_focus && tiles {
+                        choice.request_focus();
+                    }
+                    if choice.clicked() {
                         self.settings.tiles = Some(tiles);
                     }
                 }

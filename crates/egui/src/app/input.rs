@@ -235,21 +235,22 @@ impl<M: GameModel> App<M> {
         }
     }
 
+    /// Whether `key` moves among the widgets of the client settings, or presses one, while that window has the
+    /// keyboard: it is the window's, and neither the game nor an engine screen gets it.
+    pub(super) fn settings_key(&self, key: &FrameKey) -> bool {
+        let plain = key.key.is_none_or(|(_, mods)| !mods.alt && !mods.ctrl);
+        let moves = key.key.is_some()
+            && (NAVIGATION.contains(&key.token.as_str())
+                || matches!(key.token.as_str(), "TAB" | "BACKTAB" | "RETURN"));
+        self.key_window == Some(KeyWindow::Settings) && plain && (moves || key.token == "SPACE")
+    }
+
     /// Typed characters and special keys are game keys, after the client took its own.
     fn game_keys(&mut self, ctx: &egui::Context) {
         let menu = self.model.menu();
-        // The keys that move among the widgets of the client settings, or press one, are the window's.
-        let widget = self.key_window == Some(KeyWindow::Settings);
-        let widget_key = |k: &FrameKey| {
-            let plain = k.key.is_none_or(|(_, mods)| !mods.alt && !mods.ctrl);
-            let moves = k.key.is_some()
-                && (NAVIGATION.contains(&k.token.as_str())
-                    || matches!(k.token.as_str(), "TAB" | "BACKTAB" | "RETURN"));
-            widget && plain && (moves || k.token == "SPACE")
-        };
         let keys = frame_keys(ctx)
             .into_iter()
-            .filter(|k| !widget_key(k))
+            .filter(|k| !self.settings_key(k))
             .collect();
         let keys = self.client_keys(keys, menu.as_ref());
         let keys = self.engine_keys(ctx, keys, menu.as_ref());
