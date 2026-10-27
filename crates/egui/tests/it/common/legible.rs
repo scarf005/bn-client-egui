@@ -1,4 +1,4 @@
-//! Whether a frame can be read: no text cut by its clip, no label of a list with columns broken over lines, and
+//! Whether a frame can be read: no text cut by its clip or short with an ellipsis, no word broken over lines, and
 //! every window inside the room the map leaves, off the top bar, the shortcut bar and the sidebar.
 use bn_client_egui::{App, EngineModel};
 use eframe::egui::{self, epaint};
@@ -11,8 +11,10 @@ use serde_json::Value;
 pub enum Kind {
     /// Text painted partly outside its clip rectangle.
     Cut,
-    /// A row label of a list with columns on more than one line.
-    Wrapped,
+    /// Text cut short with an ellipsis, but for a window's title, which a narrowed window shortens.
+    Elided,
+    /// A word broken over two lines.
+    Broken,
     /// A window outside the room.
     Outside,
 }
@@ -55,6 +57,34 @@ pub fn cut_text(shapes: &[epaint::ClippedShape], area: egui::Rect) -> Vec<String
                 let at = row.rect().translate(text.pos.to_vec2());
                 (clip.intersect(at).is_positive() && !clip.expand(1.0).contains_rect(at))
                     .then(|| format!("{:?} at {at:?} in {clip:?}", row.text()))
+            })
+        })
+        .collect()
+}
+
+/// Texts cut short with an ellipsis, but for the titles `titles`.
+pub fn elided_text(shapes: &[epaint::ClippedShape], titles: &[String]) -> Vec<String> {
+    texts(shapes)
+        .into_iter()
+        .filter(|(_, text)| text.galley.elided)
+        .map(|(_, text)| text.galley.text().to_string())
+        .filter(|shown| !titles.contains(shown))
+        .map(|shown| format!("{shown:?} cut short"))
+        .collect()
+}
+
+/// Lines that end inside a word the next line goes on with.
+pub fn broken_words(shapes: &[epaint::ClippedShape]) -> Vec<String> {
+    texts(shapes)
+        .into_iter()
+        .flat_map(|(_, text)| {
+            text.galley.rows.windows(2).filter_map(|pair| {
+                let (end, next) = (pair[0].row.text(), pair[1].row.text());
+                let inside = |c: Option<char>| c.is_some_and(|c| !c.is_whitespace());
+                (!pair[0].ends_with_newline
+                    && inside(end.chars().last())
+                    && inside(next.chars().next()))
+                .then(|| format!("{end:?} broken before {next:?}"))
             })
         })
         .collect()
@@ -143,14 +173,19 @@ pub fn legible(h: &Harness<'_, App<EngineModel>>, screen: &Value) -> Vec<Fault> 
         .filter(|s| Some(s.clip_rect) != map)
         .cloned()
         .collect::<Vec<_>>();
+    let titles = h
+        .query_all_by_role(egui::accesskit::Role::Window)
+        .filter_map(|w| w.accesskit_node().label())
+        .collect::<Vec<_>>();
     cut_text(&unmapped, area)
         .into_iter()
         .map(fault(Kind::Cut))
         .chain(
-            wrapped_labels(shapes, &column_list_labels(screen))
+            elided_text(shapes, &titles)
                 .into_iter()
-                .map(fault(Kind::Wrapped)),
+                .map(fault(Kind::Elided)),
         )
+        .chain(broken_words(shapes).into_iter().map(fault(Kind::Broken)))
         .chain(
             outside_room(h, room(h))
                 .into_iter()
