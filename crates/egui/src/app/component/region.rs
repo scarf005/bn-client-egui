@@ -103,7 +103,7 @@ pub(super) fn advance(
     if let Some(over) = pointer.over {
         grabbed.now = over;
     }
-    if !(pointer.released || !pointer.down) {
+    if !pointer.released && pointer.down {
         return None;
     }
     let done = held.take()?;
