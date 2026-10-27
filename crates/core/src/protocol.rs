@@ -1980,6 +1980,29 @@ pub struct Head {
     /// The ids of the screen's affordances that act on this component.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub affordances: Vec<String>,
+    /// What this part of a workspace screen's root split is for; none counts as the inspector.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub slot: Option<Slot>,
+}
+
+/// What a part of a `workspace` screen's root split is for, which the client lays out as it likes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Slot {
+    /// The tools and their settings.
+    Tools,
+    /// The document being edited.
+    Canvas,
+    /// What the tools put down.
+    Palette,
+    /// The parts of the document.
+    Outline,
+    /// The settings of what is picked.
+    Inspector,
+    /// Messages and history.
+    Log,
+    /// A line of facts about the cursor and the document.
+    Status,
 }
 
 /// A generic component, by `kind`: a client draws each without knowing the screen.
@@ -2739,6 +2762,9 @@ pub struct Affordance {
     /// A step of the map the player can hold down: `bn.hold` on key down, `bn.release` on key up.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub holdable: bool,
+    /// The menu of a workspace screen it belongs in, such as File.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group: Option<Text>,
     pub expect: Scope,
 }
 
