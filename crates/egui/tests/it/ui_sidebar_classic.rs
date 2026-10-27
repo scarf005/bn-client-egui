@@ -299,3 +299,46 @@ fn a_message_log_in_a_narrow_sidebar_stays_where_it_is_frame_after_frame() {
     }
     assert!(jumping.is_empty(), "{jumping:#?}");
 }
+
+#[test]
+fn the_inventory_shows_only_whole_rows_at_rest_however_far_it_is_scrolled() {
+    // Rows of one and two lines, so a height measured from the bottom rows does not fit the top ones.
+    let names = (0..24).map(|n| match n % 3 {
+        0 => format!("a rock with a name long enough to wrap over two lines of the sidebar {n}"),
+        _ => format!("smooth rock {n}"),
+    });
+    let mut cut = vec![];
+    for size in SIZES {
+        let map = fixture("subscribe_result")["result"]["interaction"]["stack"][0].clone();
+        let (app, script) = crate::common::staged(json!([map]));
+        let mut h = crate::common::themed_harness(size, app);
+        h.run_steps(3);
+        let mut walk = classic();
+        walk["params"]["events"][0]["changes"]["avatar"]["inventory"] =
+            names.clone().map(|n| item(&n)).collect();
+        script.push(walk);
+        h.run_steps(4);
+        crate::common::settle_windows(&mut h);
+        let sidebar = egui::Rect::from_x_y_ranges(
+            rect(&h, "Health").x_range(),
+            h.ctx.content_rect().y_range(),
+        );
+        let at = rect(&h, "Inventory").center_bottom() + egui::vec2(0.0, 40.0);
+        for wheel in [0.0, -0.7, -1.3, -2.0, 1.1] {
+            h.hover_at(at);
+            h.run_steps(2);
+            h.event(egui::Event::MouseWheel {
+                unit: egui::MouseWheelUnit::Line,
+                delta: egui::vec2(0.0, wheel),
+                phase: egui::TouchPhase::Move,
+                modifiers: egui::Modifiers::NONE,
+            });
+            h.run_steps(30);
+            let lines = cut_text(&h.output().shapes, sidebar);
+            if !lines.is_empty() {
+                cut.push(format!("{size:?} after a wheel of {wheel}: {lines:?}"));
+            }
+        }
+    }
+    assert!(cut.is_empty(), "{cut:#?}");
+}
