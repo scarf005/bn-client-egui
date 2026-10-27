@@ -327,6 +327,12 @@ fn has_row(h: &H, label: &str) -> bool {
 
 /// Scrolls until square (`x`, `y`) of the canvas is in view and clicks it.
 fn paint(h: &mut H, x: usize, y: usize) {
+    scroll_to(h, x, y);
+    click_at(h, square(h, x, y).center());
+}
+
+/// Scrolls with the wheel until square (`x`, `y`) of the canvas is in view.
+fn scroll_to(h: &mut H, x: usize, y: usize) {
     let size = h.ctx.content_rect().size();
     for _ in 0..80 {
         let r = square(h, x, y);
@@ -343,7 +349,6 @@ fn paint(h: &mut H, x: usize, y: usize) {
         );
     }
     h.run_steps(6);
-    click_at(h, square(h, x, y).center());
 }
 
 /// The glyph of square (`x`, `y`) of the canvas.
@@ -1253,4 +1258,156 @@ fn the_map_editor_shows_the_squares_beside_the_entry_and_a_click_on_one_opens_it
     let rows = canvas_glyphs(&h);
     assert!(rows[0].ends_with(&"#".repeat(24)), "{}", rows[0]);
     assert!(rows[0].trim_start().starts_with("....#"), "{}", rows[0]);
+}
+
+/// The regions the canvas on top outlines: id, (west, north), (east, south) and whether it is the picked one.
+type Regions = Vec<(String, (i32, i32), (i32, i32), bool)>;
+
+fn canvas_regions(h: &H) -> Regions {
+    let top = h.state().model.screens().last().unwrap();
+    let Some(bn_client_egui::protocol::Component::Grid(grid)) =
+        top.root.as_ref().unwrap().find("editor:canvas")
+    else {
+        panic!("no canvas");
+    };
+    grid.regions
+        .iter()
+        .map(|r| {
+            (
+                r.id.clone(),
+                (r.from.x, r.from.y),
+                (r.to.x, r.to.y),
+                r.selected == Some(true),
+            )
+        })
+        .collect()
+}
+
+/// Presses on square `from`, moves the pointer through `via` and releases on the last one, a frame or two apart, as
+/// a hand drags; the engine's answer is waited for.
+fn drag_squares(h: &mut H, shot: &str, from: (usize, usize), via: &[(usize, usize)]) {
+    let end = via.last().copied().unwrap_or(from);
+    scroll_to(h, (from.0 + end.0) / 2, (from.1 + end.1) / 2);
+    let at = square(h, from.0, from.1).center();
+    h.hover_at(at);
+    h.run_steps(2);
+    let button = |h: &mut H, pos: egui::Pos2, pressed: bool| {
+        h.event(egui::Event::PointerButton {
+            pos,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        });
+        h.run_steps(2);
+    };
+    button(h, at, true);
+    let mut last = at;
+    for &(x, y) in via {
+        last = square(h, x, y).center();
+        h.hover_at(last);
+        h.run_steps(3);
+    }
+    // The picture is taken at the window's size, which a resize would change under the drag.
+    if let Some(dir) = std::env::var_os("SHOT_DIR") {
+        std::fs::create_dir_all(&dir).unwrap();
+        let size = h.ctx.content_rect().size();
+        let path = std::path::Path::new(&dir).join(format!("{shot}-{}x{}.png", size.x, size.y));
+        h.render().expect("renders").save(path).unwrap();
+    }
+    button(h, last, false);
+    rest(h);
+}
+
+/// A mod mapgen of a monster and an item placement, opened as a player reopens a file; the Placements tool drags the
+/// monster whole and stretches the items by their corner.
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn the_map_editor_drags_a_placement_whole_and_by_its_corner() {
+    let sizes = [(1290.0, 830.0)];
+    let dir = std::env::temp_dir().join(format!("bn-walk-{}", std::process::id()));
+    let profile = std::env::temp_dir().join(format!("bn-live-{}-0", std::process::id()));
+    let moddir = profile.join("mods").join("walk_regions");
+    std::fs::create_dir_all(&moddir).unwrap();
+    std::fs::create_dir_all(&dir).unwrap();
+    let entries = serde_json::json!([
+        { "type": "mapgen", "method": "json", "om_terrain": "house_01",
+          "object": { "rows": vec![".".repeat(24); 24], "terrain": { ".": "t_floor" },
+            "place_monster": [{ "monster": "mon_zombie", "x": [2, 4], "y": [3, 4] }],
+            "place_items": [{ "item": "bedroom", "x": [10, 14], "y": [10, 13], "chance": 100 }] } },
+    ]);
+    let file = moddir.join("regions.json");
+    std::fs::write(&file, entries.to_string()).unwrap();
+    let file = file.to_string_lossy().to_string();
+    let recent = serde_json::json!([{ "editor": "map", "name": file, "mods": ["bn"] }]);
+    let (mut h, _root) = start_with(&dir, &[("editor_recent.json", recent.to_string())]);
+    assert_eq!(crate::common::live::profile_dir(), profile);
+    h.set_size(egui::vec2(1290.0, 830.0));
+    rest(&mut h);
+    click(&mut h, "Editor");
+    rest(&mut h);
+    click(&mut h, &file);
+    rest(&mut h);
+    key(&mut h, egui::Key::Escape);
+    click(&mut h, "Yes");
+    wait_kind(&mut h, "editor");
+    rest(&mut h);
+    shot_at(&mut h, "pr-1-opened", &sizes);
+    let before = canvas_regions(&h);
+    println!("REGIONS before {before:?}");
+    assert_eq!(before.len(), 2, "{before:?}");
+
+    click(&mut h, "Placements");
+    rest(&mut h);
+    shot_at(&mut h, "pr-2-placements-tool", &sizes);
+
+    // The monster placement dragged whole, three squares east and two south.
+    let monster = before
+        .iter()
+        .find(|r| r.0.contains("place_monster"))
+        .unwrap();
+    let (mx, my) = (monster.1.0 as usize + 1, monster.1.1 as usize);
+    drag_squares(
+        &mut h,
+        "pr-3-preview-move",
+        (mx, my),
+        &[(mx + 1, my + 1), (mx + 3, my + 2)],
+    );
+    let moved = canvas_regions(&h);
+    println!("REGIONS after move {moved:?}");
+    let now = moved.iter().find(|r| r.0 == monster.0).unwrap();
+    assert_eq!(
+        (now.1, now.2),
+        (
+            (monster.1.0 + 3, monster.1.1 + 2),
+            (monster.2.0 + 3, monster.2.1 + 2)
+        )
+    );
+    shot_at(&mut h, "pr-5-moved", &sizes);
+
+    // The item placement stretched by its bottom-right corner, two squares east and south.
+    let items = before.iter().find(|r| r.0.contains("place_items")).unwrap();
+    let corner = (items.2.0 as usize, items.2.1 as usize);
+    drag_squares(
+        &mut h,
+        "pr-4-preview-stretch",
+        corner,
+        &[(corner.0 + 1, corner.1 + 1), (corner.0 + 2, corner.1 + 2)],
+    );
+    let stretched = canvas_regions(&h);
+    println!("REGIONS after stretch {stretched:?}");
+    let now = stretched.iter().find(|r| r.0 == items.0).unwrap();
+    assert_eq!((now.1, now.2), (items.1, (items.2.0 + 2, items.2.1 + 2)));
+    shot_at(&mut h, "pr-6-stretched", &sizes);
+
+    // The engine's placements list and file hold the new ranges.
+    dump(&h, "after the drags");
+    key_mod(&mut h, egui::Modifiers::CTRL, egui::Key::S);
+    let saved = std::fs::read_to_string(&file).unwrap();
+    println!("SAVED {saved}");
+    let saved = serde_json::from_str::<serde_json::Value>(&saved).unwrap();
+    let object = &saved[0]["object"];
+    assert_eq!(object["place_monster"][0]["x"], serde_json::json!([5, 7]));
+    assert_eq!(object["place_monster"][0]["y"], serde_json::json!([5, 6]));
+    assert_eq!(object["place_items"][0]["x"], serde_json::json!([10, 16]));
+    assert_eq!(object["place_items"][0]["y"], serde_json::json!([10, 15]));
 }
