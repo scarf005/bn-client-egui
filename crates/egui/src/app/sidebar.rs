@@ -6,12 +6,13 @@ use crate::display::Display;
 use bn_client_core::localise::tr;
 use bn_client_core::protocol::ItemListId;
 use bn_client_core::sidebar::{Body, Direction, Layout, Panel};
+use bn_client_core::sounds::SoundLine;
 use bn_client_core::{Cell, GameModel, LogLine, markup};
 use eframe::egui::{self, accesskit};
 
 /// The fewest lines of the message log the sidebar keeps in view, whatever the panels above it hold.
 const LOG_LINES: f32 = 6.0;
-/// The share of the log panel its game lines take; the client's own lines and the sounds share the rest.
+/// The share of the log panel's least height its game lines keep; the client's own lines and the sounds take the rest.
 const NATIVE_SHARE: f32 = 0.7;
 /// The most of what the status leaves the item lists take before the player drags the log's edge.
 const ITEM_SHARE: f32 = 0.5;
@@ -291,10 +292,10 @@ impl<M: GameModel> App<M> {
                         native,
                         commands: self.model.messages(),
                         live: [&native_live, &command_live],
+                        sounds: &self.model.sounds(),
                         room,
                     },
                 );
-                super::sounds::show(ui, &self.model.sounds());
             });
     }
 }
@@ -368,17 +369,19 @@ pub(super) struct LogOptions<'a> {
     pub native: &'a [LogLine],
     pub commands: &'a [String],
     pub live: [&'a str; 2],
+    pub sounds: &'a [SoundLine],
     pub room: f32,
 }
 
 /// The message log panel: the game's own lines in their native colours, then the client's command
-/// results and errors in a separate scroll area. What each list gained since the last frame is a
-/// polite live region, so history is never re-announced.
+/// results and errors in a separate scroll area, then the heard sounds. What each list gained since the last frame
+/// is a polite live region, so history is never re-announced.
 pub(super) fn message_log(ui: &mut egui::Ui, options: LogOptions) {
     let LogOptions {
         native,
         commands,
         live,
+        sounds,
         room,
     } = options;
     if !native.is_empty() {
@@ -387,12 +390,10 @@ pub(super) fn message_log(ui: &mut egui::Ui, options: LogOptions) {
     // The tops of last frame's lines, so the area ends between two of them and shows no half line.
     let key = egui::Id::new("native_log_tops");
     let (tops, total): (Vec<f32>, f32) = ui.data(|d| d.get_temp(key)).unwrap_or_default();
-    // The client's own lines share the panel only when there are some.
-    let share = match commands.is_empty() {
-        true => 1.0,
-        false => NATIVE_SHARE,
-    };
-    let room = whole_lines_height(&tops, total, room * share);
+    // The commands and the sounds under the lines keep last frame's height of the panel, so they stay in view.
+    let below_key = egui::Id::new("native_log_below");
+    let below: f32 = ui.data(|d| d.get_temp(below_key)).unwrap_or_default();
+    let room = whole_lines_height(&tops, total, (room - below).max(0.0));
     let output = egui::ScrollArea::vertical()
         .id_salt("native_log")
         .max_height(room)
@@ -420,6 +421,7 @@ pub(super) fn message_log(ui: &mut egui::Ui, options: LogOptions) {
             tops
         });
     ui.data_mut(|d| d.insert_temp(key, (output.inner, output.content_size.y)));
+    let bottom = ui.next_widget_position().y;
     if !commands.is_empty() {
         ui.separator();
         a11y::live_region(ui, live[1]);
@@ -433,6 +435,9 @@ pub(super) fn message_log(ui: &mut egui::Ui, options: LogOptions) {
                 ui.label(message);
             }
         });
+    super::sounds::show(ui, sounds);
+    let height = ui.next_widget_position().y - bottom;
+    ui.data_mut(|d| d.insert_temp(below_key, height));
 }
 
 /// The height for a scroll area of lines starting at `tops` (`total` high in all) that holds at most
