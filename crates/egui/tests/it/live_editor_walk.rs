@@ -1567,3 +1567,232 @@ fn the_map_editor_shows_an_overmap_special_by_level_and_a_click_on_a_square_open
     let path = field(&h, "editor:file", "path");
     assert!(path.ends_with("house01.json"), "{path}");
 }
+
+/// The grid cells of the canvas on top as (x, y, id, label, glyph).
+type Cells = Vec<(u32, u32, String, String, String)>;
+
+fn canvas_grid(h: &H) -> (u32, u32, Cells) {
+    let top = h.state().model.screens().last().unwrap();
+    let Some(bn_client_egui::protocol::Component::Grid(grid)) =
+        top.root.as_ref().unwrap().find("editor:canvas")
+    else {
+        panic!("no canvas");
+    };
+    let cells = grid
+        .cells
+        .iter()
+        .map(|c| {
+            (
+                c.x,
+                c.y,
+                c.id.clone().unwrap_or_default(),
+                c.label.as_ref().map(|l| l.shown()).unwrap_or_default(),
+                c.glyph.clone().unwrap_or_default(),
+            )
+        })
+        .collect();
+    (grid.cols, grid.rows, cells)
+}
+
+/// Where the canvas square (`x`, `y`) is drawn, from the square of the cell `anchor` (its grid x, y and label).
+fn square_from(h: &H, anchor: (u32, u32, &str), x: u32, y: u32) -> egui::Rect {
+    let at = find(h, anchor.2).unwrap_or_else(|| panic!("no anchor {}: {:?}", anchor.2, labels(h)));
+    at.translate(egui::vec2(
+        (x as f32 - anchor.0 as f32) * at.width(),
+        (y as f32 - anchor.1 as f32) * at.height(),
+    ))
+}
+
+/// The ids of the tabs of the bar that has the tab `of`, and the label of the selected one.
+fn tabs_of(h: &H, of: &str) -> (Vec<String>, Option<String>) {
+    let tabs = h
+        .root()
+        .children_recursive()
+        .filter(|n| n.accesskit_node().role() == egui::accesskit::Role::Tab)
+        .map(|n| {
+            (
+                n.accesskit_node().label().unwrap_or_default().to_string(),
+                n.accesskit_node().is_selected() == Some(true),
+            )
+        })
+        .collect::<Vec<_>>();
+    assert!(tabs.iter().any(|t| t.0 == of), "no tab {of}: {tabs:?}");
+    let selected = tabs.iter().find(|t| t.1).map(|t| t.0.clone());
+    (tabs.into_iter().map(|t| t.0).collect(), selected)
+}
+
+/// A mod file with one overmap special: a house and a field. Point draws a forest from the catalog on a square of
+/// the room around the special and on one beside it with a drag, one undo takes the drag back, erase removes a
+/// square, and the saved file holds the result.
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn the_map_editor_draws_and_erases_the_squares_of_an_overmap_special_and_saves_them() {
+    let sizes = [(1920.0, 1080.0)];
+    let dir = std::env::temp_dir().join(format!("bn-walk-{}", std::process::id()));
+    let profile = std::env::temp_dir().join(format!("bn-live-{}-0", std::process::id()));
+    let moddir = profile.join("mods").join("walk_draw");
+    std::fs::create_dir_all(&moddir).unwrap();
+    std::fs::create_dir_all(&dir).unwrap();
+    let entries = serde_json::json!([{
+        "type": "overmap_special", "id": "walk_draw", "subtype": "fixed",
+        "locations": ["land"], "city_distance": [0, 20], "city_sizes": [1, 20], "occurrences": [0, 1],
+        "overmaps": [
+            { "point": [0, 0, 0], "overmap": "house_01_north" },
+            { "point": [1, 0, 0], "overmap": "field" }
+        ]
+    }]);
+    let file = moddir.join("draw.json");
+    std::fs::write(&file, entries.to_string()).unwrap();
+    let path = file.to_string_lossy().to_string();
+    let recent = serde_json::json!([{ "editor": "map", "name": path, "mods": ["bn"] }]);
+    let (mut h, _root) = start_with(&dir, &[("editor_recent.json", recent.to_string())]);
+    h.set_size(egui::vec2(1920.0, 1080.0));
+    rest(&mut h);
+    click(&mut h, "Editor");
+    rest(&mut h);
+    click(&mut h, &path);
+    rest(&mut h);
+    key(&mut h, egui::Key::Escape);
+    click(&mut h, "Yes");
+    wait_kind(&mut h, "editor");
+    rest(&mut h);
+    shot_at(&mut h, "sd-1-opened", &sizes);
+    dump(&h, "opened");
+    println!("grid {:?}", canvas_grid(&h));
+    assert_eq!(tabs_of(&h, "Open mapgen").1.as_deref(), Some("Open mapgen"));
+    type_text(&mut h, "b");
+    rest(&mut h);
+    assert_eq!(tabs_of(&h, "Pencil").1.as_deref(), Some("Pencil"));
+    let (cols, rows, cells) = canvas_grid(&h);
+    assert_eq!((cols, rows, cells.len()), (4, 3, 12), "{cells:?}");
+    assert_eq!(
+        cells
+            .iter()
+            .filter(|c| c.3.is_empty() && c.4 == " ")
+            .count(),
+        10
+    );
+    shot_at(&mut h, "sd-2-point", &sizes);
+
+    // The catalog, filtered to one terrain, picks it for the pencil.
+    let first_search = |h: &H| {
+        h.root()
+            .children_recursive()
+            .find(|n| {
+                let a = n.accesskit_node();
+                a.role() == egui::accesskit::Role::TextInput
+                    && a.label().as_deref() == Some("Search")
+            })
+            .map(|n| n.rect())
+    };
+    let at = click_stable(&mut h, "catalog search", first_search);
+    click_at(&mut h, at.center());
+    type_text(&mut h, "forest_thick");
+    rest(&mut h);
+    shot_at(&mut h, "sd-3-catalog", &sizes);
+    dump(&h, "catalog filtered");
+    double_click(&mut h, "forest_thick");
+    println!("DOC after pick: {}", document(&h));
+    assert!(document(&h).contains("forest_thick"), "{}", document(&h));
+    shot_at(&mut h, "sd-4-picked", &sizes);
+
+    // A drag from the field into the room beside it, one stroke.
+    let anchor_of = |h: &H| {
+        let (_, _, cells) = canvas_grid(h);
+        let house = cells.iter().find(|c| c.3 == "house").expect("a house");
+        (house.0, house.1)
+    };
+    let at = |h: &H, x: u32, y: u32| {
+        let (ax, ay) = anchor_of(h);
+        square_from(h, (ax, ay, "house"), x, y).center()
+    };
+    let (hx, hy) = anchor_of(&h);
+    let (from, to) = (at(&h, hx + 1, hy), at(&h, hx + 2, hy));
+    let before = canvas_grid(&h);
+    h.hover_at(from);
+    h.run_steps(2);
+    let button = |h: &mut H, pos: egui::Pos2, pressed: bool| {
+        h.event(egui::Event::PointerButton {
+            pos,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        });
+        h.run_steps(2);
+    };
+    button(&mut h, from, true);
+    h.hover_at(to);
+    h.run_steps(3);
+    button(&mut h, to, false);
+    rest(&mut h);
+    shot_at(&mut h, "sd-5-dragged", &sizes);
+    let (_, _, drawn) = canvas_grid(&h);
+    println!("after drag {drawn:?}");
+    let forests = |cells: &[(u32, u32, String, String, String)]| {
+        cells
+            .iter()
+            .filter(|c| c.2 == "square:1,0" || c.2 == "square:2,0")
+            .map(|c| c.3.clone())
+            .collect::<Vec<_>>()
+    };
+    assert!(
+        forests(&drawn)
+            .iter()
+            .all(|l| !l.is_empty() && l != "field"),
+        "{drawn:?}"
+    );
+
+    // One undo takes both squares back.
+    click_footer(&mut h, "Undo");
+    rest(&mut h);
+    shot_at(&mut h, "sd-6-undone", &sizes);
+    let (_, _, undone) = canvas_grid(&h);
+    assert_eq!(forests(&undone), forests(&before.2), "{undone:?}");
+
+    // The drag again, then the eraser on the house.
+    let (hx, hy) = anchor_of(&h);
+    let (from, to) = (at(&h, hx + 1, hy), at(&h, hx + 2, hy));
+    h.hover_at(from);
+    h.run_steps(2);
+    button(&mut h, from, true);
+    h.hover_at(to);
+    h.run_steps(3);
+    button(&mut h, to, false);
+    rest(&mut h);
+    type_text(&mut h, "e");
+    rest(&mut h);
+    assert_eq!(tabs_of(&h, "Eraser").1.as_deref(), Some("Eraser"));
+    let (hx, hy) = anchor_of(&h);
+    let house = at(&h, hx, hy);
+    click_at(&mut h, house);
+    shot_at(&mut h, "sd-7-erased", &sizes);
+    let (_, _, erased) = canvas_grid(&h);
+    println!("after erase {erased:?}");
+    assert!(erased.iter().all(|c| c.3 != "house"), "{erased:?}");
+
+    // Saved, the file holds the forest squares and not the house.
+    key_mod(&mut h, egui::Modifiers::CTRL, egui::Key::S);
+    rest(&mut h);
+    shot_at(&mut h, "sd-8-saved", &sizes);
+    assert!(
+        document(&h).contains("\"Saved\"=\"Yes\""),
+        "{}",
+        document(&h)
+    );
+    let saved = std::fs::read_to_string(&file).unwrap();
+    println!("saved {saved}");
+    let saved = serde_json::from_str::<serde_json::Value>(&saved).unwrap();
+    let overmaps = saved[0]["overmaps"].as_array().unwrap();
+    assert!(
+        overmaps.iter().all(|o| o["overmap"] != "house_01_north"),
+        "{overmaps:?}"
+    );
+    assert_eq!(
+        overmaps
+            .iter()
+            .filter(|o| o["overmap"] == "forest_thick")
+            .count(),
+        2,
+        "{overmaps:?}"
+    );
+}

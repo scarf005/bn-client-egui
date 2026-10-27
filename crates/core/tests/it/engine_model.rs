@@ -3529,6 +3529,32 @@ fn a_hover_held_back_by_a_command_is_not_asked_when_a_screen_comes_up_with_its_e
 }
 
 #[test]
+fn an_overmap_terrain_look_asks_for_the_sprite_as_the_overmaps_tile_does() {
+    let (t, _) = session();
+    let m = connected(t);
+    let look: bn_client_core::protocol::Look = serde_json::from_value(json!({
+        "kind": "overmap_terrain", "id": "forest_thick", "name": "forest", "glyph": "F", "color": "green",
+        "rotation": 1, "subtile": "edge", "looks_like": ["forest", "t_dirt"]
+    }))
+    .unwrap();
+    let layer = &m.looks_cell(&[look], 0).unwrap().layers[0];
+    assert_eq!(
+        (
+            layer.id.as_str(),
+            layer.rotation,
+            layer.subtile.as_deref(),
+            layer.fallbacks.as_slice()
+        ),
+        (
+            "forest_thick",
+            1,
+            Some("edge"),
+            ["forest".to_owned(), "t_dirt".to_owned()].as_slice()
+        )
+    );
+}
+
+#[test]
 fn an_overmap_terrain_look_asks_for_the_terrain_sprite_at_its_rotation() {
     let (t, _) = session();
     let m = connected(t);
