@@ -314,24 +314,32 @@ fn prototypes(name: &str) -> Value {
     screen
 }
 
-/// How far the scroll bar of the list is right of the widest of its `id` texts.
+/// How far the scroll bar of the list is right of the widest of its `id` texts: the first bar right of where they
+/// start, not that of a part left of the list.
 fn bar_gap(h: &H, id: &str) -> f32 {
-    let right = texts(h)
+    let ids = texts(h)
         .into_iter()
         .filter(|t| t.galley.text().starts_with(id))
+        .collect::<Vec<_>>();
+    let right = ids
+        .iter()
         .map(|t| t.pos.x + t.galley.rect.max.x)
         .fold(f32::MIN, f32::max);
+    let left = ids.iter().map(|t| t.pos.x).fold(f32::MAX, f32::min);
     let bar = h
         .output()
         .shapes
         .iter()
         .filter_map(|c| match &c.shape {
-            egui::Shape::Rect(r) if r.rect.width() < 20.0 && r.rect.height() > 50.0 => {
+            egui::Shape::Rect(r)
+                if r.rect.width() < 20.0 && r.rect.height() > 50.0 && r.rect.left() > left =>
+            {
                 Some(r.rect.left())
             }
             _ => None,
         })
         .fold(f32::MAX, f32::min);
+    assert!(bar < f32::MAX, "the list of {id} has no scroll bar");
     bar - right
 }
 
