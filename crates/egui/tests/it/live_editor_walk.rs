@@ -1482,3 +1482,88 @@ fn the_map_editor_tool_keys_choose_tools_and_z_turns_the_clipboard() {
     );
     shot_at(&mut h, "tk-5-rotated", &sizes);
 }
+
+/// The canvas on top as (cell id, label, glyph), in the order the engine sent them.
+fn canvas_cells(h: &H) -> Vec<(String, String, String)> {
+    let top = h.state().model.screens().last().unwrap();
+    let Some(bn_client_egui::protocol::Component::Grid(grid)) =
+        top.root.as_ref().unwrap().find("editor:canvas")
+    else {
+        panic!("no canvas");
+    };
+    grid.cells
+        .iter()
+        .map(|c| {
+            (
+                c.id.clone().unwrap_or_default(),
+                c.label.as_ref().map(|l| l.shown()).unwrap_or_default(),
+                c.glyph.clone().unwrap_or_default(),
+            )
+        })
+        .collect()
+}
+
+/// A mod file with one overmap special: a house and a field on the ground, the house's roof above it; opened as a
+/// player reopens a file. `<` walks to the roof level and a click on a roof square opens its mapgen file.
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn the_map_editor_shows_an_overmap_special_by_level_and_a_click_on_a_square_opens_its_mapgen() {
+    let sizes = [(1920.0, 1080.0)];
+    let dir = std::env::temp_dir().join(format!("bn-walk-{}", std::process::id()));
+    let profile = std::env::temp_dir().join(format!("bn-live-{}-0", std::process::id()));
+    let moddir = profile.join("mods").join("walk_special");
+    std::fs::create_dir_all(&moddir).unwrap();
+    std::fs::create_dir_all(&dir).unwrap();
+    let entries = serde_json::json!([{
+        "type": "overmap_special", "id": "walk_special", "subtype": "fixed",
+        "locations": ["land"], "city_distance": [0, 20], "city_sizes": [1, 20], "occurrences": [0, 1],
+        "overmaps": [
+            { "point": [0, 0, 0], "overmap": "house_01_north" },
+            { "point": [1, 0, 0], "overmap": "field" },
+            { "point": [0, 0, 1], "overmap": "house_01_roof_north" }
+        ]
+    }]);
+    let file = moddir.join("special.json");
+    std::fs::write(&file, entries.to_string()).unwrap();
+    let file = file.to_string_lossy().to_string();
+    let recent = serde_json::json!([{ "editor": "map", "name": file, "mods": ["bn"] }]);
+    let (mut h, _root) = start_with(&dir, &[("editor_recent.json", recent.to_string())]);
+    assert_eq!(crate::common::live::profile_dir(), profile);
+    h.set_size(egui::vec2(1920.0, 1080.0));
+    rest(&mut h);
+    click(&mut h, "Editor");
+    rest(&mut h);
+    click(&mut h, &file);
+    rest(&mut h);
+    key(&mut h, egui::Key::Escape);
+    click(&mut h, "Yes");
+    wait_kind(&mut h, "editor");
+    rest(&mut h);
+    shot_at(&mut h, "sp-1-ground", &sizes);
+    dump(&h, "ground level");
+    let cells = canvas_cells(&h);
+    println!("ground cells {cells:?}");
+    assert_eq!(
+        cells.iter().map(|c| c.0.as_str()).collect::<Vec<_>>(),
+        ["square:0,0", "square:1,0"]
+    );
+    assert!(cells.iter().all(|c| !c.1.is_empty() && !c.2.is_empty()));
+    assert!(document(&h).contains("\"Level\"=\"0\""), "{}", document(&h));
+
+    type_text(&mut h, "<");
+    shot_at(&mut h, "sp-2-roof", &sizes);
+    dump(&h, "roof level");
+    assert!(document(&h).contains("\"Level\"=\"1\""), "{}", document(&h));
+    let roof = canvas_cells(&h);
+    println!("roof cells {roof:?}");
+    assert_eq!(roof.len(), 1);
+    assert_eq!(roof[0].0, "square:0,0");
+
+    click(&mut h, &roof[0].1);
+    wait_kind(&mut h, "editor");
+    rest(&mut h);
+    shot_at(&mut h, "sp-3-opened", &sizes);
+    dump(&h, "opened mapgen");
+    let path = field(&h, "editor:file", "path");
+    assert!(path.ends_with("house01.json"), "{path}");
+}

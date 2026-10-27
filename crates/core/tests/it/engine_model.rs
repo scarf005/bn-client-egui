@@ -3527,3 +3527,20 @@ fn a_hover_held_back_by_a_command_is_not_asked_when_a_screen_comes_up_with_its_e
     m.poll();
     assert_eq!(describes(&h), 0, "a screen is up");
 }
+
+#[test]
+fn an_overmap_terrain_look_asks_for_the_terrain_sprite_at_its_rotation() {
+    let (t, _) = session();
+    let m = connected(t);
+    let look: bn_client_core::protocol::Look = serde_json::from_value(json!({
+        "kind": "overmap_terrain", "id": "house_01", "name": "house", "glyph": "H", "color": "light_red",
+        "rotation": 2
+    }))
+    .unwrap();
+    let cell = m.looks_cell(&[look], 0).unwrap();
+    assert_eq!(cell.glyph, 'H');
+    assert_eq!(
+        (cell.layers[0].id.as_str(), cell.layers[0].rotation),
+        ("house_01", 2)
+    );
+}
