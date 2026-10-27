@@ -266,6 +266,30 @@ fn a_workspace_has_no_title_bar_and_its_title_help_and_leave_end_its_menu_bar() 
     }
 }
 
+#[test]
+fn an_action_on_a_row_of_a_list_no_part_names_is_drawn_under_that_list() {
+    for size in SIZES {
+        let mut screen = workspace();
+        screen["affordances"].as_array_mut().unwrap().push(json!({"id": "ws:inside", "label": "Inside",
+            "keys": [], "enabled": true, "expect": "screen", "args": {"row": {"component_id": "ws:palette"}}}));
+        let (app, _) = crate::common::staged(crate::common::over_map(screen));
+        let mut h = crate::common::themed_harness(size, app);
+        h.run_steps(7);
+        crate::common::settle_windows(&mut h);
+        let (inside, floor, inspector) = (
+            rect(&h, "Inside"),
+            rect(&h, "Floor"),
+            rect(&h, "Properties"),
+        );
+        assert!(
+            inside.top() >= floor.bottom()
+                && inside.bottom() <= inspector.top()
+                && inside.left() >= floor.left() - 8.0,
+            "{size:?}: Inside {inside:?} under Floor {floor:?}, over {inspector:?}"
+        );
+    }
+}
+
 /// Writes PNGs of the workspace to `$SHOT_DIR`; needs a Vulkan adapter, so it only runs when asked:
 /// `cargo test --test it ui_workspace::shots -- --ignored`.
 #[test]
