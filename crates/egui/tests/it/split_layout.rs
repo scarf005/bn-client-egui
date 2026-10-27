@@ -169,3 +169,14 @@ fn a_chain_of_stale_lines_moves_the_end_up_by_a_few_lines_not_to_the_top() {
     let end = whole_rows(&stale, 600.0);
     assert!((540.0..600.0).contains(&end), "{end}");
 }
+
+#[test]
+fn short_prose_beside_lists_takes_its_natural_width_and_the_lists_share_the_rest() {
+    let parts = [
+        pane(40.0, 80.0, false),
+        pane(100.0, 200.0, true),
+        pane(100.0, 200.0, true),
+    ];
+    let widths = prose_widths(&parts, 0, 900.0, GAP);
+    assert_eq!(widths, vec![80.0, 402.0, 402.0]);
+}
