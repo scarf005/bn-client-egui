@@ -10,6 +10,7 @@ use bn_client_egui::watchdog::Watchdog;
 use bn_client_egui::{App, EngineModel, GameModel};
 use eframe::egui;
 use egui_kittest::Harness;
+use egui_kittest::kittest::Queryable;
 use std::time::Duration;
 
 type H<'a> = Harness<'a, App<EngineModel>>;
@@ -46,8 +47,19 @@ fn cursor(h: &H) -> Option<String> {
     screen.focus.as_ref()?.row_id.clone()
 }
 
+/// The engine screen on top, as the engine described it: what the look cursor is on.
+fn look_screen(h: &H) -> Option<serde_json::Value> {
+    let screen = h.state().model.screens().last().cloned()?;
+    serde_json::to_value(screen).ok()
+}
+
 /// A new game on the map, safe mode off, in a client of 1600 by 900.
 fn playing<'a>() -> H<'a> {
+    playing_in(egui::vec2(1600.0, 900.0))
+}
+
+/// `playing` in a client of `size`.
+fn playing_in<'a>(size: egui::Vec2) -> H<'a> {
     let engine = std::env::var_os("BN_ENGINE").expect("set BN_ENGINE");
     let root = game_root(engine.as_ref(), None).expect("game root");
     let dir = std::env::temp_dir().join(format!("bn-key-focus-{}", std::process::id()));
@@ -58,7 +70,7 @@ fn playing<'a>() -> H<'a> {
     let app = App::new(EngineModel::new(Box::new(transport)))
         .with_settings(settings)
         .with_root(root);
-    let mut h = crate::common::shot_harness(egui::vec2(1600.0, 900.0), app);
+    let mut h = crate::common::shot_harness(size, app);
     choose(&mut h, "menu:tab", "new_game");
     choose(&mut h, "menu:entry", "new_game:play_now");
     run_until(&mut h, "the map", 600, |h| h.state().model.size().x > 0);
@@ -131,4 +143,46 @@ fn the_level_keys_in_the_focused_map_window_change_its_level_and_climb_no_stairs
     eprintln!("map >: level {z_before:?} -> {z_after:?}; player {at_before:?} -> {at_after:?}");
     assert_eq!(at_before, at_after, "no stairs were taken");
     assert_ne!(z_before, z_after, "the map window changed its level");
+}
+
+#[test]
+#[ignore = "needs BN_ENGINE"]
+fn down_in_the_clicked_inventory_window_moves_its_cursor_and_not_the_look_cursor() {
+    for size in [egui::vec2(1280.0, 800.0), egui::vec2(1920.0, 1080.0)] {
+        let mut h = playing_in(size);
+        key(&mut h, "i");
+        run_until(&mut h, "the inventory", 60, |h| {
+            h.state()
+                .model
+                .watched_panel(PanelKind::Inventory)
+                .is_some()
+        });
+        h.run_steps(5);
+        key(&mut h, ";");
+        run_until(&mut h, "look around", 60, |h| {
+            h.state().model.focus().is_some() && !h.state().model.busy()
+        });
+        let window = h
+            .get_by_role_and_label(egui::accesskit::Role::Window, "Inventory")
+            .rect();
+        let at = window.left_top() + egui::vec2(40.0, 12.0);
+        h.event(egui::Event::PointerMoved(at));
+        h.event(egui::Event::PointerButton {
+            pos: at,
+            button: egui::PointerButton::Primary,
+            pressed: true,
+            modifiers: egui::Modifiers::NONE,
+        });
+        h.run_steps(3);
+        crate::common::settle_windows(&mut h);
+        let (look, cursor_before) = (look_screen(&h), cursor(&h));
+        save(&mut h, &format!("look-inventory-before-{}.png", size.x));
+        press(&mut h, egui::Key::ArrowDown);
+        press(&mut h, egui::Key::ArrowDown);
+        save(&mut h, &format!("look-inventory-after-{}.png", size.x));
+        let cursor_after = cursor(&h);
+        eprintln!("{size:?}: inventory {cursor_before:?} -> {cursor_after:?}");
+        assert_eq!(look_screen(&h), look, "the look cursor stayed");
+        assert_ne!(cursor_before, cursor_after, "the inventory cursor moved");
+    }
 }
