@@ -152,12 +152,11 @@ impl Rec {
         let rect_of = |h: &H| {
             h.root()
                 .children_recursive()
-                .filter(|n| {
+                .find(|n| {
                     let a = n.accesskit_node();
                     a.role() == egui::accesskit::Role::TextInput
                         && a.label().as_deref() == Some(label)
                 })
-                .next()
                 .map(|n| n.rect())
         };
         let at = self.stable(label, rect_of).center();
