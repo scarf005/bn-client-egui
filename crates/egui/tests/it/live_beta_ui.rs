@@ -2,7 +2,9 @@
 //! the windows of a play session are saved as pictures at 1280x800 and 1920x1080.
 //!
 //! `BN_ENGINE=<engine> SHOT_DIR=<dir> cargo test -p bn-client-egui --test it live_beta_ui:: -- --ignored --nocapture`
-use crate::common::live::{H, english_transport, new_game, pick, root, run_until, save, settle};
+use crate::common::live::{
+    H, english_transport, new_game, pick, root, run_until, save, save_legible, settle,
+};
 use bn_client_egui::App;
 use bn_client_egui::EngineModel;
 use bn_client_egui::protocol::{InvokeArgs, ScreenRole};
@@ -204,7 +206,7 @@ fn the_debug_windows_are_saved_as_pictures() {
         pick(&mut h, "Spawning");
         pick(&mut h, "Spawn an item");
         settle(&mut h);
-        save(&mut h, &format!("wish-{width}.png"));
+        save_legible(&mut h, &format!("wish-{width}.png"));
         assert!(
             h.state_mut()
                 .model
@@ -213,7 +215,7 @@ fn the_debug_windows_are_saved_as_pictures() {
         );
         run_until(&mut h, "the filter prompt", 60, |h| !h.state().model.busy());
         settle(&mut h);
-        save(&mut h, &format!("wish-filter-{width}.png"));
+        save_legible(&mut h, &format!("wish-filter-{width}.png"));
     }
 }
 
@@ -227,10 +229,10 @@ fn the_windows_of_a_session_are_saved_as_pictures() {
         new_game(&mut h, "new_game:play_now_default");
         let width = size.0 as u32;
         settle(&mut h);
-        save(&mut h, &format!("map-{width}.png"));
+        save_legible(&mut h, &format!("map-{width}.png"));
         h.get_by_label("Client settings").click();
         settle(&mut h);
-        save(&mut h, &format!("settings-{width}.png"));
+        save_legible(&mut h, &format!("settings-{width}.png"));
         h.get_by_label("Close window").click();
         h.run_steps(3);
         for action in [
@@ -248,7 +250,7 @@ fn the_windows_of_a_session_are_saved_as_pictures() {
             }
             run_until(&mut h, action, 60, |h| !h.state().model.busy());
             settle(&mut h);
-            save(&mut h, &format!("{action}-{width}.png"));
+            save_legible(&mut h, &format!("{action}-{width}.png"));
             h.key_press(egui::Key::Escape);
             run_until(&mut h, "the map", 60, |h| {
                 h.state()

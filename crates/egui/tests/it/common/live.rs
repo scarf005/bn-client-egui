@@ -225,3 +225,20 @@ pub fn save(h: &mut H, name: &str) {
         image.save(std::path::Path::new(&dir).join(name)).unwrap();
     }
 }
+
+/// The faults that keep the frame last drawn from being read, against the screen on top.
+pub fn faults(h: &H) -> Vec<String> {
+    let screen = (h.state().model.screens().last())
+        .map_or(serde_json::Value::Null, |s| serde_json::to_value(s).unwrap());
+    crate::common::legible::legible(h, &screen)
+        .into_iter()
+        .map(|f| format!("{:?} {}", f.kind, f.what))
+        .collect()
+}
+
+/// `save`, and the frame must be legible: no line cut or cut short, no word broken, no window outside the room.
+pub fn save_legible(h: &mut H, name: &str) {
+    save(h, name);
+    let faults = faults(h);
+    assert!(faults.is_empty(), "{name}: {faults:?}");
+}

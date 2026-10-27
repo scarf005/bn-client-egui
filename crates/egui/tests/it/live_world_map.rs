@@ -3,7 +3,7 @@
 //!
 //! `BN_ENGINE=<engine> SHOT_DIR=<dir> cargo test --release -p bn-client-egui --test it live_world_map:: -- --ignored
 //! --nocapture`
-use crate::common::live::{choose, dismiss_popups, safe_mode_off, save};
+use crate::common::live::{choose, dismiss_popups, safe_mode_off, save_legible};
 use bn_client_egui::transport::game_root;
 use bn_client_egui::watchdog::Watchdog;
 use bn_client_egui::{App, EngineModel, GameModel};
@@ -74,12 +74,12 @@ fn walk_with_the_map_open(size: egui::Vec2) {
     // The window names the level of the squares it shows: the avatar's, until a level key moves it.
     let level = h.state().model.watched_overmap().unwrap().origin.z;
     h.get_by_label(&format!("Level {level}"));
-    save(&mut h, &format!("map-open-{}.png", size.x));
+    save_legible(&mut h, &format!("map-open-{}.png", size.x));
     key(&mut h, "<");
     run_until(&mut h, "the level above", 60, |h| {
         h.query_by_label(&format!("Level {}", level + 1)).is_some()
     });
-    save(&mut h, &format!("map-level-up-{}.png", size.x));
+    save_legible(&mut h, &format!("map-level-up-{}.png", size.x));
     key(&mut h, ">");
     run_until(&mut h, "the avatar's level", 60, |h| {
         h.query_by_label(&format!("Level {level}")).is_some()
@@ -99,5 +99,5 @@ fn walk_with_the_map_open(size: egui::Vec2) {
     assert_ne!(square(&h), before, "the player moved with the map open");
     h.run_steps(5);
     h.get_by_label("Travel and notes");
-    save(&mut h, &format!("map-walked-{}.png", size.x));
+    save_legible(&mut h, &format!("map-walked-{}.png", size.x));
 }

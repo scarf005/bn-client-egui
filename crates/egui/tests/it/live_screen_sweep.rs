@@ -132,6 +132,11 @@ fn measure(h: &mut H, name: &str, faults: &mut Vec<String>) {
             .save(dir.join(format!("{}.png", name.replace(' ', "_"))))
             .unwrap();
     }
+    faults.extend(
+        crate::common::live::faults(h)
+            .into_iter()
+            .map(|f| format!("{name} ({kind}) unreadable: {f}")),
+    );
     let grew = first
         .iter()
         .zip(&later)

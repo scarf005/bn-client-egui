@@ -2,7 +2,7 @@
 //! the size of a client window and after an earlier session remembered a short window for the same kind.
 //!
 //! `BN_ENGINE=<engine> SHOT_DIR=<dir> cargo test -p bn-client-egui --test it live_menu_height:: -- --ignored --nocapture`
-use crate::common::live::{H, english_transport, new_game, root, save, settle};
+use crate::common::live::{H, english_transport, new_game, root, save_legible, settle};
 use bn_client_egui::{App, EngineModel, GameModel};
 use eframe::egui;
 use egui_kittest::kittest::Queryable;
@@ -78,7 +78,7 @@ fn the_main_menu_in_a_game_opens_showing_all_its_rows_or_the_room() {
                 size.1,
                 if remembered { "-remembered" } else { "" }
             );
-            save(&mut h, &format!("main-menu-{name}.png"));
+            save_legible(&mut h, &format!("main-menu-{name}.png"));
             let room = egui::vec2(size.0, size.1).y - 47.0 - 16.0;
             let shows = row.is_some_and(|r| window.contains_rect(r.shrink(1.0)));
             if !(shows || window.height() >= 0.9 * room - 2.0) {

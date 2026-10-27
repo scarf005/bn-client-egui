@@ -3,7 +3,7 @@
 //!
 //! `BN_ENGINE=<engine> SHOT_DIR=<dir> cargo test --release -p bn-client-egui --test it live_aim:: -- --ignored
 //! --nocapture`; `BN_ROOT` names the game root when it is not beside the engine.
-use crate::common::live::{choose, dismiss_popups, pick, run_until, save, settle};
+use crate::common::live::{choose, dismiss_popups, pick, run_until, save_legible, settle};
 use bn_client_egui::protocol::Component;
 use bn_client_egui::transport::game_root;
 use bn_client_egui::{App, EngineModel, GameModel, MenuModel};
@@ -160,7 +160,7 @@ fn aim_at_zombie(name: &str, settings: &str, size: egui::Vec2) {
     run_until(&mut h, "wielded", 60, |h| !h.state().model.busy());
     dismiss_popups(&mut h);
     settle(&mut h);
-    save(&mut h, &format!("{name}-00-wielded.png"));
+    save_legible(&mut h, &format!("{name}-00-wielded.png"));
     spawn_zombie(&mut h);
     for _ in 0..3 {
         press(&mut h, "RIGHT");
@@ -168,13 +168,13 @@ fn aim_at_zombie(name: &str, settings: &str, size: egui::Vec2) {
     press(&mut h, "RETURN");
     dismiss_popups(&mut h);
     settle(&mut h);
-    save(&mut h, &format!("{name}-01-spawned.png"));
+    save_legible(&mut h, &format!("{name}-01-spawned.png"));
     type_key(&mut h, "f");
     run_until(&mut h, "the aim", 60, |h| {
         h.state().model.focus().is_some() && !h.state().model.busy()
     });
     settle(&mut h);
-    save(&mut h, &format!("{name}-02-aim-open.png"));
+    save_legible(&mut h, &format!("{name}-02-aim-open.png"));
     // The next target, and back.
     for (n, label) in ["03-next-target", "04-target-again"]
         .into_iter()
@@ -183,25 +183,25 @@ fn aim_at_zombie(name: &str, settings: &str, size: egui::Vec2) {
         let _ = n;
         press(&mut h, "TAB");
         settle(&mut h);
-        save(&mut h, &format!("{name}-{label}.png"));
+        save_legible(&mut h, &format!("{name}-{label}.png"));
     }
     // One turn of aiming.
     type_key(&mut h, ".");
     run_until(&mut h, "the aim turn", 60, |h| !h.state().model.busy());
     settle(&mut h);
-    save(&mut h, &format!("{name}-05-aimed.png"));
+    save_legible(&mut h, &format!("{name}-05-aimed.png"));
     // Fire: the flight and the hit frame by frame.
     type_key(&mut h, "f");
     run_until(&mut h, "the shot", 60, |h| h.state().playing_effects() > 0);
     for frame in 0..10 {
-        save(&mut h, &format!("{name}-06-shot-{frame:02}.png"));
+        save_legible(&mut h, &format!("{name}-06-shot-{frame:02}.png"));
         h.run_steps(3);
     }
     run_until(&mut h, "the shot played", 120, |h| {
         h.state().playing_effects() == 0
     });
     settle(&mut h);
-    save(&mut h, &format!("{name}-07-after.png"));
+    save_legible(&mut h, &format!("{name}-07-after.png"));
 }
 
 const FLAT: &str = r#"{"tiles":true,"tileset":"UltimateCataclysm"}"#;
