@@ -449,7 +449,6 @@ impl<M: GameModel> App<M> {
         if paints.is_empty() {
             return;
         }
-        self.display.update(ctx);
         self.display.begin();
         for paint in paints {
             match paint {
