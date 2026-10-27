@@ -173,8 +173,9 @@ pub fn right_aligned(ui: &mut egui::Ui, text: impl Into<egui::WidgetText>) {
     let layout = egui::Layout::right_to_left(egui::Align::Center);
     // Not selectable: a click on the text is a click on its row.
     ui.with_layout(layout, |ui| {
-        // A value column is measured to its widest value, so a value never wraps.
-        ui.add(egui::Label::new(text).extend().selectable(false))
+        // A value column is measured to its widest value, so a value never wraps; one cut at the room's edge
+        // (`Widths::fitted`) is shortened to what fits, its whole text on hover.
+        ui.add(egui::Label::new(text).truncate().selectable(false))
     });
 }
 
