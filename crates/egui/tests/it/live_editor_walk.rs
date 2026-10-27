@@ -1423,7 +1423,7 @@ fn selected_tool(h: &H) -> Option<String> {
     })
 }
 
-/// A mapgen opened as a player reopens a file; the tool keys choose the tools, and Z turns the copied region.
+/// A mapgen opened as a player reopens a file; the tool keys choose the tools, and z turns the copied region.
 #[test]
 #[ignore = "requires BN_ENGINE pointing at an engine binary"]
 fn the_map_editor_tool_keys_choose_tools_and_z_turns_the_clipboard() {
@@ -1461,7 +1461,7 @@ fn the_map_editor_tool_keys_choose_tools_and_z_turns_the_clipboard() {
         shot_at(&mut h, &format!("tk-2-{typed}"), &sizes);
     }
 
-    // A 3x2 region selected by its two corners and copied; Z turns it to 2x3.
+    // A 3x2 region selected by its two corners and copied; z turns it to 2x3.
     paint(&mut h, 2, 2);
     paint(&mut h, 4, 3);
     shot_at(&mut h, "tk-3-select", &sizes);
@@ -1473,8 +1473,8 @@ fn the_map_editor_tool_keys_choose_tools_and_z_turns_the_clipboard() {
         document(&h)
     );
     shot_at(&mut h, "tk-4-copied", &sizes);
-    type_text(&mut h, "Z");
-    println!("DOC after Z: {}", document(&h));
+    type_text(&mut h, "z");
+    println!("DOC after z: {}", document(&h));
     assert!(
         document(&h).contains("\"Clipboard\"=\"2x3\""),
         "{}",
