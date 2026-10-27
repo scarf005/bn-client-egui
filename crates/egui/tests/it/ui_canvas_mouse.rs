@@ -164,7 +164,7 @@ fn the_same_grid_of_another_screen_is_shown_fitted_anew() {
     let zoomed = square(&h, 5, 5).unwrap().width();
     let mut other = screen();
     other["screen_id"] = "screen:other".into();
-    restack(&script, 50, vec![other]);
+    restack(&script, 41, vec![other]);
     h.run_steps(8);
     let shown = square(&h, 5, 5).unwrap().width();
     assert!(shown < zoomed / 1.5, "{zoomed} {shown}");

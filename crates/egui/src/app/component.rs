@@ -804,7 +804,7 @@ impl<M: GameModel> App<M> {
             }
             Component::Form(form) => self.form(ui, screen, form, out),
             Component::Text(block) => self.text_block(ui, block),
-            Component::Grid(grid) => self.grid(ui, grid, out),
+            Component::Grid(grid) => self.grid(ui, screen, grid, out),
             Component::Map(map) => self.map_slot(ui, screen, map, out),
             Component::Canvas(canvas) => self.canvas(ui, canvas),
         }
@@ -1115,7 +1115,7 @@ impl<M: GameModel> App<M> {
         });
     }
 
-    fn grid(&self, ui: &mut egui::Ui, grid: &Grid, out: &mut Vec<Intent>) {
+    fn grid(&self, ui: &mut egui::Ui, screen: &Screen, grid: &Grid, out: &mut Vec<Intent>) {
         let (xs, ys) = drawn_span(grid);
         // The cells grow with the room the grid has, up to twice their size, their glyphs with them; a canvas's
         // fill its room, and the zoom gesture over it scales them from there.
@@ -1125,7 +1125,7 @@ impl<M: GameModel> App<M> {
         // A canvas zooms from the size that fills its room, no smaller than the whole grid fitting in it.
         let base = fit.max(GRID_CELL);
         let limits = ((fit / base).min(1.0), GRID_ZOOM_MAX);
-        let view_key = egui::Id::new(("grid view", &grid.head.id));
+        let view_key = egui::Id::new(("grid view", &screen.screen_id, &grid.head.id));
         let view = ui
             .data(|d| d.get_temp::<canvas::View>(view_key))
             .filter(|v| v.span == (xs.len(), ys.len()));
@@ -1164,7 +1164,7 @@ impl<M: GameModel> App<M> {
             let offset = placed.offset;
             let asked = anchor.is_some().then_some(offset).flatten();
             let mut area = egui::ScrollArea::both()
-                .id_salt(("grid", &grid.head.id))
+                .id_salt(("grid", &screen.screen_id, &grid.head.id))
                 .max_height(rows * cell)
                 .auto_shrink([true, true])
                 .scroll_source(egui::scroll_area::ScrollSource {
