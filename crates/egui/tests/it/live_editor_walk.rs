@@ -262,7 +262,23 @@ fn square(h: &H, x: usize, y: usize) -> egui::Rect {
                     .is_some_and(|l| l.chars().count() <= 1 && l != "⋯")
         })
         .collect::<Vec<_>>();
-    let at = y * cols + x;
+    // The squares are the run of buttons that spells the canvas row by row; a legend's symbols are buttons too.
+    let spelled = glyphs.concat().chars().collect::<Vec<_>>();
+    let names = buttons
+        .iter()
+        .map(|b| {
+            b.accesskit_node()
+                .label()
+                .unwrap_or_default()
+                .chars()
+                .next()
+                .unwrap_or(' ')
+        })
+        .collect::<Vec<_>>();
+    let start = (0..=names.len().saturating_sub(spelled.len()))
+        .find(|&i| names[i..i + spelled.len()] == spelled[..])
+        .unwrap_or_else(|| panic!("no run of buttons spells the canvas"));
+    let at = start + y * cols + x;
     let want = glyphs[y].chars().nth(x).unwrap().to_string();
     let found = &buttons[at];
     assert_eq!(
@@ -2627,4 +2643,227 @@ fn the_map_editor_stamps_the_document_into_the_world_and_tests_it_there() {
     wait_kind(&mut h, "editor");
     assert_eq!(canvas_glyphs(&h), canvas);
     shot_at(&mut h, "st-3-editor-again", &sizes);
+}
+
+/// Pictures of the window at the laptop and desktop sizes, back at 1290x830 after.
+fn shot_both(h: &mut H, name: &str) {
+    shot_at(h, name, &[(1280.0, 800.0), (1920.0, 1080.0)]);
+}
+
+/// Opens the menu `group` of the menu bar and clicks its item `item`: the one under the menu's button, as a tab
+/// may read the same.
+fn menu(h: &mut H, group: &str, item: &str) {
+    press(h, group);
+    h.run_steps(4);
+    let under = find(h, group).unwrap().left_bottom();
+    let at = h
+        .root()
+        .children_recursive()
+        .filter(|n| n.accesskit_node().label().as_deref() == Some(item))
+        .map(|n| n.rect())
+        .filter(|r| r.top() >= under.y - 1.0)
+        .min_by(|a, b| {
+            (a.left_top() - under)
+                .length()
+                .total_cmp(&(b.left_top() - under).length())
+        })
+        .unwrap_or_else(|| panic!("no {item} in {group}"));
+    click_at(h, at.center());
+    rest(h);
+}
+
+/// The top screen's kind.
+fn top(h: &H) -> Option<String> {
+    h.state()
+        .model
+        .screens()
+        .last()
+        .and_then(|s| s.kind.clone())
+}
+
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn a_modder_opens_draws_undoes_saves_tests_and_leaves_the_map_editor_workspace() {
+    let dir = std::env::temp_dir().join(format!("bn-walk-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let (mut h, _root) = start(&dir);
+    h.set_size(egui::vec2(1290.0, 830.0));
+    rest(&mut h);
+    open_map_editor(&mut h);
+    rest(&mut h);
+    shot_both(&mut h, "ws-map-01-start");
+    dump(&h, "the start page");
+
+    // A mapgen file of the game found by the browser's search and opened by a double click on its row.
+    click_input(&mut h, "Search");
+    type_text(&mut h, "house/2story01");
+    key(&mut h, egui::Key::Enter);
+    rest(&mut h);
+    shot_both(&mut h, "ws-map-02-browsed");
+    double_click(&mut h, "2Story01.json");
+    wait_kind(&mut h, "editor");
+    run_until(&mut h, "the opened canvas", 60, |h| {
+        canvas_glyphs(h).len() == 24
+    });
+    rest(&mut h);
+    shot_both(&mut h, "ws-map-03-opened");
+    dump(&h, "the opened file");
+
+    // A symbol of the legend picked by a click on its row.
+    let top_screen = h.state().model.screens().last().unwrap();
+    let legend =
+        serde_json::to_value(top_screen.root.as_ref().unwrap().find("editor:legend")).unwrap();
+    let wall = legend["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["id"] == "symbol:#")
+        .map(|r| r["label"].as_str().unwrap().to_string())
+        .expect("a # in the legend");
+    // The legend is right of the canvas, whose squares read as their symbols too.
+    let row = h
+        .root()
+        .children_recursive()
+        .filter(|n| n.accesskit_node().label().as_deref() == Some(wall.as_str()))
+        .map(|n| n.rect())
+        .max_by(|a, b| a.left().total_cmp(&b.left()))
+        .expect("the legend's # row");
+    tap(&mut h, row.center());
+    tap(&mut h, row.center());
+    rest(&mut h);
+    run_until(&mut h, "the symbol #", 20, |h| {
+        document(h).contains("\"Symbol\"=\"#\"")
+    });
+    shot_both(&mut h, "ws-map-04-symbol");
+
+    // The pencil on one square, then a rectangle from two clicks.
+    let opened = canvas_glyphs(&h);
+    click_tab(&mut h, "Pencil");
+    // Squares in the canvas's first view, which the history under it would hide lower down.
+    paint(&mut h, 2, 10);
+    run_until(&mut h, "the pencil square", 30, |h| {
+        glyph(h, 2, 10) == Some('#')
+    });
+    click_tab(&mut h, "Rectangle");
+    paint(&mut h, 4, 9);
+    paint(&mut h, 8, 12);
+    run_until(&mut h, "the rectangle", 30, |h| {
+        glyph(h, 8, 12) == Some('#')
+    });
+    shot_both(&mut h, "ws-map-05-drawn");
+    let drawn = canvas_glyphs(&h);
+
+    // Undone from the Edit menu.
+    press(&mut h, "Edit");
+    h.run_steps(4);
+    shot_both(&mut h, "ws-map-06-edit-menu");
+    press(&mut h, "Undo");
+    rest(&mut h);
+    assert_ne!(canvas_glyphs(&h), drawn);
+    assert_eq!(glyph(&h, 2, 10), Some('#'));
+    shot_both(&mut h, "ws-map-07-undone");
+
+    // Saved as a mod file from the File menu, which asks for the path as the footer would.
+    let path = crate::common::live::profile_dir().join("mods/zz_ws_house.json");
+    menu(&mut h, "File", "Save as");
+    shot_both(&mut h, "ws-map-08-save-as-asks");
+    replace_text(&mut h, &path.to_string_lossy());
+    key(&mut h, egui::Key::Enter);
+    rest(&mut h);
+    shot_both(&mut h, "ws-map-09-saved");
+    assert!(path.is_file(), "no {}", path.display());
+    let _ = opened;
+
+    // Tested on the map, and back by the map's editor action.
+    menu(&mut h, "World", "Test");
+    run_until(&mut h, "the map", 60, |h| {
+        !h.state().model.busy() && top(h).as_deref() != Some("editor")
+    });
+    rest(&mut h);
+    shot_both(&mut h, "ws-map-10-tested");
+    click(&mut h, "Map Editor");
+    wait_kind(&mut h, "editor");
+    rest(&mut h);
+    shot_both(&mut h, "ws-map-11-back");
+
+    // Left: the world ends and the main menu is back.
+    key(&mut h, egui::Key::Escape);
+    rest(&mut h);
+    shot_both(&mut h, "ws-map-12-leaving");
+    if find(&h, "Leave without saving").is_some() {
+        click(&mut h, "Leave without saving");
+    }
+    run_until(&mut h, "the main menu", 300, |h| {
+        h.state().model.menu().is_some() && !h.state().model.busy()
+    });
+    rest(&mut h);
+    shot_both(&mut h, "ws-map-13-main-menu");
+}
+
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn a_modder_opens_a_prototype_installs_a_part_spawns_and_leaves_the_vehicle_editor_workspace() {
+    let dir = std::env::temp_dir().join(format!("bn-walk-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let (mut h, _root) = start(&dir);
+    h.set_size(egui::vec2(1290.0, 830.0));
+    rest(&mut h);
+    click(&mut h, "Editor");
+    click(&mut h, "Vehicle editor");
+    key(&mut h, egui::Key::Escape);
+    click(&mut h, "Yes");
+    wait_kind(&mut h, "vehicle_editor");
+    rest(&mut h);
+    shot_both(&mut h, "ws-veh-01-start");
+    dump(&h, "the vehicle editor");
+
+    click_input(&mut h, "Search");
+    type_text(&mut h, "bicycle");
+    key(&mut h, egui::Key::Enter);
+    rest(&mut h);
+    shot_both(&mut h, "ws-veh-02-filtered");
+    double_click(&mut h, "Bicycle");
+    wait_kind(&mut h, "vehicle_editor");
+    rest(&mut h);
+    shot_both(&mut h, "ws-veh-03-opened");
+    dump(&h, "the opened prototype");
+
+    // A mount picked by a click on its square, and a headlight installed there from the Install tab.
+    click(&mut h, "bicycle wheel");
+    rest(&mut h);
+    shot_both(&mut h, "ws-veh-04-mount");
+    click_tab(&mut h, "Install");
+    click_input(&mut h, "Search");
+    type_text(&mut h, "headlight");
+    key(&mut h, egui::Key::Enter);
+    rest(&mut h);
+    shot_both(&mut h, "ws-veh-05-parts");
+    double_click(&mut h, "headlight");
+    rest(&mut h);
+    shot_both(&mut h, "ws-veh-06-installed");
+    dump(&h, "after the install");
+
+    // Spawned beside the avatar from the World menu: the map shows it.
+    menu(&mut h, "World", "Spawn");
+    run_until(&mut h, "the map", 60, |h| {
+        !h.state().model.busy() && top(h).as_deref() != Some("vehicle_editor")
+    });
+    rest(&mut h);
+    shot_both(&mut h, "ws-veh-07-spawned");
+
+    // Back in the map editor by the map's editor action, and left for the main menu.
+    click(&mut h, "Map Editor");
+    wait_kind(&mut h, "editor");
+    rest(&mut h);
+    shot_both(&mut h, "ws-veh-08-editor-again");
+    key(&mut h, egui::Key::Escape);
+    rest(&mut h);
+    if find(&h, "Leave without saving").is_some() {
+        click(&mut h, "Leave without saving");
+    }
+    run_until(&mut h, "the main menu", 300, |h| {
+        h.state().model.menu().is_some() && !h.state().model.busy()
+    });
+    rest(&mut h);
+    shot_both(&mut h, "ws-veh-09-main-menu");
 }

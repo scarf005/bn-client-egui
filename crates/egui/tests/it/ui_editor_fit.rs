@@ -78,9 +78,11 @@ fn the_catalog_under_a_full_canvas_scrolls_into_the_window() {
         .map(|r| r["label"].as_str().unwrap().to_owned())
         .collect::<Vec<_>>();
     let mut h = open(screen, size);
-    // The window fills the map region, from under its title bar to the bottom of the screen.
-    let close = h.get_by_label("Close window").rect();
-    let room = egui::Rect::from_x_y_ranges(0.0..=close.right(), close.bottom()..=size.y);
+    // The workspace fills the view, from under its menu bar to the bottom of the screen.
+    let bar = h
+        .get_by_role_and_label(egui::accesskit::Role::Button, "File")
+        .rect();
+    let room = egui::Rect::from_x_y_ranges(0.0..=size.x, bar.bottom()..=size.y);
     let shown = |h: &H| {
         catalog
             .iter()
@@ -117,8 +119,9 @@ fn the_legend_under_a_full_canvas_shows_most_of_a_dozen_symbols_at_once() {
             .collect();
         legend["total"] = json!(12);
         let mut h = open(screen, size);
-        // Above the canvas, which the window scrolls under: the wheel over it zooms it.
-        let over = egui::pos2(40.0, 90.0);
+        // Above the canvas, which the window scrolls under, below the menu bar, which does not scroll: the wheel
+        // over the canvas zooms it.
+        let over = egui::pos2(40.0, h.get_by_label("View").rect().bottom() + 8.0);
         // Scrolling the window a notch at a time, the most symbols in view at once.
         let mut drawn = 0;
         for _ in 0..60 {

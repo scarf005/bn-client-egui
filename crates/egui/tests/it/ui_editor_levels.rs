@@ -88,6 +88,8 @@ fn square(h: &H, x: u32, y: u32) -> egui::Rect {
     let first = h
         .get_all_by_label(".")
         .map(|n| n.rect())
+        // A canvas square is as wide as it is tall; a list row naming `.` is wider.
+        .filter(|r| (r.width() - r.height()).abs() < 1.0)
         .min_by(|a, b| (a.min.y, a.min.x).partial_cmp(&(b.min.y, b.min.x)).unwrap())
         .unwrap();
     first.translate(egui::vec2(

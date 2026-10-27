@@ -184,6 +184,154 @@ fn no_text_of_the_workspace_is_cut() {
     }
 }
 
+/// `workspace()` with `edit` applied to its root's parts.
+fn shown_with<'a>(size: egui::Vec2, edit: impl FnOnce(&mut Vec<Value>)) -> H<'a> {
+    let mut screen = workspace();
+    edit(screen["root"]["children"].as_array_mut().unwrap());
+    let (app, _) = crate::common::staged(crate::common::over_map(screen));
+    let mut h = crate::common::themed_harness(size, app);
+    h.run_steps(7);
+    crate::common::settle_windows(&mut h);
+    h
+}
+
+#[test]
+fn a_status_panel_is_one_line_of_its_facts() {
+    for size in SIZES {
+        let h = shown_with(size, |parts| {
+            parts[5] = json!({"id": "ws:status", "kind": "panel", "slot": "status", "title": "room.json",
+                "stats": [{"key": "saved", "label": "Saved", "value": "Yes"},
+                    {"key": "symbol", "label": "Symbol", "value": "#"},
+                    {"key": "brush", "label": "Brush", "value": "2"}]});
+        });
+        let line = ["room.json", "Saved", "Yes", "Symbol", "Brush", "2"].map(|l| rect(&h, l));
+        assert!(
+            line.iter()
+                .all(|r| (r.center().y - line[0].center().y).abs() < 2.0),
+            "{size:?}: {line:?}"
+        );
+    }
+}
+
+/// The painted texts that read `text`.
+fn painted(h: &H, text: &str) -> Vec<egui::Rect> {
+    fn walk(shape: &egui::Shape, text: &str, out: &mut Vec<egui::Rect>) {
+        match shape {
+            egui::Shape::Text(t) if t.galley.text() == text => {
+                out.push(t.galley.rect.translate(t.pos.to_vec2()));
+            }
+            egui::Shape::Vec(shapes) => shapes.iter().for_each(|s| walk(s, text, out)),
+            _ => {}
+        }
+    }
+    let mut out = vec![];
+    h.output()
+        .shapes
+        .iter()
+        .for_each(|c| walk(&c.shape, text, &mut out));
+    out
+}
+
+#[test]
+fn a_workspace_has_no_title_bar_and_its_title_help_and_leave_end_its_menu_bar() {
+    for size in SIZES {
+        let mut screen = workspace();
+        let affordances = screen["affordances"].as_array_mut().unwrap();
+        affordances.push(
+            json!({"id": "ws:leave", "label": "Leave", "keys": ["ESC"], "enabled": true,
+            "expect": "screen", "role": "cancel"}),
+        );
+        affordances.push(
+            json!({"id": "ws:help", "label": "Help", "keys": ["?"], "enabled": true,
+            "expect": "screen", "role": "help"}),
+        );
+        let (app, _) = crate::common::staged(crate::common::over_map(screen));
+        let mut h = crate::common::themed_harness(size, app);
+        h.run_steps(7);
+        crate::common::settle_windows(&mut h);
+        assert!(h.query_by_label("Close window").is_none(), "{size:?}");
+        let file = rect(&h, "File");
+        let bar =
+            |r: egui::Rect| (r.center().y - file.center().y).abs() < 2.0 && r.left() > file.right();
+        let (leave, help) = (rect(&h, "Leave"), rect(&h, "Help"));
+        let title = painted(&h, "Room Editor");
+        assert!(
+            bar(leave) && bar(help) && title.len() == 1 && bar(title[0]),
+            "{size:?}: File {file:?}, Leave {leave:?}, Help {help:?}, title {title:?}"
+        );
+        assert!(
+            leave.right() > size.x - 60.0 && title[0].right() < help.left(),
+            "{size:?}: Leave {leave:?}, Help {help:?}, title {title:?}"
+        );
+    }
+}
+
+#[test]
+fn an_action_on_a_row_of_a_list_no_part_names_is_drawn_under_that_list() {
+    for size in SIZES {
+        let mut screen = workspace();
+        screen["affordances"].as_array_mut().unwrap().push(json!({"id": "ws:inside", "label": "Inside",
+            "keys": [], "enabled": true, "expect": "screen", "args": {"row": {"component_id": "ws:palette"}}}));
+        let (app, _) = crate::common::staged(crate::common::over_map(screen));
+        let mut h = crate::common::themed_harness(size, app);
+        h.run_steps(7);
+        crate::common::settle_windows(&mut h);
+        let (inside, floor, inspector) = (
+            rect(&h, "Inside"),
+            rect(&h, "Floor"),
+            rect(&h, "Properties"),
+        );
+        assert!(
+            inside.top() >= floor.bottom()
+                && inside.bottom() <= inspector.top()
+                && inside.left() >= floor.left() - 8.0,
+            "{size:?}: Inside {inside:?} under Floor {floor:?}, over {inspector:?}"
+        );
+    }
+}
+
+#[test]
+fn a_log_list_shows_several_rows_over_the_status_line() {
+    for size in SIZES {
+        let steps = (0..10).map(|n| format!("Step {n}")).collect::<Vec<_>>();
+        let h = shown_with(size, |parts| {
+            let steps = steps.iter().map(String::as_str).collect::<Vec<_>>();
+            parts[4] = list("ws:history", "History", &steps, "log");
+        });
+        let status = rect(&h, "Cursor 3,4");
+        let shown = steps
+            .iter()
+            .filter(|s| {
+                h.query_by_label(s)
+                    .is_some_and(|n| n.rect().bottom() <= status.top())
+            })
+            .count();
+        assert!(shown >= 3, "{size:?}: {shown} rows of the history shown");
+    }
+}
+
+#[test]
+fn a_status_fact_too_long_for_the_line_wraps_whole_with_its_value() {
+    let facts = (0..10)
+        .map(|n| (format!("Fact number {n}"), format!("Value {n}")))
+        .collect::<Vec<_>>();
+    let h = shown_with(SIZES[0], |parts| {
+        let stats = facts
+            .iter()
+            .map(|(label, value)| json!({"key": label, "label": label, "value": value}))
+            .collect::<Vec<_>>();
+        parts[5] = json!({"id": "ws:status", "kind": "panel", "slot": "status",
+            "title": "/home/someone/games/cataclysm/data/json/mapgen/house/2Story01.json", "stats": stats});
+    });
+    let apart = facts
+        .iter()
+        .filter(|(label, value)| {
+            (rect(&h, label).center().y - rect(&h, value).center().y).abs() > 2.0
+        })
+        .collect::<Vec<_>>();
+    assert!(apart.is_empty(), "{apart:?}");
+}
+
 /// Writes PNGs of the workspace to `$SHOT_DIR`; needs a Vulkan adapter, so it only runs when asked:
 /// `cargo test --test it ui_workspace::shots -- --ignored`.
 #[test]

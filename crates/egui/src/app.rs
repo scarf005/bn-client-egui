@@ -431,6 +431,8 @@ impl<M: GameModel> App<M> {
         self.display.follow_engine(self.model.display_default());
         self.display.follow_mods(self.model.mod_tilesets());
         self.model.set_tiles(self.display.tiles());
+        // Every frame, map or none: a sheet that finished decoding is uploaded for the screens' sprites too.
+        self.display.update(ui.ctx());
         self.model.set_tint_ids(self.display.tint_ids());
         ui.ctx()
             .set_zoom_factor(f32::from(self.display.interface_scale()) / 100.0);

@@ -29,6 +29,19 @@ pub fn field_width(ui: &egui::Ui, value: &str) -> f32 {
     text + FIELD_MARGIN.sum().x
 }
 
+/// A one-line field's text wrapped at `wrap`: a one-line field lays its text out unwrapped, and a value wider than
+/// the field would run past it or be cut.
+fn wrapped_text(ui: &egui::Ui, text: &str, wrap: f32) -> std::sync::Arc<egui::Galley> {
+    let font = egui::TextStyle::Body.resolve(ui.style());
+    let color = ui
+        .visuals()
+        .override_text_color
+        .unwrap_or_else(|| ui.visuals().widgets.inactive.text_color());
+    let mut job = egui::text::LayoutJob::simple(text.to_owned(), font, color, wrap);
+    job.keep_trailing_whitespace = true;
+    ui.fonts_mut(|f| f.layout_job(job))
+}
+
 /// Draws the control for `editor` next to `label`; returns the new value once it is committed.
 pub fn value_editor(
     ui: &mut egui::Ui,
@@ -76,7 +89,7 @@ pub fn value_editor(
             }
             _ => {
                 ui.label(label);
-                // A one-line field widens to its whole value rather than cut it.
+                // A one-line field widens to its whole value rather than cut it, up to the room it has.
                 let edit = match editor.multiline {
                     // A long text scrolls in a box of a few lines, as wide as the room left.
                     true => {
@@ -95,12 +108,25 @@ pub fn value_editor(
                             })
                             .inner
                     }
-                    false => ui.add(
-                        egui::TextEdit::singleline(&mut draft.text)
-                            .desired_width(ui.spacing().text_edit_width.min(ui.available_width()))
-                            .clip_text(false)
-                            .margin(FIELD_MARGIN),
-                    ),
+                    // Wider than the room, it wraps its value onto further lines instead of running past the
+                    // room's edge.
+                    false => {
+                        let room = ui.available_width();
+                        let width = field_width(ui, &draft.text)
+                            .max(ui.spacing().text_edit_width)
+                            .min(room);
+                        let wrap = width - FIELD_MARGIN.sum().x;
+                        let mut wrapped = |ui: &egui::Ui, text: &dyn egui::TextBuffer, _: f32| {
+                            wrapped_text(ui, text.as_str(), wrap)
+                        };
+                        ui.add(
+                            egui::TextEdit::singleline(&mut draft.text)
+                                .desired_width(width)
+                                .layouter(&mut wrapped)
+                                .clip_text(false)
+                                .margin(FIELD_MARGIN),
+                        )
+                    }
                 };
                 edit.widget_info(|| {
                     egui::WidgetInfo::text_edit(true, draft.text.clone(), draft.text.clone(), label)
@@ -267,9 +293,15 @@ fn typing(
         (Some(true), false) => m.request_focus(box_id),
         _ => {}
     });
+    // As wide as the room, wrapping a longer text.
+    let wrap = ui.available_width() - 2.0 * ui.spacing().button_padding.x;
+    let mut wrapped =
+        |ui: &egui::Ui, text: &dyn egui::TextBuffer, _: f32| wrapped_text(ui, text.as_str(), wrap);
     let edit = egui::TextEdit::singleline(&mut state.text)
         .id(box_id)
-        .desired_width(f32::INFINITY);
+        .desired_width(f32::INFINITY)
+        .layouter(&mut wrapped)
+        .clip_text(false);
     let response = ui.add(edit.hint_text(label));
     // egui drops the focus of a box on Escape unless the box's event filter says it handles it.
     if response.has_focus() && (search.is_some() || !state.text.is_empty()) {

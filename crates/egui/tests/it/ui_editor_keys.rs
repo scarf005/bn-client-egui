@@ -99,9 +99,9 @@ fn with_region_drag() -> Value {
 #[test]
 fn an_affordance_only_a_drag_runs_has_no_button() {
     let (mut h, _) = open(with_region_drag());
-    h.get_by_label("⋯").click();
+    h.get_by_label("Edit").click();
     h.run_steps(4);
-    // The overflow menu lists the affordances no drag runs.
+    // The menu of their group lists the affordances no drag runs.
     assert!(h.query_by_label_contains("Redo").is_some());
     for label in ["Begin stroke", "End stroke", "Move placement"] {
         assert!(h.query_by_label_contains(label).is_none(), "{label}");

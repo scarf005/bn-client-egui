@@ -112,7 +112,6 @@ fn every_window_lies_in_the_map_region_off_the_top_bar_toolbar_and_sidebar() {
         ("inventory", "drop selector screen", "inventory"),
         ("pickup", "pickup screen", "pickup"),
         ("crafting", "Crafting screen", "crafting"),
-        ("editor", "map editor with nothing open", "editor"),
         ("generic", "query popup screen", "popup"),
         ("look", "look-around screen", "look"),
     ];
@@ -242,7 +241,9 @@ fn only_a_grid_the_engine_marks_as_a_canvas_fills_the_region() {
             window_of(&h, "advanced_inventory")
         });
         assert_eq!(plain, named, "{size:?}");
-        let editor = example("editor", "map editor with a drawn room and a new mapping");
+        // The editor as a screen over the map: as a workspace it is the whole view.
+        let mut editor = example("editor", "map editor with a drawn room and a new mapping");
+        editor["role"] = json!("screen");
         let (h, _) = playing(size, editor, None);
         let window = window_of(&h, "editor");
         assert!(

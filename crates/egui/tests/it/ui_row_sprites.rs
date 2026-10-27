@@ -20,6 +20,11 @@ fn row(id: &str, look: Value, weight: &str) -> Value {
 /// An inventory-like dialog on the test tileset: a row with a sprite (`mon_a`), a rock the tileset lacks and a note
 /// with no item, each with its weight.
 fn listed<'a>(tag: &str, tiles: bool, width: f32) -> H<'a> {
+    shown(tag, tiles, width, "dialog")
+}
+
+/// `listed` with the list's screen of `role`: a workspace is the whole view, with no map under it.
+fn shown<'a>(tag: &str, tiles: bool, width: f32, role: &str) -> H<'a> {
     let root = crate::common::game_root(tag);
     let settings = root.join("settings.json");
     std::fs::write(&settings, json!({ "tiles": tiles }).to_string()).unwrap();
@@ -30,13 +35,14 @@ fn listed<'a>(tag: &str, tiles: bool, width: f32) -> H<'a> {
         row("rock", json!({"kind": "item", "id": "rock", "glyph": "*", "color": "light_gray"}), "12.50"),
         row("note", Value::Null, "1.00"),
     ]});
-    let screen = json!({"screen_id": "screen:9", "role": "dialog", "title": "Test", "root": list,
+    let screen = json!({"screen_id": "screen:9", "role": role, "title": "Test", "root": list,
         "affordances": []});
+    let map = json!({"screen_id": "screen:map:e1", "role": "map", "root": null, "affordances": []});
     let mut subscribe = fixture("subscribe_result");
-    subscribe["result"]["interaction"]["stack"] = json!([
-        {"screen_id": "screen:map:e1", "role": "map", "root": null, "affordances": []},
-        screen
-    ]);
+    subscribe["result"]["interaction"]["stack"] = match role {
+        "workspace" => json!([screen]),
+        _ => json!([map, screen]),
+    };
     let reply = vec![
         subscribe,
         fixture("snapshot_part_0"),
@@ -108,6 +114,14 @@ fn a_row_with_a_sprite_draws_it_before_its_text_in_tiles_mode() {
         "bra",
         "the glyph is not also in the text"
     );
+}
+
+#[test]
+fn a_row_of_a_workspace_with_no_map_under_it_draws_its_sprite() {
+    let h = shown("row-workspace", true, 1100.0, "workspace");
+    let (sprites, glyphs) = beside(&h, h.get_by_label_contains("bra").rect());
+    assert_eq!(sprites, 1, "the bra's sprite");
+    assert!(glyphs.is_empty(), "{glyphs:?}");
 }
 
 #[test]

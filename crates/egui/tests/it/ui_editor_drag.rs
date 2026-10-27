@@ -119,6 +119,8 @@ fn square(h: &H, x: u32, y: u32) -> egui::Pos2 {
     let first = h
         .get_all_by_label(".")
         .map(|n| n.rect())
+        // A canvas square is as wide as it is tall; a list row naming `.` is wider.
+        .filter(|r| (r.width() - r.height()).abs() < 1.0)
         .min_by(|a, b| (a.min.y, a.min.x).partial_cmp(&(b.min.y, b.min.x)).unwrap())
         .unwrap();
     let cell = first.width();
@@ -277,6 +279,8 @@ fn a_press_on_a_neighbour_paints_nothing_on_the_entry_it_opens() {
 pub(crate) fn first_square(h: &H) -> egui::Rect {
     h.get_all_by_label(".")
         .map(|n| n.rect())
+        // A canvas square is as wide as it is tall; a list row naming `.` is wider.
+        .filter(|r| (r.width() - r.height()).abs() < 1.0)
         .min_by(|a, b| (a.min.y, a.min.x).partial_cmp(&(b.min.y, b.min.x)).unwrap())
         .unwrap()
 }
@@ -359,10 +363,12 @@ fn a_drag_left_open_by_a_closed_editor_sends_nothing_into_its_next_showing() {
 fn a_click_on_the_middle_row_of_a_24_square_canvas_paints_it_in_a_laptop_window() {
     for size in [egui::vec2(1290.0, 830.0), egui::vec2(1920.0, 1080.0)] {
         let (mut h, script) = open_sized(editor_of(Some("span"), 24), size);
-        let close = h.get_by_label("Close window").rect();
+        let bar = h
+            .get_by_role_and_label(egui::accesskit::Role::Button, "File")
+            .rect();
         let at = square(&h, 3, 12);
         assert!(
-            at.y > close.bottom() && at.y < size.y,
+            at.y > bar.bottom() && at.y < size.y,
             "row 12 is drawn in the window at {size:?}: {at:?}"
         );
         drag(&mut h, (3, 12), &[]);

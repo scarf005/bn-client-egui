@@ -110,6 +110,7 @@ impl<M: GameModel> App<M> {
             true => widths.wrapped_label_in(room, spacing.x),
             false => widths.label_in(room, spacing.x),
         };
+        let widths = widths.fitted(room, spacing.x, label);
         let height = match self.squares(&rows) {
             true => tokens::ROW_ITEM,
             false => tokens::ROW,
@@ -132,6 +133,7 @@ impl<M: GameModel> App<M> {
             // The rows run the list's `activate`, on a double click or Enter.
             .filter(|a| list.activate.as_deref() != Some(a.id.as_str()))
             .filter(|a| !searched(screen, list, a))
+            .chain(row_actions(screen, id))
             .collect::<Vec<_>>();
         let step = height + spacing.y;
         // Room is kept for a refusal and the buttons only when some row or the list has them, so a list with
@@ -172,15 +174,6 @@ impl<M: GameModel> App<M> {
         if cursor.is_some() && at.is_none() {
             out.push(Intent::More(id.clone()));
         }
-        // The viewport is a whole number of rows tall: the most rows from the top that fit. An empty list, or one
-        // whose first row does not fit, keeps its room.
-        let list_height = starts
-            .iter()
-            .zip(&heights)
-            .map(|(start, h)| start + h)
-            .take_while(|end| *end <= list_height)
-            .last()
-            .unwrap_or(list_height);
         // A focus new to the list and out of its sight scrolls the focused row to the middle, with the rows
         // around it in view, the top row whole.
         let focus = cursor.map(str::to_string);
@@ -198,6 +191,21 @@ impl<M: GameModel> App<M> {
             }
             scroll.shown = focus;
         }
+        // The viewport is a whole number of rows tall: the most rows from the one at its top that fit, so rows of
+        // a wrapped label do not leave the last row cut. An empty list, or one whose top row does not fit, keeps its
+        // room.
+        let top = offset.unwrap_or_else(|| {
+            let scrolls = self.screens.list_scroll.borrow();
+            scrolls.get(&slot).map_or(0.0, |s| s.top)
+        });
+        let first = starts.iter().rposition(|s| *s <= top + 0.5).unwrap_or(0);
+        let list_height = starts[first..]
+            .iter()
+            .zip(&heights[first..])
+            .map(|(start, h)| start + h - starts[first])
+            .take_while(|end| *end <= list_height)
+            .last()
+            .unwrap_or(list_height);
         let mut drawn = 0;
         let body = |body: egui_extras::TableBody| {
             let layout = RowLayout {

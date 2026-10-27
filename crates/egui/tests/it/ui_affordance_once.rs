@@ -1,5 +1,6 @@
 //! Every list screen of the engine's examples draws each of its affordances as one button at most: a row action
-//! runs from the rows, the cancel is one button or the window's close, never a second button beside it.
+//! runs from the rows, the cancel is one button or the window's close, never a second button beside it. The menu
+//! bar's menus, named by the affordances' groups, and the parts' headings are no affordance's button.
 use crate::common::{fixture, session};
 use bn_client_egui::protocol::{Affordance, AffordanceRole, Component, Screen};
 use bn_client_egui::{App, EngineModel, markup};
@@ -74,6 +75,21 @@ fn no_list_screen_draws_a_row_action_or_a_second_cancel_as_a_button() {
     for (name, value) in screens {
         let screen = serde_json::from_value::<Screen>(value.clone()).unwrap();
         let h = showing(value);
+        // The menu bar's buttons are named by the affordances' groups, and the parts' headings by the parts, not by
+        // an affordance.
+        let menus = screen
+            .affordances
+            .iter()
+            .filter_map(|a| a.group.as_ref())
+            .chain(
+                screen
+                    .root
+                    .iter()
+                    .flat_map(|root| root.nested())
+                    .filter_map(|c| c.head().label.as_ref()),
+            )
+            .map(|t| markup::plain(&t.shown()))
+            .collect::<Vec<_>>();
         let buttons = h
             .get_all_by_role(egui::accesskit::Role::Button)
             .filter_map(|b| {
@@ -81,11 +97,23 @@ fn no_list_screen_draws_a_row_action_or_a_second_cancel_as_a_button() {
                 let shortcut = node.data().keyboard_shortcut().map(str::to_string);
                 node.label().map(|l| (l.to_string(), shortcut))
             })
+            .filter(|(label, shortcut)| shortcut.is_some() || !menus.contains(label))
             .collect::<Vec<_>>();
         let drawn = |a: &Affordance| buttons.iter().filter(|b| **b == button_label(a)).count();
         let mut rows = vec![];
         row_actions(screen.root.as_ref().unwrap(), &mut rows);
-        for a in screen.affordances.iter().filter(|a| rows.contains(&a.id)) {
+        // A button that reads as another affordance's too is that one's.
+        let shared = |a: &Affordance| {
+            screen
+                .affordances
+                .iter()
+                .any(|b| b.id != a.id && button_label(b) == button_label(a))
+        };
+        for a in screen
+            .affordances
+            .iter()
+            .filter(|a| rows.contains(&a.id) && !shared(a))
+        {
             assert_eq!(
                 drawn(a),
                 0,

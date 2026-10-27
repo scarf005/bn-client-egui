@@ -8,7 +8,7 @@ use bn_client_core::localise::tr;
 /// The width the tools' column and the right column first have, which the player can change.
 const TOOLS_WIDTH: f32 = 180.0;
 const SIDE_WIDTH: f32 = 300.0;
-/// The most the log's strip is tall before it scrolls.
+/// The height the log's strip first has, which the player can change.
 const LOG_HEIGHT: f32 = 160.0;
 
 /// The parts of `root` in `slot`; a part with none is the inspector.
@@ -32,7 +32,14 @@ pub(super) fn laid_out(screen: &Screen) -> Option<&Split> {
 
 impl<M: GameModel> App<M> {
     /// One menu per group of the screen's affordances, in the order the groups first appear.
-    pub(super) fn menu_bar(&self, ui: &mut egui::Ui, screen: &Screen, out: &mut Vec<Intent>) {
+    /// A workspace's ends with its title, help and leave, which a window has in its title bar.
+    pub(super) fn menu_bar(
+        &self,
+        ui: &mut egui::Ui,
+        screen: &Screen,
+        title: &str,
+        out: &mut Vec<Intent>,
+    ) {
         let groups = screen
             .affordances
             .iter()
@@ -43,7 +50,8 @@ impl<M: GameModel> App<M> {
                 }
                 groups
             });
-        if groups.is_empty() {
+        let workspace = laid_out(screen).is_some();
+        if groups.is_empty() && !workspace {
             return;
         }
         egui::Panel::top(egui::Id::new(("menu bar", &screen.screen_id))).show(ui, |ui| {
@@ -73,6 +81,15 @@ impl<M: GameModel> App<M> {
                         }
                     });
                 }
+                if workspace {
+                    let ends = [AffordanceRole::Cancel, AffordanceRole::Help]
+                        .into_iter()
+                        .filter_map(|role| interaction::with_role(screen, role));
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ends.for_each(|a| self.affordance_button(ui, a, None, out));
+                        ui.label(egui::RichText::new(title).strong());
+                    });
+                }
             });
         });
     }
@@ -87,16 +104,17 @@ impl<M: GameModel> App<M> {
     ) {
         let id = |name: &str| egui::Id::new((name, &screen.screen_id));
         // The columns' ids are strings, which `label_resize_handle` names the drag handles by.
-        let (tools_id, side_id) = (
+        let (tools_id, side_id, log_id) = (
             format!("workspace-tools {}", screen.screen_id),
             format!("workspace-side {}", screen.screen_id),
+            format!("workspace-log {}", screen.screen_id),
         );
         egui::Panel::bottom(id("status"))
             .resizable(false)
             .show(ui, |ui| {
                 parts(root, Slot::Status)
                     .into_iter()
-                    .for_each(|c| self.component(ui, screen, c, out));
+                    .for_each(|c| self.status_line(ui, screen, c, out));
             });
         let tools = parts(root, Slot::Tools);
         if !tools.is_empty() {
@@ -118,15 +136,10 @@ impl<M: GameModel> App<M> {
         }
         let log = parts(root, Slot::Log);
         if !log.is_empty() {
-            egui::Panel::bottom(id("log"))
-                .resizable(false)
-                .show(ui, |ui| {
-                    egui::ScrollArea::vertical()
-                        .id_salt(id("log scroll"))
-                        .max_height(LOG_HEIGHT)
-                        .auto_shrink([false, true])
-                        .show(ui, |ui| self.stack(ui, screen, &log, out));
-                });
+            egui::Panel::bottom(egui::Id::new(&log_id))
+                .default_size(LOG_HEIGHT)
+                .show(ui, |ui| self.column(ui, screen, &log, out));
+            crate::app::label_resize_handle(ui.ctx(), &log_id, &tr("Resize workspace log"));
         }
         egui::CentralPanel::no_frame().show(ui, |ui| {
             parts(root, Slot::Canvas)
@@ -135,7 +148,40 @@ impl<M: GameModel> App<M> {
         });
     }
 
-    /// `parts` one above the other in a column that scrolls.
+    /// A status part on one line: a panel's title and its facts side by side; any other part as it is drawn
+    /// elsewhere.
+    fn status_line(
+        &self,
+        ui: &mut egui::Ui,
+        screen: &Screen,
+        c: &Component,
+        out: &mut Vec<Intent>,
+    ) {
+        let Component::Panel(panel) = c else {
+            return self.component(ui, screen, c, out);
+        };
+        ui.horizontal_wrapped(|ui| {
+            ui.label(egui::RichText::new(markup::plain(&panel.title.shown())).strong());
+            for stat in panel.stats.iter().flatten() {
+                ui.separator();
+                // A fact wraps to the next line whole, its value beside its label.
+                ui.horizontal(|ui| {
+                    ui.weak(markup::plain(&stat.label.shown()));
+                    let shown = stat_text(stat);
+                    if !shown.is_empty() {
+                        let color = stat.tone.map_or(ui.visuals().text_color(), tone_color);
+                        ui.label(egui::RichText::new(shown).color(color));
+                    }
+                });
+            }
+        });
+        if let Some(child) = &panel.child {
+            self.component(ui, screen, child, out);
+        }
+    }
+
+    /// `parts` one above the other in a column that scrolls, whole lines in view. The column is as wide as the
+    /// player left it: what is wider is cut at its edge rather than widen the column a little more each frame.
     fn column(
         &self,
         ui: &mut egui::Ui,
@@ -143,10 +189,18 @@ impl<M: GameModel> App<M> {
         parts: &[&Component],
         out: &mut Vec<Intent>,
     ) {
-        egui::ScrollArea::vertical()
+        let rect = ui.available_rect_before_wrap();
+        let mut inner = ui.new_child(egui::UiBuilder::new().max_rect(rect));
+        inner.set_clip_rect(rect.intersect(ui.clip_rect()));
+        let scroll = egui::ScrollArea::vertical()
             .id_salt(ui.id().with("column"))
-            .auto_shrink([false, false])
-            .show(ui, |ui| self.stack(ui, screen, parts, out));
+            .auto_shrink([false, false]);
+        let room = rect.height();
+        // A list is at most `PEER_ROWS` rows tall, so the parts under a long one stay in reach.
+        body_scroll(&mut inner, scroll, room, |ui| {
+            self.with_list_rows(Some(PEER_ROWS), || self.stack(ui, screen, parts, out))
+        });
+        ui.allocate_rect(rect, egui::Sense::hover());
     }
 
     /// `parts` one above the other, each under its label as a heading that collapses it.

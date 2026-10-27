@@ -1,11 +1,11 @@
-//! The vehicle editor's Part tab: its form is a column beside the prototypes and the vehicle, at the laptop
-//! width too, instead of making the whole screen stack so the form is under the grid and out of view.
+//! The vehicle editor's Part tab: its form is in the column beside the vehicle and in view, at the laptop width too
+//! and under a prototype list as long as a game's, instead of under the grid or the list and out of view.
 use crate::common::fixture;
 use bn_client_egui::transport::ScriptedTransport;
 use bn_client_egui::{App, Clock, ConnectOptions, EngineModel};
 use eframe::egui;
 use egui_kittest::Harness;
-use egui_kittest::kittest::Queryable;
+use egui_kittest::kittest::{NodeT, Queryable};
 use serde_json::{Value, json};
 
 fn find<'a>(value: &'a mut Value, id: &str) -> Option<&'a mut Value> {
@@ -41,13 +41,21 @@ fn editor() -> Value {
         "id": "vehicle:part_form", "kind": "form",
         "fields": [{ "id": "fuel", "label": "Fuel", "type": "text", "value": "gasoline" }]
     });
-    // Prototypes named as the game's are, and a car's grid ten squares wide.
+    // As many prototypes as a game has, named as its are, and a car's grid ten squares wide.
     let list = find(&mut screen["root"], "vehicle:prototypes").unwrap();
-    for row in list["rows"].as_array_mut().unwrap() {
-        row["label"] = json!("Mechanized Infantry Carrier");
-        row["columns"] =
-            json!([{ "key": "id", "label": "ID", "value": "commercial_airliner_cargo" }]);
-    }
+    let row = list["rows"][0].clone();
+    list["rows"] = (0..60)
+        .map(|n| {
+            let mut row = row.clone();
+            row["id"] = json!(format!("proto:carrier_{n}"));
+            row["label"] = json!("Mechanized Infantry Carrier");
+            row["selected"] = json!(n == 0);
+            row["columns"] =
+                json!([{ "key": "id", "label": "ID", "value": "commercial_airliner_cargo" }]);
+            row
+        })
+        .collect();
+    list["total"] = json!(60);
     let grid = find(&mut screen["root"], "vehicle:grid").unwrap();
     grid["cols"] = json!(10);
     grid["rows"] = json!(6);
@@ -81,9 +89,16 @@ fn the_part_tab_form_stays_beside_the_vehicle_in_a_laptop_window() {
         );
         h.run_steps(8);
         let fuel = h.get_by_label("Fuel").rect();
+        // The grid's squares are buttons named by their glyph.
+        let grid = h
+            .get_all_by_role(egui::accesskit::Role::Button)
+            .filter(|n| n.accesskit_node().label().as_deref() == Some("."))
+            .map(|n| n.rect())
+            .reduce(|a, b| a.union(b))
+            .expect("the vehicle's squares");
         assert!(
-            fuel.top() < 200.0,
-            "the form ({fuel:?}) is in the first line of the editor at {size:?}"
+            fuel.left() > grid.right() && fuel.bottom() < size.y - 40.0,
+            "the form ({fuel:?}) is beside the vehicle ({grid:?}) and in view at {size:?}"
         );
     }
 }

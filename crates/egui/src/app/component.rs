@@ -243,6 +243,19 @@ fn claimed(root: &Component) -> HashSet<&str> {
         .collect()
 }
 
+/// The affordances of `screen` that take a row of its list `id` and that no part names: the list offers them under
+/// its rows as its own.
+fn row_actions<'a>(screen: &'a Screen, id: &str) -> impl Iterator<Item = &'a Affordance> {
+    let named = screen.root.as_ref().map_or_else(HashSet::new, claimed);
+    screen.affordances.iter().filter(move |a| {
+        !named.contains(a.id.as_str())
+            && a.args
+                .as_ref()
+                .and_then(|args| args.row.as_ref())
+                .is_some_and(|row| row.component_id == id)
+    })
+}
+
 /// The engine's affordance that opens the prompt of a list's filter.
 const FILTER: &str = "FILTER";
 
@@ -353,7 +366,7 @@ impl<M: GameModel> App<M> {
             out.push(Intent::Run(cancel));
         }
         self.paint_icons();
-        self.paint_overmap(ctx);
+        self.paint_overmap();
         out.into_iter().for_each(|intent| self.apply(intent));
         self.send_paints(ctx);
     }
@@ -605,17 +618,34 @@ impl<M: GameModel> App<M> {
         let placement = placement(screen, &room);
         let place = placement.place;
         let base = self.window_spec(ctx, self.window_kind(screen).as_deref(), &title);
-        let title_bar = base.title_bar;
+        // A workspace is the whole view, with no title bar: its title, help and leave end its menu bar.
+        let workspace = workspace::laid_out(screen).is_some();
+        let title_bar = base.title_bar || workspace;
         let named = screen.root.as_ref().map_or_else(HashSet::new, claimed);
+        let lists = screen.root.as_ref().map_or(vec![], |root| {
+            root.nested()
+                .into_iter()
+                .filter_map(|c| match c {
+                    Component::List(l) => Some(l.head.id.as_str()),
+                    _ => None,
+                })
+                .collect()
+        });
+        let listed = lists
+            .iter()
+            .flat_map(|id| row_actions(screen, id))
+            .map(|a| a.id.as_str())
+            .collect::<HashSet<_>>();
         let rest = screen
             .affordances
             .iter()
-            .filter(|a| !named.contains(a.id.as_str()))
+            .filter(|a| !named.contains(a.id.as_str()) && !listed.contains(a.id.as_str()))
             .collect::<Vec<_>>();
         // The help sits in the title bar, or last in the footer of a window that has none.
         let titled = interaction::with_role(screen, AffordanceRole::Help)
-            .filter(|a| a.enabled && base.title_bar);
+            .filter(|a| a.enabled && base.title_bar && !workspace);
         let spec = WindowSpec {
+            title_bar: base.title_bar && !workspace,
             closable: interaction::with_role(screen, AffordanceRole::Cancel).is_some(),
             frame: Some(frame),
             place: Some(place),
@@ -646,7 +676,7 @@ impl<M: GameModel> App<M> {
                     .frame(egui::Frame::NONE)
                     .show_separator_line(false)
                     .show(ui, |ui| footer(ui, out));
-                self.menu_bar(ui, screen, out);
+                self.menu_bar(ui, screen, &title, out);
                 if let Some(split) = workspace::laid_out(screen) {
                     return self.workspace(ui, screen, split, out);
                 }
@@ -1097,10 +1127,11 @@ impl<M: GameModel> App<M> {
         let view = ui
             .data(|d| d.get_temp::<canvas::View>(view_key))
             .filter(|v| v.span == (xs.len(), ys.len()));
-        let (zoom, offset) = view
-            .and_then(|view| canvas::zoomed(ui, view, base, limits))
-            .map_or((view.map_or(1.0, |v| v.zoom), None), |(z, o)| (z, Some(o)));
-        let zoom = zoom.clamp(limits.0, limits.1);
+        let anchor = view.and_then(|view| canvas::zoomed(ui, view, limits));
+        let zoom = anchor
+            .as_ref()
+            .map_or(view.map_or(1.0, |v| v.zoom), |a| a.zoom)
+            .clamp(limits.0, limits.1);
         let cell = match canvas {
             true => base * zoom,
             false => fit.clamp(GRID_CELL, GRID_MAX_CELL),
@@ -1118,6 +1149,18 @@ impl<M: GameModel> App<M> {
             });
             // The viewport is a whole number of cells tall, so none is cut across.
             let rows = (ui.available_height() / cell).floor().max(1.0);
+            let room = egui::vec2(ui.available_width(), rows * cell);
+            let grid_size = egui::vec2(xs.len() as f32, ys.len() as f32) * cell;
+            // The area clamps an asked offset to last frame's content, so the margins of a new zoom take it only
+            // the frame after: it is asked for again then.
+            let placed = canvas::place(
+                (view, anchor.as_ref()),
+                zoom > limits.0 + 1e-3,
+                (room, grid_size),
+                cell,
+            );
+            let offset = placed.offset;
+            let asked = anchor.is_some().then_some(offset).flatten();
             let mut area = egui::ScrollArea::both()
                 .id_salt(("grid", &grid.head.id))
                 .max_height(rows * cell)
@@ -1136,7 +1179,19 @@ impl<M: GameModel> App<M> {
                     ui.scroll_with_delta(pan);
                 }
                 let cells = GridCells { size, glyph_size };
-                self.grid_cells(ui, grid, cells, &mut squares, out)
+                // The cells sit `lead` in from the corner, and the area runs on `tail` past them.
+                let corner = ui.cursor().min;
+                let laid = ui.scope_builder(
+                    egui::UiBuilder::new()
+                        .max_rect(egui::Rect::from_min_size(corner + placed.lead, grid_size)),
+                    |ui| self.grid_cells(ui, grid, cells, &mut squares, out),
+                );
+                let whole = placed.lead + grid_size + placed.tail;
+                ui.allocate_rect(
+                    egui::Rect::from_min_size(corner, whole),
+                    egui::Sense::hover(),
+                );
+                laid.inner
             });
             layout = Some(shown.inner);
             let view = canvas::View {
@@ -1146,6 +1201,8 @@ impl<M: GameModel> App<M> {
                 rect: shown.inner_rect,
                 // While zooming, the offset asked for: one a smaller square clamped must not drift the anchor.
                 offset: offset.unwrap_or(shown.state.offset),
+                pending: asked,
+                lead: placed.lead,
             };
             ui.data_mut(|d| d.insert_temp(view_key, view));
             self.hover_outline(ui, &squares);

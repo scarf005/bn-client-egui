@@ -314,24 +314,32 @@ fn prototypes(name: &str) -> Value {
     screen
 }
 
-/// How far the scroll bar of the list is right of the widest of its `id` texts.
+/// How far the scroll bar of the list is right of the widest of its `id` texts: the first bar right of where they
+/// start, not that of a part left of the list.
 fn bar_gap(h: &H, id: &str) -> f32 {
-    let right = texts(h)
+    let ids = texts(h)
         .into_iter()
         .filter(|t| t.galley.text().starts_with(id))
+        .collect::<Vec<_>>();
+    let right = ids
+        .iter()
         .map(|t| t.pos.x + t.galley.rect.max.x)
         .fold(f32::MIN, f32::max);
+    let left = ids.iter().map(|t| t.pos.x).fold(f32::MAX, f32::min);
     let bar = h
         .output()
         .shapes
         .iter()
         .filter_map(|c| match &c.shape {
-            egui::Shape::Rect(r) if r.rect.width() < 20.0 && r.rect.height() > 50.0 => {
+            egui::Shape::Rect(r)
+                if r.rect.width() < 20.0 && r.rect.height() > 50.0 && r.rect.left() > left =>
+            {
                 Some(r.rect.left())
             }
             _ => None,
         })
         .fold(f32::MAX, f32::min);
+    assert!(bar < f32::MAX, "the list of {id} has no scroll bar");
     bar - right
 }
 
@@ -354,6 +362,22 @@ fn a_list_too_narrow_for_its_columns_wraps_its_label_and_keeps_the_last_column_c
             gap >= 0.0,
             "at {width} the ID column ends {gap} before the scroll bar, under it if negative"
         );
+    }
+}
+
+#[test]
+fn a_value_column_cut_at_the_rooms_edge_shows_its_values_whole_or_shortened_never_cut() {
+    for width in [700.0, 880.0] {
+        let screen = prototypes("vehicle editor with a prototype open on a mount");
+        let h = open(screen, egui::vec2(width, 830.0));
+        let cut = crate::common::legible::cut_text(
+            &h.output().shapes,
+            egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(width, 830.0)),
+        )
+        .into_iter()
+        .filter(|line| line.contains("airliner"))
+        .collect::<Vec<_>>();
+        assert!(cut.is_empty(), "at {width}: {cut:#?}");
     }
 }
 

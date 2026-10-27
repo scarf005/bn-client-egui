@@ -440,16 +440,15 @@ impl<M: GameModel> App<M> {
         if screen {
             self.model.invoke_action("map");
         }
-        self.paint_overmap(ctx);
+        self.paint_overmap();
     }
 
     /// Paints what the overmap collected, now that the window is drawn.
-    pub(super) fn paint_overmap(&mut self, ctx: &egui::Context) {
+    pub(super) fn paint_overmap(&mut self) {
         let paints = self.screens.overmap.take();
         if paints.is_empty() {
             return;
         }
-        self.display.update(ctx);
         self.display.begin();
         for paint in paints {
             match paint {

@@ -335,7 +335,6 @@ struct MapInput {
 
 impl<M: GameModel> App<M> {
     pub(super) fn map(&mut self, ui: &mut egui::Ui) {
-        self.display.update(ui.ctx());
         let cell_px = self.display.cell(CELL) * self.display.zoom();
         self.map_view = None;
         self.display.begin();

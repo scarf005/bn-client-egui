@@ -53,11 +53,36 @@ impl Widths {
     }
 
     /// The label's width in `room`: its natural width when that fits beside the other columns, else what they
-    /// leave it, where it wraps. Short of room for its longest word that word breaks, so the columns after it stay
-    /// beside the scroll bar.
+    /// leave it, where it wraps between words. It keeps its longest word whole up to half the room, and the columns
+    /// that do not fit beside it are cut (`fitted`).
     pub fn label_in(&self, room: f32, gap: f32) -> f32 {
-        let others = self.natural(gap) - self.label;
-        (room - others).min(self.label).max(0.0)
+        // The spare last column stands a gap after the others.
+        let others = self.natural(gap) - self.label + gap;
+        (room - others)
+            .max(self.label_min.min(room / 2.0))
+            .min(self.label)
+            .max(0.0)
+    }
+
+    /// These widths in `room` beside a label `label` wide: a value column past the room's edge is cut at it, and
+    /// one wholly past it is left out, so the scroll bar stays at the room's edge.
+    pub fn fitted(mut self, room: f32, gap: f32, label: f32) -> Self {
+        let lead = [self.pick, self.item, self.key]
+            .into_iter()
+            .filter(|w| *w > 0.0);
+        // The spare last column stands a gap after the others.
+        let mut left = room - gap - label - lead.map(|w| w + gap).sum::<f32>();
+        let apart = gap + tokens::COLUMN_GAP - tokens::ITEM_GAP;
+        for w in self
+            .values
+            .iter_mut()
+            .chain([&mut self.count])
+            .filter(|w| **w > 0.0)
+        {
+            *w = w.min(left - apart).max(0.0);
+            left -= *w + apart;
+        }
+        self
     }
 
     /// The label's width in `room` for a list without columns: all the other columns leave it.
@@ -148,8 +173,9 @@ pub fn right_aligned(ui: &mut egui::Ui, text: impl Into<egui::WidgetText>) {
     let layout = egui::Layout::right_to_left(egui::Align::Center);
     // Not selectable: a click on the text is a click on its row.
     ui.with_layout(layout, |ui| {
-        // A value column is measured to its widest value, so a value never wraps.
-        ui.add(egui::Label::new(text).extend().selectable(false))
+        // A value column is measured to its widest value, so a value never wraps; one cut at the room's edge
+        // (`Widths::fitted`) is shortened to what fits, its whole text on hover.
+        ui.add(egui::Label::new(text).truncate().selectable(false))
     });
 }
 
@@ -225,12 +251,33 @@ mod tests {
     }
 
     #[test]
-    fn a_label_keeps_its_natural_width_when_there_is_room_and_takes_what_the_other_columns_leave_when_there_is_none()
+    fn a_label_keeps_its_natural_width_when_there_is_room_and_else_what_the_other_columns_leave_but_its_longest_word()
      {
         let w = widths();
         assert_eq!(w.label_in(1000.0, 8.0), 200.0);
-        assert_eq!(w.label_in(250.0, 8.0), 250.0 - 166.0);
-        assert_eq!(w.label_in(100.0, 8.0), 0.0);
+        assert_eq!(w.label_in(250.0, 8.0), 250.0 - 174.0);
+        assert_eq!(w.label_in(200.0, 8.0), 60.0);
+        assert_eq!(w.label_in(100.0, 8.0), 50.0);
         assert_eq!(w.wrapped_label_in(1000.0, 8.0), 1000.0 - 166.0);
+    }
+
+    #[test]
+    fn value_columns_past_the_room_are_cut_at_its_edge_and_those_wholly_past_it_left_out() {
+        assert_eq!(
+            widths().fitted(374.0, 8.0, 200.0).values,
+            vec![40.0, 0.0, 50.0]
+        );
+        assert_eq!(
+            widths().fitted(338.0, 8.0, 200.0).values,
+            vec![40.0, 0.0, 14.0]
+        );
+        assert_eq!(
+            widths().fitted(308.0, 8.0, 200.0).values,
+            vec![40.0, 0.0, 0.0]
+        );
+        assert_eq!(
+            widths().fitted(278.0, 8.0, 200.0).values,
+            vec![10.0, 0.0, 0.0]
+        );
     }
 }
