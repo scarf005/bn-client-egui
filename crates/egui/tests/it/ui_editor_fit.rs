@@ -117,8 +117,9 @@ fn the_legend_under_a_full_canvas_shows_most_of_a_dozen_symbols_at_once() {
             .collect();
         legend["total"] = json!(12);
         let mut h = open(screen, size);
-        // Above the canvas, which the window scrolls under: the wheel over it zooms it.
-        let over = egui::pos2(40.0, 90.0);
+        // Above the canvas, which the window scrolls under, below the menu bar, which does not scroll: the wheel
+        // over the canvas zooms it.
+        let over = egui::pos2(40.0, h.get_by_label("View").rect().bottom() + 8.0);
         // Scrolling the window a notch at a time, the most symbols in view at once.
         let mut drawn = 0;
         for _ in 0..60 {
