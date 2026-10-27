@@ -120,30 +120,26 @@ impl<M: GameModel> App<M> {
 
 #[cfg(test)]
 mod tests {
-    use super::shown_tabs;
+    use super::tab_rows;
 
     #[test]
-    fn a_row_with_room_for_every_tab_shows_them_all() {
+    fn a_row_with_room_for_every_tab_holds_them_all() {
+        assert_eq!(tab_rows(&[10.0, 20.0, 30.0], 60.0), [[0, 1, 2]]);
+    }
+
+    #[test]
+    fn a_narrow_strip_puts_the_tabs_that_do_not_fit_on_further_rows_in_order() {
         assert_eq!(
-            shown_tabs(&[10.0, 20.0, 30.0], Some(2), 5.0, 60.0),
-            [0, 1, 2]
+            tab_rows(&[10.0, 20.0, 30.0, 40.0, 5.0], 55.0),
+            vec![vec![0, 1], vec![2], vec![3, 4]]
         );
     }
 
     #[test]
-    fn a_narrow_row_keeps_the_chosen_tab_and_the_first_that_fit_beside_the_menu() {
+    fn a_tab_wider_than_the_room_has_a_row_of_its_own() {
         assert_eq!(
-            shown_tabs(&[10.0, 20.0, 30.0, 40.0], Some(3), 5.0, 70.0),
-            [0, 3]
+            tab_rows(&[10.0, 50.0, 10.0], 20.0),
+            [vec![0], vec![1], vec![2]]
         );
-        assert_eq!(
-            shown_tabs(&[10.0, 20.0, 30.0, 40.0], None, 5.0, 40.0),
-            [0, 1]
-        );
-    }
-
-    #[test]
-    fn a_row_narrower_than_the_chosen_tab_still_shows_it() {
-        assert_eq!(shown_tabs(&[10.0, 50.0], Some(1), 5.0, 20.0), [1]);
     }
 }

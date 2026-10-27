@@ -1730,3 +1730,31 @@ fn the_text_a_started_affordance_asks_for_takes_the_typing_without_a_click_first
         "the box of the question has the focus when it opens"
     );
 }
+
+#[test]
+fn every_tab_of_a_strip_too_narrow_for_one_row_is_on_screen() {
+    let screen = example("construction.json", "Construction screen");
+    let labels = screen["tabs"]
+        .as_array()
+        .map_or_else(Vec::new, Clone::clone)
+        .into_iter()
+        .map(|t| t["label"].as_str().unwrap().to_string())
+        .collect::<Vec<_>>();
+    let size = egui::vec2(1280.0, 800.0);
+    let mut h = crate::common::themed_harness(size, crate::common::staged(json!([screen])).0);
+    h.run_steps(6);
+    crate::common::settle_windows(&mut h);
+    let on_screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1280.0, 800.0));
+    for label in &labels {
+        let tab = h
+            .query_all_by_label(label.as_str())
+            .find(|n| n.accesskit_node().role() == egui::accesskit::Role::Tab);
+        let tab = tab.unwrap_or_else(|| panic!("no tab {label}"));
+        assert!(
+            on_screen.contains_rect(tab.rect()),
+            "{label}: {:?}",
+            tab.rect()
+        );
+    }
+    assert!(h.query_by_label("⋯").is_none(), "no tab menu");
+}
