@@ -133,6 +133,7 @@ impl<M: GameModel> App<M> {
             // The rows run the list's `activate`, on a double click or Enter.
             .filter(|a| list.activate.as_deref() != Some(a.id.as_str()))
             .filter(|a| !searched(screen, list, a))
+            .chain(row_actions(screen, id))
             .collect::<Vec<_>>();
         let step = height + spacing.y;
         // Room is kept for a refusal and the buttons only when some row or the list has them, so a list with

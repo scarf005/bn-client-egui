@@ -243,6 +243,19 @@ fn claimed(root: &Component) -> HashSet<&str> {
         .collect()
 }
 
+/// The affordances of `screen` that take a row of its list `id` and that no part names: the list offers them under
+/// its rows as its own.
+fn row_actions<'a>(screen: &'a Screen, id: &str) -> impl Iterator<Item = &'a Affordance> {
+    let named = screen.root.as_ref().map_or_else(HashSet::new, claimed);
+    screen.affordances.iter().filter(move |a| {
+        !named.contains(a.id.as_str())
+            && a.args
+                .as_ref()
+                .and_then(|args| args.row.as_ref())
+                .is_some_and(|row| row.component_id == id)
+    })
+}
+
 /// The engine's affordance that opens the prompt of a list's filter.
 const FILTER: &str = "FILTER";
 
@@ -609,10 +622,24 @@ impl<M: GameModel> App<M> {
         let workspace = workspace::laid_out(screen).is_some();
         let title_bar = base.title_bar || workspace;
         let named = screen.root.as_ref().map_or_else(HashSet::new, claimed);
+        let lists = screen.root.as_ref().map_or(vec![], |root| {
+            root.nested()
+                .into_iter()
+                .filter_map(|c| match c {
+                    Component::List(l) => Some(l.head.id.as_str()),
+                    _ => None,
+                })
+                .collect()
+        });
+        let listed = lists
+            .iter()
+            .flat_map(|id| row_actions(screen, id))
+            .map(|a| a.id.as_str())
+            .collect::<HashSet<_>>();
         let rest = screen
             .affordances
             .iter()
-            .filter(|a| !named.contains(a.id.as_str()))
+            .filter(|a| !named.contains(a.id.as_str()) && !listed.contains(a.id.as_str()))
             .collect::<Vec<_>>();
         // The help sits in the title bar, or last in the footer of a window that has none.
         let titled = interaction::with_role(screen, AffordanceRole::Help)
