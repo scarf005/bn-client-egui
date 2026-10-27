@@ -10,6 +10,8 @@ pub struct Extent {
     pub natural: f32,
     /// Takes the room left once every pane has its natural width (a list, a long text).
     pub grows: bool,
+    /// Takes a line of its own: a pane that wraps to a further line does not share it (a terminal's output).
+    pub alone: bool,
 }
 
 /// The width of each pane in `room`, with `gap` between panes. Never below a pane's minimum: when the minimums

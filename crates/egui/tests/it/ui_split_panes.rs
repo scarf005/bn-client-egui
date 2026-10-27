@@ -106,3 +106,27 @@ fn the_trade_screens_credit_line_keeps_its_width_and_the_lists_share_the_rest() 
     assert!(you.left() - npc.left() > 400.0, "{npc:?} {you:?}");
     assert!(size.x - you.left() > 500.0, "{you:?}");
 }
+
+#[test]
+fn a_terminals_answers_sit_under_its_output() {
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../core/tests/fixtures/0.2.examples/terminal.json"
+    );
+    let all = serde_json::from_str::<Value>(&std::fs::read_to_string(path).unwrap()).unwrap();
+    let terminal = all["valid"][0]["value"].clone();
+    for size in [egui::vec2(1280.0, 800.0), egui::vec2(1920.0, 1080.0)] {
+        let app = crate::common::staged(serde_json::json!([terminal])).0;
+        let mut h = crate::common::themed_harness(size, app);
+        h.run_steps(6);
+        crate::common::settle_windows(&mut h);
+        let output = h.get_by_label_contains("ERROR: Please place").rect();
+        let yes = h.get_by_label("Yes").rect();
+        assert!(yes.top() >= output.bottom(), "{size:?}: {output:?} {yes:?}");
+        // Within a pane's margin and a row's padding.
+        assert!(
+            (yes.left() - output.left()).abs() <= 16.0,
+            "{size:?}: {output:?} {yes:?}"
+        );
+    }
+}

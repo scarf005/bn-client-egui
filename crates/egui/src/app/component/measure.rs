@@ -72,16 +72,19 @@ impl<M: GameModel> App<M> {
             min: a.min.max(b.min),
             natural: a.natural.max(b.natural),
             grows: a.grows || b.grows,
+            alone: a.alone || b.alone,
         };
         let fixed = |w: f32| Extent {
             min: w,
             natural: w,
             grows: false,
+            alone: false,
         };
         let prose = |text: &str| Extent {
             min: word_width(ui, text, &font),
             natural: line_width(ui, text, &font),
             grows: false,
+            alone: false,
         };
         let inside = |child: &Option<Box<Component>>| {
             child
@@ -104,6 +107,7 @@ impl<M: GameModel> App<M> {
                     min: least.min(room),
                     natural,
                     grows: true,
+                    alone: false,
                 }
             }
             Component::Tabs(tabs) => {
@@ -117,6 +121,7 @@ impl<M: GameModel> App<M> {
                     min: labels.iter().copied().fold(0.0, f32::max),
                     natural: labels.iter().map(|w| w + gap).sum(),
                     grows: false,
+                    alone: false,
                 };
                 inside(&tabs.child).map_or(row, |child| stacked(row, child))
             }
@@ -134,6 +139,7 @@ impl<M: GameModel> App<M> {
                     natural: parts.iter().map(|p| p.natural).sum::<f32>()
                         + split::gaps(parts.len(), gap),
                     grows: parts.iter().any(|p| p.grows),
+                    alone: false,
                 };
                 headings
                     .into_iter()
@@ -163,6 +169,7 @@ impl<M: GameModel> App<M> {
                     min: valued.max(word),
                     natural: section::facts_width(ui, stats.iter().map(width)),
                     grows: false,
+                    alone: false,
                 };
                 let lines = [Some(prose(&markup::plain(&panel.title.shown())))]
                     .into_iter()
@@ -206,6 +213,7 @@ impl<M: GameModel> App<M> {
                     min: label + gap + FIELD_MIN,
                     natural: label + gap + field,
                     grows: true,
+                    alone: false,
                 }
             }
             Component::Text(block) => {
@@ -228,6 +236,7 @@ impl<M: GameModel> App<M> {
                     min: cols * (GRID_CELL + gap),
                     natural: cols * (GRID_MAX_CELL + gap),
                     grows: grid.role == Some(GridRole::Canvas),
+                    alone: false,
                 }
             }
             // The overmap's squares take all the room they get; the game's map is drawn under the window, and
@@ -239,6 +248,7 @@ impl<M: GameModel> App<M> {
                     MapMode::World => room.min(480.0),
                 },
                 grows: true,
+                alone: false,
             },
             Component::Canvas(canvas) => {
                 let mono = egui::FontId::monospace(CANVAS_MIN_FONT);
@@ -260,6 +270,7 @@ impl<M: GameModel> App<M> {
                 min: buttons.iter().copied().fold(0.0, f32::max),
                 natural: buttons.iter().sum::<f32>() + split::gaps(buttons.len(), gap),
                 grows: false,
+                alone: false,
             },
         );
         // Every part but a panel draws its heading over itself, on one line.

@@ -10,6 +10,7 @@ fn pane(min: f32, natural: f32, grows: bool) -> Extent {
         min,
         natural,
         grows,
+        alone: false,
     }
 }
 
@@ -179,4 +180,16 @@ fn short_prose_beside_lists_takes_its_natural_width_and_the_lists_share_the_rest
     ];
     let widths = prose_widths(&parts, 0, 900.0, GAP);
     assert_eq!(widths, vec![80.0, 402.0, 402.0]);
+}
+
+#[test]
+fn a_pane_that_stands_alone_takes_a_line_of_its_own() {
+    let alone = Extent {
+        alone: true,
+        ..pane(100.0, 100.0, false)
+    };
+    let parts = [alone, pane(50.0, 80.0, true), pane(50.0, 80.0, true)];
+    assert_eq!(wrap_lines(&parts, 1000.0, GAP), vec![0..1, 1..3]);
+    let parts = [pane(50.0, 80.0, true), alone, pane(50.0, 80.0, true)];
+    assert_eq!(wrap_lines(&parts, 1000.0, GAP), vec![0..1, 1..2, 2..3]);
 }
