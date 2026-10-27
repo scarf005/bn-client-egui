@@ -290,6 +290,26 @@ fn an_action_on_a_row_of_a_list_no_part_names_is_drawn_under_that_list() {
     }
 }
 
+#[test]
+fn a_log_list_shows_several_rows_over_the_status_line() {
+    for size in SIZES {
+        let steps = (0..10).map(|n| format!("Step {n}")).collect::<Vec<_>>();
+        let h = shown_with(size, |parts| {
+            let steps = steps.iter().map(String::as_str).collect::<Vec<_>>();
+            parts[4] = list("ws:history", "History", &steps, "log");
+        });
+        let status = rect(&h, "Cursor 3,4");
+        let shown = steps
+            .iter()
+            .filter(|s| {
+                h.query_by_label(s)
+                    .is_some_and(|n| n.rect().bottom() <= status.top())
+            })
+            .count();
+        assert!(shown >= 3, "{size:?}: {shown} rows of the history shown");
+    }
+}
+
 /// Writes PNGs of the workspace to `$SHOT_DIR`; needs a Vulkan adapter, so it only runs when asked:
 /// `cargo test --test it ui_workspace::shots -- --ignored`.
 #[test]
