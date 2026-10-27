@@ -356,3 +356,21 @@ fn an_engine_screen_that_opens_takes_the_keys_from_a_client_window() {
         "the inventory window did not move its cursor"
     );
 }
+
+#[test]
+fn the_keys_of_the_client_settings_window_reach_no_engine_screen_under_it() {
+    let (mut h, script) = game();
+    open_a_popup(&mut h, &script);
+    h.get_by_label("Client settings").click();
+    h.run_steps(4);
+    let sent = operations(&script).len();
+    for k in [
+        egui::Key::ArrowDown,
+        egui::Key::ArrowUp,
+        egui::Key::Tab,
+        egui::Key::Enter,
+    ] {
+        press(&mut h, k);
+    }
+    assert_eq!(operations(&script).len(), sent, "no key reached the screen");
+}
