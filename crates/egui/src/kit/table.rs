@@ -39,8 +39,10 @@ impl Widths {
         let lead = [self.pick, self.item, self.key]
             .into_iter()
             .filter(|w| *w > 0.0);
-        let values = self.values.iter().copied().filter(|w| *w > 0.0);
-        let count = Some(self.count).filter(|w| *w > 0.0);
+        // A value is right-aligned, so the room a column gap adds lands before it.
+        let apart = |w: f32| w + tokens::COLUMN_GAP - tokens::ITEM_GAP;
+        let values = self.values.iter().copied().filter(|w| *w > 0.0).map(apart);
+        let count = Some(self.count).filter(|w| *w > 0.0).map(apart);
         lead.chain([label]).chain(values).chain(count).collect()
     }
 
