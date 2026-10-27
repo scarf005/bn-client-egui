@@ -91,12 +91,12 @@ impl<M: GameModel> App<M> {
         // The palette and an open menu of the client (the map's right-click menu) have the keyboard; Escape closes
         // them.
         let client = self.palette.is_some() || egui::Popup::is_any_open(ctx);
-        match interaction::described(self.model.screens()) {
-            _ if client => {}
-            Some(_) => self.component_keys(ctx),
-            None => {
-                self.window_keys(ctx);
-                self.game_keys(ctx)
+        let screen = interaction::described(self.model.screens()).is_some();
+        if !client {
+            self.window_keys(ctx, screen);
+            match screen {
+                true => self.component_keys(ctx),
+                false => self.game_keys(ctx),
             }
         }
         // Whichever screen took the keys, the walk ends with its key.
@@ -132,8 +132,9 @@ impl<M: GameModel> App<M> {
     }
 
     /// The window that just opened has the keyboard, and so has the one the pointer pressed on; a press on
-    /// anything else (the map, the sidebar, an engine screen) gives it back to the game.
-    fn follow_key_window(&mut self, ctx: &egui::Context) {
+    /// anything else (the map, the sidebar, an engine screen) gives it back to the game, and so does an engine
+    /// screen that opens.
+    fn follow_key_window(&mut self, ctx: &egui::Context, screen: bool) {
         let open = PANELS
             .map(|(panel, _)| KeyWindow::Panel(panel))
             .into_iter()
@@ -151,18 +152,23 @@ impl<M: GameModel> App<M> {
             .iter()
             .rfind(|w| !self.known_windows.contains(w))
             .copied();
-        self.key_window = opened.or(self.key_window).filter(|w| open.contains(w));
+        let screen_opened = screen && !self.screen_shown;
+        self.screen_shown = screen;
+        self.key_window = opened
+            .or(self.key_window.filter(|_| !screen_opened))
+            .filter(|w| open.contains(w));
         self.known_windows = open;
     }
 
     /// The keys the window with the keyboard uses are its own and never reach the game. A text box has the
-    /// typing, and look and aim keep the keys for the cursor they move.
-    fn window_keys(&mut self, ctx: &egui::Context) {
-        self.follow_key_window(ctx);
+    /// typing, and look and aim keep the keys for the cursor they move, unless the player clicked a window over an
+    /// engine `screen`.
+    fn window_keys(&mut self, ctx: &egui::Context, screen: bool) {
+        self.follow_key_window(ctx, screen);
         let Some(window) = self.key_window else {
             return;
         };
-        if ctx.text_edit_focused() || self.model.focus().is_some() {
+        if ctx.text_edit_focused() || (self.model.focus().is_some() && !screen) {
             return;
         }
         ctx.input_mut(|i| {
