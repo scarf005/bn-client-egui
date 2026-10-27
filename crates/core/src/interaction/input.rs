@@ -403,16 +403,14 @@ impl Interaction {
         }
     }
 
-    /// A key that is a tab's hotkey, in either case, chooses that tab with the tabs' `select` affordance, as a click does.
+    /// A key that is a tab's hotkey chooses that tab with the tabs' `select` affordance, as a click does.
     fn press_tab_hotkey(&mut self, screen: &Screen, key: &str) -> Option<Outcome> {
         let (tabs, tab, select) = screen.components().into_iter().find_map(|c| match c {
             Component::Tabs(tabs) => {
-                let hot = |t: &&crate::protocol::Tab| {
-                    t.hotkey
-                        .as_deref()
-                        .is_some_and(|k| k.eq_ignore_ascii_case(key))
-                };
-                let tab = tabs.tabs.iter().find(hot)?;
+                let tab = tabs
+                    .tabs
+                    .iter()
+                    .find(|t| t.hotkey.as_deref() == Some(key))?;
                 Some((tabs, tab, tabs.select.as_deref()?))
             }
             _ => None,

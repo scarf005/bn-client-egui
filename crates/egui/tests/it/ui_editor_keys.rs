@@ -38,7 +38,7 @@ fn tool_rows(script: &bn_client_egui::transport::ScriptHandle) -> Vec<String> {
 fn a_tab_hotkey_runs_the_tabs_select_on_that_tab() {
     let (mut h, script) = open(editor(Some("trail")));
     type_text(&mut h, "l");
-    type_text(&mut h, "S");
+    type_text(&mut h, "s");
     assert_eq!(tool_rows(&script), ["tool:line", "tool:select"]);
 }
 
@@ -62,14 +62,14 @@ fn an_affordance_key_is_not_a_key_while_a_text_field_has_the_typing() {
         .unwrap()
         .click();
     h.run_steps(4);
-    type_text(&mut h, "Z");
+    type_text(&mut h, "z");
     assert!(!sent(&script).contains(&"editor:rotate".to_owned()));
 }
 
 #[test]
 fn an_affordance_key_runs_the_affordance() {
     let (mut h, script) = open(enabled("editor:rotate"));
-    type_text(&mut h, "Z");
+    type_text(&mut h, "z");
     assert_eq!(sent(&script), ["editor:rotate"]);
 }
 
@@ -106,4 +106,11 @@ fn an_affordance_only_a_drag_runs_has_no_button() {
     for label in ["Begin stroke", "End stroke", "Move placement"] {
         assert!(h.query_by_label_contains(label).is_none(), "{label}");
     }
+}
+
+#[test]
+fn a_tab_hotkey_is_not_the_same_key_shifted() {
+    let (mut h, script) = open(editor(Some("trail")));
+    type_text(&mut h, "L");
+    assert_eq!(tool_rows(&script), Vec::<String>::new());
 }
