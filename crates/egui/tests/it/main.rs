@@ -2,6 +2,7 @@
 mod animated_tiles;
 mod ascii_stand_in;
 mod common;
+mod demo_editor_video;
 mod diamond;
 mod fonts;
 mod input_queue;
