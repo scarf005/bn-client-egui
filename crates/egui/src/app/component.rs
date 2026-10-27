@@ -431,6 +431,7 @@ impl<M: GameModel> App<M> {
     /// The keys pressed this frame go to the interaction core, which decides what each one does.
     pub(super) fn component_keys(&mut self, ctx: &egui::Context) {
         self.keys_consumed = false;
+        canvas::keep_space(ctx);
         self.sync_screens();
         let pages = self.screens.list_pages.borrow().clone();
         // A text box has the typing; its keys are not the screen's, except Escape, which closes the screen (a filled filter box clears first).
@@ -1175,6 +1176,7 @@ impl<M: GameModel> App<M> {
             }
             let shown = area.show(ui, |ui| {
                 canvas::note_clip(ui.ctx(), ui.clip_rect());
+                canvas::note_hover(ui);
                 if let Some(pan) = pan.filter(|_| ui.rect_contains_pointer(ui.clip_rect())) {
                     ui.scroll_with_delta(pan);
                 }

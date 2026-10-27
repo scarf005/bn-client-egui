@@ -97,6 +97,41 @@ pub(super) fn panning(ui: &egui::Ui) -> bool {
     ui.input(|i| i.key_down(egui::Key::Space))
 }
 
+/// Notes that the pointer is over the canvas `ui` draws in, on its own layer: Space pans it there.
+pub(super) fn note_hover(ui: &egui::Ui) {
+    let ctx = ui.ctx();
+    let at = ui.input(|i| i.pointer.hover_pos());
+    let over = at.is_some_and(|at| {
+        ui.clip_rect().contains(at) && ctx.layer_id_at(at) == Some(ui.layer_id())
+    });
+    if over {
+        let pass = ctx.cumulative_pass_nr();
+        ctx.data_mut(|d| d.insert_temp(egui::Id::new("canvas hover"), pass));
+    }
+}
+
+/// Takes the Space of this frame's events, pressed, repeated or typed, when a canvas was under the pointer last
+/// pass or Space pans it: the engine's keys and a focused button do not see it.
+pub(super) fn keep_space(ctx: &egui::Context) {
+    let pass = ctx.cumulative_pass_nr();
+    let hover = ctx.data(|d| d.get_temp::<u64>(egui::Id::new("canvas hover")));
+    let over = hover.is_some_and(|at| at + 1 >= pass);
+    let held = ctx.input(|i| i.key_down(egui::Key::Space) && i.pointer.primary_down());
+    if over || held {
+        ctx.input_mut(|i| {
+            i.events.retain(|e| {
+                !matches!(
+                    e,
+                    egui::Event::Key {
+                        key: egui::Key::Space,
+                        ..
+                    }
+                ) && !matches!(e, egui::Event::Text(t) if t == " ")
+            })
+        });
+    }
+}
+
 /// The clips of the canvases drawn in this pass: their text scrolls on its own, so it is no line of the body.
 pub(super) fn clips(ctx: &egui::Context) -> Vec<egui::Rect> {
     let pass = ctx.cumulative_pass_nr();
