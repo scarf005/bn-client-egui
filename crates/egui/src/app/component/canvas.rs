@@ -122,7 +122,8 @@ pub(super) fn keep_space(ctx: &egui::Context) {
     let hover = ctx.data(|d| d.get_temp::<u64>(egui::Id::new("canvas hover")));
     let over = hover.is_some_and(|at| at + 1 >= pass);
     let held = ctx.input(|i| i.key_down(egui::Key::Space) && i.pointer.primary_down());
-    if over || held {
+    // A text box with the keyboard takes its Space, unless the player is panning.
+    if (over && !ctx.text_edit_focused()) || held {
         ctx.input_mut(|i| {
             i.events.retain(|e| {
                 !matches!(
