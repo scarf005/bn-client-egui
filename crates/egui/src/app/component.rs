@@ -1173,8 +1173,7 @@ impl<M: GameModel> App<M> {
             let mut area = egui::ScrollArea::both()
                 .id_salt(("grid", &screen.screen_id, &grid.head.id))
                 .max_height(rows * cell)
-                // As wide as its room, which the grid is centred in.
-                .auto_shrink([false, true])
+                .auto_shrink([true, true])
                 .scroll_source(egui::scroll_area::ScrollSource {
                     drag: egui::scroll_area::DragScroll::Never,
                     mouse_wheel: false,
@@ -1205,6 +1204,8 @@ impl<M: GameModel> App<M> {
                 laid.inner
             });
             layout = Some(shown.inner);
+            // The canvas takes its room's whole width, which the grid is centred in.
+            ui.allocate_space(egui::vec2(ui.available_width(), 0.0));
             let view = canvas::View {
                 span: (xs.len(), ys.len()),
                 zoom,
