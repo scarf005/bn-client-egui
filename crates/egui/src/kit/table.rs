@@ -98,6 +98,20 @@ impl Widths {
             **w += more;
             left -= more;
         }
+        // A column still cut takes the width of the cut columns after it, the last first: the engine orders them by
+        // what matters most. A whole one keeps its width.
+        for at in 0..columns.len() {
+            for from in (at + 1..columns.len()).rev() {
+                let short = columns[at].1 - *columns[at].0;
+                let cut = *columns[from].0 < columns[from].1;
+                if short <= 0.0 || !cut {
+                    continue;
+                }
+                let taken = short.min(*columns[from].0);
+                *columns[from].0 -= taken;
+                *columns[at].0 += taken;
+            }
+        }
         self
     }
 
@@ -311,5 +325,25 @@ mod tests {
         assert_eq!(w().fitted(400.0, 8.0, 200.0, kept).values, vec![144.0]);
         assert_eq!(w().label_in(300.0, 8.0, kept), 164.0);
         assert_eq!(w().fitted(300.0, 8.0, 164.0, kept).values, vec![kept]);
+    }
+
+    #[test]
+    fn a_cut_value_takes_the_width_of_the_cut_values_after_it_but_not_of_a_whole_one() {
+        let w = |values: Vec<f32>| Widths {
+            label: 20.0,
+            values,
+            ..Widths::default()
+        };
+        let room =
+            |n: f32| 20.0 + 8.0 + n * (40.0 + 8.0 + tokens::COLUMN_GAP - tokens::ITEM_GAP) + 8.0;
+        let values = w(vec![100.0, 100.0, 100.0])
+            .fitted(room(3.0), 8.0, 20.0, 40.0)
+            .values;
+        assert_eq!((values[0], values[2]), (100.0, 0.0), "{values:?}");
+        assert!(values[1] > 0.0 && values[1] < 40.0, "{values:?}");
+        let values = w(vec![100.0, 30.0])
+            .fitted(room(2.0) - 10.0, 8.0, 20.0, 40.0)
+            .values;
+        assert!(values[0] < 100.0 && values[1] == 30.0, "{values:?}");
     }
 }
