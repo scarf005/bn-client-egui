@@ -981,3 +981,30 @@ fn a_click_on_a_row_of_a_list_holding_the_engines_cursor_shows_it_selected() {
     h.run_steps(3);
     assert!(selected(&h, "Eraser") && !selected(&h, "Pencil"));
 }
+
+#[test]
+fn a_click_or_return_on_a_menu_item_that_is_off_shows_the_engines_reason() {
+    for size in [egui::vec2(1290.0, 830.0), egui::vec2(1920.0, 1080.0)] {
+        let (mut h, script) = shown(size);
+        h.get_by_label("File").click();
+        h.run_steps(3);
+        h.get_by_label("Save").click();
+        h.run_steps(3);
+        assert!(
+            h.query_by_label("Nothing to save").is_some(),
+            "{size:?}: a click on Save said nothing"
+        );
+        assert!(!invoked(&script).contains(&"ws:save".to_string()));
+        let (mut h, _) = shown(size);
+        h.get_by_label("File").click();
+        h.run_steps(3);
+        h.get_by_label("Save").focus();
+        h.run_steps(2);
+        h.key_press(egui::Key::Enter);
+        h.run_steps(3);
+        assert!(
+            h.query_by_label("Nothing to save").is_some(),
+            "{size:?}: Return on Save said nothing"
+        );
+    }
+}
