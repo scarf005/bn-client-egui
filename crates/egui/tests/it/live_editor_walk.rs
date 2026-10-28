@@ -5,6 +5,7 @@
 //! --ignored --nocapture`
 use crate::common::live::settle;
 use crate::live_editor::{H, field, run_until, start, start_with, wait_kind};
+use bn_client_egui::protocol::Component;
 use bn_client_egui::{GameModel, MenuModel};
 use eframe::egui;
 use egui_kittest::kittest::NodeT;
@@ -59,6 +60,36 @@ fn document(h: &H) -> String {
         .unwrap_or_default()
 }
 
+/// The row id of the legend's selected symbol, as `symbol:#`: the symbol the canvas draws with.
+fn picked_symbol(h: &H) -> Option<String> {
+    let top = h.state().model.screens().last().unwrap();
+    let Some(Component::List(legend)) = top.root.as_ref().unwrap().find("editor:legend") else {
+        return None;
+    };
+    legend
+        .rows
+        .iter()
+        .find(|r| r.selected)
+        .map(|r| r.id.clone())
+}
+
+/// The cell of the column `key` of the legend's row of `symbol`, such as the name of what it places on a layer: the
+/// legend is drawn above the catalog, so a name both show is aimed at in the legend.
+fn legend_cell(h: &H, symbol: &str, key: &str) -> String {
+    let top = h.state().model.screens().last().unwrap();
+    let Some(Component::List(legend)) = top.root.as_ref().unwrap().find("editor:legend") else {
+        panic!("no legend");
+    };
+    let id = format!("symbol:{symbol}");
+    legend
+        .rows
+        .iter()
+        .find(|r| r.id == id)
+        .and_then(|r| r.columns.iter().find(|c| c.key.as_deref() == Some(key)))
+        .map(|c| c.value.shown())
+        .unwrap_or_else(|| panic!("no {key} cell for {symbol}"))
+}
+
 fn dump(h: &H, what: &str) {
     println!("--- {what}\n{}", labels(h).join("\n"));
 }
@@ -81,13 +112,7 @@ fn click(h: &mut H, label: &str) {
 
 /// Double-clicks the widget labelled `label`: a row of a list in a pane runs its action so.
 fn double_click(h: &mut H, label: &str) {
-    reveal(h, label);
-    let mut seen = None;
-    while seen != find(h, label) {
-        seen = find(h, label);
-        h.run_steps(3);
-    }
-    let at = find(h, label).unwrap().center();
+    let at = click_stable(h, label, |h| find(h, label)).center();
     h.hover_at(at);
     h.run_steps(2);
     // Two clicks a frame or two apart, as a hand makes them.
@@ -194,7 +219,13 @@ fn reveal_rect(h: &mut H, what: &str, rect_of: impl Fn(&H) -> Option<egui::Rect>
     // How many times it was not drawn so far.
     let mut misses = 0u32..;
     for _ in 0..200 {
-        let Some(r) = rect_of(h) else {
+        // A wheel turn scrolls on over a few frames: where it ends is what counts.
+        let mut seen = None;
+        while seen != rect_of(h) {
+            seen = rect_of(h);
+            h.run_steps(3);
+        }
+        let Some(r) = seen else {
             // Not drawn: it is scrolled out of the list in the column's middle or of the column, so look down that
             // list, then up it, then down and up the column.
             let phase = misses.next().unwrap_or_default() / 20 % 4;
@@ -203,8 +234,7 @@ fn reveal_rect(h: &mut H, what: &str, rect_of: impl Fn(&H) -> Option<egui::Rect>
             wheel_at(h, at, if down { -150.0 } else { 150.0 });
             continue;
         };
-        // The menu bar and the status line clip what lies past these.
-        if r.top() >= 34.0 && r.bottom() < size.y - 45.0 && r.bottom() > 0.0 {
+        if in_view(h, r) {
             return;
         }
         let dy = if r.center().y < size.y / 2.0 {
@@ -223,6 +253,12 @@ fn reveal_rect(h: &mut H, what: &str, rect_of: impl Fn(&H) -> Option<egui::Rect>
         "{what} is never brought into view by the wheel; last at {seen:?} in {size:?} among {:#?}",
         labels(h)
     );
+}
+
+/// Whether `r` is drawn between the menu bar and the status line, which clip what lies past these.
+fn in_view(h: &H, r: egui::Rect) -> bool {
+    let size = h.ctx.content_rect().size();
+    r.top() >= 34.0 && r.bottom() < size.y - 45.0 && r.bottom() > 0.0
 }
 
 /// A point in the gutter of a workspace's right column, left of the parts it indents under their headings: the
@@ -458,7 +494,7 @@ fn glyph(h: &H, x: usize, y: usize) -> Option<char> {
 /// A new mapgen file in the profile's mods directory, made from the editor's form, and its canvas.
 fn create_mapgen(h: &mut H, name: &str) -> std::path::PathBuf {
     let path = crate::common::live::profile_dir().join(format!("mods/{name}.json"));
-    click_beside(h, "New file");
+    click_beside(h, "New file/Path");
     // The form keeps what the file made before it was given.
     replace_text(h, &path.to_string_lossy());
     click_beside(h, "Overmap terrain");
@@ -496,12 +532,9 @@ fn the_map_editor_paints_places_furniture_undoes_previews_saves_and_reopens() {
     click(&mut h, "Set mapping");
     assert!(crate::live_editor::rows(&h, "editor:legend").contains(&"symbol:#".to_string()));
     shot(&mut h, "map-3-mapped");
-    double_click(&mut h, "t_brick_wall");
-    assert!(
-        document(&h).contains("\"Symbol\"=\"#\""),
-        "{}",
-        document(&h)
-    );
+    let cell = legend_cell(&h, "#", "terrain");
+    double_click(&mut h, &cell);
+    assert_eq!(picked_symbol(&h).as_deref(), Some("symbol:#"));
 
     // A rectangle from two clicks, undone by the button, redone by Ctrl+Y, undone by Ctrl+Z.
     click(&mut h, "Rectangle");
@@ -545,15 +578,11 @@ fn the_map_editor_paints_places_furniture_undoes_previews_saves_and_reopens() {
     replace_text(&mut h, "C");
     key(&mut h, egui::Key::Enter);
     click(&mut h, "Set mapping");
-    double_click(&mut h, &format!("\"{furniture}\""));
+    let cell = legend_cell(&h, "C", "furniture");
+    double_click(&mut h, &cell);
     run_until(&mut h, "the symbol C", 20, |h| {
-        document(h).contains("\"Symbol\"=\"C\"")
+        picked_symbol(h).as_deref() == Some("symbol:C")
     });
-    assert!(
-        document(&h).contains("\"Symbol\"=\"C\""),
-        "{}",
-        document(&h)
-    );
     click(&mut h, "Pencil");
     paint(&mut h, 15, 15);
     // The engine answers a paint after the client went idle; wait for the square instead of racing the reply.
@@ -596,13 +625,14 @@ fn the_map_editor_paints_places_furniture_undoes_previews_saves_and_reopens() {
     dump(&h, "after escape");
     shot(&mut h, "map-9-left");
 
-    // Reopened from the file list by its name: the walls and the barrel are still there.
-    click(&mut h, "Map Editor");
-    wait_kind(&mut h, "editor");
-    click_input(&mut h, "Search");
-    replace_text(&mut h, &path.to_string_lossy());
-    key(&mut h, egui::Key::Enter);
-    shot(&mut h, "map-10-filtered");
+    // Reopened from the main menu's recent files: the walls and the barrel are still there.
+    click(&mut h, "Editor");
+    shot(&mut h, "map-10-recent");
+    click(&mut h, &path.to_string_lossy());
+    // The mod list first, left with the mods as they are, as when the editor opened.
+    wait_kind(&mut h, "world_creation");
+    key(&mut h, egui::Key::Escape);
+    click(&mut h, "Yes");
     wait_kind(&mut h, "editor");
     run_until(&mut h, "the reopened canvas", 30, |h| {
         canvas_glyphs(h).len() == 24
@@ -870,11 +900,18 @@ fn click_input(h: &mut H, label: &str) {
 }
 
 /// Clicks into the text box drawn right of the label `label`, on the label's row.
+/// `heading/label` names the field `label` of the form under the heading `heading`, where several forms have one.
 fn click_beside(h: &mut H, label: &str) {
+    let (heading, label) = label.rsplit_once('/').unwrap_or(("", label));
     let rect_of = |h: &H| {
         let boxes = text_boxes(h);
+        let named = |n: &egui_kittest::Node| {
+            let a = n.accesskit_node();
+            a.label().or_else(|| a.value()).map(|l| l.to_string())
+        };
         h.root()
             .children_recursive()
+            .skip_while(|n| !heading.is_empty() && named(n).as_deref() != Some(heading))
             .filter(|n| {
                 let a = n.accesskit_node();
                 a.role() != egui::accesskit::Role::TextInput
@@ -882,9 +919,11 @@ fn click_beside(h: &mut H, label: &str) {
             })
             .map(|n| n.rect())
             .find(|l| {
-                boxes
-                    .iter()
-                    .any(|b| b.y_range().contains(l.center().y) && b.left() > l.left())
+                // A form's box sits next to its label; a status fact of the same name has none.
+                boxes.iter().any(|b| {
+                    b.y_range().contains(l.center().y)
+                        && (l.right()..l.right() + 120.0).contains(&b.left())
+                })
             })
     };
     let at = click_stable(h, label, rect_of);
@@ -892,9 +931,16 @@ fn click_beside(h: &mut H, label: &str) {
 }
 
 /// Scrolls the rectangle `rect_of` finds into view, waits until it stopped moving and returns it.
+/// A column that moves on its own while it settles, as an engine reply relays it out, is revealed again.
 fn click_stable(h: &mut H, what: &str, rect_of: impl Fn(&H) -> Option<egui::Rect>) -> egui::Rect {
-    reveal_rect(h, what, &rect_of);
-    stable(h, what, rect_of)
+    for _ in 0..10 {
+        reveal_rect(h, what, &rect_of);
+        let at = stable(h, what, &rect_of);
+        if in_view(h, at) {
+            return at;
+        }
+    }
+    panic!("{what} moves out of view whenever it settles");
 }
 
 /// The rectangle `rect_of` finds once it stopped moving.
@@ -924,7 +970,7 @@ fn the_map_editor_creates_a_palette_maps_a_symbol_and_saves_it() {
     click(&mut h, "Palette");
     assert!(find(&h, "Palette id").is_some(), "{:?}", labels(&h));
     let path = crate::common::live::profile_dir().join("mods/zz_palette.json");
-    click_beside(&mut h, "New file");
+    click_beside(&mut h, "New file/Path");
     type_text(&mut h, &path.to_string_lossy());
     click_beside(&mut h, "Palette id");
     type_text(&mut h, "zz_walk_palette");
@@ -1289,11 +1335,7 @@ fn the_map_editor_outlines_overmap_squares_and_shows_the_level_below_faded() {
     type_text(&mut h, "i");
     paint(&mut h, 14, 3);
     type_text(&mut h, "b");
-    assert!(
-        document(&h).contains("\"Symbol\"=\"r\""),
-        "{}",
-        document(&h)
-    );
+    assert_eq!(picked_symbol(&h).as_deref(), Some("symbol:r"));
     shot_at(&mut h, "lv-2b-roof-symbol-picked", &sizes);
     let before = canvas_glyphs(&h);
     paint(&mut h, 3, 3);
@@ -2000,8 +2042,9 @@ fn map_wall(h: &mut H) {
     key(h, egui::Key::Enter);
     click(h, "Set mapping");
     // The legend row picks the symbol the canvas draws with.
-    double_click(h, "t_brick_wall");
-    assert!(document(h).contains("\"Symbol\"=\"#\""), "{}", document(h));
+    let cell = legend_cell(h, "#", "terrain");
+    double_click(h, &cell);
+    assert_eq!(picked_symbol(h).as_deref(), Some("symbol:#"));
 }
 
 /// A region copied from one mapgen file and cut from another is pasted into a third, which maps nothing of it.
@@ -2124,7 +2167,7 @@ fn the_map_editor_makes_a_nested_chunk_and_moves_a_legend_into_a_palette() {
     click(&mut h, "Nested chunk");
     assert!(find(&h, "Chunk id").is_some(), "{:?}", labels(&h));
     let nested = crate::common::live::profile_dir().join("mods/zz_nested.json");
-    click_beside(&mut h, "New file");
+    click_beside(&mut h, "New file/Path");
     replace_text(&mut h, &nested.to_string_lossy());
     click_beside(&mut h, "Chunk id");
     replace_text(&mut h, "zz_walk_chunk");
@@ -2575,7 +2618,7 @@ fn the_map_editor_makes_a_new_overmap_special_and_connects_it() {
     click(&mut h, "Mapgen");
     click(&mut h, "Overmap special");
     let path = crate::common::live::profile_dir().join("mods/zz_new_special.json");
-    click_beside(&mut h, "New file");
+    click_beside(&mut h, "New file/Path");
     replace_text(&mut h, &path.to_string_lossy());
     click_beside(&mut h, "Special id");
     replace_text(&mut h, "zz_walk_new_special");
@@ -2791,7 +2834,7 @@ fn a_modder_opens_draws_undoes_saves_tests_and_leaves_the_map_editor_workspace()
     tap(&mut h, row.center());
     rest(&mut h);
     run_until(&mut h, "the symbol #", 20, |h| {
-        document(h).contains("\"Symbol\"=\"#\"")
+        picked_symbol(h).as_deref() == Some("symbol:#")
     });
     shot_both(&mut h, "ws-map-04-symbol");
 

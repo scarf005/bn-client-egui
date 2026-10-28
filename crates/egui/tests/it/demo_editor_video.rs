@@ -418,18 +418,24 @@ fn square(h: &H, x: usize, y: usize) -> egui::Rect {
     buttons[start + y * cols + x].rect()
 }
 
-/// The text of the first cell of the legend's row of the symbol `#`, else of the first symbol with a terrain: what a
-/// click on that row aims at, as the symbol column itself can be scrolled out of the pane.
+/// The ID cell of the legend's row of the symbol `#`, else of the first symbol with a terrain: what a click on that
+/// row aims at, as names repeat across rows and the symbol column itself can be scrolled out of the pane.
 fn legend_cell(h: &H) -> String {
     let top = h.state().model.screens().last().unwrap();
     let legend = serde_json::to_value(top.root.as_ref().unwrap().find("editor:legend")).unwrap();
     let rows = legend["rows"].as_array().unwrap();
-    let cell = |r: &serde_json::Value| r["columns"][0]["value"].as_str().map(str::to_string);
-    let has_terrain = |r: &&serde_json::Value| r["columns"][0]["key"] == "terrain";
+    let column = |r: &serde_json::Value, key: &str| {
+        r["columns"]
+            .as_array()
+            .and_then(|c| c.iter().find(|c| c["key"] == key))
+            .and_then(|c| c["value"].as_str())
+            .map(str::to_string)
+    };
+    let has_terrain = |r: &&serde_json::Value| column(r, "terrain").is_some_and(|t| !t.is_empty());
     rows.iter()
         .find(|r| r["id"] == "symbol:#" && has_terrain(r))
         .or_else(|| rows.iter().find(has_terrain))
-        .and_then(cell)
+        .and_then(|r| column(r, "id"))
         .expect("a terrain in the legend")
 }
 
