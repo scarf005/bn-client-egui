@@ -359,6 +359,24 @@ fn the_logs_words_are_in_view_above_a_long_history_and_problems() {
     }
 }
 
+/// A canvas of no squares, as an entry without rows has, draws nothing: no empty frame and no button of its own.
+#[test]
+fn a_canvas_without_squares_draws_nothing() {
+    let mut screen = editor();
+    let canvas = find(&mut screen["root"], "editor:canvas").unwrap();
+    canvas["cols"] = json!(0);
+    canvas["rows"] = json!(0);
+    canvas["cells"] = json!([]);
+    canvas["regions"] = json!([]);
+    let h = open(screen, egui::vec2(1290.0, 830.0));
+    assert!(h.query_by_label("Draw").is_none(), "a Draw button is drawn");
+    let framed = h
+        .root()
+        .children_recursive()
+        .any(|n| n.accesskit_node().role() == egui::accesskit::Role::Canvas);
+    assert!(!framed, "an empty canvas is drawn");
+}
+
 /// Each text box of a form is named by its field's label for a screen reader and a test, beside its value.
 #[test]
 fn a_forms_text_boxes_are_named_by_their_fields() {
