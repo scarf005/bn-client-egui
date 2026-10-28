@@ -188,7 +188,8 @@ impl<M: GameModel> App<M> {
             let scroll = scrolls.entry(slot.clone()).or_default();
             let y = starts[i];
             let step = heights[i] + spacing.y;
-            let seen = y >= scroll.top && y + step <= scroll.top + list_height;
+            // The last row has no gap under it in the viewport.
+            let seen = y >= scroll.top && y + heights[i] <= scroll.top + list_height + 0.5;
             if scroll.shown != focus && !seen {
                 let middle = y - (list_height - step) / 2.0;
                 let top = starts.iter().copied().take_while(|s| *s <= middle).last();
