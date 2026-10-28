@@ -257,18 +257,19 @@ impl<M: GameModel> App<M> {
                 .default_size(left_width)
                 .show(ui, |ui| match left_is_log {
                     true => self.log_column(ui, screen, &left, out),
-                    false => self.column(ui, screen, &left, out),
+                    false => {
+                        self.column(ui, screen, &left, out);
+                    }
                 });
             crate::app::label_resize_handle(ui.ctx(), &tools_id, &tr("Resize workspace column"));
         }
-        let (lists, inspector) = (
-            [Slot::Palette, Slot::Outline]
-                .into_iter()
-                .flat_map(|slot| parts(root, slot))
-                .collect::<Vec<_>>(),
+        let (palette, outline, inspector) = (
+            parts(root, Slot::Palette),
+            parts(root, Slot::Outline),
             parts(root, Slot::Inspector),
         );
-        if !lists.is_empty() || !inspector.is_empty() {
+        let lists = !palette.is_empty() || !outline.is_empty();
+        if lists || !inspector.is_empty() {
             let width = side_width(ui, root);
             follow(ui.ctx(), egui::Id::new(&side_id), width);
             egui::Panel::right(egui::Id::new(&side_id))
@@ -276,17 +277,19 @@ impl<M: GameModel> App<M> {
                 .show(ui, |ui| {
                     // Room for two columns puts the inspector beside the palette and the outline, both in view.
                     match ui.available_width() >= 2.0 * SIDE_WIDTH.0
-                        && !lists.is_empty()
+                        && lists
                         && !inspector.is_empty()
                     {
                         true => ui.columns(2, |halves| {
-                            self.column(&mut halves[0], screen, &lists, out);
-                            self.column(&mut halves[1], screen, &inspector, out);
+                            // The halves are told apart by name: a column's own id is its parent's.
+                            halves[0].push_id("lists", |ui| {
+                                self.sections(ui, screen, &[&palette, &outline], out)
+                            });
+                            halves[1].push_id("inspector", |ui| {
+                                self.sections(ui, screen, &[&inspector], out)
+                            });
                         }),
-                        false => {
-                            let side = [lists.as_slice(), inspector.as_slice()].concat();
-                            self.column(ui, screen, &side, out);
-                        }
+                        false => self.sections(ui, screen, &[&palette, &outline, &inspector], out),
                     }
                 });
             crate::app::label_resize_handle(ui.ctx(), &side_id, &tr("Resize workspace column"));
@@ -418,7 +421,7 @@ impl<M: GameModel> App<M> {
         screen: &Screen,
         parts: &[&Component],
         out: &mut Vec<Intent>,
-    ) {
+    ) -> f32 {
         let rect = ui.available_rect_before_wrap();
         let mut inner = ui.new_child(egui::UiBuilder::new().max_rect(rect));
         inner.set_clip_rect(rect.intersect(ui.clip_rect()));
@@ -453,6 +456,50 @@ impl<M: GameModel> App<M> {
         });
         self.screens.column_caps.replace(caps);
         self.screens.column_lists.replace(lists);
+        ui.allocate_rect(rect, egui::Sense::hover());
+        // As tall as its parts are with every row of their lists.
+        let (content, fits) = ui
+            .data(|d| d.get_temp::<(f32, Vec<ListFit>)>(key))
+            .unwrap_or_default();
+        content + fits.iter().map(|f| f.wanted - f.taken).sum::<f32>()
+    }
+
+    /// `groups` one above the other in the room `ui` has, each a column of its own that scrolls: each is as tall as
+    /// its parts want up to an even share of what the others leave, so that the start of every one is in view however
+    /// long the others are.
+    fn sections(
+        &self,
+        ui: &mut egui::Ui,
+        screen: &Screen,
+        groups: &[&Vec<&Component>],
+        out: &mut Vec<Intent>,
+    ) {
+        let groups = groups.iter().filter(|g| !g.is_empty()).collect::<Vec<_>>();
+        let rect = ui.available_rect_before_wrap();
+        let gap = ui.spacing().item_spacing.y;
+        let room = rect.height() - gap * groups.len().saturating_sub(1) as f32;
+        let key = ui.id().with("sections");
+        // Until a section is drawn, what it wants is not known: they share the room evenly.
+        let wanted = ui
+            .data(|d| d.get_temp::<Vec<f32>>(key))
+            .filter(|w| w.len() == groups.len())
+            .unwrap_or_else(|| vec![f32::INFINITY; groups.len()]);
+        let mut top = rect.top();
+        let mut natural = vec![];
+        for (i, (group, height)) in groups.iter().zip(shares(room, &wanted, 0.0)).enumerate() {
+            let slice = egui::Rect::from_min_size(
+                egui::pos2(rect.left(), top),
+                egui::vec2(rect.width(), height),
+            );
+            let mut section = ui.new_child(
+                egui::UiBuilder::new()
+                    .id_salt(("section", i))
+                    .max_rect(slice),
+            );
+            natural.push(self.column(&mut section, screen, group, out));
+            top += height + gap;
+        }
+        ui.data_mut(|d| d.insert_temp(key, natural));
         ui.allocate_rect(rect, egui::Sense::hover());
     }
 
