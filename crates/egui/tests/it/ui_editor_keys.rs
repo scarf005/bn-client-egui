@@ -142,3 +142,43 @@ fn a_tab_hotkey_is_not_the_same_key_shifted() {
     type_text(&mut h, "L");
     assert_eq!(tool_rows(&script), Vec::<String>::new());
 }
+
+/// Whether the widget egui's keyboard focus is on is named `label`.
+fn focused_on(h: &H, label: &str) -> bool {
+    let Some(id) = h.ctx.memory(|m| m.focused()) else {
+        return false;
+    };
+    let rect = h
+        .ctx
+        .viewport(|v| v.prev_pass.widgets.get(id).map(|w| w.rect));
+    h.query_all_by_label(label).any(|n| Some(n.rect()) == rect)
+}
+
+/// Tab reaches the canvas early, before the side columns' widgets; there the arrows move over its squares and
+/// Return draws on the one reached.
+#[test]
+fn tab_reaches_the_canvas_where_the_arrows_and_return_draw() {
+    let (mut h, script) = open(editor(Some("trail")));
+    let mut presses = 0;
+    while !focused_on(&h, "Canvas") {
+        presses += 1;
+        assert!(presses <= 12, "Tab does not reach the canvas");
+        h.key_press(egui::Key::Tab);
+        h.run_steps(2);
+    }
+    h.key_press(egui::Key::ArrowRight);
+    h.run_steps(2);
+    h.key_press(egui::Key::ArrowRight);
+    h.run_steps(2);
+    assert!(
+        focused_on(&h, "Canvas"),
+        "the arrows took the focus off the canvas"
+    );
+    h.key_press(egui::Key::Enter);
+    h.run_steps(4);
+    assert!(
+        sent(&script).contains(&"editor:paint".to_owned()),
+        "{:?}",
+        sent(&script)
+    );
+}
