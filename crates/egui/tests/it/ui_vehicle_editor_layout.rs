@@ -329,6 +329,58 @@ fn the_right_column_holds_every_design_tab_and_some_rows_of_each_list_in_view() 
     }
 }
 
+/// Whether the widget drawn at `r` is whole in the window and uncut by what clips it.
+fn unclipped(h: &H, r: egui::Rect) -> bool {
+    let clipped = h.ctx.viewport(|v| {
+        v.prev_pass
+            .widgets
+            .layers()
+            .flat_map(|(_, ws)| ws)
+            .find(|w| w.rect == r)
+            .map(|w| w.interact_rect)
+    });
+    clipped.is_some_and(|c| c.contains_rect(r.shrink(1.0))) && h.ctx.content_rect().contains_rect(r)
+}
+
+#[test]
+fn the_design_inspector_is_whole_in_view_over_long_lists_without_scrolling() {
+    let screen = open_with_full_pages();
+    let tabs = find(&screen["root"], "vehicle:tools").unwrap()["tabs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|t| t["label"].as_str().unwrap().to_owned())
+        .collect::<Vec<_>>();
+    let facts = find(&screen["root"], "vehicle:performance").unwrap()["stats"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|s| s["label"].as_str().unwrap().to_owned())
+        .collect::<Vec<_>>();
+    let stack = labels(&screen, "vehicle:stack");
+    for size in [egui::vec2(1290.0, 830.0), egui::vec2(1920.0, 1080.0)] {
+        let mut h = open(screen.clone(), size);
+        h.run_steps(6);
+        let mut out = vec![];
+        for tab in &tabs {
+            let r = h
+                .query_all_by_label(tab)
+                .find(|n| n.accesskit_node().role() == egui::accesskit::Role::Tab)
+                .map(|n| n.rect());
+            if !r.is_some_and(|r| unclipped(&h, r)) {
+                out.push(format!("tab {tab} at {r:?}"));
+            }
+        }
+        for label in stack.iter().chain(&facts) {
+            let r = h.query_by_label(label).map(|n| n.rect());
+            if !r.is_some_and(|r| unclipped(&h, r)) {
+                out.push(format!("{label} at {r:?}"));
+            }
+        }
+        assert!(out.is_empty(), "at {size:?} out of view: {out:#?}");
+    }
+}
+
 /// The world list's rows run `Edit in place` on a double click, and it is a button beside the list's other
 /// actions on a row, `Export design` and `Copy vehicle`, as they are.
 #[test]

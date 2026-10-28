@@ -414,3 +414,42 @@ fn a_forms_text_boxes_are_named_by_their_fields() {
         );
     }
 }
+
+/// Whether the widget drawn at `r` is whole in the window and uncut by what clips it.
+fn unclipped(h: &H, r: egui::Rect) -> bool {
+    let clipped = h.ctx.viewport(|v| {
+        v.prev_pass
+            .widgets
+            .layers()
+            .flat_map(|(_, ws)| ws)
+            .find(|w| w.rect == r)
+            .map(|w| w.interact_rect)
+    });
+    clipped.is_some_and(|c| c.contains_rect(r.shrink(1.0))) && h.ctx.content_rect().contains_rect(r)
+}
+
+#[test]
+fn the_entries_of_the_open_file_are_in_view_beside_a_full_canvas_without_scrolling() {
+    for size in [egui::vec2(1290.0, 830.0), egui::vec2(1920.0, 1080.0)] {
+        let mut screen = editor();
+        let entries = find(&mut screen["root"], "editor:objects").unwrap()["rows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|r| r["label"].as_str().unwrap().to_owned())
+            .collect::<Vec<_>>();
+        // A file in a profile deep under the user's directories, as a mod's is: its path wraps.
+        let path = "/home/modder/.local/share/cataclysm-bn/profiles/a-long-profile-name/mods/my_first_mod/mapgen/editor_scenario_chunk.json";
+        find(&mut screen["root"], "editor:file").unwrap()["fields"][0]["value"] = json!(path);
+        find(&mut screen["root"], "editor:document").unwrap()["title"] = json!(path);
+        let mut h = crate::common::themed_harness(size, crate::common::staged(json!([screen])).0);
+        h.run_steps(12);
+        for entry in &entries {
+            let r = h.query_by_label(entry).map(|n| n.rect());
+            assert!(
+                r.is_some_and(|r| unclipped(&h, r)),
+                "at {size:?} the entry {entry:?} at {r:?} is out of view"
+            );
+        }
+    }
+}
