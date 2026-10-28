@@ -134,12 +134,14 @@ impl Rec {
 
     /// Clicks the widget labelled `label` once it stopped moving.
     fn click(&mut self, label: &str) {
+        crate::live_editor_walk::reveal_rect(&mut self.h, label, |h| find(h, label));
         let at = self.stable(label, |h| find(h, label)).center();
         self.click_at(at);
     }
 
     /// Double-clicks the widget labelled `label`.
     fn double_click(&mut self, label: &str) {
+        crate::live_editor_walk::reveal_rect(&mut self.h, label, |h| find(h, label));
         let at = self.stable(label, |h| find(h, label)).center();
         self.move_to(at);
         self.tap();
@@ -217,13 +219,6 @@ impl Rec {
         self.done();
     }
 
-    /// Ctrl+X, Ctrl+C or Ctrl+V as the platform hands them over: as the clipboard's command `event`.
-    fn clipboard(&mut self, event: egui::Event) {
-        self.h.event(event);
-        self.h.run_steps(3);
-        self.done();
-    }
-
     /// Clicks the square (`x`, `y`) of the canvas.
     fn paint(&mut self, x: usize, y: usize) {
         let at = self
@@ -240,11 +235,12 @@ impl Rec {
 
     /// Opens the editor from the main menu: the Editor tab, the editor's entry, the mod list left as it is.
     fn open_editor(&mut self, entry: &str, kind: &str) {
-        self.say("메인 메뉴에서 에디터 탭을 연다");
+        self.say("Main menu: open the Editor tab");
         self.click("Editor");
-        self.say(&format!("{entry}를 고른다"));
+        self.say(&format!("Choose {entry}"));
         self.click(entry);
-        self.say("모드 목록은 그대로 두고 확인한다");
+        self.say("The mod list asks which mod holds your files; Esc confirms it");
+        self.grab(HOLD_MS * 2);
         self.key(egui::Key::Escape);
         self.click("Yes");
         self.wait_kind(kind);
@@ -385,31 +381,6 @@ fn square(h: &H, x: usize, y: usize) -> egui::Rect {
     buttons[start + y * cols + x].rect()
 }
 
-/// The terrain cell of the first row of the legend in view whose terrain is a wall, else of the first with a
-/// terrain: what a click on that row aims at.
-fn legend_cell(h: &H) -> String {
-    let top = h.state().model.screens().last().unwrap();
-    let legend = serde_json::to_value(top.root.as_ref().unwrap().find("editor:legend")).unwrap();
-    let rows = legend["rows"].as_array().unwrap();
-    let terrains = rows
-        .iter()
-        .filter_map(|r| {
-            r["columns"]
-                .as_array()
-                .and_then(|c| c.iter().find(|c| c["key"] == "terrain"))
-                .and_then(|c| c["value"].as_str())
-                .filter(|t| !t.is_empty() && find(h, t).is_some())
-                .map(str::to_string)
-        })
-        .collect::<Vec<_>>();
-    terrains
-        .iter()
-        .find(|t| t.contains("wall"))
-        .or(terrains.first())
-        .cloned()
-        .expect("a terrain in view in the legend")
-}
-
 /// The symbol of the legend's selected row.
 fn selected_symbol(h: &H) -> String {
     let top = h.state().model.screens().last().unwrap();
@@ -423,31 +394,10 @@ fn selected_symbol(h: &H) -> String {
         .expect("a selected legend row")
 }
 
-/// Whether egui's keyboard focus is on the widget named `label`.
-fn focused_on(h: &H, label: &str) -> bool {
-    let Some(id) = h.ctx.memory(|m| m.focused()) else {
-        return false;
-    };
-    let rect = h
-        .ctx
-        .viewport(|v| v.prev_pass.widgets.get(id).map(|w| w.rect));
-    h.root()
-        .children_recursive()
-        .any(|n| n.accesskit_node().label().as_deref() == Some(label) && Some(n.rect()) == rect)
-}
-
 /// The text of the component `id` of the screen on top, as the engine sent it.
 fn engine_text(h: &H, id: &str) -> String {
     let top = h.state().model.screens().last().unwrap();
     serde_json::to_string(&top.root.as_ref().and_then(|r| r.find(id))).unwrap()
-}
-
-/// Why the screen on top refuses its affordance `id`.
-fn refusal(h: &H, id: &str) -> String {
-    let top = h.state().model.screens().last().unwrap();
-    let a = top.affordances.iter().find(|a| a.id == id).unwrap();
-    assert!(!a.enabled, "{id} is not refused");
-    a.denial.as_ref().map(|d| d.shown()).unwrap_or_default()
 }
 
 /// The labels of the rows of the list `id` of the screen on top.
@@ -484,118 +434,237 @@ impl Rec {
             .center();
         self.click_at(at);
     }
-
-    /// Presses Tab until the canvas has the keyboard.
-    fn tab_to_canvas(&mut self) {
-        for _ in 0..16 {
-            if focused_on(&self.h, "Canvas") {
-                return;
-            }
-            self.key(egui::Key::Tab);
-        }
-        panic!("Tab does not reach the canvas: {:?}", labels(&self.h));
-    }
 }
 
 #[test]
 #[ignore = "requires BN_ENGINE pointing at an engine binary"]
 fn map_editor_demo() {
     let mut r = Rec::new("map-editor");
+    let mods = crate::common::live::profile_dir().join("mods");
     r.open_editor("Map editor", "editor");
 
-    r.say("World 메뉴의 Open overmap terrain에 지도에 보이는 이름 house를 적어 연다");
-    r.menu("World", "Open overmap terrain");
-    r.type_slowly("house");
-    r.key(egui::Key::Enter);
-    run_until(&mut r.h, "the opened house", 60, |h| {
-        !rows_of(h, "editor:objects").is_empty() && !canvas_glyphs(h).is_empty()
-    });
-    r.done();
-    println!("ENTRIES {:?}", rows_of(&r.h, "editor:objects"));
-    println!("STATUS {}", engine_text(&r.h, "editor:status"));
-
-    r.say("Entries 목록에서 항목을 누르면 그 항목이 캔버스에 열린다");
-    let entries = rows_of(&r.h, "editor:objects");
-    r.click(entries.last().unwrap());
-    r.grab(HOLD_MS);
-    r.click(&entries[0]);
-
-    r.say("범례에서 기호를 고르고 연필로 칸을 마우스로 칠한다");
-    let cell = legend_cell(&r.h);
-    r.double_click(&cell);
-    let symbol = selected_symbol(&r.h);
-    r.tab("Pencil");
-    r.paint(2, 2);
-    r.paint(3, 2);
-    assert_eq!(
-        canvas_glyphs(&r.h)[2].chars().nth(3).map(String::from),
-        Some(symbol.clone()),
-        "the pencil did not draw"
-    );
-
-    r.say("Tab으로 캔버스에 가서 방향키로 옮기고 Enter로 칠한다");
-    r.tab_to_canvas();
-    for arrow in [
-        egui::Key::ArrowRight,
-        egui::Key::ArrowRight,
-        egui::Key::ArrowDown,
-    ] {
-        r.key(arrow);
-    }
-    let before = canvas_glyphs(&r.h);
-    r.key(egui::Key::Enter);
-    assert_ne!(canvas_glyphs(&r.h), before, "Return drew nothing");
-
-    r.say("고른 칸 없이 Ctrl+C를 누르면 엔진이 거절한 이유가 아래 줄에 나온다");
-    let why = refusal(&r.h, "editor:copy");
-    r.clipboard(egui::Event::Copy);
-    assert!(
-        find(&r.h, &why).is_some(),
-        "no refusal {why:?}: {:?}",
-        labels(&r.h)
-    );
-    r.grab(HOLD_MS * 3);
-
-    r.say("선택 도구로 두 칸을 눌러 영역을 고르고 Ctrl+X로 잘라낸다");
-    r.tab("Select");
-    r.paint(1, 1);
-    r.paint(4, 3);
-    r.clipboard(egui::Event::Cut);
-    let cut = canvas_glyphs(&r.h);
-    r.say("붙여넣기 도구로 다른 곳을 눌러 붙인다");
-    r.tab("Paste");
-    r.paint(10, 10);
-    assert_ne!(canvas_glyphs(&r.h), cut, "the paste changed nothing");
-
-    r.say("Ctrl+Z로 되돌리면 상태 줄이 무엇을 되돌렸는지 말한다");
-    r.key_mod(egui::Modifiers::CTRL, egui::Key::Z);
-    assert!(
-        engine_text(&r.h, "editor:status").contains("Undid"),
-        "{}",
-        engine_text(&r.h, "editor:status")
-    );
-    r.done();
-
-    r.say("File 메뉴의 Save as로 모드 폴더에 저장한다");
-    let path = crate::common::live::profile_dir().join("mods/zz_demo_house.json");
-    r.menu("File", "Save as");
+    r.say("A new mapgen file: fields marked * are required");
+    r.grab(HOLD_MS * 2);
+    r.say("A path outside a mod folder is refused with the reason");
+    r.click_field("New mapgen file/Path");
     r.key_mod(egui::Modifiers::COMMAND, egui::Key::A);
+    r.paste(&mods.join("demo_hut.json").to_string_lossy());
+    r.click_field("New mapgen file/Overmap terrain");
+    r.key_mod(egui::Modifiers::COMMAND, egui::Key::A);
+    r.type_slowly("field");
+    r.click("Create");
+    r.grab(HOLD_MS * 2);
+    r.say("A path inside a mod folder makes the mod and the file");
+    r.click_field("New mapgen file/Path");
+    r.key_mod(egui::Modifiers::COMMAND, egui::Key::A);
+    let path = mods.join("my_mod/demo_hut.json");
     r.paste(&path.to_string_lossy());
-    r.key(egui::Key::Enter);
+    r.click("Create");
+    if find(&r.h, "Continue").is_some() {
+        r.click("Continue");
+    }
+    r.wait_kind("editor");
     assert!(path.is_file(), "no {}", path.display());
+    assert!(mods.join("my_mod/modinfo.json").is_file(), "no modinfo");
+    r.say("With a document open, the start page's parts fold");
+    r.grab(HOLD_MS * 2);
 
-    r.say("Esc로 에디터를 나가 메인 메뉴로 돌아온다");
+    r.say("Catalog: pick a terrain, give it a symbol, Set mapping adds it to the legend");
+    r.click_field("Catalog");
+    r.type_slowly("brick wall");
+    r.key(egui::Key::Enter);
+    r.double_click("brick wall");
+    r.click_field("Mapping/Symbol");
+    r.key_mod(egui::Modifiers::COMMAND, egui::Key::A);
+    r.type_slowly("#");
+    r.key(egui::Key::Enter);
+    r.click("Set mapping");
+    r.say("Furniture the same way, on its own layer");
+    r.tab("Furniture");
+    r.click_field("Catalog");
+    r.key_mod(egui::Modifiers::COMMAND, egui::Key::A);
+    r.type_slowly("chair");
+    r.key(egui::Key::Enter);
+    let chair = rows_of(&r.h, "editor:catalog")
+        .into_iter()
+        .next()
+        .expect("a chair in the furniture catalog");
+    r.double_click(&chair);
+    r.click_field("Mapping/Symbol");
+    r.key_mod(egui::Modifiers::COMMAND, egui::Key::A);
+    r.type_slowly("c");
+    r.key(egui::Key::Enter);
+    println!("MAPPING {}", engine_text(&r.h, "editor:mapping"));
+    r.click("Set mapping");
+    println!("LEGEND {:?}", rows_of(&r.h, "editor:legend"));
+    r.grab(HOLD_MS * 2);
+
+    r.say("Pick the wall symbol in the legend, then draw a room with two clicks");
+    let wall = legend_row("symbol:#", &r.h);
+    r.double_click(&wall);
+    println!("SELECTED {}", selected_symbol(&r.h));
+    r.tab("Room");
+    r.paint(3, 3);
+    r.paint(14, 10);
+    assert_eq!(
+        canvas_glyphs(&r.h)[3].chars().nth(3).map(String::from),
+        Some("#".into()),
+        "the room did not draw"
+    );
+    r.say("Pick the furniture symbol and place it with the pencil");
+    let furniture = legend_row("symbol:c", &r.h);
+    r.double_click(&furniture);
+    r.tab("Pencil");
+    r.paint(5, 5);
+    r.paint(6, 5);
+    r.paint(7, 5);
+    r.say("Ctrl+Z undoes the last stroke and the status line says so");
+    r.key_mod(egui::Modifiers::CTRL, egui::Key::Z);
+    assert!(engine_text(&r.h, "editor:status").contains("Undid"));
+    r.say("Ctrl+S saves into the mod folder");
+    r.key_mod(egui::Modifiers::CTRL, egui::Key::S);
+    println!("SAVED {}", std::fs::read_to_string(&path).unwrap());
+
+    r.say("World > Test stamps the mapgen over the player's square and moves the player there");
+    r.menu("World", "Test");
+    run_until(&mut r.h, "the map", 120, |h| {
+        !h.state().model.busy()
+            && h.state()
+                .model
+                .screens()
+                .last()
+                .is_some_and(|s| s.kind.as_deref() != Some("editor"))
+    });
+    r.grab(HOLD_MS * 3);
+    r.done();
+    r.say("Back in the editor through the map's Map Editor action");
+    r.click("Map Editor");
+    r.wait_kind("editor");
+
+    r.say("Export writes the squares around the player as a mapgen file in a mod");
+    r.menu_any("Export mapgen here");
+    r.grab(HOLD_MS * 2);
+    r.key_mod(egui::Modifiers::COMMAND, egui::Key::A);
+    let exported = mods.join("my_mod/demo_hut_export.json");
+    r.paste(&exported.to_string_lossy());
+    r.key(egui::Key::Enter);
+    assert!(exported.is_file(), "no {}", exported.display());
+    r.grab(HOLD_MS * 2);
+
+    r.say("Esc leaves the editor");
     r.leave();
     r.finish();
+}
+
+/// What the legend row `id` shows to click on: its terrain, else its furniture.
+fn legend_row(id: &str, h: &H) -> String {
+    let top = h.state().model.screens().last().unwrap();
+    let legend = serde_json::to_value(top.root.as_ref().unwrap().find("editor:legend")).unwrap();
+    let row = legend["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["id"] == id)
+        .unwrap_or_else(|| panic!("no {id} in the legend: {legend}"));
+    ["terrain", "furniture"]
+        .into_iter()
+        .filter_map(|key| {
+            row["columns"]
+                .as_array()?
+                .iter()
+                .find(|c| c["key"] == key)?["value"]
+                .as_str()
+                .filter(|v| !v.is_empty())
+                .map(str::to_string)
+        })
+        .next()
+        .unwrap_or_else(|| panic!("nothing to click on in {row}"))
+}
+
+impl Rec {
+    /// Scrolls the open select's list with the wheel until the option `label` is in view, and clicks it.
+    fn pick_option(&mut self, label: &str) {
+        for turn in 0..120 {
+            if find(&self.h, label).is_some_and(|r| crate::live_editor_walk::in_view(&self.h, r)) {
+                let at = self.stable(label, |h| find(h, label)).center();
+                self.click_at(at);
+                return;
+            }
+            let at = self.at + egui::vec2(60.0, 80.0);
+            crate::live_editor_walk::wheel_at(&mut self.h, at, -300.0);
+            if turn % 2 == 0 {
+                self.grab(MOVE_MS * 2);
+            }
+        }
+        panic!("no option {label}");
+    }
+
+    /// Clicks the select labelled `label`.
+    fn click_combo(&mut self, label: &str) {
+        let rect_of = |h: &H| {
+            h.root()
+                .children_recursive()
+                .find(|n| {
+                    let a = n.accesskit_node();
+                    a.role() == egui::accesskit::Role::ComboBox
+                        && a.label().as_deref() == Some(label)
+                })
+                .map(|n| n.rect())
+        };
+        crate::live_editor_walk::reveal_rect(&mut self.h, label, rect_of);
+        let at = self.stable(label, rect_of).center();
+        self.click_at(at);
+    }
+
+    /// Clicks the text box `label`, as `heading/label` after the heading that names its form.
+    fn click_field(&mut self, label: &str) {
+        let (heading, label) = label.rsplit_once('/').unwrap_or(("", label));
+        let rect_of = |h: &H| {
+            let boxes = h
+                .root()
+                .children_recursive()
+                .skip_while(|n| {
+                    !heading.is_empty() && n.accesskit_node().label().as_deref() != Some(heading)
+                })
+                .filter(|n| {
+                    let a = n.accesskit_node();
+                    a.role() == egui::accesskit::Role::TextInput
+                        && a.label().as_deref() == Some(label)
+                })
+                .map(|n| n.rect())
+                .collect::<Vec<_>>();
+            boxes.first().copied()
+        };
+        crate::live_editor_walk::reveal_rect(&mut self.h, label, rect_of);
+        let at = self.stable(label, rect_of).center();
+        self.click_at(at);
+    }
+
+    /// Clicks the item `item` of whichever menu of the menu bar holds it.
+    fn menu_any(&mut self, item: &str) {
+        for group in ["File", "Edit", "View", "World"] {
+            if find(&self.h, group).is_none() {
+                continue;
+            }
+            self.click(group);
+            if last_button(&self.h, item).is_some() {
+                let at = self.stable(item, |h| last_button(h, item)).center();
+                return self.click_at(at);
+            }
+            self.click(group);
+        }
+        panic!("no menu holds {item}: {:?}", labels(&self.h));
+    }
 }
 
 #[test]
 #[ignore = "requires BN_ENGINE pointing at an engine binary"]
 fn vehicle_editor_demo() {
     let mut r = Rec::new("vehicle-editor");
+    let mods = crate::common::live::profile_dir().join("mods");
     r.open_editor("Vehicle editor", "vehicle_editor");
 
-    r.say("File 메뉴의 New vehicle은 비어 있는 파일 이름을 미리 적어 준다");
+    r.say("File > New vehicle suggests a free name inside a mod folder");
     r.menu("File", "New vehicle");
     r.grab(HOLD_MS * 2);
     r.key(egui::Key::Enter);
@@ -604,29 +673,54 @@ fn vehicle_editor_demo() {
     });
     r.done();
 
-    r.say("부품 팔레트에서 프레임을 골라 장착 칸 두 곳을 눌러 단다");
-    r.install("frame_vertical", "frame", &["mount:0,0", "mount:1,0"]);
-    r.say("트렁크, 포탑 받침, 포탑을 골라 단다");
-    r.install("trunk", "trunk", &["mount:0,0"]);
-    r.install("turret_mount", "turret mount", &["mount:1,0"]);
-    r.install("m249", "mounted M249", &["mount:1,0"]);
+    r.say("Search the parts palette, pick a part, click the mounts to install it");
+    r.install(
+        "frame_vertical",
+        "frame",
+        &["mount:-1,0", "mount:0,0", "mount:1,0"],
+    );
+    r.install("seat", "seat", &["mount:0,0"]);
+    r.say("A fuel tank goes on a mount the same way");
+    r.install("vehicle tank (60L)", "vehicle tank (60L)", &["mount:1,0"]);
     println!("HISTORY {:?}", rows_of(&r.h, "vehicle:history"));
 
-    r.say("History 목록의 한 단계를 누르면 그때로 돌아가고, 마지막 단계로 다시 온다");
-    let steps = rows_of(&r.h, "vehicle:history");
-    r.double_click(&steps[1]);
-    r.double_click(steps.last().unwrap());
+    r.say("Pick the tank on its mount, then its settings tab");
+    r.mount("mount:1,0");
+    println!("STACK {:?}", rows_of(&r.h, "vehicle:stack"));
+    r.double_click("vehicle tank (60L)");
+    r.tab("Part settings");
+    r.say("Fuel is a picker of the engine's liquids; scroll to gasoline");
+    r.click_combo("Fuel");
+    r.grab(HOLD_MS);
+    r.pick_option("gasoline");
+    println!(
+        "FORM {}",
+        engine_text(&r.h, "vehicle:part_form")
+            .chars()
+            .take(200)
+            .collect::<String>()
+    );
+    println!("HISTORY {:?}", rows_of(&r.h, "vehicle:history"));
+    r.grab(HOLD_MS * 2);
 
-    r.say("트렁크 칸의 Items here 탭은 아이템 팔레트를 열어 이 칸에 생길 아이템을 단다");
-    r.mount("mount:0,0");
-    r.tab("Items here");
-    let item = rows_of(&r.h, "vehicle:item_catalog")
-        .first()
-        .cloned()
-        .expect("an item palette");
-    r.double_click(&item);
+    r.say("Name and flags: give the design a name");
+    r.tab("Name and flags");
+    r.click_field("Name");
+    r.key_mod(egui::Modifiers::COMMAND, egui::Key::A);
+    r.type_slowly("Demo Wagon");
+    r.key(egui::Key::Enter);
+    r.say("Ctrl+S saves into the mod folder");
+    r.key_mod(egui::Modifiers::CTRL, egui::Key::S);
+    let saved = mods.join("my_mod/my_vehicle.json");
+    let text =
+        std::fs::read_to_string(&saved).unwrap_or_else(|e| panic!("{}: {e}", saved.display()));
+    println!("SAVED {text}");
+    assert!(
+        text.contains("Demo Wagon") && text.contains("gasoline"),
+        "{text}"
+    );
 
-    r.say("World 메뉴의 Spawn으로 차량을 게임 맵의 플레이어 옆에 놓는다");
+    r.say("World > Spawn puts the vehicle on the game map beside the player");
     r.menu("World", "Spawn");
     run_until(&mut r.h, "the map", 120, |h| {
         !h.state().model.busy()
@@ -639,60 +733,28 @@ fn vehicle_editor_demo() {
     r.grab(HOLD_MS * 3);
     r.done();
 
-    r.say("맵 에디터로 돌아와 World 메뉴에서 차량 에디터를 다시 연다");
+    r.say("Back to the editors through the map's Map Editor action");
     r.click("Map Editor");
     r.wait_kind("editor");
     r.menu("World", "Vehicle editor");
     r.wait_kind("vehicle_editor");
-
-    r.say("World 탭에서 놓인 차량을 골라 Edit in place로 그 자리에서 고친다");
+    r.say("World tab: vehicles on the map with distance and direction");
     r.tab("World");
     println!("WORLD {:?}", rows_of(&r.h, "vehicle:world"));
+    r.grab(HOLD_MS * 3);
     let near = rows_of(&r.h, "vehicle:world")
         .into_iter()
-        .find(|row| row.contains("my_vehicle"))
+        .find(|row| row.contains("Demo Wagon"))
         .expect("the spawned vehicle in the world list");
-    r.click_button(&near);
-    r.say("Copy vehicle과 Paste vehicle은 복사본을 놓고 몇 칸 어디에 놓였는지 말한다");
-    r.click("Copy vehicle");
-    r.menu("World", "Paste vehicle");
-    let pasted = engine_text(&r.h, "vehicle:status");
-    println!("STATUS {pasted}");
-    assert!(pasted.contains("Pasted"), "{pasted}");
-    r.grab(HOLD_MS * 2);
-    r.say("놓인 차량을 골라 Edit in place로 그 자리에서 고친다");
+    r.say("Edit in place opens the spawned vehicle for changes where it stands");
     r.click_button(&near);
     r.click("Edit in place");
-    r.say("놓인 차량의 포탑을 골라 탄약을 채운다");
-    r.mount("mount:1,0");
-    println!("STACK {:?}", rows_of(&r.h, "vehicle:stack"));
-    let turret = rows_of(&r.h, "vehicle:stack")
-        .into_iter()
-        .find(|row| row.contains("M249"))
-        .expect("the turret in the stack");
-    r.double_click(&turret);
-    r.tab("Part condition");
-    println!("FORM {}", engine_text(&r.h, "vehicle:live_form"));
-    if !engine_text(&r.h, "vehicle:live_form").contains("\"value\":\"556") {
-        r.click_input("Ammunition");
-        r.key_mod(egui::Modifiers::COMMAND, egui::Key::A);
-        r.type_slowly("556");
-        r.key(egui::Key::Enter);
-    }
-    r.click_input("Rounds");
-    r.key_mod(egui::Modifiers::COMMAND, egui::Key::A);
-    r.type_slowly("100");
-    r.key(egui::Key::Enter);
-    println!("HISTORY {:?}", rows_of(&r.h, "vehicle:history"));
-    println!("FORM {}", engine_text(&r.h, "vehicle:live_form"));
     r.grab(HOLD_MS * 2);
-
-    r.say("World 메뉴의 Done으로 제자리 편집을 마친다");
+    r.say("World > Done ends the in-place edit");
     r.menu("World", "Done");
-    println!("LABELS {:?}", labels(&r.h));
     r.done();
 
-    r.say("Esc로 에디터를 나가 메인 메뉴로 돌아온다");
+    r.say("Esc leaves the editor");
     r.leave();
     r.finish();
 }
