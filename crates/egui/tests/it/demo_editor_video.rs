@@ -149,22 +149,6 @@ impl Rec {
         self.done();
     }
 
-    /// Clicks the first text box labelled `label`, such as a list's search box: the palette's over the outline's.
-    fn click_input(&mut self, label: &str) {
-        let rect_of = |h: &H| {
-            h.root()
-                .children_recursive()
-                .find(|n| {
-                    let a = n.accesskit_node();
-                    a.role() == egui::accesskit::Role::TextInput
-                        && a.label().as_deref() == Some(label)
-                })
-                .map(|n| n.rect())
-        };
-        let at = self.stable(label, rect_of).center();
-        self.click_at(at);
-    }
-
     /// Clicks the menu `group` of the menu bar and its item `item`.
     fn menu(&mut self, group: &str, item: &str) {
         self.click(group);
@@ -582,23 +566,6 @@ fn legend_row(id: &str, h: &H) -> String {
 }
 
 impl Rec {
-    /// Scrolls the open select's list with the wheel until the option `label` is in view, and clicks it.
-    fn pick_option(&mut self, label: &str) {
-        for turn in 0..120 {
-            if find(&self.h, label).is_some_and(|r| crate::live_editor_walk::in_view(&self.h, r)) {
-                let at = self.stable(label, |h| find(h, label)).center();
-                self.click_at(at);
-                return;
-            }
-            let at = self.at + egui::vec2(60.0, 80.0);
-            crate::live_editor_walk::wheel_at(&mut self.h, at, -300.0);
-            if turn % 2 == 0 {
-                self.grab(MOVE_MS * 2);
-            }
-        }
-        panic!("no option {label}");
-    }
-
     /// Clicks the select labelled `label`.
     fn click_combo(&mut self, label: &str) {
         let rect_of = |h: &H| {
@@ -664,95 +631,84 @@ fn vehicle_editor_demo() {
     let mods = crate::common::live::profile_dir().join("mods");
     r.open_editor("Vehicle editor", "vehicle_editor");
 
-    r.say("File > New vehicle suggests a free name inside a mod folder");
+    r.say("File > New vehicle asks for a name");
     r.menu("File", "New vehicle");
-    r.grab(HOLD_MS * 2);
+    r.grab(HOLD_MS);
+    r.key_mod(egui::Modifiers::COMMAND, egui::Key::A);
+    r.type_slowly("walk_van");
     r.key(egui::Key::Enter);
+    if find(&r.h, "Continue").is_some() {
+        r.click("Continue");
+    }
     run_until(&mut r.h, "the new vehicle", 60, |h| {
         !rows_of(h, "vehicle:history").is_empty()
     });
     r.done();
 
-    r.say("Search the parts palette, pick a part, click the mounts to install it");
-    r.install(
-        "frame_vertical",
-        "frame",
-        &["mount:-1,0", "mount:0,0", "mount:1,0"],
-    );
-    r.install("seat", "seat", &["mount:0,0"]);
-    r.say("A fuel tank goes on a mount the same way");
-    r.install("vehicle tank (60L)", "vehicle tank (60L)", &["mount:1,0"]);
+    r.say("The parts palette has category tabs; Frames: pick a frame, click the squares beside the first one");
+    r.pick("Frames", "frame");
+    r.install(&["mount:1,0", "mount:-1,0"]);
+    r.say("A wheel needs a hub on its mount, so this install is refused");
+    r.pick("Wheels & hubs", "wheel");
+    r.install(&["mount:-1,0"]);
+    r.say("Install the wheel hub assembly first, then the wheel");
+    r.pick("Wheels & hubs", "wheel hub assembly");
+    r.install(&["mount:-1,0"]);
+    r.pick("Wheels & hubs", "wheel");
+    r.install(&["mount:-1,0"]);
+    r.say("Seats & controls: a seat and controls on the middle square");
+    r.pick("Seats & controls", "seat");
+    r.install(&["mount:0,0"]);
+    r.pick("Seats & controls", "controls");
+    r.install(&["mount:0,0"]);
+    r.say("Engines & motors: an engine on a frame below");
+    r.pick("Frames", "frame");
+    r.install(&["mount:0,1"]);
+    r.pick("Engines & motors", "1-cylinder engine");
+    r.install(&["mount:0,1"]);
+    r.say("Fuel & batteries: a tank on a frame above");
+    r.pick("Frames", "frame");
+    r.install(&["mount:0,-1"]);
+    r.pick("Fuel & batteries", "vehicle tank (60L)");
+    r.install(&["mount:0,-1"]);
     println!("HISTORY {:?}", rows_of(&r.h, "vehicle:history"));
 
-    r.say("Pick the tank on its mount, then its settings tab");
-    r.mount("mount:1,0");
-    println!("STACK {:?}", rows_of(&r.h, "vehicle:stack"));
-    r.double_click("vehicle tank (60L)");
-    r.tab("Part settings");
-    r.say("Fuel is a picker of the engine's liquids; scroll to gasoline");
+    r.say("Select tool, then the tank's square and its part there; the part has a Fuel select");
+    r.click("Select");
+    r.mount("mount:0,-1");
+    r.click_button("vehicle tank (60L)");
     r.click_combo("Fuel");
     r.grab(HOLD_MS);
-    r.pick_option("gasoline");
-    println!(
-        "FORM {}",
-        engine_text(&r.h, "vehicle:part_form")
-            .chars()
-            .take(200)
-            .collect::<String>()
-    );
-    println!("HISTORY {:?}", rows_of(&r.h, "vehicle:history"));
+    r.say("The select has a filter: type to narrow the fuels, Enter picks the first");
+    r.type_slowly("gaso");
+    r.key(egui::Key::Enter);
     r.grab(HOLD_MS * 2);
 
-    r.say("Name and flags: give the design a name");
-    r.tab("Name and flags");
-    r.click_field("Name");
-    r.key_mod(egui::Modifiers::COMMAND, egui::Key::A);
-    r.type_slowly("Demo Wagon");
-    r.key(egui::Key::Enter);
+    r.say("A right click on a square removes its top part");
+    r.right_click_square("mount:-1,0");
+    println!("HISTORY {:?}", rows_of(&r.h, "vehicle:history"));
+
     r.say("Ctrl+S saves into the mod folder");
     r.key_mod(egui::Modifiers::CTRL, egui::Key::S);
-    let saved = mods.join("my_mod/my_vehicle.json");
+    let saved = mods.join("my_mod/walk_van.json");
     let text =
         std::fs::read_to_string(&saved).unwrap_or_else(|e| panic!("{}: {e}", saved.display()));
     println!("SAVED {text}");
-    assert!(
-        text.contains("Demo Wagon") && text.contains("gasoline"),
-        "{text}"
-    );
+    assert!(text.contains("gasoline"), "{text}");
 
-    r.say("World > Spawn puts the vehicle on the game map beside the player");
+    r.say("World > Spawn puts the vehicle on the game map; the editor stays open");
     r.menu("World", "Spawn");
-    run_until(&mut r.h, "the map", 120, |h| {
-        !h.state().model.busy()
-            && h.state()
-                .model
-                .screens()
-                .last()
-                .is_some_and(|s| s.kind.as_deref() != Some("vehicle_editor"))
-    });
     r.grab(HOLD_MS * 3);
-    r.done();
-
-    r.say("Back to the editors through the map's Map Editor action");
-    r.click("Map Editor");
-    r.wait_kind("editor");
-    r.menu("World", "Vehicle editor");
-    r.wait_kind("vehicle_editor");
-    r.say("World tab: vehicles on the map with distance and direction");
-    r.tab("World");
-    println!("WORLD {:?}", rows_of(&r.h, "vehicle:world"));
-    r.grab(HOLD_MS * 3);
-    let near = rows_of(&r.h, "vehicle:world")
-        .into_iter()
-        .find(|row| row.contains("Demo Wagon"))
-        .expect("the spawned vehicle in the world list");
-    r.say("Edit in place opens the spawned vehicle for changes where it stands");
-    r.click_button(&near);
-    r.click("Edit in place");
-    r.grab(HOLD_MS * 2);
-    r.say("World > Done ends the in-place edit");
-    r.menu("World", "Done");
-    r.done();
+    assert_eq!(
+        r.h.state()
+            .model
+            .screens()
+            .last()
+            .and_then(|s| s.kind.clone())
+            .as_deref(),
+        Some("vehicle_editor")
+    );
+    println!("NOTICE {}", engine_text(&r.h, "vehicle:notice"));
 
     r.say("Esc leaves the editor");
     r.leave();
@@ -813,25 +769,68 @@ impl Rec {
         self.click_at(at);
     }
 
-    /// Searches the parts palette for `search`, picks the row named `part` and clicks each of `mounts` to install it
-    /// there.
-    fn install(&mut self, search: &str, part: &str, mounts: &[&str]) {
-        self.click_input("Parts");
-        self.key_mod(egui::Modifiers::COMMAND, egui::Key::A);
-        self.type_slowly(search);
-        self.key(egui::Key::Enter);
-        assert!(
-            rows_of(&self.h, "vehicle:parts").iter().any(|r| r == part),
-            "no part {part} in the palette: {:?}",
-            rows_of(&self.h, "vehicle:parts")
-        );
-        self.double_click(part);
+    /// Opens the palette tab `tab` and picks the part row `part` with a double click.
+    fn pick(&mut self, tab: &str, part: &str) {
+        self.tab(tab);
+        // The palette's rows lie under its tab strip, over the heads of the sections under it, right of the
+        // canvas, whose squares and whose mount's stack may bear the part's name.
+        let row = |h: &H| {
+            let named = |role, label: &str| {
+                h.root()
+                    .children_recursive()
+                    .filter(move |n| {
+                        let a = n.accesskit_node();
+                        a.role() == role && a.label().as_deref() == Some(label)
+                    })
+                    .map(|n| n.rect())
+                    .next()
+            };
+            let (top, bottom, left) = (
+                named(egui::accesskit::Role::Tab, "Other")?.bottom(),
+                named(egui::accesskit::Role::Button, "Vehicles")?.top(),
+                named(egui::accesskit::Role::Tab, "Frames")?.left() - 10.0,
+            );
+            h.root()
+                .children_recursive()
+                .filter(|n| {
+                    let a = n.accesskit_node();
+                    a.role() == egui::accesskit::Role::Button && a.label().as_deref() == Some(part)
+                })
+                .map(|n| n.rect())
+                .find(|r| r.left() >= left && r.top() > top && r.bottom() < bottom + 1.0)
+        };
+        crate::live_editor_walk::reveal_rect(&mut self.h, part, row);
+        let at = self.stable(part, row).center();
+        self.move_to(at);
+        self.tap();
+        self.tap();
+        self.done();
+    }
+
+    /// Clicks each of `mounts` to install the picked part there.
+    fn install(&mut self, mounts: &[&str]) {
         for id in mounts {
             self.mount(id);
         }
-        println!(
-            "INSTALLED {part}: {}",
-            engine_text(&self.h, "vehicle:notice")
-        );
+        println!("INSTALLED: {}", engine_text(&self.h, "vehicle:notice"));
+    }
+
+    /// A right click on the grid square of the mount `id`.
+    fn right_click_square(&mut self, id: &str) {
+        let at = self.stable(id, |h| mount_square(h, id)).center();
+        self.move_to(at);
+        for pressed in [true, false] {
+            self.h.event(egui::Event::PointerButton {
+                pos: self.at,
+                button: egui::PointerButton::Secondary,
+                pressed,
+                modifiers: egui::Modifiers::NONE,
+            });
+            self.h.run_steps(2);
+            if pressed {
+                self.grab(PRESS_MS);
+            }
+        }
+        self.done();
     }
 }
