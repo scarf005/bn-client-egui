@@ -97,13 +97,33 @@ fn double_click(h: &mut H, label: &str) {
 }
 
 /// Clicks a button of the footer, which stays in view whatever the body scrolls; one that did not fit the footer is in
-/// the menu of its `⋯`, the lowest one in the window.
+/// the menu of its `⋯`, the lowest one in the window, and a grouped one is an item of a menu of the menu bar.
 fn click_footer(h: &mut H, label: &str) {
     if find(h, label).is_none() {
-        let at = stable(h, label, |h| more_buttons(h).first().copied());
-        click_at(h, at.center());
+        match more_buttons(h).first().copied() {
+            Some(_) => {
+                let at = stable(h, label, |h| more_buttons(h).first().copied());
+                click_at(h, at.center());
+            }
+            None => open_menu_with(h, label),
+        }
     }
     press(h, label);
+}
+
+/// Opens the menu of the menu bar that holds `label`, trying each menu in turn and shutting the others again.
+fn open_menu_with(h: &mut H, label: &str) {
+    let menus = ["File", "Edit", "View", "World"]
+        .into_iter()
+        .filter(|m| find(h, m).is_some())
+        .collect::<Vec<_>>();
+    for menu in menus {
+        press(h, menu);
+        if find(h, label).is_some() {
+            return;
+        }
+        press(h, menu);
+    }
 }
 
 /// Clicks the entry `label` of the footer's overflow menu, whose button is the first `⋯`.
@@ -169,37 +189,68 @@ fn reveal(h: &mut H, label: &str) {
 /// `reveal` for any widget `rect_of` finds, named `what` when it never comes into view.
 fn reveal_rect(h: &mut H, what: &str, rect_of: impl Fn(&H) -> Option<egui::Rect>) {
     let size = h.ctx.content_rect().size();
+    // Over the right column's gutter the wheel scrolls the column; over its middle, the list there.
+    let (bar, list) = (gutter(h), egui::pos2(size.x - 120.0, size.y * 0.5));
     // How many times it was not drawn so far.
     let mut misses = 0u32..;
-    for _ in 0..120 {
+    for _ in 0..200 {
         let Some(r) = rect_of(h) else {
-            // Not drawn: it is scrolled out of the window, so look down the window, then up.
-            let down = (misses.next().unwrap_or_default() / 30) % 2 == 0;
-            wheel(h, if down { -150.0 } else { 150.0 });
+            // Not drawn: it is scrolled out of the list in the column's middle or of the column, so look down that
+            // list, then up it, then down and up the column.
+            let phase = misses.next().unwrap_or_default() / 20 % 4;
+            let down = phase % 2 == 0;
+            let at = if phase < 2 { list } else { bar };
+            wheel_at(h, at, if down { -150.0 } else { 150.0 });
             continue;
         };
-        // The footer's buttons and the window's edge clip what lies lower than this.
-        if r.top() > 70.0 && r.bottom() < size.y - 75.0 && r.bottom() > 0.0 {
+        // The menu bar and the status line clip what lies past these.
+        if r.top() >= 34.0 && r.bottom() < size.y - 45.0 && r.bottom() > 0.0 {
             return;
         }
-        wheel(
-            h,
-            if r.center().y < size.y / 2.0 {
-                150.0
-            } else {
-                -150.0
-            },
-        );
+        let dy = if r.center().y < size.y / 2.0 {
+            150.0
+        } else {
+            -150.0
+        };
+        wheel_at(h, bar, dy);
+        // A column that scrolls no further leaves it where it was: its own list scrolls it into view.
+        if rect_of(h) == Some(r) {
+            wheel_at(h, r.center(), dy);
+        }
     }
-    panic!("{what} is never brought into view by the wheel");
+    let seen = rect_of(h);
+    panic!(
+        "{what} is never brought into view by the wheel; last at {seen:?} in {size:?} among {:#?}",
+        labels(h)
+    );
 }
 
-/// Turns the wheel over the scroll bar of a workspace's right column, which holds the lists and forms a walk
-/// reaches for, by `dy` points and lets the frames follow: over the canvas the wheel would zoom it, and over a list
-/// it would scroll only that list.
-fn wheel(h: &mut H, dy: f32) {
+/// A point in the gutter of a workspace's right column, left of the parts it indents under their headings: the
+/// wheel there scrolls the column, over the canvas it would zoom it, and over a list it would scroll only that list.
+/// The window's right edge without a workspace.
+fn gutter(h: &H) -> egui::Pos2 {
     let size = h.ctx.content_rect().size();
-    h.hover_at(egui::pos2(size.x - 12.0, size.y * 0.5));
+    let side = h
+        .root()
+        .children_recursive()
+        .filter(|n| n.accesskit_node().label().as_deref() == Some("Resize workspace column"))
+        .map(|n| n.rect().center().x)
+        .fold(None, |most: Option<f32>, x| {
+            Some(most.map_or(x, |m| m.max(x)))
+        });
+    egui::pos2(side.map_or(size.x - 12.0, |x| x + 10.0), size.y * 0.5)
+}
+
+/// Turns the wheel over the gutter of a workspace's right column, which holds the lists and forms a walk reaches
+/// for, by `dy` points and lets the frames follow.
+fn wheel(h: &mut H, dy: f32) {
+    let at = gutter(h);
+    wheel_at(h, at, dy);
+}
+
+/// Turns the wheel over `at` by `dy` points and lets the frames follow.
+fn wheel_at(h: &mut H, at: egui::Pos2, dy: f32) {
+    h.hover_at(at);
     h.run_steps(2);
     h.event(egui::Event::MouseWheel {
         unit: egui::MouseWheelUnit::Point,
@@ -264,8 +315,14 @@ fn square(h: &H, x: usize, y: usize) -> egui::Rect {
                     .is_some_and(|l| l.chars().count() <= 1 && l != "⋯")
         })
         .collect::<Vec<_>>();
-    // The squares are the run of buttons that spells the canvas row by row; a legend's symbols are buttons too.
+    // The squares are the run of buttons that spells the canvas row by row and lies on its grid; a legend's
+    // symbols are buttons too, and spell a blank canvas as well one button earlier.
     let spelled = glyphs.concat().chars().collect::<Vec<_>>();
+    let on_grid = |i: usize| {
+        let rect = |k: usize| buttons[k].rect();
+        let (first, next, under) = (rect(i), rect(i + 1), rect(i + cols));
+        (next.left() - first.right()).abs() < 1.0 && (under.top() - first.bottom()).abs() < 1.0
+    };
     let names = buttons
         .iter()
         .map(|b| {
@@ -278,7 +335,7 @@ fn square(h: &H, x: usize, y: usize) -> egui::Rect {
         })
         .collect::<Vec<_>>();
     let start = (0..=names.len().saturating_sub(spelled.len()))
-        .find(|&i| names[i..i + spelled.len()] == spelled[..])
+        .find(|&i| names[i..i + spelled.len()] == spelled[..] && on_grid(i))
         .unwrap_or_else(|| panic!("no run of buttons spells the canvas"));
     let at = start + y * cols + x;
     let want = glyphs[y].chars().nth(x).unwrap().to_string();
@@ -439,7 +496,7 @@ fn the_map_editor_paints_places_furniture_undoes_previews_saves_and_reopens() {
     click(&mut h, "Set mapping");
     assert!(crate::live_editor::rows(&h, "editor:legend").contains(&"symbol:#".to_string()));
     shot(&mut h, "map-3-mapped");
-    double_click(&mut h, "\"t_brick_wall\"");
+    double_click(&mut h, "t_brick_wall");
     assert!(
         document(&h).contains("\"Symbol\"=\"#\""),
         "{}",
@@ -1943,7 +2000,7 @@ fn map_wall(h: &mut H) {
     key(h, egui::Key::Enter);
     click(h, "Set mapping");
     // The legend row picks the symbol the canvas draws with.
-    double_click(h, "\"t_brick_wall\"");
+    double_click(h, "t_brick_wall");
     assert!(document(h).contains("\"Symbol\"=\"#\""), "{}", document(h));
 }
 
