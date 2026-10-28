@@ -131,7 +131,7 @@ fn typed(key: &str) -> Option<&str> {
 
 impl Interaction {
     /// One key pressed on the top screen. In order: an open ask takes it; Return on a focus the player moved
-    /// runs its row; an affordance the engine binds to it runs; Escape and Return run the `cancel` and `confirm` affordances, or a list's `activate` on its
+    /// runs its row; an affordance the engine binds to it runs; Escape, F1 and Return run the `cancel`, `help` and `confirm` affordances, or a list's `activate` on its
     /// focused row; a row's hotkey chooses the row; the arrows, Home, End, Page keys and Tab move the focus
     /// (or the tab, or the grid cursor); else the `any_key` affordance runs. `page` is the rows a page key
     /// moves in the list with that id; `rows` gives the rows of a list that are loaded.
@@ -169,6 +169,7 @@ impl Interaction {
             "ESC" => {
                 with_role(screen, AffordanceRole::Cancel).map(|a| self.activate(screen, &a.id))
             }
+            "F1" => with_role(screen, AffordanceRole::Help).map(|a| self.activate(screen, &a.id)),
             "RETURN" => with_role(screen, AffordanceRole::Confirm)
                 .map(|a| self.activate(screen, &a.id))
                 .or_else(|| self.activate_focused(screen)),
