@@ -28,6 +28,9 @@ struct RowLayout<'a> {
     /// The screen is a list filter's prompt: a row it shows is a result, and a click on one confirms the text and
     /// then chooses that row of the list.
     filter: bool,
+    /// The engine chose a row of the list and the focus does not move its choice: the chosen row is shown
+    /// selected, and the focus only outlined.
+    chosen: bool,
 }
 
 impl<M: GameModel> App<M> {
@@ -259,6 +262,7 @@ impl<M: GameModel> App<M> {
                 across: body.max_rect(),
                 answers: !self.screens.passive && Self::asks(screen),
                 filter: form::filter_submit(screen).is_some(),
+                chosen: rows.iter().any(|r| r.selected) && !follows_focus(screen, id),
             };
             body.heterogeneous_rows(heights.iter().copied(), |row| {
                 let at = row.index();
@@ -412,7 +416,11 @@ impl<M: GameModel> App<M> {
             .find(|p| p.id == row.id);
         let result = layout.filter && row.enabled && !row.selectable;
         let on = row.enabled && (row.selectable || result);
-        let highlighted = cursor == Some(row.id.as_str()) || (cursor.is_none() && row.selected);
+        let at = cursor == Some(row.id.as_str());
+        let highlighted = match layout.chosen {
+            true => row.selected,
+            false => at || (cursor.is_none() && row.selected),
+        };
         cells.set_selected(highlighted);
         // The row's text is drawn on the selection bar when it is highlighted.
         let ground = |ui: &egui::Ui| match highlighted {
@@ -514,9 +522,19 @@ impl<M: GameModel> App<M> {
         });
         table::spare(&mut cells);
         let across = cells.response();
+        if at && !highlighted {
+            let stroke = egui::Stroke::new(1.0, tokens::SELECTION);
+            across.ctx.layer_painter(across.layer_id).rect_stroke(
+                across.rect,
+                0,
+                stroke,
+                egui::StrokeKind::Inside,
+            );
+        }
         let Some(button) = button else {
             return;
         };
+        a11y::selected(&button.ctx, button.id, highlighted);
         button.widget_info(|| {
             WidgetInfo::selected(
                 WidgetType::SelectableLabel,
@@ -567,6 +585,23 @@ impl<M: GameModel> App<M> {
     pub(super) fn squares(&self, rows: &[&Row]) -> bool {
         self.display.tiles() && rows.iter().any(|r| r.look.is_some())
     }
+}
+
+/// Whether the engine's cursor is in the list `id` of `screen`, so its chosen row is where its cursor is, or a
+/// `select`-role affordance names the list, so moving the focus in it moves the engine's choice.
+fn follows_focus(screen: &Screen, id: &str) -> bool {
+    let cursor = screen
+        .focus
+        .as_ref()
+        .and_then(|f| f.component_id.as_deref());
+    cursor == Some(id)
+        || screen.affordances.iter().any(|a| {
+            a.role == Some(AffordanceRole::Select)
+                && a.args
+                    .as_ref()
+                    .and_then(|args| args.row.as_ref())
+                    .is_some_and(|row| row.component_id == id)
+        })
 }
 
 #[cfg(test)]

@@ -177,3 +177,8 @@ impl Announcer {
         &self.text
     }
 }
+
+/// Whether the control `id`, a row of a list, reads as the one chosen.
+pub fn selected(ctx: &egui::Context, id: egui::Id, selected: bool) {
+    ctx.accesskit_node_builder(id, |b| b.set_selected(selected));
+}

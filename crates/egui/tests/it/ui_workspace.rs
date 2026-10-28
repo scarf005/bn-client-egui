@@ -968,3 +968,16 @@ fn a_click_on_a_row_of_a_list_that_follows_the_focus_shows_it_selected() {
     assert!(invoked(&script).contains(&"ws:pick_tool".to_string()));
     assert!(selected(&h, "Eraser") && !selected(&h, "Pencil"));
 }
+
+#[test]
+fn a_click_on_a_row_of_a_list_holding_the_engines_cursor_shows_it_selected() {
+    let mut screen = workspace();
+    screen["focus"] = json!({"component_id": "ws:tools", "row_id": "ws:tools:0"});
+    let (app, _) = crate::common::staged(crate::common::over_map(screen));
+    let mut h = crate::common::themed_harness(SIZES[0], app);
+    h.run_steps(7);
+    crate::common::settle_windows(&mut h);
+    h.get_by_label("Eraser").click();
+    h.run_steps(3);
+    assert!(selected(&h, "Eraser") && !selected(&h, "Pencil"));
+}
