@@ -208,10 +208,13 @@ impl<M: GameModel> App<M> {
             out.push(Intent::More(id.clone()));
         }
         // A focus new to the list and out of its sight scrolls the focused row to the middle, with the rows
-        // around it in view, the top row whole.
-        let focus = cursor.map(str::to_string);
+        // around it in view, the top row whole; without a focus in the list, so does a newly selected row.
+        let selected = rows.iter().position(|r| r.selected);
+        let shown = at.or(selected.filter(|_| cursor.is_none()));
+        let focus = shown.map(|i| rows[i].id.clone());
         let mut offset = None;
-        if let Some(i) = at {
+        let (mut pending, mut moved) = (false, false);
+        if let Some(i) = shown {
             let mut scrolls = self.screens.list_scroll.borrow_mut();
             let scroll = scrolls.entry(slot.clone()).or_default();
             let y = starts[i];
@@ -223,7 +226,8 @@ impl<M: GameModel> App<M> {
                 let top = starts.iter().copied().take_while(|s| *s <= middle).last();
                 offset = Some(top.unwrap_or(0.0));
             }
-            scroll.shown = focus;
+            pending = scroll.shown != focus;
+            moved = scroll.shown.is_some();
         }
         // The viewport is a whole number of rows tall: the most rows from the one at its top that fit, so rows of
         // a wrapped label do not leave the last row cut. An empty list, or one whose top row does not fit, keeps its
@@ -290,6 +294,27 @@ impl<M: GameModel> App<M> {
             })
             .inner;
         windows::note_hidden(ui, &scrolled);
+        // The row is shown once it is in sight in the list and in what holds it: a list that changes its height as
+        // it scrolls scrolls again, and what holds it scrolls too when the row moved there from another.
+        if let (Some(i), true) = (shown, pending) {
+            let y = scrolled.inner_rect.top() + starts[i] - scrolled.state.offset.y;
+            let row =
+                egui::Rect::from_x_y_ranges(scrolled.inner_rect.x_range(), y..=y + heights[i]);
+            let within = |r: egui::Rect| {
+                r.y_range().contains(row.top()) && r.y_range().contains(row.bottom())
+            };
+            match (
+                within(scrolled.inner_rect),
+                within(ui.clip_rect()) || !moved,
+            ) {
+                (true, true) => {
+                    let mut scrolls = self.screens.list_scroll.borrow_mut();
+                    scrolls.entry(slot.clone()).or_default().shown = focus;
+                }
+                (true, false) => ui.scroll_to_rect(row, None),
+                (false, _) => {}
+            }
+        }
         // A list with no rows keeps its pane, outlined, as tall as its rows would have been.
         if rows.is_empty() {
             let pane = egui::Rect::from_x_y_ranges(
