@@ -194,11 +194,12 @@ fn reveal_rect(h: &mut H, what: &str, rect_of: impl Fn(&H) -> Option<egui::Rect>
     panic!("{what} is never brought into view by the wheel");
 }
 
-/// Turns the wheel over the right column of a workspace, which holds the lists and forms a walk reaches for, by
-/// `dy` points and lets the frames follow; over the canvas the wheel would zoom it.
+/// Turns the wheel over the scroll bar of a workspace's right column, which holds the lists and forms a walk
+/// reaches for, by `dy` points and lets the frames follow: over the canvas the wheel would zoom it, and over a list
+/// it would scroll only that list.
 fn wheel(h: &mut H, dy: f32) {
     let size = h.ctx.content_rect().size();
-    h.hover_at(egui::pos2(size.x - 120.0, size.y * 0.5));
+    h.hover_at(egui::pos2(size.x - 12.0, size.y * 0.5));
     h.run_steps(2);
     h.event(egui::Event::MouseWheel {
         unit: egui::MouseWheelUnit::Point,
