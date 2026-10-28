@@ -245,6 +245,8 @@ impl<M: GameModel> App<M> {
             let scrolls = self.screens.list_scroll.borrow();
             scrolls.get(&slot).map_or(0.0, |s| s.top)
         });
+        // Rows that went out of the list, such as by a tab of other parts, leave the top where the rows end.
+        top = top.min((wanted - list_height).max(0.0));
         let mut first = starts.iter().rposition(|s| *s <= top + 0.5).unwrap_or(0);
         // A list at rest shows its top row whole: a top left between rows, such as by a list that got shorter, goes
         // to the nearer row; while the player scrolls, it is left alone.
@@ -252,7 +254,8 @@ impl<M: GameModel> App<M> {
             ui.input(|i| i.smooth_scroll_delta != egui::Vec2::ZERO || i.pointer.primary_down());
         if offset.is_none() && !scrolling && starts.get(first).is_some_and(|s| top - s > 0.5) {
             let next = (first + 1).min(starts.len() - 1);
-            first = match top - starts[first] < starts[next] - top {
+            let fits = starts[next] <= (wanted - list_height).max(0.0) + 0.5;
+            first = match top - starts[first] < starts[next] - top || !fits {
                 true => first,
                 false => next,
             };
