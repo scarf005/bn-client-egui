@@ -220,12 +220,21 @@ impl<M: GameModel> App<M> {
         };
         ui.horizontal_wrapped(|ui| {
             ui.label(egui::RichText::new(markup::plain(&panel.title.shown())).strong());
+            let font = egui::TextStyle::Body.resolve(ui.style());
+            let (gap, right) = (ui.spacing().item_spacing.x, ui.max_rect().right());
             for stat in panel.stats.iter().flatten() {
-                ui.separator();
-                // A fact wraps to the next line whole, its value beside its label.
+                let (label, shown) = (markup::plain(&stat.label.shown()), stat_text(stat));
+                // A fact wraps to the next line whole, its value beside its label, before it would run past the
+                // line's end.
+                let width = text_width(ui, &label, &font) + gap + text_width(ui, &shown, &font);
+                match right - ui.cursor().left() < width + 3.0 * gap {
+                    true => ui.end_row(),
+                    false => {
+                        ui.separator();
+                    }
+                }
                 ui.horizontal(|ui| {
-                    ui.weak(markup::plain(&stat.label.shown()));
-                    let shown = stat_text(stat);
+                    ui.weak(label);
                     if !shown.is_empty() {
                         let color = stat.tone.map_or(ui.visuals().text_color(), tone_color);
                         ui.label(egui::RichText::new(shown).color(color));
