@@ -168,7 +168,7 @@ fn the_mounts_are_tile_sized_in_the_middle_of_the_canvas_and_the_stack_reads_who
 }
 
 #[test]
-fn a_small_grid_fills_its_canvas_pane_whole() {
+fn a_small_grid_sits_whole_and_centred_in_its_canvas_pane_at_a_readable_square_size() {
     let screen = editor();
     let cells = find(&screen["root"], "vehicle:grid").unwrap();
     let (cols, rows) = (
@@ -208,8 +208,13 @@ fn a_small_grid_fills_its_canvas_pane_whole() {
             "at {size:?} the grid {grid:?} runs out of its pane {pane:?}"
         );
         assert!(
-            grid.width() >= 0.8 * pane.width() || grid.height() >= 0.6 * pane.height(),
-            "at {size:?} the grid {grid:?} leaves most of its pane {pane:?} empty"
+            (26.0..=40.5).contains(&square.width()),
+            "at {size:?} the squares are {} wide, not a readable size no larger than the cap",
+            square.width()
+        );
+        assert!(
+            (grid.center() - pane.center()).abs().max_elem() < 0.2 * pane.width(),
+            "at {size:?} the grid {grid:?} is not centred in its pane {pane:?}"
         );
     }
 }

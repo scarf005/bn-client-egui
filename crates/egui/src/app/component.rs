@@ -30,9 +30,9 @@ use crate::{a11y, editor, text};
 use bn_client_core::interaction::{self, ArgKind, InvokeError};
 use bn_client_core::protocol::{
     Affordance, AffordanceRole, CanvasComponent, Component, Editor, EditorValue, FieldKind, Form,
-    FormField, Grid, GridDrag, GridRegion, GridRole, InvokeArgs, List, MapComponent, MapMode,
-    OvermapTile, OvermapWire, PanelStat, Relation, Row, Screen, ScreenDock, ScreenRole, Selection,
-    SidebarSide, Slot, Split, Text, TextBlock, TextRole, Tone, WorldPos,
+    FormField, Grid, GridCell, GridDrag, GridRegion, GridRole, InvokeArgs, List, MapComponent,
+    MapMode, OvermapTile, OvermapWire, PanelStat, Relation, Row, Screen, ScreenDock, ScreenRole,
+    Selection, SidebarSide, Slot, Split, Text, TextBlock, TextRole, Tone, WorldPos,
 };
 use bn_client_core::{Cell, GameModel, Pos, Rgb, markup};
 use eframe::egui::{self, WidgetInfo, WidgetType};
@@ -57,10 +57,25 @@ const PEER_ROWS: usize = 12;
 const GRID_CELL: f32 = 26.0;
 /// The largest a grid's cell grows to when the room allows.
 const GRID_MAX_CELL: f32 = 2.0 * GRID_CELL;
+/// The largest a canvas grid's square grows to when it fits its room, so a small grid keeps readable sprites; the
+/// zoom gesture goes past it.
+const CANVAS_MAX_CELL: f32 = 40.0;
 /// The opacity of the squares a grid marks faded.
 const GRID_FADED: f32 = 0.45;
 /// The most the zoom gesture scales a canvas grid's cells from the size that fills its room.
 const GRID_ZOOM_MAX: f32 = 4.0;
+
+/// What a square says on hover: what it holds and, when it is off, why.
+fn cell_tip(cell: &GridCell) -> String {
+    let label = cell.label.as_ref().map(|l| markup::plain(&l.shown()));
+    let why = cell.denial.as_ref().filter(|_| !cell.enabled);
+    label
+        .into_iter()
+        .chain(why.map(|w| markup::plain(&w.shown())))
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
 
 /// The client-local state of the top screen: what the interaction core keeps, and what the player is asked.
 #[derive(Default)]
@@ -1314,10 +1329,10 @@ impl<M: GameModel> App<M> {
         let fit = (ui.available_width() / xs.len().max(1) as f32)
             .min(ui.available_height() / ys.len().max(1) as f32);
         let canvas = grid.role == Some(GridRole::Canvas);
-        // A canvas first fits its whole grid to its room, however few its squares; it zooms out until the whole grid
-        // fits, and in until a cell is as large as the room.
+        // A canvas first fits its whole grid to its room, its squares no larger than `CANVAS_MAX_CELL`; it zooms out
+        // until the whole grid fits, and in until a cell is as large as the room.
         let base = match canvas {
-            true => fit.max(GRID_CELL),
+            true => fit.clamp(GRID_CELL, CANVAS_MAX_CELL),
             false => fit.clamp(GRID_CELL, GRID_MAX_CELL),
         };
         let limits = ((fit / base).min(1.0), GRID_ZOOM_MAX.max(fit / base));
@@ -1486,9 +1501,11 @@ impl<M: GameModel> App<M> {
                             continue;
                         };
                         // Another level seen through open air is drawn faded, as its sprites and its glyph.
-                        ui.set_opacity(match cell.faded {
-                            Some(true) => opacity * GRID_FADED,
-                            _ => opacity,
+                        // A square that is off is drawn faded too; a button does that itself.
+                        let off = !(cell.enabled || cell.id.is_some() && cell.affordance.is_some());
+                        ui.set_opacity(match cell.faded == Some(true) || off {
+                            true => opacity * GRID_FADED,
+                            false => opacity,
                         });
                         let glyph = cell.glyph.clone().unwrap_or_else(|| " ".into());
                         let name = cell.label.as_ref().map_or(glyph.clone(), Text::shown);
@@ -1532,6 +1549,10 @@ impl<M: GameModel> App<M> {
                             };
                             let label = ui.add_sized(size, egui::Label::new(shown));
                             queue(ui, label.rect);
+                            let tip = cell_tip(cell);
+                            if !tip.is_empty() {
+                                label.on_hover_text(tip);
+                            }
                             continue;
                         }
                         // A canvas is one stop of the keyboard's walk, whose squares the arrows move among.
@@ -1578,14 +1599,11 @@ impl<M: GameModel> App<M> {
                                 markup::plain(&name),
                             )
                         });
-                        let button = match (&cell.denial, &cell.label) {
-                            (Some(why), _) if !cell.enabled => {
-                                button.on_disabled_hover_text(why.shown())
-                            }
-                            (_, Some(label)) if !label.shown().is_empty() => {
-                                button.on_hover_text(markup::plain(&name))
-                            }
-                            _ => button,
+                        let tip = cell_tip(cell);
+                        let button = match (cell.enabled, tip.is_empty()) {
+                            (_, true) => button,
+                            (true, false) => button.on_hover_text(tip),
+                            (false, false) => button.on_disabled_hover_text(tip),
                         };
                         // A pointer click on a draggable canvas is the drag's press and release.
                         let pointer_click =
