@@ -408,3 +408,44 @@ fn the_client_buttons_of_the_menu_bar_open_the_action_palette_and_the_settings()
         "no settings window"
     );
 }
+
+#[test]
+fn the_footer_buttons_end_the_status_line() {
+    for size in SIZES {
+        let (h, _) = shown(size);
+        let (status, validate) = (rect(&h, "Cursor 3,4"), rect(&h, "Validate"));
+        assert!(
+            (validate.center().y - status.center().y).abs() < 4.0
+                && validate.left() > status.right()
+                && validate.right() > size.x / 2.0,
+            "{size:?}: Validate {validate:?} off the status line {status:?}"
+        );
+    }
+}
+
+#[test]
+fn without_a_status_line_or_footer_the_columns_reach_the_bottom() {
+    for size in SIZES {
+        let mut screen = workspace();
+        screen["root"]["children"]
+            .as_array_mut()
+            .unwrap()
+            .retain(|c| c["slot"] != "status");
+        screen["affordances"]
+            .as_array_mut()
+            .unwrap()
+            .retain(|a| a["group"].is_string());
+        let (app, _) = crate::common::staged(crate::common::over_map(screen));
+        let mut h = crate::common::themed_harness(size, app);
+        h.run_steps(7);
+        crate::common::settle_windows(&mut h);
+        let columns = h
+            .get_all_by_label("Resize workspace column")
+            .map(|n| n.rect())
+            .collect::<Vec<_>>();
+        assert!(
+            columns.iter().all(|r| r.bottom() > size.y - 24.0),
+            "{size:?}: {columns:?}"
+        );
+    }
+}
