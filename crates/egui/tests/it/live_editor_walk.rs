@@ -3971,3 +3971,43 @@ pub(crate) fn right_click_pub(h: &mut H, at: egui::Pos2) {
         h.run_steps(3);
     }
 }
+
+const CATALOG_SIZES: [(f32, f32); 2] = [(1920.0, 1080.0), (1280.0, 800.0)];
+
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn the_map_editor_shows_the_catalog_search_and_rows_with_a_document_open() {
+    let dir = std::env::temp_dir().join(format!("bn-walk-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let (mut h, _root) = start(&dir);
+    h.set_size(egui::vec2(1290.0, 830.0));
+    rest(&mut h);
+    open_map_editor(&mut h);
+    // A new file goes inside a mod's folder.
+    let folder = crate::common::live::profile_dir().join("mods/zz_catalog_mod");
+    std::fs::create_dir_all(&folder).unwrap();
+    std::fs::write(folder.join("modinfo.json"), r#"[{"type": "MOD_INFO", "id": "zz_catalog_mod", "name": "Catalog mod", "authors": ["test"], "description": "d", "category": "content"}]"#).unwrap();
+    create_mapgen(&mut h, "zz_catalog_mod/zz_catalog");
+    rest(&mut h);
+    shot_at(&mut h, "map-document-open", &CATALOG_SIZES);
+}
+
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn the_vehicle_editor_shows_its_lists_with_a_design_open() {
+    let dir = std::env::temp_dir().join(format!("bn-walk-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let (mut h, _root) = start(&dir);
+    h.set_size(egui::vec2(1290.0, 830.0));
+    rest(&mut h);
+    click(&mut h, "Editor");
+    click(&mut h, "Vehicle editor");
+    key(&mut h, egui::Key::Escape);
+    click(&mut h, "Yes");
+    wait_kind(&mut h, "vehicle_editor");
+    rest(&mut h);
+    double_click(&mut h, "Offroad Car");
+    wait_kind(&mut h, "vehicle_editor");
+    rest(&mut h);
+    shot_at(&mut h, "vehicle-design-open", &CATALOG_SIZES);
+}
