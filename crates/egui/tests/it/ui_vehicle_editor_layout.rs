@@ -1,6 +1,6 @@
-//! The vehicle editor around its canvas: at 1280×800 and 1920×1080 the vehicle's mounts take the widest pane between
-//! the vehicle list and the mount's part stack, every part of the stack reads whole, the zoom gesture over the canvas
-//! scales its mounts, and a mount names its parts on hover.
+//! The vehicle editor around its canvas: at 1280×800 and 1920×1080 the vehicle's mounts are tile-sized squares in the
+//! middle of the canvas pane, every part of the stack reads whole, the zoom gesture over the canvas scales its mounts,
+//! and a mount names its parts on hover.
 use crate::common::{fixture, legible};
 use bn_client_egui::transport::ScriptedTransport;
 use bn_client_egui::{App, Clock, ConnectOptions, EngineModel};
@@ -97,10 +97,13 @@ fn mount(h: &H, label: &str) -> egui::Rect {
 }
 
 #[test]
-fn the_canvas_takes_the_widest_pane_and_the_stack_reads_whole() {
+fn the_mounts_are_tile_sized_in_the_middle_of_the_canvas_and_the_stack_reads_whole() {
     let screen = editor();
     let cells = find(&screen["root"], "vehicle:grid").unwrap();
-    let cols = cells["cols"].as_f64().unwrap() as f32;
+    let (cols, rows) = (
+        cells["cols"].as_f64().unwrap() as f32,
+        cells["rows"].as_f64().unwrap() as f32,
+    );
     let named = cells["cells"]
         .as_array()
         .unwrap()
@@ -108,16 +111,36 @@ fn the_canvas_takes_the_widest_pane_and_the_stack_reads_whole() {
         .find_map(|c| c["label"].as_str().filter(|l| l.contains(", ")))
         .unwrap()
         .to_owned();
+    let at = cells["cells"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["label"].as_str() == Some(named.as_str()))
+        .map(|c| (c["x"].as_f64().unwrap() as f32, c["y"].as_f64().unwrap() as f32))
+        .unwrap();
     let stack = labels(&screen, "vehicle:stack");
     assert!(!stack.is_empty());
     for size in [egui::vec2(1280.0, 800.0), egui::vec2(1920.0, 1080.0)] {
         let h = open(screen.clone(), size);
-        let room = legible::room(&h);
-        let canvas = mount(&h, &named).width() * cols;
+        let square = mount(&h, &named);
         assert!(
-            canvas >= 0.4 * room.width(),
-            "at {size:?} the canvas is {canvas} of {} wide",
-            room.width()
+            (20.0..=64.0).contains(&square.width()),
+            "at {size:?} a mount is {} wide",
+            square.width()
+        );
+        // The grid's corner, from the mount's place in it.
+        let corner = square.min - egui::vec2(at.0, at.1) * square.width();
+        let grid = egui::Rect::from_min_size(corner, egui::vec2(cols, rows) * square.width());
+        let room = legible::room(&h);
+        let side = h.get_by_label("Parts").rect().left();
+        let middle = (room.left() + side) / 2.0;
+        assert!(
+            (grid.center().x - middle).abs() < 40.0,
+            "at {size:?} the grid {grid:?} is off the middle {middle} of the canvas pane"
+        );
+        assert!(
+            grid.center().y > room.center().y - 120.0,
+            "at {size:?} the grid {grid:?} hugs the top of {room:?}"
         );
         let shown = painted(&h);
         for label in &stack {
