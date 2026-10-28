@@ -621,3 +621,16 @@ fn a_click_on_the_last_row_of_a_palette_that_holds_all_its_rows_moves_nothing() 
     h.run_steps(4);
     assert_eq!((rect(&h, "Door"), rect(&h, "Properties")), before);
 }
+
+#[test]
+fn a_right_column_wide_enough_for_two_puts_the_inspector_beside_the_palette() {
+    for (size, beside) in [(SIZES[0], false), (SIZES[1], true)] {
+        let (h, _) = shown(size);
+        let (palette, inspector) = (rect(&h, "Wall"), rect(&h, "Properties"));
+        assert_eq!(
+            inspector.left() > palette.right() && inspector.top() < palette.bottom(),
+            beside,
+            "{size:?}: palette {palette:?}, inspector {inspector:?}"
+        );
+    }
+}
