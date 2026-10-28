@@ -269,3 +269,51 @@ fn a_part_that_arrives_in_the_right_column_is_scrolled_into_view() {
         "the first row arrived at {shown:?}"
     );
 }
+
+#[test]
+fn the_newest_log_line_is_in_view_under_a_long_history_and_problems() {
+    let size = egui::vec2(1290.0, 830.0);
+    // A history and problems each longer than a list shows, the column scrolled to its top.
+    let mut screen = editor();
+    let history = find(&mut screen["root"], "editor:history").unwrap();
+    history["rows"] = (0..40)
+        .map(|n| json!({"id": format!("step:{n}"), "label": format!("step {n}"), "description": "", "denial": "",
+            "enabled": true, "selectable": true, "selected": false, "columns": []}))
+        .collect();
+    history["total"] = json!(40);
+    let problems = find(&mut screen["root"], "editor:diagnostics").unwrap();
+    problems["rows"] = (0..40)
+        .map(|n| {
+            json!({"id": format!("problem:{n}"), "label": format!("problem {n}"), "description": "",
+            "denial": "", "enabled": true, "selectable": true, "selected": false, "columns": []})
+        })
+        .collect();
+    problems["total"] = json!(40);
+    let says = |words: &str| {
+        let mut s = screen.clone();
+        s["root"]["children"].as_array_mut().unwrap().push(
+            json!({"id": "editor:status", "kind": "text", "slot": "log", "markup": words, "tone": "good"}),
+        );
+        s
+    };
+    let (mut h, script) = crate::ui_editor_drag::open_sized(says("first words"), size);
+    h.run_steps(6);
+    let (left, _) = handles(&h);
+    for _ in 0..20 {
+        h.hover_at(egui::pos2(left - 20.0, 100.0));
+        h.event(egui::Event::MouseWheel {
+            unit: egui::MouseWheelUnit::Point,
+            delta: egui::vec2(0.0, 400.0),
+            modifiers: egui::Modifiers::NONE,
+            phase: egui::TouchPhase::Move,
+        });
+        h.run_steps(2);
+    }
+    crate::ui_editor_drag::restack(&script, 41, vec![says("74 kinds of items can spawn here")]);
+    h.run_steps(6);
+    let line = h.get_by_label("74 kinds of items can spawn here").rect();
+    assert!(
+        line.top() > 30.0 && line.bottom() < size.y - 30.0,
+        "the new line is at {line:?}"
+    );
+}
