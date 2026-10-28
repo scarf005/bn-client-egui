@@ -597,6 +597,27 @@ fn a_number_outside_its_fields_bounds_is_refused_with_them() {
     );
 }
 
+/// A whole number typed into its field's box past the field's bounds is refused at Return, the box left open to
+/// mend it.
+#[test]
+fn a_number_typed_past_its_fields_bounds_is_refused_at_return() {
+    let screen = form(
+        json!([{"id": "facing", "label": "Facing", "value": "0", "type": "integer", "min": 0, "max": 359}]),
+        json!([set()]),
+    );
+    let mut ui = Interaction::default();
+    ui.focus_row("form", "facing");
+    ui.activate(&screen, "set");
+    ui.answer_text("400");
+    let out = press(&mut ui, &screen, "RETURN");
+    assert_eq!(invoked(&out), None);
+    assert_eq!(
+        out.note().as_deref(),
+        Some("Enter a whole number from 0 to 359.")
+    );
+    assert_eq!(ui.ask().and_then(|a| a.text.as_deref()), Some("400"));
+}
+
 #[test]
 fn a_form_field_is_filled_by_the_affordance_that_names_it() {
     let screen = form(
