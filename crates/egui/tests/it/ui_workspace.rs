@@ -714,3 +714,15 @@ fn elided(h: &H, start: &str) -> Vec<bool> {
         .for_each(|c| walk(&c.shape, start, &mut out));
     out
 }
+
+#[test]
+fn an_action_on_a_square_of_the_canvas_is_no_button() {
+    let mut screen = workspace();
+    screen["affordances"].as_array_mut().unwrap().push(json!({"id": "ws:open_square", "label": "Open its mapgen",
+        "keys": [], "enabled": true, "expect": "screen", "args": {"row": {"component_id": "ws:canvas"}}}));
+    let (app, _) = crate::common::staged(crate::common::over_map(screen));
+    let mut h = crate::common::themed_harness(SIZES[0], app);
+    h.run_steps(7);
+    crate::common::settle_windows(&mut h);
+    assert!(h.query_by_label("Open its mapgen").is_none());
+}
