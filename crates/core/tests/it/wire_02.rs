@@ -220,7 +220,7 @@ fn the_schema_hash_is_the_vendored_schemas_sha256_prefix() {
         .map(|b| format!("{b:02x}"))
         .collect::<String>();
     assert_eq!(protocol::SCHEMA_HASH, format!("sha256:{}", &hex[..16]));
-    assert_eq!(protocol::SCHEMA_HASH, "sha256:0a48970ded4059ce");
+    assert_eq!(protocol::SCHEMA_HASH, "sha256:556efafb9c01f8a4");
 }
 
 #[test]
