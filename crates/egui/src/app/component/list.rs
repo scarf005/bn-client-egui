@@ -138,10 +138,25 @@ impl<M: GameModel> App<M> {
             .affordances
             .iter()
             .filter_map(|a| find(screen, a))
-            // The rows run the list's `activate`, on a double click or Enter.
-            .filter(|a| list.activate.as_deref() != Some(a.id.as_str()))
             .filter(|a| !searched(screen, list, a))
             .chain(row_actions(screen, id))
+            .collect::<Vec<_>>();
+        // The rows run the list's `activate`, on a double click or Enter; in a workspace's column, beside other
+        // buttons that act on a row, it is one too, so every action on an editor's row is in sight.
+        let activate = |a: &Affordance| list.activate.as_deref() == Some(a.id.as_str());
+        let on_row = |a: &Affordance| {
+            a.args
+                .as_ref()
+                .and_then(|args| args.row.as_ref())
+                .is_some_and(|row| &row.component_id == id)
+        };
+        let beside = self.screens.in_column.get()
+            && own
+                .iter()
+                .any(|a| !activate(a) && on_row(a) && drawn_button(a));
+        let own = own
+            .into_iter()
+            .filter(|a| beside || !activate(a))
             .collect::<Vec<_>>();
         let step = height + spacing.y;
         // Room is kept for a refusal and the buttons only when some row or the list has them, so a list with
