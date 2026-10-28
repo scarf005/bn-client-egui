@@ -98,6 +98,19 @@ fn enter_in_the_filter_picks_the_first_match_and_the_next_opening_starts_unfilte
 }
 
 #[test]
+fn enter_in_an_empty_filter_commits_nothing() {
+    let sent = Default::default();
+    let mut h = harness(40, std::rc::Rc::clone(&sent));
+    h.run();
+    h.get_by_role_and_label(egui::accesskit::Role::ComboBox, "Fuel")
+        .click();
+    h.run();
+    h.key_press(egui::Key::Enter);
+    h.run();
+    assert!(sent.borrow().is_empty(), "nothing was typed to pick by");
+}
+
+#[test]
 fn a_select_with_a_long_value_stays_inside_a_narrow_pane() {
     let mut editor = editor(5);
     editor.values[0].label = "a shape with a very long name indeed".into();

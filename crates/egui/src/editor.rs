@@ -137,7 +137,10 @@ pub fn value_editor(ui: &mut egui::Ui, field: &ValueField) -> ValueEdit {
                         .values
                         .iter()
                         .filter(|v| v.label.to_lowercase().contains(&needle));
-                    if enter && let Some(v) = matching.clone().next() {
+                    if enter
+                        && !needle.is_empty()
+                        && let Some(v) = matching.clone().next()
+                    {
                         committed = Some(v.id.clone());
                         ui.close();
                     }
