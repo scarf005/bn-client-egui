@@ -190,3 +190,91 @@ fn the_zoom_gesture_scales_the_canvas_and_a_mount_names_its_parts() {
         "{before:?} zoomed to {after:?}"
     );
 }
+
+/// The vehicle editor with a prototype open, its part list and prototype list each a full page of 50 rows.
+fn open_with_full_pages() -> Value {
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../core/tests/fixtures/0.2.examples/vehicle_editor.json"
+    );
+    let all = serde_json::from_str::<Value>(&std::fs::read_to_string(path).unwrap()).unwrap();
+    let mut screen = all["valid"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["name"] == "vehicle editor with a prototype open on a mount")
+        .unwrap()["value"]
+        .clone();
+    fn find_mut<'a>(value: &'a mut Value, id: &str) -> Option<&'a mut Value> {
+        if value["id"] == id {
+            return Some(value);
+        }
+        match value {
+            Value::Array(items) => items.iter_mut().find_map(|v| find_mut(v, id)),
+            Value::Object(members) => members.values_mut().find_map(|v| find_mut(v, id)),
+            _ => None,
+        }
+    }
+    for id in ["vehicle:parts", "vehicle:prototypes"] {
+        let list = find_mut(&mut screen["root"], id).unwrap();
+        let first = list["rows"][0].clone();
+        list["rows"] = (0..50)
+            .map(|i| {
+                let mut row = first.clone();
+                row["id"] = json!(format!("{id}:{i}"));
+                row["label"] = json!(format!("{id} row {i}"));
+                row["selected"] = json!(false);
+                row
+            })
+            .collect();
+        list["total"] = json!(200);
+    }
+    screen
+}
+
+#[test]
+fn the_right_column_holds_every_design_tab_and_some_rows_of_each_list_in_view() {
+    let screen = open_with_full_pages();
+    let tabs = find(&screen["root"], "vehicle:tools").unwrap()["tabs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|t| t["label"].as_str().unwrap().to_owned())
+        .collect::<Vec<_>>();
+    let stack = labels(&screen, "vehicle:stack");
+    for size in [egui::vec2(1290.0, 830.0), egui::vec2(1920.0, 1080.0)] {
+        let h = open(screen.clone(), size);
+        // The column ends above the status line, which the open document's facts start.
+        let bottom = h.get_by_label("Mount").rect().top();
+        let in_view = |r: egui::Rect| r.top() >= 0.0 && r.bottom() <= bottom + 0.5;
+        for tab in &tabs {
+            let r = h
+                .query_all_by_label(tab)
+                .find(|n| n.accesskit_node().role() == egui::accesskit::Role::Tab)
+                .map(|n| n.rect());
+            assert!(
+                r.is_some_and(in_view),
+                "at {size:?} the tab {tab:?} at {r:?} is out of view above {bottom}"
+            );
+        }
+        for label in &stack {
+            let r = h.get_by_label(label).rect();
+            assert!(
+                in_view(r),
+                "at {size:?} the stack's {label:?} at {r:?} is out of view above {bottom}"
+            );
+        }
+        for id in ["vehicle:parts", "vehicle:prototypes"] {
+            let shown = (0..50)
+                .filter(|i| {
+                    h.query_all_by_label(&format!("{id} row {i}"))
+                        .any(|n| in_view(n.rect()) && n.rect().height() > 0.0)
+                })
+                .count();
+            assert!(
+                shown >= 3,
+                "at {size:?} {id} shows {shown} rows in view above {bottom}"
+            );
+        }
+    }
+}
