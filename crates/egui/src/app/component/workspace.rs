@@ -254,12 +254,15 @@ impl<M: GameModel> App<M> {
         let (news, log) = parts(root, Slot::Log)
             .into_iter()
             .partition::<Vec<_>, _>(|c| matches!(c, Component::Text(t) if t.tone.is_some()));
+        // What a described row already says is not said again.
+        let said = self.said_by_rows(screen);
         let news = news
             .into_iter()
             .filter_map(|c| match c {
                 Component::Text(t) => Some(t.clone()),
                 _ => None,
             })
+            .filter(|t| !said.contains(&t.markup.shown()))
             .collect::<Vec<_>>();
         let sent = self
             .screens
