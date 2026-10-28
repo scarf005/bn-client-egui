@@ -529,6 +529,36 @@ fn text_a_position_and_a_pane_are_gathered_by_the_affordance_that_asks() {
 }
 
 #[test]
+fn a_text_starts_as_the_engines_suggestion_which_typing_replaces() {
+    let ask = affordance(
+        json!({"id": "new", "label": "New vehicle", "keys": [], "enabled": true,
+        "expect": "boundary", "args": {"text": {"default": "my_vehicle"}}}),
+    );
+    let mut ui = Interaction::default();
+    ui.begin(&ask);
+    assert_eq!(ui.ask().unwrap().text.as_deref(), Some("my_vehicle"));
+    assert_eq!(
+        serde_json::to_value(ui.args(&ask).unwrap()).unwrap(),
+        json!({"text": "my_vehicle"}),
+        "taken as it is"
+    );
+    ui.push_text("b");
+    ui.push_text("us");
+    assert_eq!(
+        ui.ask().unwrap().text.as_deref(),
+        Some("bus"),
+        "typing replaces it"
+    );
+    ui.begin(&ask);
+    ui.pop_text();
+    assert_eq!(
+        ui.ask().unwrap().text.as_deref(),
+        Some(""),
+        "a backspace clears it"
+    );
+}
+
+#[test]
 fn a_draft_ends_when_its_affordance_leaves_the_screen() {
     let mut ui = Interaction::default();
     let stack = stack_of("screen:1", None);
