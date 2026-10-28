@@ -379,6 +379,13 @@ impl<M: GameModel> App<M> {
     /// Takes the stack the engine published, and moves the engine's cursor where the player's focus went.
     fn sync_screens(&mut self) {
         self.screens.interaction.sync(self.model.screens());
+        // A form sent on a screen that closed is no place for the news of one opened after it.
+        let screens = self.model.screens();
+        if let Some((at, _)) = &self.screens.sent_form
+            && !screens.iter().any(|s| &s.screen_id == at)
+        {
+            self.screens.sent_form = None;
+        }
         if let Some((id, args)) = self.screens.interaction.take_select() {
             let _ = self.model.invoke_affordance(&id, args);
         }
