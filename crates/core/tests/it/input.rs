@@ -618,6 +618,22 @@ fn a_number_typed_past_its_fields_bounds_is_refused_at_return() {
     assert_eq!(ui.ask().and_then(|a| a.text.as_deref()), Some("400"));
 }
 
+/// The engine writes a whole number field's bounds as decimals, `0.0` and `359.0`: they bound it all the same.
+#[test]
+fn a_whole_number_fields_bounds_written_as_decimals_bound_it() {
+    let screen = form(
+        json!([{"id": "facing", "label": "Facing", "value": "0", "type": "integer", "min": 0.0, "max": 359.0}]),
+        json!([set()]),
+    );
+    let mut ui = Interaction::default();
+    let out = ui.fill(&screen, "set", "form", "facing", "400");
+    assert_eq!(invoked(&out), None);
+    assert_eq!(
+        out.note().as_deref(),
+        Some("Enter a whole number from 0 to 359.")
+    );
+}
+
 #[test]
 fn a_form_field_is_filled_by_the_affordance_that_names_it() {
     let screen = form(
