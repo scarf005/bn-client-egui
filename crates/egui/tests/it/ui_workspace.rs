@@ -818,3 +818,65 @@ fn a_screen_over_a_workspace_is_drawn_over_the_workspace_which_takes_no_input() 
         );
     }
 }
+
+/// The affordances the client invoked so far.
+fn invoked(script: &bn_client_egui::transport::ScriptHandle) -> Vec<String> {
+    script
+        .sent()
+        .iter()
+        .filter_map(|m| {
+            m["params"]["operation"]["affordance_id"]
+                .as_str()
+                .map(str::to_owned)
+        })
+        .collect()
+}
+
+/// `top` pushed over `under`, a workspace that keeps its affordances, at `size`.
+fn over_workspace<'a>(
+    under: Value,
+    top: Value,
+    size: egui::Vec2,
+) -> (H<'a>, bn_client_egui::transport::ScriptHandle) {
+    let mut stack = crate::common::over_map(under);
+    stack.as_array_mut().unwrap().push(top);
+    let (app, script) = crate::common::staged(stack);
+    let mut h = crate::common::themed_harness(size, app);
+    h.run_steps(7);
+    crate::common::settle_windows(&mut h);
+    (h, script)
+}
+
+#[test]
+fn the_bar_of_a_workspace_under_a_screen_runs_nothing_and_leaves_the_keys_to_that_screen() {
+    let keys = crate::ui_window_class::example("keybindings", "keybindings screen");
+    let mut under = workspace();
+    // The same id as the keybindings' own leave: a click on the bar's must not run the screen's.
+    under["affordances"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({"id": "QUIT", "label": "Leave editor",
+        "keys": [], "enabled": true, "expect": "screen", "role": "cancel"}));
+    for size in [egui::vec2(1290.0, 830.0), egui::vec2(1920.0, 1080.0)] {
+        let (mut h, script) = over_workspace(under.clone(), keys.clone(), size);
+        h.get_by_label("Leave editor").click();
+        h.run_steps(3);
+        assert!(
+            !invoked(&script).contains(&"QUIT".to_string()),
+            "{size:?}: the bar's leave ran the keybindings' QUIT"
+        );
+        h.get_by_label("File").click();
+        h.run_steps(3);
+        assert!(
+            h.query_by_label("New").is_none(),
+            "{size:?}: a menu of the workspace under the keybindings opened"
+        );
+        h.event(egui::Event::Text("-".into()));
+        h.run_steps(3);
+        assert!(
+            invoked(&script).contains(&"REMOVE".to_string()),
+            "{size:?}: the keybindings' key did not reach them: {:?}",
+            invoked(&script)
+        );
+    }
+}
