@@ -486,11 +486,11 @@ impl Interaction {
             .filter(|c| !self.items(c, rows).is_empty())
             .collect::<Vec<_>>();
         let focused = self.focus.component_id.clone();
-        // Without a focus, the arrows are a canvas's that moves the engine's cursor.
+        // Without a focus, the arrows are the canvas's.
         let canvas = holders
             .iter()
             .copied()
-            .find(|c| matches!(c, Component::Grid(g) if moves_cursor(g)));
+            .find(|c| matches!(c, Component::Grid(g) if g.role == Some(GridRole::Canvas)));
         let current = holders
             .iter()
             .copied()
