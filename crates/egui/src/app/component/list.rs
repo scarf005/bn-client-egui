@@ -351,7 +351,8 @@ impl<M: GameModel> App<M> {
                 (false, _) => {}
             }
         }
-        // A list with no rows keeps its pane, outlined, as tall as its rows would have been.
+        // A list with no rows keeps its pane, outlined, as tall as its rows would have been, with what the engine
+        // says of it there.
         if rows.is_empty() {
             let pane = egui::Rect::from_x_y_ranges(
                 scrolled.inner_rect.x_range(),
@@ -360,6 +361,10 @@ impl<M: GameModel> App<M> {
             let stroke = egui::Stroke::new(1.0, tokens::BORDER);
             ui.painter()
                 .rect_stroke(pane, 0, stroke, egui::StrokeKind::Inside);
+            if let Some(empty) = &list.empty {
+                let text = egui::RichText::new(markup::plain(&empty.shown())).weak();
+                ui.put(pane.shrink(tokens::U), egui::Label::new(text).wrap());
+            }
         }
         if drawn + PREFETCH >= rows.len() {
             out.push(Intent::More(id.clone()));
