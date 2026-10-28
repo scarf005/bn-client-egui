@@ -58,6 +58,7 @@ impl<M: GameModel> App<M> {
             title_bar: !title.is_empty() || !interaction::titled(self.model.screens()),
             closable: false,
             help: None,
+            inert: false,
         }
     }
 

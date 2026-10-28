@@ -91,6 +91,8 @@ pub struct WindowSpec {
     pub scrolls: bool,
     /// The title bar offers a help button.
     pub help: Option<TitleHelp>,
+    /// Shown under the windows over it and taking no input: no press raises it, and its widgets are off.
+    pub inert: bool,
 }
 
 /// The help button of a title bar: read as `label`, with `tip` on hover.
@@ -540,11 +542,15 @@ pub fn show<R>(
     ctx.data_mut(|d| d.insert_temp(hidden, Hidden::default()));
     let area = egui::Area::new(spec.id)
         .order(egui::Order::Middle)
+        .interactable(!spec.inert)
         .fixed_pos(shown_rect.min)
         .constrain(false)
         .show(ctx, |ui| {
             if veil {
                 ui.set_invisible();
+            }
+            if spec.inert {
+                ui.disable();
             }
             let background = ui.painter().add(egui::Shape::Noop);
             // The area is exactly the window, whatever the contents ask for, so a press on any of it raises it.

@@ -128,8 +128,12 @@ impl<M: GameModel> App<M> {
     /// The top bar while a workspace is the top screen: its menus, the client's buttons and status, and its title,
     /// help and leave at the end, which a window has in its title bar. False when no workspace is up.
     pub(in crate::app) fn workspace_bar(&mut self, ui: &mut egui::Ui) -> bool {
-        let Some(screen) = interaction::described(self.model.screens())
-            .filter(|s| laid_out(s).is_some())
+        // A workspace under the top screen keeps its bar: its title, and its menus, which it has none of there.
+        let screens = self.model.screens();
+        let Some(screen) = screens
+            .iter()
+            .rev()
+            .find(|s| laid_out(s).is_some())
             .cloned()
         else {
             return false;
@@ -204,15 +208,20 @@ impl<M: GameModel> App<M> {
         self.canvas_stop(ui, screen, root, out);
         let status = parts(root, Slot::Status);
         let footer_width = Self::footer_width(ui, footer, true);
-        let asking = self.screens.interaction.ask().is_some() || self.screens.denial.is_some();
+        // The question and the refusal are the top screen's, which a workspace under it does not show.
+        let under = self.screens.under.get();
+        let asking =
+            !under && (self.screens.interaction.ask().is_some() || self.screens.denial.is_some());
         // No strip at the bottom when it would be empty.
         if !status.is_empty() || footer_width > 0.0 || asking {
             egui::Panel::bottom(id("status"))
                 .resizable(false)
                 .show(ui, |ui| {
-                    self.question(ui, screen, out);
-                    if let Some(denial) = &self.screens.denial {
-                        ui.colored_label(BAD, markup::plain(denial));
+                    if !under {
+                        self.question(ui, screen, out);
+                        if let Some(denial) = &self.screens.denial {
+                            ui.colored_label(BAD, markup::plain(denial));
+                        }
                     }
                     // The buttons end the line, at most half of it; the facts wrap in what they leave.
                     let line = ui.available_rect_before_wrap();
