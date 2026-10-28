@@ -197,3 +197,46 @@ fn a_refused_value_marks_its_field_with_the_refusal_beside_it_until_it_is_edited
         );
     }
 }
+
+#[test]
+fn a_value_the_engine_refuses_marks_its_field_with_the_engines_reason_beside_it() {
+    use crate::common::fixture;
+    let mut reply = crate::common::subscribe_reply();
+    reply[0]["result"]["interaction"]["stack"] = crate::common::over_map(editor(None));
+    let (t, script) = bn_client_egui::transport::ScriptedTransport::new();
+    let t = t
+        .on("bn.hello", vec![fixture("hello_result")])
+        .on("bn.subscribe", reply.clone())
+        .on("bn.subscribe", reply)
+        .on("bn.command.submit", vec![fixture("submit_result")]);
+    let clock = bn_client_egui::Clock::manual();
+    let model = EngineModel::open(Box::new(t), bn_client_egui::ConnectOptions::default())
+        .with_clock(clock.clone());
+    let app = App::new(model).with_clock(clock);
+    let mut h = crate::common::themed_harness(SIZES[0], app);
+    h.run_steps(7);
+    crate::common::settle_windows(&mut h);
+    type_into(&mut h, "Fuel %", "70");
+    assert!(
+        script
+            .sent()
+            .iter()
+            .any(|m| m["params"]["operation"]["affordance_id"] == "ed:fuel"),
+        "the value was not sent"
+    );
+    let reason = "Fuel % takes a tank's share from 0 to 100.";
+    script.push(json!({"jsonrpc": "2.0", "method": "bn.command", "params": {"epoch": "e7f3",
+        "command_id": "c:5", "stage": "rejected", "stage_text": "Refused.", "error": "invalid_arguments",
+        "error_text": reason}}));
+    h.run_steps(4);
+    let said = h
+        .get_all_by_label_contains(reason)
+        .map(|n| n.rect())
+        .collect::<Vec<_>>();
+    let box_ = field(&h, "Fuel %");
+    assert!(
+        said.iter()
+            .any(|r| r.top() >= box_.bottom() - 1.0 && r.top() - box_.bottom() < 40.0),
+        "the engine's reason {said:?} is not by Fuel % {box_:?}"
+    );
+}
