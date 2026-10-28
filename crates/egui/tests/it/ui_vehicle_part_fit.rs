@@ -88,7 +88,12 @@ fn the_part_tab_form_stays_beside_the_vehicle_in_a_laptop_window() {
             App::new(model).with_clock(clock),
         );
         h.run_steps(8);
-        let fuel = h.get_by_label("Fuel").rect();
+        // The field's label, not its box, which is named by it too.
+        let fuel = h
+            .query_all_by_label("Fuel")
+            .find(|n| n.accesskit_node().role() == egui::accesskit::Role::Label)
+            .unwrap()
+            .rect();
         // The grid's squares are buttons named by their glyph.
         let grid = h
             .get_all_by_role(egui::accesskit::Role::Button)

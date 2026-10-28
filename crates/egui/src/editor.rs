@@ -131,6 +131,9 @@ pub fn value_editor(
                 edit.widget_info(|| {
                     egui::WidgetInfo::text_edit(true, draft.text.clone(), draft.text.clone(), label)
                 });
+                // The box is named by its field, as its label beside it reads.
+                ui.ctx()
+                    .accesskit_node_builder(edit.id, |b| b.set_label(label));
                 if edit.lost_focus() && draft.text != editor.value {
                     committed = Some(draft.text.clone());
                 }

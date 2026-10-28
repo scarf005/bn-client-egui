@@ -1421,8 +1421,14 @@ fn a_multiline_field_holding_a_long_text_stays_a_few_lines_tall_and_as_wide_as_t
     let text = json!({"text": {"field_id": "field:t"}});
     let (mut h, _script) = harness(dialog(form, vec![affordance("fill", &[], text)]));
     h.run_steps(5);
-    let rect = h.get_by_label("Mapgen").rect();
-    let after = h.get_by_label("After").rect();
+    // The fields' labels, not their boxes, which are named by them too.
+    let label = |name: &str| {
+        h.query_all_by_label(name)
+            .find(|n| n.accesskit_node().role() == egui::accesskit::Role::Label)
+            .unwrap()
+            .rect()
+    };
+    let (rect, after) = (label("Mapgen"), label("After"));
     let window = h.ctx.content_rect();
     // The next field follows within a few lines, and the box is as wide as the window's room allows.
     assert!(

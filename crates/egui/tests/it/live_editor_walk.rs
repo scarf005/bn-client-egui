@@ -2922,7 +2922,6 @@ fn a_modder_opens_draws_undoes_saves_tests_and_leaves_the_map_editor_workspace()
     paint(&mut h, 8, 12);
     menu(&mut h, "View", "What can spawn here");
     rest(&mut h);
-    shot_both(&mut h, "ws-map-07b-loot");
     let top_screen = h.state().model.screens().last().unwrap();
     let Some(Component::List(loot)) = top_screen.root.as_ref().unwrap().find("editor:loot") else {
         panic!("no loot list: {:#?}", labels(&h));
@@ -2930,6 +2929,7 @@ fn a_modder_opens_draws_undoes_saves_tests_and_leaves_the_map_editor_workspace()
     let first = loot.rows.first().expect("a kind of item").label.shown();
     let at = find(&h, &first).expect("the first kind drawn");
     assert!(in_view(&h, at), "{first} at {at:?}");
+    shot_both(&mut h, "ws-map-07b-loot");
 
     // Saved as a mod file from the File menu, which asks for the path as the footer would.
     let path = crate::common::live::profile_dir().join("mods/zz_ws_house.json");

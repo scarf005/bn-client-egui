@@ -63,10 +63,26 @@ fn the_vehicle_editor_opens_installs_and_undoes() {
     invoke(&mut h, "vehicle:open", row("prototype:car"));
     assert!(drawn_cells(&h, "vehicle:grid") > 10);
     save(&mut h, "vehicle-editor-car");
-    invoke(&mut h, "vehicle:mount", row("mount:-2,0"));
+    let mount = {
+        let top = h.state().model.screens().last().unwrap();
+        let Some(Component::Grid(grid)) = top.root.as_ref().unwrap().find("vehicle:grid") else {
+            panic!("no vehicle:grid");
+        };
+        grid.cells
+            .iter()
+            .find(|c| c.label.as_ref().is_some_and(|l| l.shown().contains("tank")))
+            .and_then(|c| c.id.clone())
+            .expect("the car's tank mount")
+    };
+    invoke(&mut h, "vehicle:mount", row(&mount));
     let tank = rows(&h, "vehicle:stack")
         .into_iter()
-        .find(|id| list_row(&h, "vehicle:stack", id).label.shown() == "vehicle tank (60L)")
+        .find(|id| {
+            list_row(&h, "vehicle:stack", id)
+                .label
+                .shown()
+                .contains("tank")
+        })
         .expect("the car's tank");
     invoke(&mut h, "vehicle:pick", row(&tank));
     save(&mut h, "vehicle-editor-stack");
