@@ -194,10 +194,11 @@ fn reveal_rect(h: &mut H, what: &str, rect_of: impl Fn(&H) -> Option<egui::Rect>
     panic!("{what} is never brought into view by the wheel");
 }
 
-/// Turns the wheel over the window's middle by `dy` points and lets the frames follow.
+/// Turns the wheel over the right column of a workspace, which holds the lists and forms a walk reaches for, by
+/// `dy` points and lets the frames follow; over the canvas the wheel would zoom it.
 fn wheel(h: &mut H, dy: f32) {
     let size = h.ctx.content_rect().size();
-    h.hover_at(egui::pos2(size.x * 0.4, size.y * 0.5));
+    h.hover_at(egui::pos2(size.x - 120.0, size.y * 0.5));
     h.run_steps(2);
     h.event(egui::Event::MouseWheel {
         unit: egui::MouseWheelUnit::Point,

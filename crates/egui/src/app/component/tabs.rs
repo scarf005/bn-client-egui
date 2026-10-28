@@ -46,9 +46,17 @@ impl<M: GameModel> App<M> {
         let width = |text: &str, style: egui::TextStyle| {
             text_width(ui, text, &style.resolve(ui.style())) + padding
         };
+        // A tab's key stands after its name as a dim caption.
+        let key = |tab: &Tab| {
+            tab.hotkey.as_ref().map_or(0.0, |k| {
+                ui.spacing().icon_spacing
+                    + text_width(ui, k, &egui::TextStyle::Small.resolve(ui.style()))
+            })
+        };
         let widths = labels
             .iter()
-            .map(|l| width(&markup::plain(l), egui::TextStyle::Body))
+            .zip(&tabs.tabs)
+            .map(|(l, tab)| width(&markup::plain(l), egui::TextStyle::Body) + key(tab))
             .collect::<Vec<_>>();
         let rows = tab_rows(&widths, ui.available_width());
         egui::Frame::NONE
@@ -81,7 +89,13 @@ impl<M: GameModel> App<M> {
     ) -> bool {
         let on = tab.enabled && select.map_or(self.screens.passive, |a| a.enabled);
         let text = self.line(ui, label);
-        let button = self.control(ui, text, &tab.id, on, tab.selected);
+        let button = match &tab.hotkey {
+            Some(key) => {
+                let key = egui::RichText::new(key).small().weak();
+                self.control(ui, (text, key), &tab.id, on, tab.selected)
+            }
+            None => self.control(ui, text, &tab.id, on, tab.selected),
+        };
         let button = match (&tab.denial, on) {
             (Some(denial), false) => button.on_disabled_hover_text(markup::plain(&denial.shown())),
             (None, true) | (Some(_), true) => match &tab.hotkey {
@@ -90,6 +104,13 @@ impl<M: GameModel> App<M> {
             },
             _ => button,
         };
+        // Named by its name alone, its key as the shortcut.
+        a11y::keyed_button(
+            ui.ctx(),
+            button.id,
+            &markup::plain(label),
+            tab.hotkey.as_deref(),
+        );
         a11y::tab(ui.ctx(), button.id, tab.selected);
         if tab.selected {
             let bar =

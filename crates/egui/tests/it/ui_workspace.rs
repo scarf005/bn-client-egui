@@ -549,6 +549,11 @@ fn a_tool_tab_shows_its_key_beside_its_name() {
                 {"id": "tool:line", "label": "Line", "selected": false, "enabled": true, "hotkey": "l"}]}));
         });
         for (name, key) in [("Pencil", "b"), ("Line", "l")] {
+            assert!(
+                h.query_by_role_and_label(egui::accesskit::Role::Tab, name)
+                    .is_some(),
+                "{size:?}: no tab named {name:?}"
+            );
             let name = painted(&h, name);
             let key = painted(&h, key);
             assert!(
