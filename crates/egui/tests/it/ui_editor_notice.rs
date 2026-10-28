@@ -274,3 +274,28 @@ fn news_a_described_row_already_says_is_shown_once() {
         assert_eq!(said.len(), 1, "{size:?}: {NOTICE:?} drawn at {said:?}");
     }
 }
+
+/// A form sent before the editor closed is no place for news once it opens again: that news is by the status line.
+#[test]
+fn news_after_the_editor_closed_and_opened_again_is_in_the_status_strip() {
+    for size in SIZES {
+        let (mut h, script) = shown(size, None);
+        h.get_by_label("Stamp text").click();
+        h.run_steps(3);
+        script.push(crate::common::fixture("events_41_walk"));
+        h.run_steps(4);
+        let map = crate::common::over_map(json!(null))[0].clone();
+        script.push(interaction(json!([map])));
+        h.run_steps(6);
+        let mut reopened = interaction(crate::common::over_map(editor(Some(NOTICE))));
+        let event = &mut reopened["params"]["events"][0];
+        (event["sequence"], event["revision"]) = (json!("43"), json!("34"));
+        script.push(reopened);
+        h.run_steps(6);
+        let (notice, status) = (rect(&h, NOTICE), rect(&h, "No file open"));
+        assert!(
+            (notice.bottom() - status.top()).abs() < 40.0,
+            "{size:?}: news {notice:?} is not by the status line {status:?}"
+        );
+    }
+}
