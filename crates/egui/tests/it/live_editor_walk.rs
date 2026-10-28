@@ -105,7 +105,7 @@ fn rest(h: &mut H) {
 }
 
 /// Clicks the widget whose label contains `label`, as a person would, once it stopped moving.
-fn click(h: &mut H, label: &str) {
+pub(crate) fn click(h: &mut H, label: &str) {
     reveal(h, label);
     press(h, label);
 }
@@ -200,7 +200,7 @@ fn press(h: &mut H, label: &str) {
     click_at(h, find(h, label).unwrap().center());
 }
 
-fn key(h: &mut H, key: egui::Key) {
+pub(crate) fn key(h: &mut H, key: egui::Key) {
     h.key_press(key);
     rest(h);
 }
@@ -453,11 +453,6 @@ fn click_tab(h: &mut H, label: &str) {
         })
     });
     rest(h);
-}
-
-/// Whether a button is labelled exactly `label`: a row of a list, not a square that names it among its parts.
-fn has_row(h: &H, label: &str) -> bool {
-    labels(h).contains(&format!("Button {label}"))
 }
 
 /// Scrolls until square (`x`, `y`) of the canvas is in view and clicks it.
@@ -741,10 +736,10 @@ fn the_vehicle_editor_opens_a_prototype_installs_and_saves_a_mod_file() {
     click(&mut h, "vehicle tank (60L)");
     rest(&mut h);
     shot(&mut h, "veh-5-mount");
-    double_click(&mut h, "vehicle tank (60L)");
+    pick_stacked(&mut h, "vehicle tank (60L)");
     rest(&mut h);
     shot(&mut h, "veh-6-part-picked");
-    click_tab(&mut h, "Part");
+    click_tab(&mut h, "Part settings");
     rest(&mut h);
     shot(&mut h, "veh-8-part-tab");
     click_beside(&mut h, "Fuel");
@@ -753,34 +748,35 @@ fn the_vehicle_editor_opens_a_prototype_installs_and_saves_a_mod_file() {
     rest(&mut h);
     shot(&mut h, "veh-9-fuel");
 
-    // A headlight installed on the quarterpanel mount from the filtered part list, then shown on the Mount tab.
-    click(&mut h, "frame, quarterpanel");
-    click_tab(&mut h, "Install");
-    click_input(&mut h, "Search");
+    // A headlight chosen from the filtered part list and installed by a click on the quarterpanel mount, then shown
+    // on the Parts here tab.
+    click_input(&mut h, "Parts/Search");
     type_text(&mut h, "headlight");
     key(&mut h, egui::Key::Enter);
     rest(&mut h);
     shot(&mut h, "veh-10-parts-filtered");
     double_click(&mut h, "headlight");
+    click(&mut h, "frame, quarterpanel");
     rest(&mut h);
     shot(&mut h, "veh-11-installed");
-    click_tab(&mut h, "Mount");
+    click(&mut h, "Select");
+    click_tab(&mut h, "Parts here");
     shot(&mut h, "veh-12-mount-after");
-    assert!(has_row(&h, "headlight"));
+    assert!(stacked(&h, "headlight"));
 
-    // Removed from the stack by the footer's Remove and brought back by the footer's Undo; the engine binds no key to the vehicle editor's Undo.
-    double_click(&mut h, "headlight");
-    click_footer(&mut h, "Remove");
+    // The installed part, picked on top of its mount, removed by the list's own Remove and brought back by the Edit
+    // menu's Undo.
+    click(&mut h, "Remove headlight");
     rest(&mut h);
     shot(&mut h, "veh-13-removed");
-    assert!(!has_row(&h, "headlight"), "{}", labels(&h).join("\n"));
+    assert!(!stacked(&h, "headlight"), "{}", labels(&h).join("\n"));
     click_footer(&mut h, "Undo");
     rest(&mut h);
-    assert!(has_row(&h, "headlight"));
+    assert!(stacked(&h, "headlight"));
     shot(&mut h, "veh-14-undone");
 
     // The vehicle's name on the Vehicle tab.
-    click_tab(&mut h, "Vehicle");
+    click_tab(&mut h, "Name and flags");
     rest(&mut h);
     shot(&mut h, "veh-15-vehicle-tab");
     click_beside(&mut h, "Name");
@@ -799,12 +795,11 @@ fn the_vehicle_editor_opens_a_prototype_installs_and_saves_a_mod_file() {
     rest(&mut h);
     shot(&mut h, "veh-18-saved");
 
-    // The edited design spawned beside the avatar, listed on the World tab, and looked at on the map.
+    // The edited design spawned beside the avatar, and looked at on the map the editor leaves for.
     click_footer(&mut h, "Spawn");
-    rest(&mut h);
-    click_tab(&mut h, "World");
-    shot(&mut h, "veh-19-world");
-    key(&mut h, egui::Key::Escape);
+    run_until(&mut h, "the map", 60, |h| {
+        !h.state().model.busy() && top(h).as_deref() != Some("vehicle_editor")
+    });
     rest(&mut h);
     shot(&mut h, "veh-20-spawned-on-map");
     let saved = std::fs::read_to_string(&path).unwrap_or_default();
@@ -838,8 +833,8 @@ fn the_vehicle_editor_sets_the_ammunition_of_a_turret_from_the_part_tab() {
 
     // The mount holding a turret, then the turret among its parts, then the Part tab's form.
     click(&mut h, "turret mount, mounted M249, heavy duty opaque door");
-    double_click(&mut h, "mounted M249");
-    click_tab(&mut h, "Part");
+    pick_stacked(&mut h, "mounted M249");
+    click_tab(&mut h, "Part settings");
     rest(&mut h);
     shot(&mut h, "turret-2-part-tab-before");
     let form = "vehicle:part_form";
@@ -883,17 +878,28 @@ fn open_more_tabs(h: &mut H) {
 }
 
 /// Clicks into the text box whose accessible label is exactly `label`, such as the search box above a list; of
-/// several, the one drawn last, in the innermost pane.
+/// several, the one drawn last, in the innermost pane. `heading/label` names the first such box under the heading.
 fn click_input(h: &mut H, label: &str) {
+    let (heading, label) = label.rsplit_once('/').unwrap_or(("", label));
     let rect_of = |h: &H| {
-        h.root()
+        let boxes = h
+            .root()
             .children_recursive()
+            .skip_while(|n| {
+                !heading.is_empty() && n.accesskit_node().label().as_deref() != Some(heading)
+            })
             .filter(|n| {
                 let a = n.accesskit_node();
                 a.role() == egui::accesskit::Role::TextInput && a.label().as_deref() == Some(label)
             })
-            .last()
             .map(|n| n.rect())
+            .collect::<Vec<_>>();
+        if heading.is_empty() {
+            boxes.last()
+        } else {
+            boxes.first()
+        }
+        .copied()
     };
     let at = click_stable(h, label, rect_of);
     click_at(h, at.center());
@@ -2322,6 +2328,51 @@ fn grid_cells(h: &H, id: &str) -> Vec<((u32, u32), String)> {
         .collect()
 }
 
+/// Clicks the square of the vehicle editor's grid that holds a part named `part`, among others.
+fn click_square(h: &mut H, part: &str) {
+    let square = |h: &H| {
+        h.root()
+            .children_recursive()
+            .find(|n| {
+                let a = n.accesskit_node();
+                a.role() == egui::accesskit::Role::Button
+                    && a.label()
+                        .is_some_and(|l| l.split(", ").any(|p| p == part) && l.contains(", "))
+            })
+            .map(|n| n.rect())
+    };
+    let at = click_stable(h, part, square);
+    click_at(h, at.center());
+    rest(h);
+}
+
+/// Double-clicks the row of the vehicle editor's stack named `part`, not a square that names it among its parts.
+fn pick_stacked(h: &mut H, part: &str) {
+    let row = |h: &H| {
+        h.root()
+            .children_recursive()
+            .find(|n| n.accesskit_node().label().as_deref() == Some(part))
+            .map(|n| n.rect())
+    };
+    let at = click_stable(h, part, row).center();
+    h.hover_at(at);
+    h.run_steps(2);
+    tap(h, at);
+    tap(h, at);
+    rest(h);
+}
+
+/// Whether the vehicle editor's stack of parts on the picked mount has a part named `label`.
+fn stacked(h: &H, label: &str) -> bool {
+    let top = h.state().model.screens().last().unwrap();
+    let Some(bn_client_egui::protocol::Component::List(stack)) =
+        top.root.as_ref().unwrap().find("vehicle:stack")
+    else {
+        return false;
+    };
+    stack.rows.iter().any(|r| r.label.shown() == label)
+}
+
 /// The text of the vehicle editor's notice, empty when it shows none.
 fn vehicle_notice(h: &H) -> String {
     let top = h.state().model.screens().last().unwrap();
@@ -2359,7 +2410,7 @@ fn the_vehicle_editor_turns_a_preview_reloads_a_file_and_asks_before_leaving() {
     println!("FILE {text}");
 
     // The Spawn tab turns the design: the cells of the turned grid differ between facings 0 and 90.
-    click_tab(&mut h, "Spawn");
+    click_tab(&mut h, "Test spawn");
     rest(&mut h);
     shot_at(&mut h, "vr-2-spawn-tab", &sizes);
     dump(&h, "spawn tab");
@@ -2379,7 +2430,7 @@ fn the_vehicle_editor_turns_a_preview_reloads_a_file_and_asks_before_leaving() {
         |name: &str| text.replacen("\"name\": \"Bicycle\"", &format!("\"name\": \"{name}\""), 1);
     assert_ne!(on_disk("Disk Bike"), text, "no name to change in {text}");
     std::fs::write(&path, on_disk("Disk Bike")).unwrap();
-    click_tab(&mut h, "Mount");
+    click_tab(&mut h, "Parts here");
     rest(&mut h);
     shot_at(&mut h, "vr-4-reloaded", &sizes);
     dump(&h, "after the file changed");
@@ -2391,13 +2442,13 @@ fn the_vehicle_editor_turns_a_preview_reloads_a_file_and_asks_before_leaving() {
     );
 
     // An edited document keeps its edit, says so, and refuses to save over the other file.
-    click_tab(&mut h, "Vehicle");
+    click_tab(&mut h, "Name and flags");
     click_beside(&mut h, "Name");
     replace_text(&mut h, "Mine");
     key(&mut h, egui::Key::Enter);
     rest(&mut h);
     std::fs::write(&path, on_disk("Disk Bike Again")).unwrap();
-    click_tab(&mut h, "Mount");
+    click_tab(&mut h, "Parts here");
     rest(&mut h);
     shot_at(&mut h, "vr-5-kept-edit", &sizes);
     assert!(find(&h, "Mine").is_some(), "{:?}", labels(&h));
@@ -2945,20 +2996,31 @@ fn a_modder_opens_a_prototype_installs_a_part_spawns_and_leaves_the_vehicle_edit
     shot_both(&mut h, "ws-veh-03-opened");
     dump(&h, "the opened prototype");
 
-    // A mount picked by a click on its square, and a headlight installed there from the Install tab.
-    click(&mut h, "bicycle wheel");
+    // A mount picked by a click on its square, and a headlight chosen from the part list and installed there by a
+    // click on that square.
+    click_square(&mut h, "67.5cm bicycle wheel");
     rest(&mut h);
     shot_both(&mut h, "ws-veh-04-mount");
-    click_tab(&mut h, "Install");
-    click_input(&mut h, "Search");
+    click_input(&mut h, "Parts/Search");
     type_text(&mut h, "headlight");
     key(&mut h, egui::Key::Enter);
     rest(&mut h);
     shot_both(&mut h, "ws-veh-05-parts");
     double_click(&mut h, "headlight");
+    click_square(&mut h, "67.5cm bicycle wheel");
     rest(&mut h);
     shot_both(&mut h, "ws-veh-06-installed");
     dump(&h, "after the install");
+    assert!(stacked(&h, "headlight"), "{}", labels(&h).join("\n"));
+
+    // Every tab of the design is reached and read in the right column.
+    for tab in ["Items here", "Raw JSON", "Parts here"] {
+        click_tab(&mut h, tab);
+        shot_both(
+            &mut h,
+            &format!("ws-veh-06-{}", tab.replace(' ', "-").to_lowercase()),
+        );
+    }
 
     // Spawned beside the avatar from the World menu: the map shows it.
     menu(&mut h, "World", "Spawn");

@@ -43,6 +43,10 @@ fn the_vehicle_editor_opens_installs_and_undoes() {
     let (mut h, _root) = start(&dir);
     invoke(&mut h, "menu:tab", row("editor"));
     invoke(&mut h, "menu:entry", row("editor:vehicle"));
+    // The mod list first, left with the mods as they are.
+    wait_kind(&mut h, "world_creation");
+    crate::live_editor_walk::key(&mut h, eframe::egui::Key::Escape);
+    crate::live_editor_walk::click(&mut h, "Yes");
     run_until(&mut h, "the vehicle editor", 900, |h| {
         !h.state().model.busy()
             && h.state()
@@ -59,10 +63,10 @@ fn the_vehicle_editor_opens_installs_and_undoes() {
     invoke(&mut h, "vehicle:open", row("prototype:car"));
     assert!(drawn_cells(&h, "vehicle:grid") > 10);
     save(&mut h, "vehicle-editor-car");
-    invoke(&mut h, "vehicle:mount", row("mount:-2,-1"));
+    invoke(&mut h, "vehicle:mount", row("mount:-2,0"));
     let tank = rows(&h, "vehicle:stack")
         .into_iter()
-        .find(|id| list_row(&h, "vehicle:stack", id).description.shown() == "/parts/18/parts/2")
+        .find(|id| list_row(&h, "vehicle:stack", id).label.shown() == "vehicle tank (60L)")
         .expect("the car's tank");
     invoke(&mut h, "vehicle:pick", row(&tank));
     save(&mut h, "vehicle-editor-stack");
@@ -78,13 +82,14 @@ fn the_vehicle_editor_opens_installs_and_undoes() {
     save(&mut h, "vehicle-editor-list");
     invoke(&mut h, "vehicle:open", row("prototype:bicycle"));
     let opened = glyphs(&h, "vehicle:grid");
-    assert_eq!((opened.len(), opened[0].chars().count()), (3, 5));
+    assert_eq!((opened.len(), opened[0].chars().count()), (5, 7));
     assert_eq!(drawn_cells(&h, "vehicle:grid"), 3);
 
     invoke(&mut h, "vehicle:mount", row("mount:1,0"));
     let before = rows(&h, "vehicle:stack");
     invoke(&mut h, "vehicle:part_filter", text("headlight"));
-    invoke(&mut h, "vehicle:install", row("vpart:headlight"));
+    invoke(&mut h, "vehicle:choose", row("vpart:headlight"));
+    invoke(&mut h, "vehicle:mount", row("mount:1,0"));
     assert_eq!(rows(&h, "vehicle:stack").len(), before.len() + 1);
     save(&mut h, "vehicle-editor-installed");
 
@@ -109,7 +114,8 @@ fn the_vehicle_editor_opens_installs_and_undoes() {
     invoke(&mut h, "vehicle:mount", row("mount:1,0"));
     let plain = rows(&h, "vehicle:stack");
     invoke(&mut h, "vehicle:part_filter", text("headlight"));
-    invoke(&mut h, "vehicle:install", row("vpart:headlight"));
+    invoke(&mut h, "vehicle:choose", row("vpart:headlight"));
+    invoke(&mut h, "vehicle:mount", row("mount:1,0"));
     assert_eq!(rows(&h, "vehicle:stack").len(), plain.len() + 1);
     save(&mut h, "vehicle-editor-live");
     invoke(&mut h, "vehicle:undo", InvokeArgs::default());
