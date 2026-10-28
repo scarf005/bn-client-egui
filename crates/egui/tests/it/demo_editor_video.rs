@@ -769,7 +769,7 @@ impl Rec {
         self.click_at(at);
     }
 
-    /// Opens the palette tab `tab` and picks the part row `part` with a double click.
+    /// Opens the palette tab `tab` and picks the part row `part`.
     fn pick(&mut self, tab: &str, part: &str) {
         self.tab(tab);
         // The palette's rows lie under its tab strip, over the heads of the sections under it, right of the
@@ -801,10 +801,7 @@ impl Rec {
         };
         crate::live_editor_walk::reveal_rect(&mut self.h, part, row);
         let at = self.stable(part, row).center();
-        self.move_to(at);
-        self.tap();
-        self.tap();
-        self.done();
+        self.click_at(at);
     }
 
     /// Clicks each of `mounts` to install the picked part there.
