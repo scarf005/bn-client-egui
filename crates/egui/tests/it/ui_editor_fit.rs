@@ -5,7 +5,7 @@ use bn_client_egui::transport::ScriptedTransport;
 use bn_client_egui::{App, Clock, ConnectOptions, EngineModel};
 use eframe::egui;
 use egui_kittest::Harness;
-use egui_kittest::kittest::Queryable;
+use egui_kittest::kittest::{NodeT, Queryable};
 use serde_json::{Value, json};
 
 type H<'a> = Harness<'a, App<EngineModel>>;
@@ -167,5 +167,82 @@ fn a_legend_of_one_symbol_leaves_no_screenful_of_empty_list_above_the_catalog_ta
     assert!(
         tab.top() - row.bottom() < 200.0,
         "tabs {tab:?} under row {row:?}"
+    );
+}
+
+/// The drawn square at `x`,`y` of the canvas.
+fn square(h: &H, x: u32, y: u32) -> egui::Rect {
+    h.query_all_by_label(&format!("c{x},{y}."))
+        .find(|n| n.accesskit_node().role() == egui::accesskit::Role::Button)
+        .map(|n| n.rect())
+        .unwrap_or_else(|| panic!("no square {x},{y}"))
+}
+
+/// The x of the left and the right column's resize handles.
+fn handles(h: &H) -> (f32, f32) {
+    let xs = h
+        .get_all_by_label("Resize workspace column")
+        .map(|n| n.rect().center().x)
+        .collect::<Vec<_>>();
+    (
+        xs.iter().copied().fold(f32::MAX, f32::min),
+        xs.iter().copied().fold(0.0, f32::max),
+    )
+}
+
+/// How much room is left beside the whole canvas, on its left and on its right.
+fn beside_canvas(h: &H) -> (f32, f32) {
+    let (left, right) = handles(h);
+    (
+        square(h, 0, 0).left() - left,
+        right - square(h, 23, 0).right(),
+    )
+}
+
+/// `editor` with each square named by its place.
+fn named_squares() -> Value {
+    let mut screen = editor();
+    let canvas = find(&mut screen["root"], "editor:canvas").unwrap();
+    for cell in canvas["cells"].as_array_mut().unwrap() {
+        cell["label"] = format!("c{},{}.", cell["x"], cell["y"]).into();
+    }
+    screen
+}
+
+#[test]
+fn the_right_column_takes_the_room_the_whole_canvas_leaves_as_the_window_changes() {
+    let mut h = open(named_squares(), egui::vec2(1290.0, 830.0));
+    for size in [egui::vec2(1290.0, 830.0), egui::vec2(1920.0, 1080.0)] {
+        h.set_size(size);
+        h.run_steps(8);
+        let (left, right) = beside_canvas(&h);
+        assert!(
+            left < 40.0 && right < 40.0,
+            "{size:?}: {left} left and {right} right of the canvas"
+        );
+    }
+}
+
+#[test]
+fn a_right_column_the_player_resized_keeps_its_width_as_the_window_changes() {
+    let mut h = open(named_squares(), egui::vec2(1290.0, 830.0));
+    let (_, handle) = handles(&h);
+    let y = square(&h, 0, 12).center().y;
+    h.hover_at(egui::pos2(handle, y));
+    h.run_steps(2);
+    h.drag_at(egui::pos2(handle, y));
+    h.run_steps(1);
+    h.hover_at(egui::pos2(handle + 60.0, y));
+    h.run_steps(2);
+    h.drop_at(egui::pos2(handle + 60.0, y));
+    h.run_steps(4);
+    let width = |h: &H| h.ctx.content_rect().right() - handles(h).1;
+    let dragged = width(&h);
+    h.set_size(egui::vec2(1920.0, 1080.0));
+    h.run_steps(8);
+    assert!(
+        (width(&h) - dragged).abs() < 2.0,
+        "the column {dragged} wide became {}",
+        width(&h)
     );
 }
