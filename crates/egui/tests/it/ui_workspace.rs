@@ -476,3 +476,66 @@ fn without_tools_the_log_takes_the_left_column() {
         );
     }
 }
+
+/// The painted texts that begin with `start`, with the number of lines each takes.
+fn painted_lines(h: &H, start: &str) -> Vec<(String, usize)> {
+    fn walk(shape: &egui::Shape, start: &str, out: &mut Vec<(String, usize)>) {
+        match shape {
+            egui::Shape::Text(t) if t.galley.text().starts_with(start) => {
+                out.push((t.galley.text().to_owned(), t.galley.rows.len()));
+            }
+            egui::Shape::Vec(shapes) => shapes.iter().for_each(|s| walk(s, start, out)),
+            _ => {}
+        }
+    }
+    let mut out = vec![];
+    h.output()
+        .shapes
+        .iter()
+        .for_each(|c| walk(&c.shape, start, &mut out));
+    out
+}
+
+#[test]
+fn a_palette_row_keeps_its_name_whole_and_cuts_its_id() {
+    let names = [
+        "reinforced wide-angle headlight",
+        "motorcycle headlight",
+        "headlight",
+    ];
+    let ids = [
+        "wide_headlight_reinforced",
+        "motorcycle_headlight",
+        "headlight",
+    ];
+    for (size, lines) in [(SIZES[0], 2), (SIZES[1], 1)] {
+        let h = shown_with(size, |parts| {
+            let rows = names
+                .iter()
+                .zip(ids)
+                .map(|(name, id)| {
+                    json!({"id": format!("vpart:{id}"), "label": name, "description": "",
+                    "denial": "", "enabled": true, "selectable": true, "selected": false,
+                    "columns": [{"key": "id", "label": "ID", "value": id}]})
+                })
+                .collect::<Vec<_>>();
+            parts[2] = json!({"id": "ws:palette", "kind": "list", "label": "Parts", "slot": "palette",
+                "columns": [{"key": "id", "label": "ID"}], "total": rows.len(), "rows": rows,
+                "selection": "single"});
+        });
+        for name in names {
+            let shown = painted_lines(&h, name);
+            assert!(
+                !shown.is_empty() && shown.iter().all(|(_, n)| *n <= lines),
+                "{size:?}: {name:?} painted as {shown:?}"
+            );
+        }
+        for id in ids {
+            let start = &id[..4];
+            assert!(
+                !painted_lines(&h, start).is_empty(),
+                "{size:?}: no part of {id:?} painted"
+            );
+        }
+    }
+}
