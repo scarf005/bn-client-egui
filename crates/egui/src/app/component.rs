@@ -589,7 +589,11 @@ impl<M: GameModel> App<M> {
         out: &mut Vec<Intent>,
     ) -> Shown<()> {
         let title = markup::plain(&screen.title.as_ref().map(Text::shown).unwrap_or_default());
-        let frame = super::menu::list_frame(ctx);
+        // A workspace fills the view edge to edge; its panels keep their own margins.
+        let frame = match workspace::laid_out(screen) {
+            Some(_) => egui::Frame::NONE.fill(tokens::DIALOG),
+            None => super::menu::list_frame(ctx),
+        };
         let region = self.region.unwrap_or_else(|| ctx.content_rect());
         // The squares to keep clear: the engine's cursor and the avatar, a square around each.
         let avoid = self.map_view.map_or(vec![], |view| {
@@ -672,15 +676,15 @@ impl<M: GameModel> App<M> {
             };
             // A screen that fills the room keeps its footer under its body, whatever the body's height.
             if placement.class == Class::Full {
+                if let Some(split) = workspace::laid_out(screen) {
+                    return self.workspace(ui, screen, (split, &rest), out);
+                }
                 egui::Panel::bottom(egui::Id::new(("footer", &screen.screen_id)))
                     .resizable(false)
                     .frame(egui::Frame::NONE)
                     .show_separator_line(false)
                     .show(ui, |ui| footer(ui, out));
                 self.menu_bar(ui, screen, out);
-                if let Some(split) = workspace::laid_out(screen) {
-                    return self.workspace(ui, screen, split, out);
-                }
                 // A body taller than the room, a full-size grid over further parts, scrolls instead of being cut.
                 egui::CentralPanel::no_frame().show(ui, |ui| {
                     let scroll = egui::ScrollArea::vertical()

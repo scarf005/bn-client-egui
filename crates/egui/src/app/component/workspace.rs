@@ -115,12 +115,13 @@ impl<M: GameModel> App<M> {
         }
     }
 
-    /// The parts of `root` by slot, around the canvas that takes the room left.
+    /// The parts of `root` by slot, around the canvas that takes the room left, and the screen's `footer` buttons
+    /// at the end of the status line.
     pub(super) fn workspace(
         &self,
         ui: &mut egui::Ui,
         screen: &Screen,
-        root: &Split,
+        (root, footer): (&Split, &[&Affordance]),
         out: &mut Vec<Intent>,
     ) {
         let id = |name: &str| egui::Id::new((name, &screen.screen_id));
@@ -130,13 +131,40 @@ impl<M: GameModel> App<M> {
             format!("workspace-side {}", screen.screen_id),
             format!("workspace-log {}", screen.screen_id),
         );
-        egui::Panel::bottom(id("status"))
-            .resizable(false)
-            .show(ui, |ui| {
-                parts(root, Slot::Status)
-                    .into_iter()
-                    .for_each(|c| self.status_line(ui, screen, c, out));
-            });
+        let status = parts(root, Slot::Status);
+        let footer_width = Self::footer_width(ui, footer, true);
+        let asking = self.screens.interaction.ask().is_some() || self.screens.denial.is_some();
+        // No strip at the bottom when it would be empty.
+        if !status.is_empty() || footer_width > 0.0 || asking {
+            egui::Panel::bottom(id("status"))
+                .resizable(false)
+                .show(ui, |ui| {
+                    self.question(ui, screen, out);
+                    if let Some(denial) = &self.screens.denial {
+                        ui.colored_label(BAD, markup::plain(denial));
+                    }
+                    // The buttons end the line, at most half of it; the facts wrap in what they leave.
+                    let line = ui.available_rect_before_wrap();
+                    let gap = ui.spacing().item_spacing.x;
+                    let split = line.right() - footer_width.min(line.width() / 2.0);
+                    // Beside buttons, the facts' first line sits level with their words.
+                    let lift = match footer_width > 0.0 {
+                        true => ui.spacing().button_padding.y,
+                        false => 0.0,
+                    };
+                    let mut facts = ui.new_child(
+                        egui::UiBuilder::new()
+                            .max_rect(line.with_max_x(split - gap).with_min_y(line.top() + lift)),
+                    );
+                    status
+                        .iter()
+                        .for_each(|c| self.status_line(&mut facts, screen, c, out));
+                    let mut buttons =
+                        ui.new_child(egui::UiBuilder::new().max_rect(line.with_min_x(split)));
+                    self.footer(&mut buttons, footer, true, out);
+                    ui.advance_cursor_after_rect(facts.min_rect().union(buttons.min_rect()));
+                });
+        }
         let tools = parts(root, Slot::Tools);
         if !tools.is_empty() {
             egui::Panel::left(egui::Id::new(&tools_id))

@@ -162,6 +162,19 @@ impl<M: GameModel> App<M> {
         }
     }
 
+    /// The width `footer` takes for all of `affordances` on one row; 0 when it draws no button.
+    pub(super) fn footer_width(ui: &egui::Ui, affordances: &[&Affordance], title_bar: bool) -> f32 {
+        let row = footer_buttons(affordances, title_bar);
+        match row.back.is_empty()
+            && row.rest.is_empty()
+            && row.confirm.is_empty()
+            && row.help.is_none()
+        {
+            true => 0.0,
+            false => row.width(ui, row.rest.len()),
+        }
+    }
+
     /// The screen's own actions under its content, as `footer_buttons` picks them, on one row as wide as the
     /// room left to it.
     pub(super) fn footer(

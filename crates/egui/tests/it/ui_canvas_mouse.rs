@@ -168,18 +168,20 @@ fn the_wheel_over_an_open_menu_does_not_zoom_the_canvas_under_it() {
     // Zoomed in, the grid reaches up under the menu bar.
     let (mut h, _script, at) = zoomed();
     let before = square(&h, 5, 5).unwrap().width();
-    h.get_by_role_and_label(egui::accesskit::Role::Button, "File")
+    // The longest menu, which reaches down over the canvas.
+    h.get_by_role_and_label(egui::accesskit::Role::Button, "World")
         .click();
     h.run_steps(4);
-    let item = h.get_by_label("Extract legend to palette").rect();
-    let covered = (0..SIDE)
+    let squares = (0..SIDE)
         .flat_map(|y| (0..SIDE).map(move |x| (x, y)))
         .filter_map(|(x, y)| square(&h, x, y))
-        .any(|r| r.intersects(item));
-    assert!(
-        covered,
-        "the menu is over the canvas: {item:?}, pointer was {at:?}"
-    );
+        .collect::<Vec<_>>();
+    // An item of the menu that lies over the canvas.
+    let item = ["Vehicle editor", "Apply to game", "Stamp", "Test"]
+        .into_iter()
+        .map(|label| h.get_by_label(label).rect())
+        .find(|item| squares.iter().any(|r| r.contains(item.center())))
+        .unwrap_or_else(|| panic!("no item of the menu is over the canvas zoomed at {at:?}"));
     wheel(&mut h, item.center(), 120.0);
     assert_eq!(square(&h, 5, 5).unwrap().width(), before);
 }
