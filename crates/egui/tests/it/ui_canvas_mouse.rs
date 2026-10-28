@@ -152,9 +152,10 @@ fn a_zoomed_grid_is_centred_again_when_its_room_widens_past_it() {
     let (mut h, _script) = open_sized(screen(), egui::vec2(1100.0, 800.0));
     let at = square(&h, 5, 5).unwrap().center();
     wheel(&mut h, at, 60.0);
-    // Scrolled back to the grid's start, so that only the room before it can move it.
-    for _ in 0..4 {
-        let pull = egui::vec2(300.0, 0.0);
+    // Scrolled back to the grid's start, so that only the room before it can move it; each pull ends over the
+    // canvas.
+    for _ in 0..12 {
+        let pull = egui::vec2(100.0, 0.0);
         drag_by(&mut h, at, pull, egui::PointerButton::Middle);
     }
     h.set_size(egui::vec2(1700.0, 800.0));
@@ -165,8 +166,9 @@ fn a_zoomed_grid_is_centred_again_when_its_room_widens_past_it() {
 
 #[test]
 fn the_wheel_over_an_open_menu_does_not_zoom_the_canvas_under_it() {
-    // Zoomed in, the grid reaches up under the menu bar.
+    // Zoomed in far, the grid reaches up under the menu bar.
     let (mut h, _script, at) = zoomed();
+    wheel(&mut h, at, 400.0);
     let before = square(&h, 5, 5).unwrap().width();
     // The longest menu, which reaches down over the canvas.
     h.get_by_role_and_label(egui::accesskit::Role::Button, "World")
@@ -180,7 +182,12 @@ fn the_wheel_over_an_open_menu_does_not_zoom_the_canvas_under_it() {
     let item = ["Vehicle editor", "Apply to game", "Stamp", "Test"]
         .into_iter()
         .map(|label| h.get_by_label(label).rect())
-        .find(|item| squares.iter().any(|r| r.contains(item.center())))
+        .find_map(|item| {
+            squares
+                .iter()
+                .map(|r| r.intersect(item))
+                .find(|r| r.is_positive())
+        })
         .unwrap_or_else(|| panic!("no item of the menu is over the canvas zoomed at {at:?}"));
     wheel(&mut h, item.center(), 120.0);
     assert_eq!(square(&h, 5, 5).unwrap().width(), before);

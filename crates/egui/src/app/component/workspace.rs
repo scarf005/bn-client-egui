@@ -1,12 +1,13 @@
 //! A `workspace` screen laid out as an editor: a menu bar from the affordances' groups, the tools on the left, the
-//! canvas in the middle with the log under it, the palette, outline and inspector on the right and the status line
-//! at the bottom, each part by the slot the engine gave it.
+//! canvas in the middle with the log under it (on the left without tools), the palette, outline and inspector on the
+//! right and the status line at the bottom, each part by the slot the engine gave it.
 
 use super::*;
 use bn_client_core::localise::tr;
 
-/// The width the tools' column and the right column first have, which the player can change.
+/// The width the tools' column, the log's column and the right column first have, which the player can change.
 const TOOLS_WIDTH: f32 = 180.0;
+const LOG_WIDTH: f32 = 240.0;
 const SIDE_WIDTH: f32 = 300.0;
 /// The height the log's strip first has, which the player can change.
 const LOG_HEIGHT: f32 = 160.0;
@@ -165,11 +166,16 @@ impl<M: GameModel> App<M> {
                     ui.advance_cursor_after_rect(facts.min_rect().union(buttons.min_rect()));
                 });
         }
-        let tools = parts(root, Slot::Tools);
-        if !tools.is_empty() {
+        // Without tools the log takes the left column, and the canvas the whole height.
+        let (tools, log) = (parts(root, Slot::Tools), parts(root, Slot::Log));
+        let (left, left_width, log) = match tools.is_empty() {
+            true => (log, LOG_WIDTH, vec![]),
+            false => (tools, TOOLS_WIDTH, log),
+        };
+        if !left.is_empty() {
             egui::Panel::left(egui::Id::new(&tools_id))
-                .default_size(TOOLS_WIDTH)
-                .show(ui, |ui| self.column(ui, screen, &tools, out));
+                .default_size(left_width)
+                .show(ui, |ui| self.column(ui, screen, &left, out));
             crate::app::label_resize_handle(ui.ctx(), &tools_id, &tr("Resize workspace column"));
         }
         let side = [Slot::Palette, Slot::Outline, Slot::Inspector]
@@ -182,7 +188,6 @@ impl<M: GameModel> App<M> {
                 .show(ui, |ui| self.column(ui, screen, &side, out));
             crate::app::label_resize_handle(ui.ctx(), &side_id, &tr("Resize workspace column"));
         }
-        let log = parts(root, Slot::Log);
         if !log.is_empty() {
             egui::Panel::bottom(egui::Id::new(&log_id))
                 .default_size(LOG_HEIGHT)
