@@ -23,7 +23,8 @@ fn footer_buttons<'a>(affordances: &[&'a Affordance], title_bar: bool) -> Footer
     let role = |a: &&Affordance, role| a.role == Some(role);
     let shown = affordances.iter().copied().filter(|a| match a.role {
         Some(AffordanceRole::Cancel | AffordanceRole::Help) => !title_bar,
-        _ => drawn_button(a),
+        // A grouped affordance is an item of the workspace's menu bar.
+        _ => drawn_button(a) && a.group.is_none(),
     });
     let (help, actions): (Vec<_>, Vec<_>) = shown.partition(|a| role(a, AffordanceRole::Help));
     let (back, actions): (Vec<_>, Vec<_>) = actions
@@ -265,18 +266,16 @@ pub(super) fn own_buttons<'a>(screen: &'a Screen, component: &Component) -> Vec<
 }
 
 /// Whether `a` is drawn as a button: picking, moving, digits and text edits run from their rows and keys instead, and what
-/// only rearranges the native window changes nothing here.
+/// only rearranges the native window changes nothing here. A grouped one is also an item of the workspace's menu bar.
 pub(super) fn drawn_button(a: &Affordance) -> bool {
-    // A grouped affordance is an item of the workspace's menu bar.
-    a.group.is_none()
-        && !matches!(
-            a.role,
-            Some(
-                AffordanceRole::Select
-                    | AffordanceRole::Navigate
-                    | AffordanceRole::Digit
-                    | AffordanceRole::Layout
-                    | AffordanceRole::Edit
-            )
+    !matches!(
+        a.role,
+        Some(
+            AffordanceRole::Select
+                | AffordanceRole::Navigate
+                | AffordanceRole::Digit
+                | AffordanceRole::Layout
+                | AffordanceRole::Edit
         )
+    )
 }
