@@ -240,3 +240,17 @@ fn a_value_the_engine_refuses_marks_its_field_with_the_engines_reason_beside_it(
         "the engine's reason {said:?} is not by Fuel % {box_:?}"
     );
 }
+
+/// A value the client refuses is not sent, so the engine's news standing from before stays by the status line.
+#[test]
+fn news_standing_before_a_refused_value_stays_in_the_status_strip() {
+    for size in SIZES {
+        let (mut h, _) = shown(size, Some(NOTICE));
+        type_into(&mut h, "Fuel %", "150");
+        let (notice, status) = (rect(&h, NOTICE), rect(&h, "No file open"));
+        assert!(
+            (notice.bottom() - status.top()).abs() < 40.0,
+            "{size:?}: news {notice:?} left the status line {status:?}"
+        );
+    }
+}
