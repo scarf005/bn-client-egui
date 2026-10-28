@@ -1505,7 +1505,12 @@ impl<M: GameModel> App<M> {
                         // A square that is off or refused is drawn faded too; a disabled button does that itself.
                         let off = !(cell.enabled || cell.id.is_some() && cell.affordance.is_some())
                             || cell.refused.is_some();
-                        ui.set_opacity(match cell.faded == Some(true) || off {
+                        // The square the cursor or a selection marks keeps its full look, to be seen.
+                        let at_cursor = grid
+                            .cursor
+                            .is_some_and(|c| (c.x, c.y) == (x as i32, y as i32));
+                        let marked = cell.selected == Some(true) || at_cursor;
+                        ui.set_opacity(match (cell.faded == Some(true) || off) && !marked {
                             true => opacity * GRID_FADED,
                             false => opacity,
                         });
@@ -1522,15 +1527,12 @@ impl<M: GameModel> App<M> {
                             .flatten();
                         let glyph = if sprite.is_some() { " ".into() } else { glyph };
                         let color = cell.color.as_deref().map(|c| self.tint(c));
-                        let at_cursor = grid
-                            .cursor
-                            .is_some_and(|c| (c.x, c.y) == (x as i32, y as i32));
-                        let actionable = cell.id.is_some() && cell.affordance.is_some();
+                        let actionable = cell.id.is_some()
+                            && (cell.affordance.is_some() || grid.secondary.is_some());
                         let mut shown = egui::RichText::new(&glyph).monospace().size(glyph_size);
                         if let Some(color) = color {
                             shown = shown.color(color);
                         }
-                        let marked = cell.selected == Some(true) || at_cursor;
                         // The square the keyboard reached is outlined over its sprites.
                         let reached = focus.is_some() && cell.id.as_deref() == focus;
                         // A marked cell keeps a rim of its highlight around the sprite.
@@ -1572,10 +1574,9 @@ impl<M: GameModel> App<M> {
                         queue(ui, button.rect);
                         if reached {
                             let ring = outline_shapes(button.rect, tokens::TEXT);
-                            self.screens
-                                .rules
-                                .borrow_mut()
-                                .push((ui.painter().clone(), ring));
+                            let mut painter = ui.painter().clone();
+                            painter.set_opacity(opacity);
+                            self.screens.rules.borrow_mut().push((painter, ring));
                         }
                         // An empty square to draw on shows as an outlined one, not a gap in the grid;
                         // a blank glyph that shows something, such as open air, is no empty square.
@@ -1607,9 +1608,11 @@ impl<M: GameModel> App<M> {
                             (true, false) => button.on_hover_text(tip),
                             (false, false) => button.on_disabled_hover_text(tip),
                         };
-                        if let (true, Some(id), Some(a)) =
-                            (button.secondary_clicked(), &cell.id, &grid.secondary)
-                        {
+                        if let (true, Some(id), Some(a)) = (
+                            button.secondary_clicked() && !canvas::panning(ui),
+                            &cell.id,
+                            &grid.secondary,
+                        ) {
                             out.push(Intent::Focus {
                                 component: self.row_component(a, &grid.head.id),
                                 row: id.clone(),

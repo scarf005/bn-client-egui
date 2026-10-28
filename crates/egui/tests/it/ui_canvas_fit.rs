@@ -117,6 +117,32 @@ fn a_right_click_runs_the_grids_secondary_affordance_on_that_square() {
 }
 
 #[test]
+fn a_right_click_runs_the_secondary_on_a_square_without_a_primary_affordance() {
+    let mut with = screen(5);
+    let mut stack = vec![&mut with["root"]];
+    while let Some(node) = stack.pop() {
+        if node["id"] == "editor:canvas" {
+            node["secondary"] = json!("editor:paint");
+            for cell in node["cells"].as_array_mut().unwrap() {
+                if (cell["x"].as_u64(), cell["y"].as_u64()) == (Some(3), Some(3)) {
+                    cell.as_object_mut().unwrap().remove("affordance");
+                }
+            }
+            break;
+        }
+        match node {
+            Value::Array(items) => stack.extend(items.iter_mut()),
+            Value::Object(members) => stack.extend(members.values_mut()),
+            _ => {}
+        }
+    }
+    let (mut h, script) = open_sized(with, LARGE);
+    let at = square(&h, 3, 3).center();
+    right_click(&mut h, at);
+    assert_eq!(painted(&script), ["square:3,3"]);
+}
+
+#[test]
 fn a_refused_square_says_why_on_hover_and_still_takes_its_click() {
     let mut with = screen(5);
     let mut stack = vec![&mut with["root"]];
