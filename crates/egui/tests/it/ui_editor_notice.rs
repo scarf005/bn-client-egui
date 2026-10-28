@@ -3,7 +3,7 @@
 use bn_client_egui::{App, EngineModel};
 use eframe::egui;
 use egui_kittest::Harness;
-use egui_kittest::kittest::Queryable;
+use egui_kittest::kittest::{NodeT, Queryable};
 use serde_json::{Value, json};
 
 type H<'a> = Harness<'a, App<EngineModel>>;
@@ -135,4 +135,65 @@ fn the_engines_news_after_a_form_is_sent_is_under_that_form() {
 fn field(h: &H, label: &str) -> egui::Rect {
     h.get_by_role_and_label(egui::accesskit::Role::TextInput, label)
         .rect()
+}
+
+/// Types `text` into the field labelled `label` and leaves it with Return.
+fn type_into(h: &mut H, label: &str, text: &str) {
+    h.get_by_role_and_label(egui::accesskit::Role::TextInput, label)
+        .click();
+    h.run_steps(2);
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+    h.event(egui::Event::Text(text.into()));
+    h.run_steps(2);
+    h.key_press(egui::Key::Enter);
+    h.run_steps(3);
+}
+
+#[test]
+fn a_refused_value_marks_its_field_with_the_refusal_beside_it_until_it_is_edited() {
+    for size in SIZES {
+        let (mut h, script) = shown(size, None);
+        type_into(&mut h, "Fuel %", "150");
+        assert!(
+            !script
+                .sent()
+                .iter()
+                .any(|m| m["params"]["operation"]["affordance_id"] == "ed:fuel"),
+            "{size:?}: the client sent a value out of the field's bounds"
+        );
+        let refusal = "Enter a whole number from 0 to 100.";
+        let marked = |h: &H| {
+            h.get_by_role_and_label(egui::accesskit::Role::TextInput, "Fuel %")
+                .accesskit_node()
+                .data()
+                .invalid()
+                .is_some()
+        };
+        assert!(marked(&h), "{size:?}: the refused field is not marked");
+        let (said, field) = (rect(&h, refusal), field(&h, "Fuel %"));
+        assert!(
+            said.top() >= field.bottom() - 1.0
+                && said.top() - field.bottom() < 40.0
+                && (said.left() - field.left()).abs() < 200.0,
+            "{size:?}: the refusal {said:?} is not by Fuel % {field:?}"
+        );
+        assert_eq!(
+            h.get_all_by_label(refusal).count(),
+            1,
+            "{size:?}: the refusal is shown twice"
+        );
+        h.get_by_role_and_label(egui::accesskit::Role::TextInput, "Fuel %")
+            .click();
+        h.run_steps(2);
+        h.event(egui::Event::Text("0".into()));
+        h.run_steps(3);
+        assert!(
+            h.query_by_label(refusal).is_none(),
+            "{size:?}: the refusal stayed while the field is edited"
+        );
+        assert!(
+            !marked(&h),
+            "{size:?}: the mark stayed while the field is edited"
+        );
+    }
 }
