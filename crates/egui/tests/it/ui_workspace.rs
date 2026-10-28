@@ -635,3 +635,19 @@ fn a_right_column_wide_enough_for_two_puts_the_inspector_beside_the_palette() {
         );
     }
 }
+
+#[test]
+fn a_grouped_action_a_list_names_is_drawn_under_that_list_too() {
+    let h = shown_with(SIZES[0], |parts| {
+        parts[2]["affordances"] = json!(["ws:undo"]);
+    });
+    let (undo, floor) = (
+        h.get_by_role_and_label(egui::accesskit::Role::Button, "Undo")
+            .rect(),
+        rect(&h, "Floor"),
+    );
+    assert!(
+        undo.top() >= floor.bottom() && undo.left() >= floor.left() - 8.0,
+        "Undo {undo:?} under Floor {floor:?}"
+    );
+}
