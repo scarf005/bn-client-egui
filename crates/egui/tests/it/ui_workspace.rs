@@ -592,3 +592,31 @@ fn a_status_fact_never_runs_under_the_footer_buttons() {
         assert!(under.is_empty(), "{size:?}: {under:?} under {buttons:?}");
     }
 }
+
+#[test]
+fn a_click_on_the_last_row_of_a_palette_that_holds_all_its_rows_moves_nothing() {
+    let mut h = shown_with(SIZES[0], |parts| {
+        let mut palette = list(
+            "ws:palette",
+            "Palette",
+            &["Wall", "Floor", "Door"],
+            "palette",
+        );
+        // Rows with a square and a column, as an editor's legend has.
+        palette["columns"] = json!([{"key": "id", "label": "ID"}]);
+        for (n, row) in palette["rows"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .enumerate()
+        {
+            row["columns"] = json!([{"key": "id", "label": "ID", "value": format!("t_{n}")}]);
+            row["look"] = json!({"kind": "terrain", "id": "t_floor", "glyph": ".", "color": "c_cyan", "name": "wooden floor"});
+        }
+        parts[2] = palette;
+    });
+    let before = (rect(&h, "Door"), rect(&h, "Properties"));
+    h.get_by_label("Door").click();
+    h.run_steps(4);
+    assert_eq!((rect(&h, "Door"), rect(&h, "Properties")), before);
+}
