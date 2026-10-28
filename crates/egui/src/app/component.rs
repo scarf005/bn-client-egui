@@ -243,6 +243,17 @@ fn find<'a>(screen: &'a Screen, id: &str) -> Option<&'a Affordance> {
     screen.affordances.iter().find(|a| a.id == id)
 }
 
+/// The row or tab of a list or strip that had the keyboard, by the engine's id and the widget's.
+type Keyed = (String, egui::Id);
+
+/// Whether the stop `now` of a list or strip takes the keyboard: the arrows moved it off the `held` one, and no
+/// other widget took the keyboard since.
+fn takes_keyboard(ctx: &egui::Context, held: Option<&Keyed>, now: &str) -> bool {
+    held.is_some_and(|(id, widget)| {
+        id != now && ctx.memory(|m| m.focused().is_none_or(|f| f == *widget))
+    })
+}
+
 /// Whether `c` is running text: a text block, or a panel holding only one.
 fn prose(c: &Component) -> bool {
     match c {

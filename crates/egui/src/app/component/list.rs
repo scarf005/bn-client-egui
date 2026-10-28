@@ -33,10 +33,10 @@ struct RowLayout<'a> {
     chosen: bool,
     /// The row that is the list's one stop of the keyboard's walk: the arrows move among the rows from there.
     stop: Option<&'a str>,
-    /// A row of the list had the keyboard the frame before: the stop takes it when the arrows move it.
-    keyed: bool,
-    /// A row of the list has the keyboard now.
-    focused: std::cell::Cell<bool>,
+    /// The row of the list that had the keyboard the frame before: the stop takes it when the arrows moved it.
+    keyed: Option<Keyed>,
+    /// The row of the list that has the keyboard now.
+    focused: std::cell::Cell<Option<Keyed>>,
 }
 
 impl<M: GameModel> App<M> {
@@ -280,9 +280,9 @@ impl<M: GameModel> App<M> {
             })
             .map(|i| rows[i].id.as_str());
         let keys = egui::Id::new(("list keyboard", &screen.screen_id, id));
-        let keyed = ui.data(|d| d.get_temp::<bool>(keys)).unwrap_or_default();
+        let keyed = ui.data(|d| d.get_temp::<Option<Keyed>>(keys)).flatten();
         let mut drawn = 0;
-        let mut focused = false;
+        let mut focused = None;
         let body = |body: egui_extras::TableBody| {
             let layout = RowLayout {
                 widths: &widths,
@@ -292,14 +292,14 @@ impl<M: GameModel> App<M> {
                 chosen: rows.iter().any(|r| r.selected) && !follows_focus(screen, id),
                 stop,
                 keyed,
-                focused: std::cell::Cell::new(false),
+                focused: std::cell::Cell::new(None),
             };
             body.heterogeneous_rows(heights.iter().copied(), |row| {
                 let at = row.index();
                 drawn = drawn.max(at + 1);
                 self.list_row(row, list, rows[at], cursor, &layout, out);
             });
-            focused = layout.focused.get();
+            focused = layout.focused.take();
         };
         let top = ui.cursor().top();
         let scrolled = ui
@@ -637,13 +637,17 @@ impl<M: GameModel> App<M> {
         out: &mut Vec<Intent>,
     ) {
         let stop = layout.stop == Some(row.id.as_str());
-        if stop && at && layout.keyed && !button.has_focus() {
+        if stop
+            && at
+            && !button.has_focus()
+            && takes_keyboard(&button.ctx, layout.keyed.as_ref(), &row.id)
+        {
             button.request_focus();
         }
         if !button.has_focus() {
             return;
         }
-        layout.focused.set(true);
+        layout.focused.set(Some((row.id.clone(), button.id)));
         let arrows = egui::EventFilter {
             vertical_arrows: true,
             ..Default::default()
