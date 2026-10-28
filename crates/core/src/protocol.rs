@@ -2816,6 +2816,9 @@ pub struct CountShape {
 pub struct TextShape {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub field_id: Option<String>,
+    /// The text the engine suggests, which the box opens with.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]

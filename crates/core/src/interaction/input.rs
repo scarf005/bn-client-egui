@@ -674,7 +674,9 @@ impl Interaction {
         let Some(field) = field else {
             return;
         };
+        // A field's value is what it holds, kept as typing goes on.
         ask.text = Some(field.value.clone());
+        ask.suggested = false;
         ask.max_len = field.max_length.filter(|n| *n > 0).map(|n| n as usize);
         match field.kind {
             FieldKind::Integer => ask.filter = Filter::Integer,

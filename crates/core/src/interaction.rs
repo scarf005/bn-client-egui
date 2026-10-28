@@ -441,6 +441,8 @@ pub struct Ask {
     digits: Option<String>,
     /// The count is the shape's default, which the first digit typed replaces.
     fresh: bool,
+    /// The text is the engine's suggestion, which the first character typed or a backspace replaces.
+    suggested: bool,
     bounds: Option<CountShape>,
     /// The members still to answer, in the order they are asked.
     todo: Vec<ArgKind>,
@@ -468,6 +470,7 @@ impl Ask {
             asking: None,
             digits: default.map(|n| n.to_string()),
             fresh: default.is_some(),
+            suggested: false,
             bounds,
             todo: vec![],
             filter: Filter::Any,
@@ -717,7 +720,11 @@ impl Interaction {
         .into_iter()
         .filter_map(|(asked, kind)| asked.then_some(kind))
         .collect::<Vec<_>>();
-        ask.text = shape.text.as_ref().map(|_| String::new());
+        ask.text = shape
+            .text
+            .as_ref()
+            .map(|t| t.default.clone().unwrap_or_default());
+        ask.suggested = shape.text.as_ref().is_some_and(|t| t.default.is_some());
         if let Some(screen) = screen {
             self.seed(&mut ask, screen, &shape);
         }
@@ -763,6 +770,9 @@ impl Interaction {
             return;
         };
         let (filter, max_len) = (ask.filter, ask.max_len);
+        if std::mem::take(&mut ask.suggested) {
+            ask.text = None;
+        }
         let typed = ask.text.get_or_insert_default();
         for c in text.chars().filter(|&c| filter.takes(c)) {
             if max_len.is_none_or(|max| typed.chars().count() < max) {
@@ -772,8 +782,15 @@ impl Interaction {
     }
 
     pub fn pop_text(&mut self) {
-        if let Some(typed) = self.ask.as_mut().and_then(|a| a.text.as_mut()) {
-            typed.pop();
+        let Some(ask) = self.ask.as_mut() else {
+            return;
+        };
+        match (std::mem::take(&mut ask.suggested), ask.text.as_mut()) {
+            (true, Some(typed)) => typed.clear(),
+            (false, Some(typed)) => {
+                typed.pop();
+            }
+            (_, None) => {}
         }
     }
 
@@ -781,6 +798,7 @@ impl Interaction {
     pub fn answer_text(&mut self, text: &str) {
         if let Some(ask) = self.ask.as_mut() {
             ask.text = Some(text.into());
+            ask.suggested = false;
         }
     }
 
