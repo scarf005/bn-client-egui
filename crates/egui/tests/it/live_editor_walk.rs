@@ -110,6 +110,24 @@ pub(crate) fn click(h: &mut H, label: &str) {
     press(h, label);
 }
 
+/// The button labelled exactly `label`, the last one drawn, past a heading of the same name.
+fn button(h: &H, label: &str) -> Option<egui::Rect> {
+    h.root()
+        .children_recursive()
+        .filter(|n| {
+            let a = n.accesskit_node();
+            a.role() == egui::accesskit::Role::Button && a.label().as_deref() == Some(label)
+        })
+        .map(|n| n.rect())
+        .last()
+}
+
+/// Clicks `button(label)` once it is in view and stopped moving.
+fn click_button(h: &mut H, label: &str) {
+    let at = click_stable(h, label, |h| button(h, label));
+    click_at(h, at.center());
+}
+
 /// Double-clicks the widget labelled `label`: a row of a list in a pane runs its action so.
 fn double_click(h: &mut H, label: &str) {
     let at = click_stable(h, label, |h| find(h, label)).center();
@@ -124,7 +142,7 @@ fn double_click(h: &mut H, label: &str) {
 /// Clicks a button of the footer, which stays in view whatever the body scrolls; one that did not fit the footer is in
 /// the menu of its `⋯`, the lowest one in the window, and a grouped one is an item of a menu of the menu bar.
 fn click_footer(h: &mut H, label: &str) {
-    if find(h, label).is_none() {
+    if button(h, label).is_none() {
         match more_buttons(h).first().copied() {
             Some(_) => {
                 let at = stable(h, label, |h| more_buttons(h).first().copied());
@@ -133,7 +151,7 @@ fn click_footer(h: &mut H, label: &str) {
             None => open_menu_with(h, label),
         }
     }
-    press(h, label);
+    click_button(h, label);
 }
 
 /// Opens the menu of the menu bar that holds `label`, trying each menu in turn and shutting the others again.
@@ -144,18 +162,11 @@ fn open_menu_with(h: &mut H, label: &str) {
         .collect::<Vec<_>>();
     for menu in menus {
         press(h, menu);
-        if find(h, label).is_some() {
+        if button(h, label).is_some() {
             return;
         }
         press(h, menu);
     }
-}
-
-/// Clicks the entry `label` of the footer's overflow menu, whose button is the first `⋯`.
-fn click_overflow(h: &mut H, label: &str) {
-    let at = stable(h, "the footer's ⋯", |h| more_buttons(h).first().copied());
-    click_at(h, at.center());
-    press(h, label);
 }
 
 /// The `⋯` buttons drawn, in the order the screen draws them: the footer's first, then those of tab bars.
@@ -255,10 +266,19 @@ fn reveal_rect(h: &mut H, what: &str, rect_of: impl Fn(&H) -> Option<egui::Rect>
     );
 }
 
-/// Whether `r` is drawn between the menu bar and the status line, which clip what lies past these.
+/// Whether the widget drawn at `r` is whole on screen, uncut by what clips it (the menu bar, the status line, the
+/// end of its scroll area).
 fn in_view(h: &H, r: egui::Rect) -> bool {
-    let size = h.ctx.content_rect().size();
-    r.top() >= 34.0 && r.bottom() < size.y - 45.0 && r.bottom() > 0.0
+    let screen = h.ctx.content_rect();
+    let clipped = h.ctx.viewport(|v| {
+        v.prev_pass
+            .widgets
+            .layers()
+            .flat_map(|(_, ws)| ws)
+            .find(|w| w.rect == r)
+            .map(|w| w.interact_rect)
+    });
+    clipped.is_some_and(|c| c.contains_rect(r.shrink(1.0))) && screen.contains_rect(r)
 }
 
 /// A point in the gutter of a workspace's right column, left of the parts it indents under their headings: the
@@ -1116,8 +1136,15 @@ fn the_main_menu_reopens_a_recent_map_file_in_the_map_editor() {
     rest(&mut h);
     shot(&mut h, "recent-4-map-opened");
     dump(&h, "the map editor");
-    let opened = labels(&h).join("\n");
-    assert!(opened.contains(&file), "{opened}");
+    // The status line names the file by its path under the game's folder.
+    let opened = labels(&h);
+    assert!(
+        opened
+            .iter()
+            .filter_map(|l| l.split_once(' ').map(|(_, text)| text))
+            .any(|l| l.ends_with("house01.json") && file.ends_with(l)),
+        "{opened:?}"
+    );
     assert!(canvas_glyphs(&h).len() > 1, "no canvas of the opened file");
 }
 
@@ -1521,7 +1548,7 @@ fn the_map_editor_drags_a_placement_whole_and_by_its_corner() {
     println!("REGIONS before {before:?}");
     assert_eq!(before.len(), 2, "{before:?}");
 
-    click(&mut h, "Placements");
+    click_tab(&mut h, "Placements");
     rest(&mut h);
     shot_at(&mut h, "pr-2-placements-tool", &sizes);
 
@@ -2089,10 +2116,7 @@ fn the_map_editor_copies_and_cuts_between_two_open_documents_and_pastes() {
     );
     shot_at(&mut h, "xdoc-1-a-copied", &sizes);
 
-    // Document B is another file: the clipboard stays, and B maps no `#` of its own.
-    key(&mut h, egui::Key::Escape);
-    click(&mut h, "Map Editor");
-    wait_kind(&mut h, "editor");
+    // Document B is another file, made in the same editor: the clipboard stays, and B maps no `#` of its own.
     let b = create_mapgen(&mut h, "zz_xdoc_b");
     assert_ne!(a, b);
     dump(&h, "B created");
@@ -2196,9 +2220,6 @@ fn the_map_editor_makes_a_nested_chunk_and_moves_a_legend_into_a_palette() {
     );
 
     // A mapgen with a wall symbol of its own, whose legend moves into a palette the mapgen then names.
-    key(&mut h, egui::Key::Escape);
-    click(&mut h, "Map Editor");
-    wait_kind(&mut h, "editor");
     click(&mut h, "Nested chunk");
     click(&mut h, "Mapgen");
     let path = create_mapgen(&mut h, "zz_extract");
@@ -2424,6 +2445,17 @@ fn the_vehicle_editor_turns_a_preview_reloads_a_file_and_asks_before_leaving() {
     let east = grid_cells(&h, "vehicle:turned");
     println!("TURNED {north:?} -> {east:?}");
     assert_ne!(north, east, "the preview did not turn");
+    // A facing past the last degree is refused in words naming the field's bounds, and the facing stays.
+    click_beside(&mut h, "Facing");
+    replace_text(&mut h, "400");
+    key(&mut h, egui::Key::Enter);
+    rest(&mut h);
+    shot_at(&mut h, "vr-3b-facing-refused", &sizes);
+    assert!(
+        labels(&h).iter().any(|l| l.contains("from 0 to 359")),
+        "no refusal shown"
+    );
+    assert_eq!(grid_cells(&h, "vehicle:turned"), east);
 
     // A clean document follows its file when a text editor changes it: the name on disk is the one shown.
     let on_disk =
@@ -2517,10 +2549,18 @@ fn the_map_editor_exports_a_spawned_vehicle_as_a_placement() {
     double_click(&mut h, "Bicycle");
     wait_kind(&mut h, "vehicle_editor");
     rest(&mut h);
+    // Spawn leaves for the map, where the map editor's action opens it again.
     click_footer(&mut h, "Spawn");
+    run_until(&mut h, "the map", 120, |h| {
+        h.state()
+            .model
+            .screens()
+            .last()
+            .is_some_and(|s| s.role == bn_client_egui::protocol::ScreenRole::Map)
+    });
     rest(&mut h);
     shot_at(&mut h, "xv-1-spawned", &sizes);
-    key(&mut h, egui::Key::Escape);
+    assert!(h.state_mut().model.invoke_action("editor"));
     wait_kind(&mut h, "editor");
     rest(&mut h);
 
@@ -2731,10 +2771,10 @@ fn the_map_editor_adds_a_placement_from_a_marked_rectangle_and_removes_it() {
     h.set_size(egui::vec2(1920.0, 1080.0));
     settle(&mut h);
 
-    // An item placement: the form's default kind, its other members as JSON.
-    click_beside(&mut h, "Value");
+    // An item placement: the form's default kind, its other members as JSON; its button is named as its heading.
+    click_beside(&mut h, "Add placement/Value");
     type_text(&mut h, r#"{"item": "bedroom", "chance": 100}"#);
-    click(&mut h, "Add placement");
+    click_button(&mut h, "Add placement");
     rest(&mut h);
     shot_at(&mut h, "pl-2-added", &sizes);
     h.set_size(egui::vec2(1920.0, 1080.0));
@@ -2773,8 +2813,9 @@ fn the_map_editor_stamps_the_document_into_the_world_and_tests_it_there() {
     paint(&mut h, 20, 20);
     run_until(&mut h, "the wall", 60, |h| glyph(h, 10, 10) == Some('#'));
     assert_eq!(enabled(&h, "editor:unstamp"), Some(false));
-    assert_eq!(enabled(&h, "editor:test"), Some(false));
-    click_overflow(&mut h, "Stamp");
+    // Test stamps a mapgen it is on by itself.
+    assert_eq!(enabled(&h, "editor:test"), Some(true));
+    click_footer(&mut h, "Stamp");
     rest(&mut h);
     shot_at(&mut h, "st-1-stamped", &sizes);
     assert_eq!(enabled(&h, "editor:unstamp"), Some(true));
@@ -2782,7 +2823,7 @@ fn the_map_editor_stamps_the_document_into_the_world_and_tests_it_there() {
     let canvas = canvas_glyphs(&h);
 
     // Test leaves the editor on the map, with the avatar in the stamped square; the editor opens again as it was.
-    click_overflow(&mut h, "Test");
+    click_footer(&mut h, "Test");
     run_until(&mut h, "the map", 120, |h| {
         h.state()
             .model
