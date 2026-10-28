@@ -292,7 +292,7 @@ fn list_mut<'a>(c: &'a mut Value, id: &str) -> Option<&'a mut Value> {
 /// The vehicle editor example `name` with the prototypes of a real game: long names and ids, enough rows that the
 /// list scrolls.
 fn prototypes(name: &str) -> Value {
-    let mut screen = example("vehicle_editor", name);
+    let mut screen = crate::common::unfolded(example("vehicle_editor", name));
     let list = list_mut(&mut screen["root"], "vehicle:prototypes").unwrap();
     let base = list["rows"].as_array().unwrap().clone();
     let rows = (0..8)
