@@ -121,6 +121,7 @@ mod ui_tile_seams;
 mod ui_tiles;
 mod ui_title_vehicle;
 mod ui_toolbar;
+mod ui_vehicle_editor_keys;
 mod ui_vehicle_editor_layout;
 mod ui_vehicle_part_fit;
 mod ui_window_class;
