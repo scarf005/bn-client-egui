@@ -377,6 +377,31 @@ fn a_canvas_without_squares_draws_nothing() {
     assert!(!framed, "an empty canvas is drawn");
 }
 
+/// A legend's value cut short at the column's edge is read whole on hover, as is its column's caption.
+#[test]
+fn a_legend_value_cut_short_is_read_whole_on_hover() {
+    let long = "a reinforced concrete wall with rebar sticking out of it";
+    let mut screen = editor();
+    let legend = find(&mut screen["root"], "editor:legend").unwrap();
+    legend["rows"][0]["columns"][1]["value"] = json!(long);
+    let (mut h, _script) = crate::ui_editor_drag::open_sized(screen, egui::vec2(1290.0, 830.0));
+    h.run_steps(6);
+    let count = |h: &H| h.query_all_by_label_contains("reinforced concrete").count();
+    let before = count(&h);
+    assert!(before > 0, "the value is not drawn");
+    let cell = h
+        .query_all_by_label_contains("reinforced concrete")
+        .next()
+        .unwrap()
+        .rect();
+    for _ in 0..40 {
+        h.hover_at(cell.center());
+        h.step();
+    }
+    h.run_steps(4);
+    assert!(count(&h) > before, "no whole value on hover at {cell:?}");
+}
+
 /// Each text box of a form is named by its field's label for a screen reader and a test, beside its value.
 #[test]
 fn a_forms_text_boxes_are_named_by_their_fields() {
