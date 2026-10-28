@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: bn-client\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-28 03:01+0900\n"
+"POT-Creation-Date: 2026-10-28 14:28+0900\n"
 "PO-Revision-Date: 2026-10-18 09:30+0900\n"
 "Language-Team: Japanese\n"
 "Language: ja\n"
@@ -32,7 +32,7 @@ msgid "Right click"
 msgstr "右クリック"
 
 #: crates/core/src/engine_model/commands.rs:141
-#: crates/egui/src/app/component/form.rs:201 crates/egui/src/app/menu.rs:67
+#: crates/egui/src/app/component/form.rs:210 crates/egui/src/app/menu.rs:67
 msgid "Cancel"
 msgstr "取消"
 
@@ -148,33 +148,33 @@ msgstr "読み込み画像"
 msgid "Resize sidebar"
 msgstr "サイドバーのサイズ変更"
 
-#: crates/egui/src/app.rs:554 crates/egui/src/app.rs:566
+#: crates/egui/src/app.rs:554 crates/egui/src/app.rs:576
 msgid "Client settings"
 msgstr "クライアント設定"
 
-#: crates/egui/src/app.rs:563 crates/egui/src/app/palette.rs:59
+#: crates/egui/src/app.rs:573 crates/egui/src/app/palette.rs:59
 #: crates/egui/src/app/palette.rs:105 crates/tui/src/lib.rs:881
 #: crates/tui/src/lib.rs:1050
 msgid "Actions"
 msgstr "行動"
 
-#: crates/egui/src/app.rs:581 crates/tui/src/lib.rs:666
+#: crates/egui/src/app.rs:589 crates/tui/src/lib.rs:666
 msgid "Ready"
 msgstr "待機中"
 
-#: crates/egui/src/app.rs:620
+#: crates/egui/src/app.rs:628
 msgid "Interrupt"
 msgstr "中断"
 
-#: crates/egui/src/app/component/form.rs:170 crates/egui/src/editor.rs:163
+#: crates/egui/src/app/component/form.rs:170 crates/egui/src/editor.rs:166
 msgid "Press the new key"
 msgstr "新しいキーを押してください"
 
-#: crates/egui/src/app/component/form.rs:198
+#: crates/egui/src/app/component/form.rs:207
 msgid "OK"
 msgstr "OK"
 
-#: crates/egui/src/app/component/list.rs:283 crates/egui/src/app/palette.rs:65
+#: crates/egui/src/app/component/list.rs:354 crates/egui/src/app/palette.rs:65
 msgid "Search"
 msgstr "検索"
 
@@ -197,13 +197,18 @@ msgstr "移動とメモ"
 msgid "Level %d"
 msgstr "階層 %d"
 
-#: crates/egui/src/app/component/workspace.rs:135
+#: crates/egui/src/app/component/workspace.rs:253
+#: crates/egui/src/app/component/workspace.rs:283
 msgid "Resize workspace column"
 msgstr "作業領域の列のサイズ変更"
 
-#: crates/egui/src/app/component/workspace.rs:142
+#: crates/egui/src/app/component/workspace.rs:289
 msgid "Resize workspace log"
 msgstr "作業領域のログのサイズ変更"
+
+#: crates/egui/src/app/component/workspace.rs:359
+msgid "Canvas"
+msgstr "キャンバス"
 
 #: crates/egui/src/app/map.rs:348 crates/tui/src/lib.rs:763
 msgid "No map loaded"

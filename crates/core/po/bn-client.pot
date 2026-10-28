@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: bn-client\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-28 03:01+0900\n"
+"POT-Creation-Date: 2026-10-28 14:28+0900\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -37,7 +37,7 @@ msgid "Right click"
 msgstr ""
 
 #: crates/core/src/engine_model/commands.rs:141
-#: crates/egui/src/app/component/form.rs:201 crates/egui/src/app/menu.rs:67
+#: crates/egui/src/app/component/form.rs:210 crates/egui/src/app/menu.rs:67
 msgid "Cancel"
 msgstr ""
 
@@ -151,33 +151,33 @@ msgstr ""
 msgid "Resize sidebar"
 msgstr ""
 
-#: crates/egui/src/app.rs:554 crates/egui/src/app.rs:566
+#: crates/egui/src/app.rs:554 crates/egui/src/app.rs:576
 msgid "Client settings"
 msgstr ""
 
-#: crates/egui/src/app.rs:563 crates/egui/src/app/palette.rs:59
+#: crates/egui/src/app.rs:573 crates/egui/src/app/palette.rs:59
 #: crates/egui/src/app/palette.rs:105 crates/tui/src/lib.rs:881
 #: crates/tui/src/lib.rs:1050
 msgid "Actions"
 msgstr ""
 
-#: crates/egui/src/app.rs:581 crates/tui/src/lib.rs:666
+#: crates/egui/src/app.rs:589 crates/tui/src/lib.rs:666
 msgid "Ready"
 msgstr ""
 
-#: crates/egui/src/app.rs:620
+#: crates/egui/src/app.rs:628
 msgid "Interrupt"
 msgstr ""
 
-#: crates/egui/src/app/component/form.rs:170 crates/egui/src/editor.rs:163
+#: crates/egui/src/app/component/form.rs:170 crates/egui/src/editor.rs:166
 msgid "Press the new key"
 msgstr ""
 
-#: crates/egui/src/app/component/form.rs:198
+#: crates/egui/src/app/component/form.rs:207
 msgid "OK"
 msgstr ""
 
-#: crates/egui/src/app/component/list.rs:283 crates/egui/src/app/palette.rs:65
+#: crates/egui/src/app/component/list.rs:354 crates/egui/src/app/palette.rs:65
 msgid "Search"
 msgstr ""
 
@@ -200,12 +200,17 @@ msgstr ""
 msgid "Level %d"
 msgstr ""
 
-#: crates/egui/src/app/component/workspace.rs:135
+#: crates/egui/src/app/component/workspace.rs:253
+#: crates/egui/src/app/component/workspace.rs:283
 msgid "Resize workspace column"
 msgstr ""
 
-#: crates/egui/src/app/component/workspace.rs:142
+#: crates/egui/src/app/component/workspace.rs:289
 msgid "Resize workspace log"
+msgstr ""
+
+#: crates/egui/src/app/component/workspace.rs:359
+msgid "Canvas"
 msgstr ""
 
 #: crates/egui/src/app/map.rs:348 crates/tui/src/lib.rs:763
