@@ -1738,6 +1738,28 @@ fn the_text_a_started_affordance_asks_for_takes_the_typing_without_a_click_first
 }
 
 #[test]
+fn a_text_the_engine_suggests_opens_in_the_box_and_typing_replaces_it() {
+    let ask = affordance("name", &[], json!({"text": {"default": "my_vehicle"}}));
+    let (mut h, script) = harness(dialog(rows_list(&["a", "b"]), vec![ask]));
+    h.get_by_label("name").click();
+    h.run_steps(3);
+    assert!(
+        h.query_all_by_role(egui::accesskit::Role::TextInput)
+            .any(|n| n.accesskit_node().value().as_deref() == Some("my_vehicle")),
+        "the box opens with the suggestion"
+    );
+    h.event(egui::Event::Text("bus".into()));
+    h.run_steps(3);
+    h.key_press(egui::Key::Enter);
+    h.run_steps(3);
+    assert_eq!(
+        submits(&script),
+        [boundary_invoke("name", json!({"text": "bus"}))],
+        "typing replaces the suggestion"
+    );
+}
+
+#[test]
 fn every_tab_of_a_strip_too_narrow_for_one_row_is_on_screen() {
     let screen = example("construction.json", "Construction screen");
     let labels = screen["tabs"]
