@@ -125,6 +125,14 @@ fn an_empty_list_shows_the_engines_empty_text_and_a_list_with_rows_does_not() {
     }
 }
 
+/// Scrolls the heading `label` into view and clicks it, as a player does.
+fn toggle(h: &mut H, label: &str) {
+    h.get_by_label(label).scroll_to_me();
+    h.run_steps(4);
+    h.get_by_label(label).click();
+    h.run_steps(8);
+}
+
 fn folded(screen: &Value) -> Value {
     let mut screen = screen.clone();
     fn unfold(v: &mut Value) {
@@ -151,8 +159,7 @@ fn a_collapsed_part_starts_folded_to_its_heading_and_unfolds_on_a_click() {
             !says(&h, "Overmap terrain"),
             "{size:?}: the folded part's fields do not"
         );
-        h.get_by_label("New mapgen file").click();
-        h.run_steps(6);
+        toggle(&mut h, "New mapgen file");
         assert!(says(&h, "Overmap terrain"), "{size:?}: a click unfolds it");
     }
 }
@@ -161,15 +168,13 @@ fn a_collapsed_part_starts_folded_to_its_heading_and_unfolds_on_a_click() {
 fn the_players_fold_sticks_while_the_engine_sends_the_part_again() {
     let screen = example("editor", CHUNK_OPEN);
     let (mut h, script) = shown(&screen, SIZES[1]);
-    h.get_by_label("New mapgen file").click();
-    h.run_steps(6);
+    toggle(&mut h, "New mapgen file");
     resent(&mut h, &script, &screen, 1);
     assert!(
         says(&h, "Overmap terrain"),
         "unfolded by the player, it stays"
     );
-    h.get_by_label("New mapgen file").click();
-    h.run_steps(6);
+    toggle(&mut h, "New mapgen file");
     resent(&mut h, &script, &folded(&screen), 2);
     assert!(
         !says(&h, "Overmap terrain"),
