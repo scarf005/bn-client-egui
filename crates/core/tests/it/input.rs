@@ -890,3 +890,17 @@ fn a_disabled_tabs_key_tells_its_denial_and_sends_nothing() {
     assert_eq!(invoked(&out), None);
     assert_eq!(out.note().as_deref(), Some("Copy something first."));
 }
+
+#[test]
+fn f1_opens_the_screens_help_when_no_affordance_binds_it() {
+    let screen = screen_with(
+        list(vec![row("a", json!({}))]),
+        json!([pick(), {"id": "help", "label": "Keys", "keys": ["?"], "enabled": true,
+            "role": "help", "expect": "screen"}]),
+    );
+    let mut ui = Interaction::default();
+    assert_eq!(
+        invoked(&press(&mut ui, &screen, "F1")),
+        Some(("help", json!({})))
+    );
+}
