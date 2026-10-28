@@ -241,11 +241,24 @@ impl<M: GameModel> App<M> {
         // The viewport is a whole number of rows tall: the most rows from the one at its top that fit, so rows of
         // a wrapped label do not leave the last row cut. An empty list, or one whose top row does not fit, keeps its
         // room.
-        let top = offset.unwrap_or_else(|| {
+        let mut top = offset.unwrap_or_else(|| {
             let scrolls = self.screens.list_scroll.borrow();
             scrolls.get(&slot).map_or(0.0, |s| s.top)
         });
-        let first = starts.iter().rposition(|s| *s <= top + 0.5).unwrap_or(0);
+        let mut first = starts.iter().rposition(|s| *s <= top + 0.5).unwrap_or(0);
+        // A list at rest shows its top row whole: a top left between rows, such as by a list that got shorter, goes
+        // to the nearer row; while the player scrolls, it is left alone.
+        let scrolling =
+            ui.input(|i| i.smooth_scroll_delta != egui::Vec2::ZERO || i.pointer.primary_down());
+        if offset.is_none() && !scrolling && starts.get(first).is_some_and(|s| top - s > 0.5) {
+            let next = (first + 1).min(starts.len() - 1);
+            first = match top - starts[first] < starts[next] - top {
+                true => first,
+                false => next,
+            };
+            top = starts[first];
+            offset = Some(top);
+        }
         let list_height = starts[first..]
             .iter()
             .zip(&heights[first..])
