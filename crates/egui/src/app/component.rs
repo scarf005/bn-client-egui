@@ -1201,8 +1201,12 @@ impl<M: GameModel> App<M> {
         let fit = (ui.available_width() / xs.len().max(1) as f32)
             .min(ui.available_height() / ys.len().max(1) as f32);
         let canvas = grid.role == Some(GridRole::Canvas);
-        // A canvas zooms out until the whole grid fits in its room, and in until a cell is as large as the room.
-        let base = fit.clamp(GRID_CELL, GRID_MAX_CELL);
+        // A canvas first fits its whole grid to its room, however few its squares; it zooms out until the whole grid
+        // fits, and in until a cell is as large as the room.
+        let base = match canvas {
+            true => fit.max(GRID_CELL),
+            false => fit.clamp(GRID_CELL, GRID_MAX_CELL),
+        };
         let limits = ((fit / base).min(1.0), GRID_ZOOM_MAX.max(fit / base));
         let view_key = egui::Id::new(("grid view", &screen.screen_id, &grid.head.id));
         // The workspace's stop for the keyboard over the canvas (`canvas_stop`).

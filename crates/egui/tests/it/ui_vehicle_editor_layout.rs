@@ -148,9 +148,12 @@ fn the_mounts_are_tile_sized_in_the_middle_of_the_canvas_and_the_stack_reads_who
             (grid.center().x - middle).abs() < 40.0,
             "at {size:?} the grid {grid:?} is off the middle {middle} of the canvas pane"
         );
+        // The canvas pane ends above the log's strip.
+        let bottom = h.get_by_label("History").rect().top();
+        let centre = (room.top() + bottom) / 2.0;
         assert!(
-            grid.center().y > room.center().y - 120.0,
-            "at {size:?} the grid {grid:?} hugs the top of {room:?}"
+            (grid.center().y - centre).abs() < square.width(),
+            "at {size:?} the grid {grid:?} is off the middle {centre} of the pane above {bottom}"
         );
         let shown = painted(&h);
         for label in &stack {
