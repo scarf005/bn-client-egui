@@ -742,6 +742,23 @@ fn an_arrow_moves_a_canvas_cursor_from_the_engines_by_its_cells_affordance() {
     );
 }
 
+/// A canvas drawn on by a drag, such as the map editor's, keeps its arrows off its cells' affordance, which draws.
+#[test]
+fn an_arrow_on_a_canvas_drawn_by_a_drag_runs_nothing() {
+    let canvas = json!({"id": "grid", "kind": "grid", "role": "canvas", "drag": "trail", "cols": 2, "rows": 1,
+        "cursor": {"x": 0, "y": 0}, "cells": [
+            {"x": 0, "y": 0, "id": "c0", "enabled": true, "affordance": "paint"},
+            {"x": 1, "y": 0, "id": "c1", "enabled": true, "affordance": "paint"}]});
+    let screen = screen_with(
+        canvas,
+        json!([{"id": "paint", "label": "Paint", "keys": [], "enabled": true,
+            "expect": "screen", "args": {"row": {"component_id": "grid"}}}]),
+    );
+    let mut ui = Interaction::default();
+    press(&mut ui, &screen, "RIGHT");
+    assert_eq!(invoked(&press(&mut ui, &screen, "RIGHT")), None);
+}
+
 /// The native query popup (Yes / No): the engine binds Left, Right and Confirm and keeps its own cursor.
 fn query_popup(cursor: &str) -> Screen {
     let mut screen = screen_with(

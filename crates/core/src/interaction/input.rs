@@ -2,7 +2,13 @@
 //! and what only moves the client's own focus. A renderer passes key names and ids and draws what comes back.
 
 use super::*;
-use crate::protocol::FieldKind;
+use crate::protocol::{FieldKind, GridRole};
+
+/// Whether the arrows move `grid`'s cursor by running its cells' affordance: a canvas with a cursor whose cells
+/// are not drawn on by a drag, so the affordance picks the cell rather than draws there.
+fn moves_cursor(grid: &Grid) -> bool {
+    grid.role == Some(GridRole::Canvas) && grid.cursor.is_some() && grid.drag.is_none()
+}
 
 /// What a key or a click did.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -479,10 +485,16 @@ impl Interaction {
             .filter(|c| !self.items(c, rows).is_empty())
             .collect::<Vec<_>>();
         let focused = self.focus.component_id.clone();
+        // Without a focus, the arrows are a canvas's that moves the engine's cursor.
+        let canvas = holders
+            .iter()
+            .copied()
+            .find(|c| matches!(c, Component::Grid(g) if moves_cursor(g)));
         let current = holders
             .iter()
             .copied()
             .find(|c| Some(c.id()) == focused.as_deref())
+            .or(canvas)
             .or_else(|| holders.first().copied());
         if matches!(key, "TAB" | "BACKTAB") {
             let n = holders.len();
@@ -519,7 +531,10 @@ impl Interaction {
         match (current, vertical, horizontal) {
             (Some(Component::Grid(grid)), ..) if arrow => {
                 let (dx, dy) = (horizontal.unwrap_or(0), vertical.unwrap_or(0));
-                self.move_cell(grid, dx as i64, dy as i64)
+                match select && moves_cursor(grid) {
+                    true => self.move_cursor(screen, grid, dx as i64, dy as i64),
+                    false => self.move_cell(grid, dx as i64, dy as i64),
+                }
             }
             (Some(holder), Some(by), _) => {
                 let items = self.items(holder, rows);
@@ -609,6 +624,25 @@ impl Interaction {
                 Some(Outcome::revealing(id))
             }
             None => Some(Outcome::handled()),
+        }
+    }
+
+    /// Moves a canvas's cursor from where the engine has it by running the affordance of the cell it lands on;
+    /// a cell without one only takes the focus.
+    fn move_cursor(&mut self, screen: &Screen, grid: &Grid, dx: i64, dy: i64) -> Option<Outcome> {
+        let at = grid.cursor?;
+        let target = (at.x as i64 + dx, at.y as i64 + dy);
+        let cell = grid
+            .cells
+            .iter()
+            .find(|c| (c.x as i64, c.y as i64) == target && c.id.is_some());
+        let Some((cell, id)) = cell.and_then(|c| Some((c, c.id.as_deref()?))) else {
+            return Some(Outcome::handled());
+        };
+        self.focus_row(&grid.head.id, id);
+        match &cell.affordance {
+            Some(affordance) => Some(self.activate(screen, affordance)),
+            None => Some(Outcome::revealing(id)),
         }
     }
 
