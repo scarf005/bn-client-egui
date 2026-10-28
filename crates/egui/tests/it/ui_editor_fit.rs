@@ -453,3 +453,21 @@ fn the_entries_of_the_open_file_are_in_view_beside_a_full_canvas_without_scrolli
         }
     }
 }
+
+#[test]
+fn the_kind_of_the_open_entry_shows_under_the_entries_while_the_canvas_has_the_focus() {
+    for size in [egui::vec2(1290.0, 830.0), egui::vec2(1920.0, 1080.0)] {
+        let mut screen = editor();
+        let entry = find(&mut screen["root"], "editor:objects").unwrap()["rows"][0].clone();
+        assert_eq!(entry["selected"], true);
+        let kind = entry["description"].as_str().unwrap().to_owned();
+        screen["focus"] = json!({"component_id": "editor:canvas"});
+        let mut h = crate::common::themed_harness(size, crate::common::staged(json!([screen])).0);
+        h.run_steps(12);
+        let r = h.query_by_label(&kind).map(|n| n.rect());
+        assert!(
+            r.is_some_and(|r| unclipped(&h, r)),
+            "at {size:?} the kind {kind:?} of the open entry is not shown: {r:?}"
+        );
+    }
+}
