@@ -752,6 +752,24 @@ fn under_keybindings<'a>(size: egui::Vec2) -> (H<'a>, bn_client_egui::transport:
     (h, script)
 }
 
+/// The least opacity of the painted text `text`.
+fn least_alpha(h: &H, text: &str) -> Option<u8> {
+    h.output()
+        .shapes
+        .iter()
+        .filter_map(|c| match &c.shape {
+            egui::Shape::Text(t) if t.galley.text() == text => t
+                .galley
+                .rows
+                .iter()
+                .flat_map(|r| &r.visuals.mesh.vertices)
+                .map(|v| v.color.a())
+                .min(),
+            _ => None,
+        })
+        .min()
+}
+
 #[test]
 fn a_screen_over_a_workspace_is_drawn_over_the_workspace_which_takes_no_input() {
     for size in [egui::vec2(1290.0, 830.0), egui::vec2(1920.0, 1080.0)] {
@@ -770,6 +788,13 @@ fn a_screen_over_a_workspace_is_drawn_over_the_workspace_which_takes_no_input() 
             painted(&h, "Room Editor").len(),
             1,
             "{size:?}: no title in the bar"
+        );
+        // Drawn as it is, not faded: a faded one shows the sprites its layers cover.
+        let (top, _) = shown(size);
+        assert_eq!(
+            least_alpha(&h, "Properties"),
+            least_alpha(&top, "Properties"),
+            "{size:?}: the workspace under the keybindings is faded"
         );
         let sent = script.sent().len();
         let at = rect(&h, "Pencil").center();
