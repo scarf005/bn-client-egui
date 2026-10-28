@@ -96,3 +96,27 @@ fn enter_in_the_filter_picks_the_first_match_and_the_next_opening_starts_unfilte
     h.run();
     h.get_by_label("fuel 3 other");
 }
+
+#[test]
+fn a_select_with_a_long_value_stays_inside_a_narrow_pane() {
+    let mut editor = editor(5);
+    editor.values[0].label = "a shape with a very long name indeed".into();
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(220.0, 100.0))
+        .build_ui(move |ui| {
+            value_editor(
+                ui,
+                &ValueField {
+                    id: "shape",
+                    label: "Shape",
+                    editor: &editor,
+                    enabled: true,
+                    refusal: None,
+                    required: false,
+                },
+            );
+        });
+    h.run();
+    let combo = h.get_by_role_and_label(egui::accesskit::Role::ComboBox, "Shape");
+    assert!(combo.rect().right() <= 220.0, "{:?}", combo.rect());
+}

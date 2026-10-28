@@ -106,7 +106,15 @@ pub fn value_editor(ui: &mut egui::Ui, field: &ValueField) -> ValueEdit {
                     .find(|v| v.id == editor.value)
                     .map_or(editor.value.as_str(), |v| v.label.as_str());
                 let long = editor.values.len() > SELECT_FILTER_FROM;
-                let mut combo = egui::ComboBox::from_id_salt(key).selected_text(shown);
+                // The box is as wide as its value, no wider than the room the pane leaves it.
+                let room = ui
+                    .available_width()
+                    .min(ui.clip_rect().right() - ui.cursor().left());
+                let width = (field_width(ui, shown) + ui.spacing().icon_width * 2.0).min(room);
+                let mut combo = egui::ComboBox::from_id_salt(key)
+                    .selected_text(shown)
+                    .width(width.max(ui.spacing().interact_size.x))
+                    .truncate();
                 if long {
                     combo = combo.height(ui.ctx().content_rect().height() * LONG_SELECT_HEIGHT);
                 }
