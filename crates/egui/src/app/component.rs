@@ -613,9 +613,13 @@ impl<M: GameModel> App<M> {
         let Some(top) = interaction::described(self.model.screens()) else {
             return;
         };
-        if let Some(form) = acted_form(top, &intent) {
-            self.screens.sent_form = form.map(|form| (top.screen_id.clone(), form));
+        // The form the player sends takes the engine's news once it goes out; an act outside the forms gives the
+        // news back to the status line.
+        let acted = acted_form(top, &intent);
+        if let Some(None) = acted {
+            self.screens.sent_form = None;
         }
+        let sent_form = acted.flatten().map(|form| (top.screen_id.clone(), form));
         let filled = match &intent {
             Intent::Fill { form, field, .. } => {
                 Some((top.screen_id.clone(), form.clone(), field.clone()))
@@ -677,6 +681,9 @@ impl<M: GameModel> App<M> {
             Intent::Pane(pane) => interaction.answer_pane(top, &pane),
             Intent::Confirm => interaction.confirm(top),
         };
+        if out.invoke.is_some() && sent_form.is_some() {
+            self.screens.sent_form = sent_form;
+        }
         // A value the client refused stays by its field, and only there; one sent takes the refusal away.
         if let Some((screen, form, field)) = filled {
             let refusal = out.invoke.is_none().then(|| out.note()).flatten();
