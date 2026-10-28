@@ -709,6 +709,39 @@ fn return_on_a_grid_cell_runs_the_affordance_the_cell_names() {
     assert_eq!(out.denial, Some(Text::Plain("Blocked".into())));
 }
 
+/// A canvas, such as an editor's, beside a list: an arrow moves the engine's cursor from where the engine has it,
+/// running the affordance of the cell it lands on, whatever list the screen also holds.
+#[test]
+fn an_arrow_moves_a_canvas_cursor_from_the_engines_by_its_cells_affordance() {
+    let canvas = json!({"id": "grid", "kind": "grid", "role": "canvas", "cols": 3, "rows": 1,
+        "cursor": {"x": 1, "y": 0}, "cells": [
+            {"x": 0, "y": 0, "id": "c0", "enabled": true, "affordance": "mount"},
+            {"x": 1, "y": 0, "id": "c1", "enabled": true, "affordance": "mount"},
+            {"x": 2, "y": 0, "id": "c2", "enabled": true, "affordance": "mount"}]});
+    let root = json!({"id": "body", "kind": "split", "relation": "peers",
+        "children": [list(vec![row("a", json!({})), row("b", json!({}))]), canvas]});
+    let screen = screen_with(
+        root,
+        json!([pick(), {"id": "mount", "label": "Pick mount", "keys": [], "enabled": true,
+            "expect": "screen", "args": {"row": {"component_id": "grid"}}}]),
+    );
+    let mut ui = Interaction::default();
+    assert_eq!(
+        invoked(&press(&mut ui, &screen, "RIGHT")),
+        Some(("mount", json!({"row": "c2"})))
+    );
+    assert_eq!(
+        invoked(&press(&mut ui, &screen, "LEFT")),
+        Some(("mount", json!({"row": "c0"}))),
+        "from the engine's cursor, which has not moved yet"
+    );
+    assert_eq!(
+        invoked(&press(&mut ui, &screen, "UP")),
+        None,
+        "no cell there"
+    );
+}
+
 /// The native query popup (Yes / No): the engine binds Left, Right and Confirm and keeps its own cursor.
 fn query_popup(cursor: &str) -> Screen {
     let mut screen = screen_with(
