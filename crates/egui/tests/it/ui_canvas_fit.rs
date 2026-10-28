@@ -1,6 +1,6 @@
 //! A canvas grid fits its squares to its room but never grows them past a size that keeps sprites readable, and a
 //! square names what it holds and, when it is off, why, on hover.
-use crate::ui_editor_drag::{H, editor_of, open_sized};
+use crate::ui_editor_drag::{H, editor_of, open_sized, painted};
 use eframe::egui;
 use egui_kittest::kittest::{NodeT, Queryable};
 use serde_json::{Value, json};
@@ -74,4 +74,44 @@ fn a_square_names_what_it_holds_and_why_it_is_off_on_hover() {
         2,
         "its name and the tooltip with its reason"
     );
+}
+
+/// A right click at `at`.
+fn right_click(h: &mut H, at: egui::Pos2) {
+    h.hover_at(at);
+    h.run_steps(2);
+    for pressed in [true, false] {
+        h.event(egui::Event::PointerButton {
+            pos: at,
+            button: egui::PointerButton::Secondary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        });
+        h.run_steps(2);
+    }
+}
+
+#[test]
+fn a_right_click_runs_the_grids_secondary_affordance_on_that_square() {
+    let mut with = screen(5);
+    let mut stack = vec![&mut with["root"]];
+    while let Some(node) = stack.pop() {
+        if node["id"] == "editor:canvas" {
+            node["secondary"] = json!("editor:paint");
+            break;
+        }
+        match node {
+            Value::Array(items) => stack.extend(items.iter_mut()),
+            Value::Object(members) => stack.extend(members.values_mut()),
+            _ => {}
+        }
+    }
+    let (mut h, script) = open_sized(with, LARGE);
+    let at = square(&h, 3, 3).center();
+    right_click(&mut h, at);
+    assert_eq!(painted(&script), ["square:3,3"]);
+    let (mut h, script) = open_sized(screen(5), LARGE);
+    let at = square(&h, 3, 3).center();
+    right_click(&mut h, at);
+    assert!(painted(&script).is_empty(), "no secondary, no action");
 }

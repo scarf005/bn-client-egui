@@ -1605,6 +1605,15 @@ impl<M: GameModel> App<M> {
                             (true, false) => button.on_hover_text(tip),
                             (false, false) => button.on_disabled_hover_text(tip),
                         };
+                        if let (true, Some(id), Some(a)) =
+                            (button.secondary_clicked(), &cell.id, &grid.secondary)
+                        {
+                            out.push(Intent::Focus {
+                                component: self.row_component(a, &grid.head.id),
+                                row: id.clone(),
+                            });
+                            out.push(Intent::Run(a.clone()));
+                        }
                         // A pointer click on a draggable canvas is the drag's press and release.
                         let pointer_click =
                             grid.drag.is_some() && ui.input(|i| i.pointer.any_released());

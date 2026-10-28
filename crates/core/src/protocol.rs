@@ -2402,6 +2402,9 @@ pub struct Grid {
     /// are not dragged.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub region_drag: Option<String>,
+    /// The affordance a secondary click of a cell runs, on the cell's `id`; none: a secondary click does nothing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub secondary: Option<String>,
 }
 
 /// A square of a canvas grid, counted from the same origin as its cells.
