@@ -254,3 +254,23 @@ fn news_standing_before_a_refused_value_stays_in_the_status_strip() {
         );
     }
 }
+
+/// News that says what the described row of a list already says is shown there alone, not again in the strip.
+#[test]
+fn news_a_described_row_already_says_is_shown_once() {
+    let mut screen = editor(Some(NOTICE));
+    let row = &mut screen["root"]["children"][0]["rows"][0];
+    row["selected"] = json!(true);
+    row["description"] = json!(NOTICE);
+    for size in SIZES {
+        let (app, _) = crate::common::staged(crate::common::over_map(screen.clone()));
+        let mut h = crate::common::themed_harness(size, app);
+        h.run_steps(7);
+        crate::common::settle_windows(&mut h);
+        let said = h
+            .query_all_by_label(NOTICE)
+            .map(|n| n.rect())
+            .collect::<Vec<_>>();
+        assert_eq!(said.len(), 1, "{size:?}: {NOTICE:?} drawn at {said:?}");
+    }
+}
