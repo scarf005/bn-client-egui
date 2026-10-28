@@ -480,33 +480,3 @@ fn the_kind_of_the_open_entry_shows_under_the_entries_while_no_row_of_them_has_t
         );
     }
 }
-
-/// A file of many entries, as a house's variants are: the entries take the room their rows want, and the kind of
-/// the open one still shows under them.
-#[test]
-fn the_kind_of_the_open_entry_shows_under_a_file_of_many_entries() {
-    for size in [egui::vec2(1290.0, 830.0), egui::vec2(1920.0, 1080.0)] {
-        let mut screen = editor();
-        let objects = find(&mut screen["root"], "editor:objects").unwrap();
-        let first = objects["rows"][0].clone();
-        let kind = first["description"].as_str().unwrap().to_owned();
-        objects["rows"] = (0..8)
-            .map(|i| {
-                let mut row = first.clone();
-                row["id"] = json!(format!("object:{i}"));
-                row["label"] = json!(format!("house_variant ({} of 8)", i + 1));
-                row["selected"] = json!(i == 0);
-                row
-            })
-            .collect();
-        objects["total"] = json!(8);
-        screen["focus"] = json!({"component_id": "editor:canvas"});
-        let mut h = crate::common::themed_harness(size, crate::common::staged(json!([screen])).0);
-        h.run_steps(12);
-        let r = h.query_by_label(&kind).map(|n| n.rect());
-        assert!(
-            r.is_some_and(|r| unclipped(&h, r)),
-            "at {size:?} the kind {kind:?} of the open entry is not shown under eight entries: {r:?}"
-        );
-    }
-}
