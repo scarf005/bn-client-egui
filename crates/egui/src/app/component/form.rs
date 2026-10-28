@@ -176,6 +176,15 @@ impl<M: GameModel> App<M> {
                 if ui.is_enabled() && ui.data(|d| d.get_temp::<egui::Id>(focused)) != Some(opened) {
                     edit.request_focus();
                     ui.data_mut(|d| d.insert_temp(focused, opened));
+                    // What it opens with, such as the engine's suggestion, is selected: typing replaces it.
+                    if let Some(mut state) = egui::TextEdit::load_state(ui.ctx(), edit.id) {
+                        let all = egui::text::CCursorRange::two(
+                            egui::text::CCursor::new(0),
+                            egui::text::CCursor::new(shown.chars().count()),
+                        );
+                        state.cursor.set_char_range(Some(all));
+                        state.store(ui.ctx(), edit.id);
+                    }
                 }
                 if edit.changed() {
                     out.push(Intent::Text(shown));
