@@ -1,11 +1,13 @@
 // Turns a demo directory recorded by `crates/egui/tests/it/demo_editor_video.rs` into an mp4: the frames
-// (`frames/NNNNN.png`) each shown for the milliseconds of `timing.tsv`, the captions of `captions.tsv` burned in.
+// (`frames/NNNNN.png`) each shown for the milliseconds of `timing.tsv`, the captions of `captions.tsv` burned in
+// on a strip under the picture, so that no caption covers what the window shows.
 //
 // deno run --allow-read --allow-write --allow-run=ffmpeg tools/demo_video.ts <demo dir> [out.mp4]
 import { basename, dirname, join, resolve } from "jsr:@std/path@1";
 
 const FPS = 30;
 const FONT = "Noto Sans CJK KR";
+const STRIP = 90;
 
 /// The rows of a tab-separated file as `[number, text]`.
 const rows = async (path: string) =>
@@ -60,9 +62,9 @@ const srt = captions.map(([frame, text], i) => {
 await Deno.writeTextFile(join(dir, "captions.srt"), srt);
 
 const style =
-  `FontName=${FONT},FontSize=26,Bold=1,PrimaryColour=&H00FFFFFF,OutlineColour=&HC0000000,BorderStyle=3,Outline=2,Shadow=0,MarginV=30`;
+  `FontName=${FONT},FontSize=7,Bold=1,PrimaryColour=&H00FFFFFF,OutlineColour=&HC0000000,BorderStyle=3,Outline=1,Shadow=0,MarginV=5`;
 const filter =
-  `fps=${FPS},subtitles=captions.srt:force_style='${style}',format=yuv420p`;
+  `fps=${FPS},pad=iw:ih+${STRIP}:0:0:black,subtitles=captions.srt:force_style='${style}',format=yuv420p`;
 const { code } = await new Deno.Command("ffmpeg", {
   cwd: dir,
   args: [
