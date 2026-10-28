@@ -574,6 +574,29 @@ fn a_select_field_moves_among_its_options_and_a_key_field_takes_the_next_key() {
     );
 }
 
+/// A whole number past its field's bounds, or no number, is refused in words naming the bounds, and not sent.
+#[test]
+fn a_number_outside_its_fields_bounds_is_refused_with_them() {
+    let screen = form(
+        json!([{"id": "facing", "label": "Facing", "value": "0", "type": "integer", "min": 0, "max": 359}]),
+        json!([set()]),
+    );
+    let mut ui = Interaction::default();
+    for typed in ["400", "-1", "east"] {
+        let out = ui.fill(&screen, "set", "form", "facing", typed);
+        assert_eq!(invoked(&out), None, "{typed} was sent");
+        assert_eq!(
+            out.note().as_deref(),
+            Some("Enter a whole number from 0 to 359."),
+            "{typed}"
+        );
+    }
+    assert_eq!(
+        invoked(&ui.fill(&screen, "set", "form", "facing", "359")),
+        Some(("set", json!({"row": "facing", "text": "359"})))
+    );
+}
+
 #[test]
 fn a_form_field_is_filled_by_the_affordance_that_names_it() {
     let screen = form(
