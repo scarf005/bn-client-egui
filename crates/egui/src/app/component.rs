@@ -72,6 +72,7 @@ fn cell_tip(cell: &GridCell) -> String {
     label
         .into_iter()
         .chain(why.map(|w| markup::plain(&w.shown())))
+        .chain(cell.refused.clone())
         .filter(|line| !line.is_empty())
         .collect::<Vec<_>>()
         .join("\n")
@@ -1501,8 +1502,9 @@ impl<M: GameModel> App<M> {
                             continue;
                         };
                         // Another level seen through open air is drawn faded, as its sprites and its glyph.
-                        // A square that is off is drawn faded too; a button does that itself.
-                        let off = !(cell.enabled || cell.id.is_some() && cell.affordance.is_some());
+                        // A square that is off or refused is drawn faded too; a disabled button does that itself.
+                        let off = !(cell.enabled || cell.id.is_some() && cell.affordance.is_some())
+                            || cell.refused.is_some();
                         ui.set_opacity(match cell.faded == Some(true) || off {
                             true => opacity * GRID_FADED,
                             false => opacity,

@@ -2481,6 +2481,9 @@ pub struct GridCell {
     /// The cell shows another level, such as the one below seen through open air, which a client draws faded.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub faded: Option<bool>,
+    /// Why the tool in hand cannot act on the cell, which stays enabled; a client draws it dimmed and says why on hover.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub refused: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]

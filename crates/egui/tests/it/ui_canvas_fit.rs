@@ -115,3 +115,44 @@ fn a_right_click_runs_the_grids_secondary_affordance_on_that_square() {
     right_click(&mut h, at);
     assert!(painted(&script).is_empty(), "no secondary, no action");
 }
+
+#[test]
+fn a_refused_square_says_why_on_hover_and_still_takes_its_click() {
+    let mut with = screen(5);
+    let mut stack = vec![&mut with["root"]];
+    while let Some(node) = stack.pop() {
+        if node["id"] == "editor:canvas" {
+            for cell in node["cells"].as_array_mut().unwrap() {
+                if (cell["x"].as_u64(), cell["y"].as_u64()) == (Some(3), Some(3)) {
+                    cell["refused"] = json!("Install a frame here first");
+                }
+            }
+            break;
+        }
+        match node {
+            Value::Array(items) => stack.extend(items.iter_mut()),
+            Value::Object(members) => stack.extend(members.values_mut()),
+            _ => {}
+        }
+    }
+    let (mut h, script) = open_sized(with, LARGE);
+    let at = square(&h, 3, 3).center();
+    h.hover_at(at);
+    h.run_steps(40);
+    assert_eq!(
+        h.query_all_by_label_contains("Install a frame here first")
+            .count(),
+        1
+    );
+    h.hover_at(at);
+    for pressed in [true, false] {
+        h.event(egui::Event::PointerButton {
+            pos: at,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        });
+        h.run_steps(3);
+    }
+    assert_eq!(painted(&script), ["square:3,3"]);
+}
