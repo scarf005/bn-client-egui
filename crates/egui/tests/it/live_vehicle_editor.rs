@@ -1,8 +1,8 @@
 //! Against a real engine: the vehicle editor from the main menu's Editor tab, drawn from its generic components: a
 //! prototype opened from the filtered list, its mounts drawn with the tileset on the canvas, a tank's fuel and the
 //! vehicle's name in their own fields, a part installed on a mount and one the game does not mount refused, the
-//! install undone, the design spawned and copied with its state beside the avatar, a part installed on the spawned
-//! vehicle in place and undone, and the editor left for the map.
+//! install undone, the design spawned, the editor reached again from the map editor, the vehicle copied with its state beside the avatar, a part installed on the spawned
+//! vehicle in place and undone, and the editors left.
 //!
 //! `BN_ENGINE=<engine> SHOT_DIR=<dir> cargo test --release -p bn-client-egui --test it live_vehicle_editor:: --
 //! --ignored --nocapture`; `BN_ROOT` names the game root when it is not beside the engine.
@@ -111,7 +111,8 @@ fn the_vehicle_editor_opens_installs_and_undoes() {
 
     invoke(&mut h, "vehicle:part_filter", text("xlframe_vertical"));
     let frame = list_row(&h, "vehicle:parts", "vpart:xlframe_vertical");
-    assert!(!frame.enabled);
+    // The game would not mount a second frame there, and the row says why.
+    assert!(!frame.description.shown().is_empty(), "{frame:?}");
     save(&mut h, "vehicle-editor-denied");
 
     invoke(&mut h, "vehicle:undo", InvokeArgs::default());
@@ -119,6 +120,19 @@ fn the_vehicle_editor_opens_installs_and_undoes() {
     assert_eq!(rows(&h, "vehicle:stack"), before);
 
     invoke(&mut h, "vehicle:spawn", InvokeArgs::default());
+    // The spawn leaves for the map; the map editor's vehicle editor comes back to the same design.
+    run_until(&mut h, "the map", 120, |h| {
+        !h.state().model.busy()
+            && h.state()
+                .model
+                .screens()
+                .last()
+                .is_some_and(|s| s.role == ScreenRole::Map)
+    });
+    crate::live_editor_walk::click(&mut h, "Map Editor");
+    wait_kind(&mut h, "editor");
+    invoke(&mut h, "editor:vehicle", InvokeArgs::default());
+    wait_kind(&mut h, "vehicle_editor");
     invoke(&mut h, "vehicle:source", row("source:world"));
     assert_eq!(rows(&h, "vehicle:world").len(), 1);
     invoke(&mut h, "vehicle:copy", row("world:0"));
@@ -127,6 +141,8 @@ fn the_vehicle_editor_opens_installs_and_undoes() {
     save(&mut h, "vehicle-editor-world");
 
     invoke(&mut h, "vehicle:edit", row("world:0"));
+    // The install tool is still taken: the select tool only picks the mount.
+    invoke(&mut h, "vehicle:tool_select", InvokeArgs::default());
     invoke(&mut h, "vehicle:mount", row("mount:1,0"));
     let plain = rows(&h, "vehicle:stack");
     invoke(&mut h, "vehicle:part_filter", text("headlight"));
@@ -137,14 +153,27 @@ fn the_vehicle_editor_opens_installs_and_undoes() {
     invoke(&mut h, "vehicle:undo", InvokeArgs::default());
     assert_eq!(rows(&h, "vehicle:stack").len(), plain.len());
     invoke(&mut h, "vehicle:done", InvokeArgs::default());
+    // Left for the map editor it was reached from, and that left for where the game was.
     invoke(&mut h, "QUIT", InvokeArgs::default());
-    run_until(&mut h, "the map", 120, |h| {
+    wait_kind(&mut h, "editor");
+    invoke(&mut h, "QUIT", InvokeArgs::default());
+    if h.state()
+        .model
+        .screens()
+        .last()
+        .and_then(|s| s.kind.as_deref())
+        == Some("editor")
+    {
+        crate::live_editor_walk::click(&mut h, "Leave without saving");
+    }
+    run_until(&mut h, "out of the editors", 120, |h| {
         !h.state().model.busy()
             && h.state()
                 .model
                 .screens()
                 .last()
-                .is_some_and(|s| s.role == ScreenRole::Map)
+                .and_then(|s| s.kind.as_deref())
+                .is_some_and(|k| k != "editor" && k != "vehicle_editor")
     });
     let _ = std::fs::remove_dir_all(&dir);
 }
