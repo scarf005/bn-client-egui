@@ -635,10 +635,19 @@ impl<M: GameModel> App<M> {
             let top = ui.cursor().top();
             match &c.head().label {
                 Some(label) => {
-                    egui::CollapsingHeader::new(markup::plain(&label.shown()))
+                    // Open as the player last left it on this screen, else as the engine has it.
+                    let chosen =
+                        egui::Id::new(("part folded by the player", &screen.screen_id, c.id()));
+                    let open = ui
+                        .data(|d| d.get_temp::<bool>(chosen))
+                        .unwrap_or(!c.head().collapsed);
+                    let header = egui::CollapsingHeader::new(markup::plain(&label.shown()))
                         .id_salt(c.id())
-                        .default_open(true)
+                        .open(Some(open))
                         .show(ui, |ui| self.component_body(ui, screen, c, out));
+                    if header.header_response.clicked() {
+                        ui.data_mut(|d| d.insert_temp(chosen, !open));
+                    }
                 }
                 None => self.component(ui, screen, c, out),
             }

@@ -8,7 +8,7 @@ use crate::live_editor::{H, field, run_until, start, start_with, wait_kind};
 use bn_client_egui::protocol::Component;
 use bn_client_egui::{GameModel, MenuModel};
 use eframe::egui;
-use egui_kittest::kittest::NodeT;
+use egui_kittest::kittest::{NodeT, Queryable};
 
 /// The labels drawn now, one per line.
 pub(crate) fn labels(h: &H) -> Vec<String> {
@@ -3613,4 +3613,241 @@ fn the_map_editor_answers_the_audits_clicks_keys_and_refusals() {
     }
     shot(&mut h, "m6-tab-on-canvas");
     assert!(found.0.is_empty(), "{:#?}", found.0);
+}
+
+/// How long a click took to show its answer: from the press until `done` holds on a drawn frame, with the frames
+/// drawn and the slowest of them.
+struct Took {
+    what: String,
+    total: std::time::Duration,
+    frames: u32,
+    slowest: std::time::Duration,
+}
+
+/// Clicks the centre of what `rect_of` finds once it is in view and still, and draws frames as fast as the client
+/// can until `done` holds.
+fn timed_click(
+    h: &mut H,
+    what: &str,
+    rect_of: impl Fn(&H) -> Option<egui::Rect>,
+    done: impl Fn(&H) -> bool,
+) -> Took {
+    let at = click_stable(h, what, rect_of).center();
+    h.hover_at(at);
+    h.run_steps(1);
+    let start = std::time::Instant::now();
+    for pressed in [true, false] {
+        h.event(egui::Event::PointerButton {
+            pos: at,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        });
+    }
+    let (mut frames, mut slowest) = (0, std::time::Duration::ZERO);
+    while frames == 0 || !done(h) {
+        assert!(
+            start.elapsed() < std::time::Duration::from_secs(120),
+            "{what}: never done; {:?}",
+            labels(h)
+        );
+        let frame = std::time::Instant::now();
+        h.run_steps(1);
+        frames += 1;
+        slowest = slowest.max(frame.elapsed());
+        // A frame slower than a 60 Hz display's is named with where the engine's answer stood.
+        if frame.elapsed() > std::time::Duration::from_millis(16) {
+            let stage = h.state().model.command().map(|c| c.stage);
+            println!(
+                "  frame {frames} at {:?}: {:?}, busy {}, top {:?}, command {stage:?}",
+                start.elapsed(),
+                frame.elapsed(),
+                h.state().model.busy(),
+                top(h)
+            );
+        }
+    }
+    let took = Took {
+        what: what.into(),
+        total: start.elapsed(),
+        frames,
+        slowest,
+    };
+    println!(
+        "took {}: {:?} in {} frames, slowest {:?}",
+        took.what, took.total, took.frames, took.slowest
+    );
+    took
+}
+
+/// The item `item` of the menu `group` once the menu is open.
+fn menu_item(h: &mut H, group: &str, item: &str) -> impl Fn(&H) -> Option<egui::Rect> + use<> {
+    press(h, group);
+    h.run_steps(4);
+    let under = find(h, group).unwrap().left_bottom();
+    let item = item.to_string();
+    move |h: &H| {
+        h.root()
+            .children_recursive()
+            .filter(|n| n.accesskit_node().label().as_deref() == Some(item.as_str()))
+            .map(|n| n.rect())
+            .filter(|r| r.top() >= under.y - 1.0)
+            .min_by(|a, b| {
+                (a.left_top() - under)
+                    .length()
+                    .total_cmp(&(b.left_top() - under).length())
+            })
+    }
+}
+
+/// The top screen is `kind`, the engine is idle, and `label` is drawn.
+fn showing(kind: &'static str, label: &'static str) -> impl Fn(&H) -> bool {
+    move |h: &H| {
+        !h.state().model.busy() && top(h).as_deref() == Some(kind) && find(h, label).is_some()
+    }
+}
+
+/// The engine finished the command the affordance `id` started, and is idle.
+fn answered(id: &'static str) -> impl Fn(&H) -> bool {
+    move |h: &H| {
+        let model = &h.state().model;
+        !model.busy()
+            && model
+                .command()
+                .is_some_and(|c| c.target.as_deref() == Some(id) && c.finished)
+    }
+}
+
+/// The engine's editor hints walked as a modder meets them, each shot at both sizes, and the time the editors' slow
+/// clicks take to show their answer.
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn the_editors_show_the_engines_hints_and_answer_clicks_quickly() {
+    let mut h = audit_start();
+    let mut took = vec![];
+    open_map_editor(&mut h);
+    rest(&mut h);
+    shot(&mut h, "h1-map-editor-start");
+    dump(&h, "map editor start");
+    // A menu item's description on hover.
+    let item = menu_item(&mut h, "World", "Open mapgen here");
+    let at = stable(&mut h, "Open mapgen here", &item);
+    h.hover_at(at.center());
+    for _ in 0..40 {
+        h.step();
+    }
+    shot(&mut h, "h2-menu-item-description");
+    key(&mut h, egui::Key::Escape);
+    // A filter that leaves no file: the list says so.
+    click_search(&mut h, "Files");
+    type_text(&mut h, "house_99");
+    key(&mut h, egui::Key::Enter);
+    rest(&mut h);
+    shot(&mut h, "h3-files-none");
+    dump(&h, "files none");
+    // A document open: the start page's parts fold to their headings.
+    let path = create_mapgen(&mut h, "hints_walk");
+    rest(&mut h);
+    shot(&mut h, "h4-document-open-folded");
+    dump(&h, &format!("document {}", path.display()));
+    // The vehicle editor from the map editor's World menu.
+    let item = menu_item(&mut h, "World", "Vehicle editor");
+    took.push(timed_click(
+        &mut h,
+        "Map Editor > Vehicle editor",
+        item,
+        showing("vehicle_editor", "Vehicles"),
+    ));
+    rest(&mut h);
+    shot(&mut h, "h5-vehicle-editor");
+    dump(&h, "vehicle editor");
+    // A prototype spawned beside the avatar from the World menu.
+    click_search(&mut h, "Vehicles");
+    type_text(&mut h, "bicycle");
+    key(&mut h, egui::Key::Enter);
+    rest(&mut h);
+    double_click(&mut h, "Bicycle");
+    wait_kind(&mut h, "vehicle_editor");
+    rest(&mut h);
+    shot(&mut h, "h6-prototype");
+    dump(&h, "prototype");
+    let item = menu_item(&mut h, "World", "Spawn");
+    took.push(timed_click(
+        &mut h,
+        "Spawn",
+        item,
+        answered("vehicle:spawn"),
+    ));
+    rest(&mut h);
+    shot(&mut h, "h7-spawned");
+    dump(&h, "spawned");
+    // The world's vehicles: nearest first, with the way each stands.
+    if top(&h).as_deref() != Some("vehicle_editor") {
+        click(&mut h, "Map Editor");
+        wait_kind(&mut h, "editor");
+        rest(&mut h);
+        let item = menu_item(&mut h, "World", "Vehicle editor");
+        took.push(timed_click(
+            &mut h,
+            "Map Editor > Vehicle editor, again",
+            item,
+            showing("vehicle_editor", "Vehicles"),
+        ));
+        rest(&mut h);
+    }
+    click_tab(&mut h, "World");
+    rest(&mut h);
+    shot(&mut h, "h8-world-vehicles");
+    dump(&h, "world vehicles");
+    // An action's description on keyboard focus.
+    h.get_by_role_and_label(egui::accesskit::Role::Button, "Copy vehicle")
+        .focus();
+    h.hover_at(gutter(&h));
+    for _ in 0..10 {
+        h.step();
+    }
+    shot(&mut h, "h9-copy-focused");
+    // The nearest vehicle, picked by a click on its row unless the engine picked it, copied and pasted.
+    click_button(&mut h, "Bicycle");
+    rest(&mut h);
+    click_button(&mut h, "Copy vehicle");
+    rest(&mut h);
+    let item = menu_item(&mut h, "World", "Paste vehicle");
+    took.push(timed_click(
+        &mut h,
+        "Paste vehicle",
+        item,
+        answered("vehicle:paste"),
+    ));
+    rest(&mut h);
+    shot(&mut h, "h10-pasted");
+    dump(&h, "pasted");
+    if top(&h).as_deref() != Some("vehicle_editor") {
+        click(&mut h, "Map Editor");
+        wait_kind(&mut h, "editor");
+        rest(&mut h);
+        menu(&mut h, "World", "Vehicle editor");
+        wait_kind(&mut h, "vehicle_editor");
+        click_tab(&mut h, "World");
+        rest(&mut h);
+    }
+    if find(&h, "Edit in place").is_some() {
+        click_button(&mut h, "Bicycle");
+        rest(&mut h);
+        click_button(&mut h, "Edit in place");
+        rest(&mut h);
+        shot(&mut h, "h11-in-place");
+        dump(&h, "in place");
+        let item = menu_item(&mut h, "World", "Done");
+        took.push(timed_click(&mut h, "Done", item, answered("vehicle:done")));
+        rest(&mut h);
+        shot(&mut h, "h12-done");
+        dump(&h, "done");
+    }
+    for t in &took {
+        println!(
+            "{}: {:?} ({} frames, slowest {:?})",
+            t.what, t.total, t.frames, t.slowest
+        );
+    }
 }

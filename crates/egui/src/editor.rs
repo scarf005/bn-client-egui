@@ -52,6 +52,8 @@ pub struct ValueField<'a> {
     pub editor: &'a Editor,
     pub enabled: bool,
     pub refusal: Option<&'a str>,
+    /// The form needs the field filled.
+    pub required: bool,
 }
 
 /// What the player did to a field this frame.
@@ -70,6 +72,7 @@ pub fn value_editor(ui: &mut egui::Ui, field: &ValueField) -> ValueEdit {
         editor,
         enabled,
         refusal,
+        required,
     } = *field;
     let key = egui::Id::new(("editor", id));
     let mut draft = ui
@@ -90,7 +93,7 @@ pub fn value_editor(ui: &mut egui::Ui, field: &ValueField) -> ValueEdit {
                 }
             }
             "select" => {
-                ui.label(label);
+                caption(ui, label, required);
                 let shown = editor
                     .values
                     .iter()
@@ -109,11 +112,10 @@ pub fn value_editor(ui: &mut egui::Ui, field: &ValueField) -> ValueEdit {
                         }
                     });
                 // The box is named by its field, as its label beside it reads.
-                ui.ctx()
-                    .accesskit_node_builder(combo.response.id, |b| b.set_label(label));
+                named(ui.ctx(), combo.response.id, label, required);
             }
             _ => {
-                ui.label(label);
+                caption(ui, label, required);
                 // A one-line field widens to its whole value rather than cut it, up to the room it has.
                 let edit = match editor.multiline {
                     // A long text scrolls in a box of a few lines, as wide as the room left.
@@ -157,8 +159,7 @@ pub fn value_editor(ui: &mut egui::Ui, field: &ValueField) -> ValueEdit {
                     egui::WidgetInfo::text_edit(true, draft.text.clone(), draft.text.clone(), label)
                 });
                 // The box is named by its field, as its label beside it reads.
-                ui.ctx()
-                    .accesskit_node_builder(edit.id, |b| b.set_label(label));
+                named(ui.ctx(), edit.id, label, required);
                 edited = edit.changed();
                 if refusal.is_some() && !edited {
                     let stroke = egui::Stroke::new(1.5, crate::kit::tokens::BAD);
@@ -188,6 +189,30 @@ pub fn value_editor(ui: &mut egui::Ui, field: &ValueField) -> ValueEdit {
     }
     ui.data_mut(|d| d.insert_temp(key, draft));
     ValueEdit { committed, edited }
+}
+
+/// A field's label, then a mark when the form needs the field filled, which the field itself reads out (`named`).
+fn caption(ui: &mut egui::Ui, label: &str, required: bool) {
+    ui.label(label);
+    if !required {
+        return;
+    }
+    let font = egui::TextStyle::Body.resolve(ui.style());
+    let mark = ui
+        .painter()
+        .layout_no_wrap("*".into(), font, crate::kit::tokens::BAD);
+    let (_, rect) = ui.allocate_space(mark.size());
+    ui.painter().galley(rect.min, mark, crate::kit::tokens::BAD);
+}
+
+/// Names the control `id` by its field's label, read as required when the form needs it filled.
+fn named(ctx: &egui::Context, id: egui::Id, label: &str, required: bool) {
+    ctx.accesskit_node_builder(id, |b| {
+        b.set_label(label);
+        if required {
+            b.set_required();
+        }
+    });
 }
 
 /// The engine asks for a key: the next key press names it. Escape is left to the cancel button.

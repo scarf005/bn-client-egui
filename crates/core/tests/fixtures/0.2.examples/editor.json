@@ -8,7 +8,7 @@
         "label": "Map Editor",
         "keys": [],
         "enabled": false,
-        "denial": "You need the Debug Editor trait.",
+        "denial": "You need the Debug Editor trait: open the debug menu (F12), then Player…, Mutate, and pick Debug Editor.",
         "expect": "screen"
       }
     },
@@ -67,24 +67,31 @@
                 {
                   "id": "path",
                   "label": "Path",
-                  "value": "",
-                  "type": "text"
+                  "description": "The new .json file, inside your mods.",
+                  "value": "profile/mods/my_mod/new_mapgen.json",
+                  "type": "text",
+                  "required": true
                 },
                 {
                   "id": "om_terrain",
                   "label": "Overmap terrain",
+                  "description": "The id of the overmap terrain the mapgen makes.",
                   "value": "",
-                  "type": "text"
+                  "type": "text",
+                  "required": true
                 },
                 {
                   "id": "fill",
                   "label": "Terrain",
+                  "description": "The terrain of every square, and under any symbol that maps none.",
                   "value": "t_floor",
-                  "type": "text"
+                  "type": "text",
+                  "required": true
                 },
                 {
                   "id": "kind",
                   "label": "Kind",
+                  "description": "What the file holds.",
                   "value": "mapgen",
                   "type": "select",
                   "options": [
@@ -113,8 +120,11 @@
                 {
                   "id": "size",
                   "label": "Chunk size",
+                  "description": "The side of a nested chunk, in squares.",
                   "value": "4",
-                  "type": "text"
+                  "type": "integer",
+                  "min": 1,
+                  "max": 24
                 }
               ],
               "submit": "editor:new_apply"
@@ -124,18 +134,36 @@
               "kind": "form",
               "label": "Export",
               "affordances": [
-                "editor:export_palette"
+                "editor:export_set"
               ],
               "slot": "inspector",
               "fields": [
                 {
                   "id": "palette",
                   "label": "Export palette",
+                  "description": "A palette of the game whose symbols the export reuses; empty for none.",
                   "value": "",
                   "type": "text"
+                },
+                {
+                  "id": "width",
+                  "label": "Width",
+                  "description": "Overmap squares across, around yours.",
+                  "value": "1",
+                  "type": "integer",
+                  "min": 1,
+                  "max": 3
+                },
+                {
+                  "id": "height",
+                  "label": "Height",
+                  "description": "Overmap squares down, around yours.",
+                  "value": "1",
+                  "type": "integer",
+                  "min": 1,
+                  "max": 3
                 }
-              ],
-              "submit": "editor:export_palette"
+              ]
             },
             {
               "id": "editor:import_form",
@@ -673,7 +701,8 @@
               "total": 934,
               "selection": "single",
               "activate": "editor:browser_open",
-              "filterable": true
+              "filterable": true,
+              "empty": "No data file is there to edit."
             }
           ]
         },
@@ -683,6 +712,7 @@
             "label": "Export mapgen here",
             "keys": [],
             "enabled": true,
+            "description": "Writes the map around you, or the marked squares, as a mapgen in a new file and opens it.",
             "args": {
               "text": {
                 "field_id": "path"
@@ -696,36 +726,7 @@
             "label": "Mark squares to export",
             "keys": [],
             "enabled": true,
-            "expect": "screen",
-            "group": "File"
-          },
-          {
-            "id": "editor:export_width",
-            "label": "Export width",
-            "keys": [],
-            "enabled": true,
-            "args": {
-              "count": {
-                "min": 1,
-                "max": 3,
-                "default": 1
-              }
-            },
-            "expect": "screen",
-            "group": "File"
-          },
-          {
-            "id": "editor:export_height",
-            "label": "Export height",
-            "keys": [],
-            "enabled": true,
-            "args": {
-              "count": {
-                "min": 1,
-                "max": 3,
-                "default": 1
-              }
-            },
+            "description": "Picks a rectangle of squares on the map for Export to write instead of whole overmap squares.",
             "expect": "screen",
             "group": "File"
           },
@@ -745,6 +746,7 @@
             "label": "Open mapgen here",
             "keys": [],
             "enabled": true,
+            "description": "Opens the mapgen of the overmap square you stand on.",
             "expect": "screen",
             "group": "World"
           },
@@ -753,6 +755,7 @@
             "label": "Take back stamp",
             "keys": [],
             "enabled": false,
+            "description": "Puts back what the stamp replaced in the world.",
             "denial": "Nothing is stamped.",
             "expect": "screen",
             "group": "World"
@@ -813,14 +816,15 @@
             "expect": "screen"
           },
           {
-            "id": "editor:export_palette",
-            "label": "Export palette",
+            "id": "editor:export_set",
+            "label": "Value",
             "keys": [],
             "enabled": true,
             "args": {
-              "text": {
-                "field_id": "palette"
-              }
+              "row": {
+                "component_id": "editor:export_options"
+              },
+              "text": {}
             },
             "expect": "boundary"
           },
@@ -993,6 +997,7 @@
                 "editor:save_as"
               ],
               "slot": "outline",
+              "collapsed": true,
               "fields": [
                 {
                   "id": "path",
@@ -1070,7 +1075,8 @@
               ],
               "total": 1,
               "selection": "single",
-              "activate": "editor:object"
+              "activate": "editor:object",
+              "empty": "The file holds no entry."
             },
             {
               "id": "editor:history",
@@ -1095,7 +1101,8 @@
               ],
               "total": 1,
               "selection": "single",
-              "activate": "editor:jump"
+              "activate": "editor:jump",
+              "empty": "No edits yet."
             },
             {
               "id": "editor:tools",
@@ -1506,7 +1513,8 @@
               ],
               "total": 2,
               "selection": "single",
-              "activate": "editor:symbol"
+              "activate": "editor:symbol",
+              "empty": "No symbol is mapped yet."
             },
             {
               "id": "editor:diagnostics",
@@ -1520,7 +1528,8 @@
               "rows": [],
               "total": 0,
               "selection": "single",
-              "activate": "editor:diagnostic"
+              "activate": "editor:diagnostic",
+              "empty": "No problems."
             },
             {
               "id": "editor:placements",
@@ -1574,7 +1583,8 @@
               ],
               "total": 1,
               "selection": "single",
-              "activate": "editor:placement"
+              "activate": "editor:placement",
+              "empty": "This entry places nothing."
             },
             {
               "id": "editor:place",
@@ -3564,7 +3574,8 @@
                 "total": 812,
                 "selection": "single",
                 "activate": "editor:catalog_pick",
-                "filterable": true
+                "filterable": true,
+                "empty": "The catalog has nothing of this kind."
               }
             },
             {
@@ -3576,28 +3587,36 @@
                 "editor:new_apply"
               ],
               "slot": "inspector",
+              "collapsed": true,
               "fields": [
                 {
                   "id": "path",
                   "label": "Path",
-                  "value": "",
-                  "type": "text"
+                  "description": "The new .json file, inside your mods.",
+                  "value": "profile/mods/my_mod/new_mapgen.json",
+                  "type": "text",
+                  "required": true
                 },
                 {
                   "id": "om_terrain",
                   "label": "Overmap terrain",
+                  "description": "The id of the overmap terrain the mapgen makes.",
                   "value": "",
-                  "type": "text"
+                  "type": "text",
+                  "required": true
                 },
                 {
                   "id": "fill",
                   "label": "Terrain",
+                  "description": "The terrain of every square, and under any symbol that maps none.",
                   "value": "t_floor",
-                  "type": "text"
+                  "type": "text",
+                  "required": true
                 },
                 {
                   "id": "kind",
                   "label": "Kind",
+                  "description": "What the file holds.",
                   "value": "mapgen",
                   "type": "select",
                   "options": [
@@ -3626,8 +3645,11 @@
                 {
                   "id": "size",
                   "label": "Chunk size",
+                  "description": "The side of a nested chunk, in squares.",
                   "value": "4",
-                  "type": "text"
+                  "type": "integer",
+                  "min": 1,
+                  "max": 24
                 }
               ],
               "submit": "editor:new_apply"
@@ -3637,18 +3659,36 @@
               "kind": "form",
               "label": "Export",
               "affordances": [
-                "editor:export_palette"
+                "editor:export_set"
               ],
               "slot": "inspector",
               "fields": [
                 {
                   "id": "palette",
                   "label": "Export palette",
+                  "description": "A palette of the game whose symbols the export reuses; empty for none.",
                   "value": "",
                   "type": "text"
+                },
+                {
+                  "id": "width",
+                  "label": "Width",
+                  "description": "Overmap squares across, around yours.",
+                  "value": "1",
+                  "type": "integer",
+                  "min": 1,
+                  "max": 3
+                },
+                {
+                  "id": "height",
+                  "label": "Height",
+                  "description": "Overmap squares down, around yours.",
+                  "value": "1",
+                  "type": "integer",
+                  "min": 1,
+                  "max": 3
                 }
-              ],
-              "submit": "editor:export_palette"
+              ]
             },
             {
               "id": "editor:import_form",
@@ -3659,6 +3699,7 @@
                 "editor:import"
               ],
               "slot": "inspector",
+              "collapsed": true,
               "fields": [
                 {
                   "id": "import",
@@ -3680,6 +3721,7 @@
                 "editor:browser_page"
               ],
               "slot": "outline",
+              "collapsed": true,
               "columns": [],
               "rows": [
                 {
@@ -4186,7 +4228,8 @@
               "total": 934,
               "selection": "single",
               "activate": "editor:browser_open",
-              "filterable": true
+              "filterable": true,
+              "empty": "No data file is there to edit."
             }
           ]
         },
@@ -4220,6 +4263,7 @@
             "label": "Export mapgen here",
             "keys": [],
             "enabled": true,
+            "description": "Writes the map around you, or the marked squares, as a mapgen in a new file and opens it.",
             "args": {
               "text": {
                 "field_id": "path"
@@ -4233,36 +4277,7 @@
             "label": "Mark squares to export",
             "keys": [],
             "enabled": true,
-            "expect": "screen",
-            "group": "File"
-          },
-          {
-            "id": "editor:export_width",
-            "label": "Export width",
-            "keys": [],
-            "enabled": true,
-            "args": {
-              "count": {
-                "min": 1,
-                "max": 3,
-                "default": 1
-              }
-            },
-            "expect": "screen",
-            "group": "File"
-          },
-          {
-            "id": "editor:export_height",
-            "label": "Export height",
-            "keys": [],
-            "enabled": true,
-            "args": {
-              "count": {
-                "min": 1,
-                "max": 3,
-                "default": 1
-              }
-            },
+            "description": "Picks a rectangle of squares on the map for Export to write instead of whole overmap squares.",
             "expect": "screen",
             "group": "File"
           },
@@ -4271,8 +4286,11 @@
             "label": "Extract legend to palette",
             "keys": [],
             "enabled": true,
+            "description": "Moves the entry's symbols into a new palette in this file, which the entry then uses.",
             "args": {
-              "text": {}
+              "text": {
+                "default": "editor_scenario_chunk_palette"
+              }
             },
             "expect": "boundary",
             "group": "File"
@@ -4450,6 +4468,7 @@
             "label": "Open mapgen here",
             "keys": [],
             "enabled": true,
+            "description": "Opens the mapgen of the overmap square you stand on.",
             "expect": "screen",
             "group": "World"
           },
@@ -4458,6 +4477,7 @@
             "label": "Take back stamp",
             "keys": [],
             "enabled": false,
+            "description": "Puts back what the stamp replaced in the world.",
             "denial": "Nothing is stamped.",
             "expect": "screen",
             "group": "World"
@@ -4492,6 +4512,7 @@
               "F7"
             ],
             "enabled": true,
+            "description": "The game makes this terrain's new squares with this entry from now on. Squares already made and the file stay as they are.",
             "expect": "screen",
             "group": "World"
           },
@@ -4500,6 +4521,7 @@
             "label": "Apply on save",
             "keys": [],
             "enabled": true,
+            "description": "Switches whether each save of the file also applies the entry to the game, as Apply to game does.",
             "expect": "screen",
             "group": "World"
           },
@@ -4510,6 +4532,7 @@
               "F6"
             ],
             "enabled": false,
+            "description": "Generates the entry now over the overmap square you stand on, replacing what is there. Take back stamp undoes it.",
             "denial": "A nested chunk goes on a map with the mapgen that places it; open that mapgen to stamp, test or preview it.",
             "expect": "screen",
             "group": "World"
@@ -4521,6 +4544,7 @@
               "F5"
             ],
             "enabled": false,
+            "description": "Puts you in the middle of the stamped entry to play there; in the editor's own world it stamps the entry first.",
             "denial": "A nested chunk goes on a map with the mapgen that places it; open that mapgen to stamp, test or preview it.",
             "expect": "screen",
             "group": "World"
@@ -4558,14 +4582,15 @@
             "expect": "screen"
           },
           {
-            "id": "editor:export_palette",
-            "label": "Export palette",
+            "id": "editor:export_set",
+            "label": "Value",
             "keys": [],
             "enabled": true,
             "args": {
-              "text": {
-                "field_id": "palette"
-              }
+              "row": {
+                "component_id": "editor:export_options"
+              },
+              "text": {}
             },
             "expect": "boundary"
           },
@@ -4642,6 +4667,7 @@
             "label": "Go to step",
             "keys": [],
             "enabled": true,
+            "role": "select",
             "args": {
               "row": {
                 "component_id": "editor:history"
@@ -5018,6 +5044,7 @@
                 "editor:save_as"
               ],
               "slot": "outline",
+              "collapsed": true,
               "fields": [
                 {
                   "id": "path",
@@ -5095,7 +5122,8 @@
               ],
               "total": 1,
               "selection": "single",
-              "activate": "editor:object"
+              "activate": "editor:object",
+              "empty": "The file holds no entry."
             },
             {
               "id": "editor:history",
@@ -5140,7 +5168,8 @@
               ],
               "total": 3,
               "selection": "single",
-              "activate": "editor:jump"
+              "activate": "editor:jump",
+              "empty": "No edits yet."
             },
             {
               "id": "editor:tools",
@@ -5591,7 +5620,8 @@
               ],
               "total": 3,
               "selection": "single",
-              "activate": "editor:symbol"
+              "activate": "editor:symbol",
+              "empty": "No symbol is mapped yet."
             },
             {
               "id": "editor:diagnostics",
@@ -5605,7 +5635,8 @@
               "rows": [],
               "total": 0,
               "selection": "single",
-              "activate": "editor:diagnostic"
+              "activate": "editor:diagnostic",
+              "empty": "No problems."
             },
             {
               "id": "editor:placements",
@@ -5659,7 +5690,8 @@
               ],
               "total": 1,
               "selection": "single",
-              "activate": "editor:placement"
+              "activate": "editor:placement",
+              "empty": "This entry places nothing."
             },
             {
               "id": "editor:place",
@@ -7649,7 +7681,8 @@
                 "total": 812,
                 "selection": "single",
                 "activate": "editor:catalog_pick",
-                "filterable": true
+                "filterable": true,
+                "empty": "The catalog has nothing of this kind."
               }
             },
             {
@@ -7661,28 +7694,36 @@
                 "editor:new_apply"
               ],
               "slot": "inspector",
+              "collapsed": true,
               "fields": [
                 {
                   "id": "path",
                   "label": "Path",
-                  "value": "",
-                  "type": "text"
+                  "description": "The new .json file, inside your mods.",
+                  "value": "profile/mods/my_mod/new_mapgen.json",
+                  "type": "text",
+                  "required": true
                 },
                 {
                   "id": "om_terrain",
                   "label": "Overmap terrain",
+                  "description": "The id of the overmap terrain the mapgen makes.",
                   "value": "",
-                  "type": "text"
+                  "type": "text",
+                  "required": true
                 },
                 {
                   "id": "fill",
                   "label": "Terrain",
+                  "description": "The terrain of every square, and under any symbol that maps none.",
                   "value": "t_floor",
-                  "type": "text"
+                  "type": "text",
+                  "required": true
                 },
                 {
                   "id": "kind",
                   "label": "Kind",
+                  "description": "What the file holds.",
                   "value": "mapgen",
                   "type": "select",
                   "options": [
@@ -7711,8 +7752,11 @@
                 {
                   "id": "size",
                   "label": "Chunk size",
+                  "description": "The side of a nested chunk, in squares.",
                   "value": "4",
-                  "type": "text"
+                  "type": "integer",
+                  "min": 1,
+                  "max": 24
                 }
               ],
               "submit": "editor:new_apply"
@@ -7722,18 +7766,36 @@
               "kind": "form",
               "label": "Export",
               "affordances": [
-                "editor:export_palette"
+                "editor:export_set"
               ],
               "slot": "inspector",
               "fields": [
                 {
                   "id": "palette",
                   "label": "Export palette",
+                  "description": "A palette of the game whose symbols the export reuses; empty for none.",
                   "value": "",
                   "type": "text"
+                },
+                {
+                  "id": "width",
+                  "label": "Width",
+                  "description": "Overmap squares across, around yours.",
+                  "value": "1",
+                  "type": "integer",
+                  "min": 1,
+                  "max": 3
+                },
+                {
+                  "id": "height",
+                  "label": "Height",
+                  "description": "Overmap squares down, around yours.",
+                  "value": "1",
+                  "type": "integer",
+                  "min": 1,
+                  "max": 3
                 }
-              ],
-              "submit": "editor:export_palette"
+              ]
             },
             {
               "id": "editor:import_form",
@@ -7744,6 +7806,7 @@
                 "editor:import"
               ],
               "slot": "inspector",
+              "collapsed": true,
               "fields": [
                 {
                   "id": "import",
@@ -7765,6 +7828,7 @@
                 "editor:browser_page"
               ],
               "slot": "outline",
+              "collapsed": true,
               "columns": [],
               "rows": [
                 {
@@ -8271,7 +8335,8 @@
               "total": 934,
               "selection": "single",
               "activate": "editor:browser_open",
-              "filterable": true
+              "filterable": true,
+              "empty": "No data file is there to edit."
             }
           ]
         },
@@ -8304,6 +8369,7 @@
             "label": "Export mapgen here",
             "keys": [],
             "enabled": true,
+            "description": "Writes the map around you, or the marked squares, as a mapgen in a new file and opens it.",
             "args": {
               "text": {
                 "field_id": "path"
@@ -8317,36 +8383,7 @@
             "label": "Mark squares to export",
             "keys": [],
             "enabled": true,
-            "expect": "screen",
-            "group": "File"
-          },
-          {
-            "id": "editor:export_width",
-            "label": "Export width",
-            "keys": [],
-            "enabled": true,
-            "args": {
-              "count": {
-                "min": 1,
-                "max": 3,
-                "default": 1
-              }
-            },
-            "expect": "screen",
-            "group": "File"
-          },
-          {
-            "id": "editor:export_height",
-            "label": "Export height",
-            "keys": [],
-            "enabled": true,
-            "args": {
-              "count": {
-                "min": 1,
-                "max": 3,
-                "default": 1
-              }
-            },
+            "description": "Picks a rectangle of squares on the map for Export to write instead of whole overmap squares.",
             "expect": "screen",
             "group": "File"
           },
@@ -8355,8 +8392,11 @@
             "label": "Extract legend to palette",
             "keys": [],
             "enabled": true,
+            "description": "Moves the entry's symbols into a new palette in this file, which the entry then uses.",
             "args": {
-              "text": {}
+              "text": {
+                "default": "editor_scenario_chunk_palette"
+              }
             },
             "expect": "boundary",
             "group": "File"
@@ -8533,6 +8573,7 @@
             "label": "Open mapgen here",
             "keys": [],
             "enabled": true,
+            "description": "Opens the mapgen of the overmap square you stand on.",
             "expect": "screen",
             "group": "World"
           },
@@ -8541,6 +8582,7 @@
             "label": "Take back stamp",
             "keys": [],
             "enabled": false,
+            "description": "Puts back what the stamp replaced in the world.",
             "denial": "Nothing is stamped.",
             "expect": "screen",
             "group": "World"
@@ -8575,6 +8617,7 @@
               "F7"
             ],
             "enabled": true,
+            "description": "The game makes this terrain's new squares with this entry from now on. Squares already made and the file stay as they are.",
             "expect": "screen",
             "group": "World"
           },
@@ -8583,6 +8626,7 @@
             "label": "Apply on save",
             "keys": [],
             "enabled": true,
+            "description": "Switches whether each save of the file also applies the entry to the game, as Apply to game does.",
             "expect": "screen",
             "group": "World"
           },
@@ -8593,6 +8637,7 @@
               "F6"
             ],
             "enabled": false,
+            "description": "Generates the entry now over the overmap square you stand on, replacing what is there. Take back stamp undoes it.",
             "denial": "A nested chunk goes on a map with the mapgen that places it; open that mapgen to stamp, test or preview it.",
             "expect": "screen",
             "group": "World"
@@ -8604,6 +8649,7 @@
               "F5"
             ],
             "enabled": false,
+            "description": "Puts you in the middle of the stamped entry to play there; in the editor's own world it stamps the entry first.",
             "denial": "A nested chunk goes on a map with the mapgen that places it; open that mapgen to stamp, test or preview it.",
             "expect": "screen",
             "group": "World"
@@ -8641,14 +8687,15 @@
             "expect": "screen"
           },
           {
-            "id": "editor:export_palette",
-            "label": "Export palette",
+            "id": "editor:export_set",
+            "label": "Value",
             "keys": [],
             "enabled": true,
             "args": {
-              "text": {
-                "field_id": "palette"
-              }
+              "row": {
+                "component_id": "editor:export_options"
+              },
+              "text": {}
             },
             "expect": "boundary"
           },
@@ -8725,6 +8772,7 @@
             "label": "Go to step",
             "keys": [],
             "enabled": true,
+            "role": "select",
             "args": {
               "row": {
                 "component_id": "editor:history"
@@ -8965,6 +9013,7 @@
                 "editor:save_as"
               ],
               "slot": "outline",
+              "collapsed": true,
               "fields": [
                 {
                   "id": "path",
@@ -9042,7 +9091,8 @@
               ],
               "total": 1,
               "selection": "single",
-              "activate": "editor:object"
+              "activate": "editor:object",
+              "empty": "The file holds no entry."
             },
             {
               "id": "editor:history",
@@ -9087,7 +9137,8 @@
               ],
               "total": 3,
               "selection": "single",
-              "activate": "editor:jump"
+              "activate": "editor:jump",
+              "empty": "No edits yet."
             },
             {
               "id": "editor:tools",
@@ -9487,7 +9538,8 @@
               ],
               "total": 2,
               "selection": "single",
-              "activate": "editor:symbol"
+              "activate": "editor:symbol",
+              "empty": "No symbol is mapped yet."
             },
             {
               "id": "editor:diagnostics",
@@ -9501,7 +9553,8 @@
               "rows": [],
               "total": 0,
               "selection": "single",
-              "activate": "editor:diagnostic"
+              "activate": "editor:diagnostic",
+              "empty": "No problems."
             },
             {
               "id": "editor:placements",
@@ -9555,7 +9608,8 @@
               ],
               "total": 1,
               "selection": "single",
-              "activate": "editor:placement"
+              "activate": "editor:placement",
+              "empty": "This entry places nothing."
             },
             {
               "id": "editor:move",
@@ -11570,7 +11624,8 @@
                 "total": 812,
                 "selection": "single",
                 "activate": "editor:catalog_pick",
-                "filterable": true
+                "filterable": true,
+                "empty": "The catalog has nothing of this kind."
               }
             },
             {
@@ -11582,28 +11637,36 @@
                 "editor:new_apply"
               ],
               "slot": "inspector",
+              "collapsed": true,
               "fields": [
                 {
                   "id": "path",
                   "label": "Path",
-                  "value": "",
-                  "type": "text"
+                  "description": "The new .json file, inside your mods.",
+                  "value": "profile/mods/my_mod/new_mapgen.json",
+                  "type": "text",
+                  "required": true
                 },
                 {
                   "id": "om_terrain",
                   "label": "Overmap terrain",
+                  "description": "The id of the overmap terrain the mapgen makes.",
                   "value": "",
-                  "type": "text"
+                  "type": "text",
+                  "required": true
                 },
                 {
                   "id": "fill",
                   "label": "Terrain",
+                  "description": "The terrain of every square, and under any symbol that maps none.",
                   "value": "t_floor",
-                  "type": "text"
+                  "type": "text",
+                  "required": true
                 },
                 {
                   "id": "kind",
                   "label": "Kind",
+                  "description": "What the file holds.",
                   "value": "mapgen",
                   "type": "select",
                   "options": [
@@ -11632,8 +11695,11 @@
                 {
                   "id": "size",
                   "label": "Chunk size",
+                  "description": "The side of a nested chunk, in squares.",
                   "value": "4",
-                  "type": "text"
+                  "type": "integer",
+                  "min": 1,
+                  "max": 24
                 }
               ],
               "submit": "editor:new_apply"
@@ -11643,18 +11709,36 @@
               "kind": "form",
               "label": "Export",
               "affordances": [
-                "editor:export_palette"
+                "editor:export_set"
               ],
               "slot": "inspector",
               "fields": [
                 {
                   "id": "palette",
                   "label": "Export palette",
+                  "description": "A palette of the game whose symbols the export reuses; empty for none.",
                   "value": "",
                   "type": "text"
+                },
+                {
+                  "id": "width",
+                  "label": "Width",
+                  "description": "Overmap squares across, around yours.",
+                  "value": "1",
+                  "type": "integer",
+                  "min": 1,
+                  "max": 3
+                },
+                {
+                  "id": "height",
+                  "label": "Height",
+                  "description": "Overmap squares down, around yours.",
+                  "value": "1",
+                  "type": "integer",
+                  "min": 1,
+                  "max": 3
                 }
-              ],
-              "submit": "editor:export_palette"
+              ]
             },
             {
               "id": "editor:import_form",
@@ -11665,6 +11749,7 @@
                 "editor:import"
               ],
               "slot": "inspector",
+              "collapsed": true,
               "fields": [
                 {
                   "id": "import",
@@ -11686,6 +11771,7 @@
                 "editor:browser_page"
               ],
               "slot": "outline",
+              "collapsed": true,
               "columns": [],
               "rows": [
                 {
@@ -12192,7 +12278,8 @@
               "total": 934,
               "selection": "single",
               "activate": "editor:browser_open",
-              "filterable": true
+              "filterable": true,
+              "empty": "No data file is there to edit."
             }
           ]
         },
@@ -12225,6 +12312,7 @@
             "label": "Export mapgen here",
             "keys": [],
             "enabled": true,
+            "description": "Writes the map around you, or the marked squares, as a mapgen in a new file and opens it.",
             "args": {
               "text": {
                 "field_id": "path"
@@ -12238,36 +12326,7 @@
             "label": "Mark squares to export",
             "keys": [],
             "enabled": true,
-            "expect": "screen",
-            "group": "File"
-          },
-          {
-            "id": "editor:export_width",
-            "label": "Export width",
-            "keys": [],
-            "enabled": true,
-            "args": {
-              "count": {
-                "min": 1,
-                "max": 3,
-                "default": 1
-              }
-            },
-            "expect": "screen",
-            "group": "File"
-          },
-          {
-            "id": "editor:export_height",
-            "label": "Export height",
-            "keys": [],
-            "enabled": true,
-            "args": {
-              "count": {
-                "min": 1,
-                "max": 3,
-                "default": 1
-              }
-            },
+            "description": "Picks a rectangle of squares on the map for Export to write instead of whole overmap squares.",
             "expect": "screen",
             "group": "File"
           },
@@ -12276,8 +12335,11 @@
             "label": "Extract legend to palette",
             "keys": [],
             "enabled": true,
+            "description": "Moves the entry's symbols into a new palette in this file, which the entry then uses.",
             "args": {
-              "text": {}
+              "text": {
+                "default": "editor_scenario_chunk_palette"
+              }
             },
             "expect": "boundary",
             "group": "File"
@@ -12461,6 +12523,7 @@
             "label": "Open mapgen here",
             "keys": [],
             "enabled": true,
+            "description": "Opens the mapgen of the overmap square you stand on.",
             "expect": "screen",
             "group": "World"
           },
@@ -12469,6 +12532,7 @@
             "label": "Take back stamp",
             "keys": [],
             "enabled": false,
+            "description": "Puts back what the stamp replaced in the world.",
             "denial": "Nothing is stamped.",
             "expect": "screen",
             "group": "World"
@@ -12503,6 +12567,7 @@
               "F7"
             ],
             "enabled": true,
+            "description": "The game makes this terrain's new squares with this entry from now on. Squares already made and the file stay as they are.",
             "expect": "screen",
             "group": "World"
           },
@@ -12511,6 +12576,7 @@
             "label": "Apply on save",
             "keys": [],
             "enabled": true,
+            "description": "Switches whether each save of the file also applies the entry to the game, as Apply to game does.",
             "expect": "screen",
             "group": "World"
           },
@@ -12521,6 +12587,7 @@
               "F6"
             ],
             "enabled": false,
+            "description": "Generates the entry now over the overmap square you stand on, replacing what is there. Take back stamp undoes it.",
             "denial": "A nested chunk goes on a map with the mapgen that places it; open that mapgen to stamp, test or preview it.",
             "expect": "screen",
             "group": "World"
@@ -12532,6 +12599,7 @@
               "F5"
             ],
             "enabled": false,
+            "description": "Puts you in the middle of the stamped entry to play there; in the editor's own world it stamps the entry first.",
             "denial": "A nested chunk goes on a map with the mapgen that places it; open that mapgen to stamp, test or preview it.",
             "expect": "screen",
             "group": "World"
@@ -12569,14 +12637,15 @@
             "expect": "screen"
           },
           {
-            "id": "editor:export_palette",
-            "label": "Export palette",
+            "id": "editor:export_set",
+            "label": "Value",
             "keys": [],
             "enabled": true,
             "args": {
-              "text": {
-                "field_id": "palette"
-              }
+              "row": {
+                "component_id": "editor:export_options"
+              },
+              "text": {}
             },
             "expect": "boundary"
           },
@@ -12653,6 +12722,7 @@
             "label": "Go to step",
             "keys": [],
             "enabled": true,
+            "role": "select",
             "args": {
               "row": {
                 "component_id": "editor:history"
@@ -13277,6 +13347,7 @@
                 "editor:save_as"
               ],
               "slot": "outline",
+              "collapsed": true,
               "fields": [
                 {
                   "id": "path",
@@ -13364,7 +13435,8 @@
               ],
               "total": 1,
               "selection": "single",
-              "activate": "editor:object"
+              "activate": "editor:object",
+              "empty": "The file holds no entry."
             },
             {
               "id": "editor:history",
@@ -13389,7 +13461,8 @@
               ],
               "total": 1,
               "selection": "single",
-              "activate": "editor:jump"
+              "activate": "editor:jump",
+              "empty": "No edits yet."
             },
             {
               "id": "editor:tools",
@@ -18207,7 +18280,8 @@
               ],
               "total": 2,
               "selection": "single",
-              "activate": "editor:symbol"
+              "activate": "editor:symbol",
+              "empty": "No symbol is mapped yet."
             },
             {
               "id": "editor:diagnostics",
@@ -18221,7 +18295,8 @@
               "rows": [],
               "total": 0,
               "selection": "single",
-              "activate": "editor:diagnostic"
+              "activate": "editor:diagnostic",
+              "empty": "No problems."
             },
             {
               "id": "editor:placements",
@@ -18275,7 +18350,8 @@
               ],
               "total": 1,
               "selection": "single",
-              "activate": "editor:placement"
+              "activate": "editor:placement",
+              "empty": "This entry places nothing."
             },
             {
               "id": "editor:place",
@@ -20265,7 +20341,8 @@
                 "total": 812,
                 "selection": "single",
                 "activate": "editor:catalog_pick",
-                "filterable": true
+                "filterable": true,
+                "empty": "The catalog has nothing of this kind."
               }
             },
             {
@@ -29250,7 +29327,8 @@
                 }
               ],
               "total": 74,
-              "selection": "single"
+              "selection": "single",
+              "empty": "Nothing can spawn on the marked squares."
             },
             {
               "id": "editor:new",
@@ -29261,28 +29339,36 @@
                 "editor:new_apply"
               ],
               "slot": "inspector",
+              "collapsed": true,
               "fields": [
                 {
                   "id": "path",
                   "label": "Path",
-                  "value": "",
-                  "type": "text"
+                  "description": "The new .json file, inside your mods.",
+                  "value": "profile/mods/my_mod/new_mapgen.json",
+                  "type": "text",
+                  "required": true
                 },
                 {
                   "id": "om_terrain",
                   "label": "Overmap terrain",
+                  "description": "The id of the overmap terrain the mapgen makes.",
                   "value": "",
-                  "type": "text"
+                  "type": "text",
+                  "required": true
                 },
                 {
                   "id": "fill",
                   "label": "Terrain",
+                  "description": "The terrain of every square, and under any symbol that maps none.",
                   "value": "t_floor",
-                  "type": "text"
+                  "type": "text",
+                  "required": true
                 },
                 {
                   "id": "kind",
                   "label": "Kind",
+                  "description": "What the file holds.",
                   "value": "mapgen",
                   "type": "select",
                   "options": [
@@ -29311,8 +29397,11 @@
                 {
                   "id": "size",
                   "label": "Chunk size",
+                  "description": "The side of a nested chunk, in squares.",
                   "value": "4",
-                  "type": "text"
+                  "type": "integer",
+                  "min": 1,
+                  "max": 24
                 }
               ],
               "submit": "editor:new_apply"
@@ -29322,18 +29411,36 @@
               "kind": "form",
               "label": "Export",
               "affordances": [
-                "editor:export_palette"
+                "editor:export_set"
               ],
               "slot": "inspector",
               "fields": [
                 {
                   "id": "palette",
                   "label": "Export palette",
+                  "description": "A palette of the game whose symbols the export reuses; empty for none.",
                   "value": "",
                   "type": "text"
+                },
+                {
+                  "id": "width",
+                  "label": "Width",
+                  "description": "Overmap squares across, around yours.",
+                  "value": "1",
+                  "type": "integer",
+                  "min": 1,
+                  "max": 3
+                },
+                {
+                  "id": "height",
+                  "label": "Height",
+                  "description": "Overmap squares down, around yours.",
+                  "value": "1",
+                  "type": "integer",
+                  "min": 1,
+                  "max": 3
                 }
-              ],
-              "submit": "editor:export_palette"
+              ]
             },
             {
               "id": "editor:import_form",
@@ -29344,6 +29451,7 @@
                 "editor:import"
               ],
               "slot": "inspector",
+              "collapsed": true,
               "fields": [
                 {
                   "id": "import",
@@ -29365,6 +29473,7 @@
                 "editor:browser_page"
               ],
               "slot": "outline",
+              "collapsed": true,
               "columns": [],
               "rows": [
                 {
@@ -29868,10 +29977,11 @@
                   "columns": []
                 }
               ],
-              "total": 934,
+              "total": 935,
               "selection": "single",
               "activate": "editor:browser_open",
-              "filterable": true
+              "filterable": true,
+              "empty": "No data file is there to edit."
             },
             {
               "id": "editor:status",
@@ -29912,6 +30022,7 @@
             "label": "Export mapgen here",
             "keys": [],
             "enabled": true,
+            "description": "Writes the map around you, or the marked squares, as a mapgen in a new file and opens it.",
             "args": {
               "text": {
                 "field_id": "path"
@@ -29925,36 +30036,7 @@
             "label": "Mark squares to export",
             "keys": [],
             "enabled": true,
-            "expect": "screen",
-            "group": "File"
-          },
-          {
-            "id": "editor:export_width",
-            "label": "Export width",
-            "keys": [],
-            "enabled": true,
-            "args": {
-              "count": {
-                "min": 1,
-                "max": 3,
-                "default": 1
-              }
-            },
-            "expect": "screen",
-            "group": "File"
-          },
-          {
-            "id": "editor:export_height",
-            "label": "Export height",
-            "keys": [],
-            "enabled": true,
-            "args": {
-              "count": {
-                "min": 1,
-                "max": 3,
-                "default": 1
-              }
-            },
+            "description": "Picks a rectangle of squares on the map for Export to write instead of whole overmap squares.",
             "expect": "screen",
             "group": "File"
           },
@@ -29963,8 +30045,11 @@
             "label": "Extract legend to palette",
             "keys": [],
             "enabled": true,
+            "description": "Moves the entry's symbols into a new palette in this file, which the entry then uses.",
             "args": {
-              "text": {}
+              "text": {
+                "default": "house_04_palette"
+              }
             },
             "expect": "boundary",
             "group": "File"
@@ -30146,6 +30231,7 @@
             "label": "Open mapgen here",
             "keys": [],
             "enabled": true,
+            "description": "Opens the mapgen of the overmap square you stand on.",
             "expect": "screen",
             "group": "World"
           },
@@ -30154,6 +30240,7 @@
             "label": "Take back stamp",
             "keys": [],
             "enabled": false,
+            "description": "Puts back what the stamp replaced in the world.",
             "denial": "Nothing is stamped.",
             "expect": "screen",
             "group": "World"
@@ -30188,6 +30275,7 @@
               "F7"
             ],
             "enabled": true,
+            "description": "The game makes this terrain's new squares with this entry from now on. Squares already made and the file stay as they are.",
             "expect": "screen",
             "group": "World"
           },
@@ -30196,6 +30284,7 @@
             "label": "Apply on save",
             "keys": [],
             "enabled": true,
+            "description": "Switches whether each save of the file also applies the entry to the game, as Apply to game does.",
             "expect": "screen",
             "group": "World"
           },
@@ -30206,6 +30295,7 @@
               "F6"
             ],
             "enabled": true,
+            "description": "Generates the entry now over the overmap square you stand on, replacing what is there. Take back stamp undoes it.",
             "expect": "screen",
             "group": "World"
           },
@@ -30216,6 +30306,7 @@
               "F5"
             ],
             "enabled": false,
+            "description": "Puts you in the middle of the stamped entry to play there; in the editor's own world it stamps the entry first.",
             "denial": "Stamp the entry first: Test plays what was stamped.",
             "expect": "screen",
             "group": "World"
@@ -30253,14 +30344,15 @@
             "expect": "screen"
           },
           {
-            "id": "editor:export_palette",
-            "label": "Export palette",
+            "id": "editor:export_set",
+            "label": "Value",
             "keys": [],
             "enabled": true,
             "args": {
-              "text": {
-                "field_id": "palette"
-              }
+              "row": {
+                "component_id": "editor:export_options"
+              },
+              "text": {}
             },
             "expect": "boundary"
           },
@@ -30337,6 +30429,7 @@
             "label": "Go to step",
             "keys": [],
             "enabled": true,
+            "role": "select",
             "args": {
               "row": {
                 "component_id": "editor:history"

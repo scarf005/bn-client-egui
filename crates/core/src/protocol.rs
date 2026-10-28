@@ -1983,6 +1983,9 @@ pub struct Head {
     /// What this part of a workspace screen's root split is for; none counts as the inspector.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub slot: Option<Slot>,
+    /// The part starts folded to its heading on a `workspace` screen.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub collapsed: bool,
 }
 
 /// What a part of a `workspace` screen's root split is for, which the client lays out as it likes.
@@ -2104,6 +2107,9 @@ pub struct List {
     /// The filter text the list holds; none when it holds none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub filter: Option<String>,
+    /// What the list says while it has no rows.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub empty: Option<Text>,
 }
 
 impl List {
@@ -2331,6 +2337,9 @@ pub struct FormField {
     pub min: Option<serde_json::Number>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max: Option<serde_json::Number>,
+    /// The form's submit refuses while the field is empty.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub required: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -2750,6 +2759,9 @@ pub enum Scope {
 pub struct Affordance {
     pub id: String,
     pub label: Text,
+    /// One line on what it does, for a tooltip.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<Text>,
     /// The player's bindings, as keybinding-file key names.
     pub keys: Vec<String>,
     pub enabled: bool,

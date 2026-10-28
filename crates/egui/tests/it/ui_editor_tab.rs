@@ -151,7 +151,10 @@ fn searches_named(screen: &Value, headings: &[&str]) {
 fn the_map_editors_search_boxes_are_named_by_their_lists_headings() {
     let screen =
         crate::ui_window_class::example("editor", "map editor with a drawn room and a new mapping");
-    searches_named(&screen, &["Catalog", "Files"]);
+    searches_named(&screen, &["Catalog"]);
+    // The files are folded away while a document is open.
+    let screen = crate::ui_window_class::example("editor", "map editor with nothing open");
+    searches_named(&screen, &["Files"]);
 }
 
 #[test]

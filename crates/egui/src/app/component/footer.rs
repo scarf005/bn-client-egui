@@ -94,17 +94,32 @@ fn key_list(a: &Affordance) -> String {
     a.keys.join(", ")
 }
 
-/// The hover text of a button drawn as a glyph: the engine's label over every key bound to `a`.
-pub(super) fn glyph_tip(a: &Affordance) -> String {
-    let label = markup::plain(&a.label.shown());
-    match a.keys.is_empty() {
-        true => label,
-        false => format!("{label}\n{}", key_list(a)),
-    }
+/// The engine's description of `a`, when it has one.
+fn description(a: &Affordance) -> Option<String> {
+    a.description
+        .as_ref()
+        .map(|d| markup::plain(&d.shown()))
+        .filter(|d| !d.is_empty())
 }
 
-/// Names `a`'s button `button` by the engine's label alone, with its first key as the shortcut, and lists every
-/// key on hover.
+/// `a`'s description over every key bound to it, each when it has some.
+fn tip_lines(a: &Affordance) -> impl Iterator<Item = String> {
+    description(a)
+        .into_iter()
+        .chain((!a.keys.is_empty()).then(|| key_list(a)))
+}
+
+/// The hover text of a button drawn as a glyph: the engine's label over its description and every key bound to `a`.
+pub(super) fn glyph_tip(a: &Affordance) -> String {
+    std::iter::once(markup::plain(&a.label.shown()))
+        .chain(tip_lines(a))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Names `a`'s button `button` by the engine's label alone, with its first key as the shortcut and the engine's
+/// description as its accessible description, and shows that description over every key bound to it on hover and
+/// while the keyboard is on it.
 pub(super) fn described(
     ctx: &egui::Context,
     button: egui::Response,
@@ -116,10 +131,18 @@ pub(super) fn described(
         &markup::plain(&a.label.shown()),
         a.keys.first().map(String::as_str),
     );
-    match a.keys.is_empty() {
-        true => button,
-        false => button.on_hover_text(key_list(a)),
+    if let Some(said) = description(a) {
+        ctx.accesskit_node_builder(button.id, |b| b.set_description(said));
     }
+    let tip = tip_lines(a).collect::<Vec<_>>().join("\n");
+    if tip.is_empty() {
+        return button;
+    }
+    // A clicked button gives its focus back: a focus is the keyboard's.
+    if button.has_focus() && !button.hovered() {
+        button.show_tooltip_text(tip.clone());
+    }
+    button.on_hover_text(tip)
 }
 
 impl<M: GameModel> App<M> {
