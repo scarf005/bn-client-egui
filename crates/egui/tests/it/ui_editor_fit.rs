@@ -262,7 +262,7 @@ fn a_part_that_arrives_in_the_right_column_is_scrolled_into_view() {
         "label": "What can spawn here", "slot": "inspector", "columns": [], "total": rows.len(), "rows": rows,
         "selection": "none"}));
     crate::ui_editor_drag::restack(&script, 41, vec![grown]);
-    crate::common::settle_windows(&mut h);
+    h.run_steps(6);
     let shown = h.get_by_label("spawned thing 0").rect();
     assert!(
         shown.top() > 40.0 && shown.bottom() < size.y - 40.0,

@@ -314,15 +314,16 @@ impl<M: GameModel> App<M> {
         let room = rect.height();
         // A list is at most `PEER_ROWS` rows tall, so the parts under a long one stay in reach.
         body_scroll(&mut inner, scroll, room, |ui| {
-            // A column's lists are palettes, read by their names.
-            let was = self.screens.names_first.replace(true);
+            // A column's lists are palettes, read by their names, as tall as their rows wherever they are.
+            let was = self.screens.in_column.replace(true);
             self.with_list_rows(Some(PEER_ROWS), || self.stack(ui, screen, parts, out));
-            self.screens.names_first.set(was);
+            self.screens.in_column.set(was);
         });
         ui.allocate_rect(rect, egui::Sense::hover());
     }
 
-    /// `parts` one above the other, each under its label as a heading that collapses it.
+    /// `parts` one above the other, each under its label as a heading that collapses it. A part that was not there
+    /// the frame before, such as a result the engine just sent, is scrolled into view.
     fn stack(
         &self,
         ui: &mut egui::Ui,
@@ -330,7 +331,11 @@ impl<M: GameModel> App<M> {
         parts: &[&Component],
         out: &mut Vec<Intent>,
     ) {
+        let key = ui.id().with("parts");
+        let was = ui.data(|d| d.get_temp::<Vec<String>>(key));
+        let mut arrived = None;
         for c in parts {
+            let top = ui.cursor().top();
             match &c.head().label {
                 Some(label) => {
                     egui::CollapsingHeader::new(markup::plain(&label.shown()))
@@ -340,6 +345,19 @@ impl<M: GameModel> App<M> {
                 }
                 None => self.component(ui, screen, c, out),
             }
+            if was
+                .as_ref()
+                .is_some_and(|was| !was.iter().any(|id| id == c.id()))
+            {
+                arrived = arrived.or(Some(ui.min_rect().with_min_y(top)));
+            }
         }
+        // Asked for after the parts, whose own lists would take the request for themselves.
+        if let Some(drawn) = arrived {
+            let at_once = egui::style::ScrollAnimation::none();
+            ui.scroll_to_rect_animation(drawn, Some(egui::Align::Min), at_once);
+        }
+        let ids = parts.iter().map(|c| c.id().to_string()).collect::<Vec<_>>();
+        ui.data_mut(|d| d.insert_temp(key, ids));
     }
 }

@@ -37,7 +37,10 @@ impl<M: GameModel> App<M> {
     fn list_height(&self, ui: &egui::Ui, step: f32, below: usize, held: Option<f32>) -> f32 {
         let spacing = ui.spacing();
         let line = spacing.interact_size.y + spacing.item_spacing.y;
-        let room = (ui.available_height() - below as f32 * line).max(MIN_ROWS * line);
+        let room = match self.screens.in_column.get() {
+            true => f32::INFINITY,
+            false => (ui.available_height() - below as f32 * line).max(MIN_ROWS * line),
+        };
         self.screens.list_rows.get().map_or(room, |rows| {
             let cap = rows as f32 * step;
             room.min(held.map_or(cap, |held| cap.min(held.max(MIN_ROWS * step))))
@@ -107,7 +110,7 @@ impl<M: GameModel> App<M> {
         let widths = self.list_widths(ui, list, &rows);
         // Without columns to keep beside it, the label takes the room.
         // Where names come first, a long value is cut before the label wraps.
-        let kept = match self.screens.names_first.get() {
+        let kept = match self.screens.in_column.get() {
             true => table::VALUE_KEPT,
             false => f32::INFINITY,
         };
@@ -235,7 +238,11 @@ impl<M: GameModel> App<M> {
                 let mut table = table::table(ui, &widths, label)
                     .id_salt(("list", id))
                     .max_scroll_height(list_height)
-                    .min_scrolled_height(height)
+                    // A column scrolls as a whole, so a list low in it is as tall as below the column's fold.
+                    .min_scrolled_height(match self.screens.in_column.get() {
+                        true => list_height.max(height),
+                        false => height,
+                    })
                     // An empty list keeps its room, so its pane does not collapse.
                     .auto_shrink([false, !rows.is_empty()]);
                 if let Some(offset) = offset {

@@ -88,8 +88,10 @@ pub(super) struct Screens {
     focus_search: std::cell::Cell<bool>,
     /// The most rows the lists drawn now show before they scroll, when fewer than their room holds.
     list_rows: std::cell::Cell<Option<usize>>,
-    /// The lists drawn now keep their rows' names whole before their values (a workspace's palettes).
-    names_first: std::cell::Cell<bool>,
+    /// The parts drawn now are in a workspace's column, which scrolls: its lists keep their rows' names whole
+    /// before their values, as palettes, and are as tall as their rows up to `list_rows`, however little of the
+    /// column is left below them.
+    in_column: std::cell::Cell<bool>,
     /// The squares a drag crossed that the engine has not taken yet: it holds few commands at once.
     paints: VecDeque<Paint>,
 }
