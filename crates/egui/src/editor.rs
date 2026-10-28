@@ -245,7 +245,10 @@ pub struct Typed {
 pub struct Search<'a> {
     pub screen: &'a str,
     pub id: &'a str,
+    /// What the empty box shows.
     pub label: &'a str,
+    /// What a screen reader names the box: the heading of the list it searches.
+    pub name: &'a str,
     /// The filter text the engine holds.
     pub value: &'a str,
     pub busy: bool,
@@ -260,11 +263,18 @@ pub fn search_box(ui: &mut egui::Ui, search: &Search) -> Typed {
         screen,
         id,
         label,
+        name,
         value,
         busy,
         focus,
     } = *search;
-    typing(ui, (screen, id, label, value, busy), Some(focus))
+    let typed = typing(ui, (screen, id, label, value, busy), Some(focus));
+    let name = name.to_string();
+    ui.ctx()
+        .accesskit_node_builder(egui::Id::new(("typing-box", id)), move |b| {
+            b.set_label(name)
+        });
+    typed
 }
 
 /// A text box whose every change goes out as it is typed and whose Return submits, such as the prompt of a

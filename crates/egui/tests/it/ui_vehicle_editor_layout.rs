@@ -142,7 +142,7 @@ fn the_mounts_are_tile_sized_in_the_middle_of_the_canvas_and_the_stack_reads_who
             .query_all_by_label("Resize workspace column")
             .map(|n| n.rect().center().x)
             .fold(f32::MAX, f32::min);
-        let side = h.get_by_label("Parts").rect().left();
+        let side = heading(&h, "Parts").rect().left();
         let middle = (tools.min(side).max(room.left()) + side) / 2.0;
         assert!(
             (grid.center().x - middle).abs() < 40.0,
@@ -200,7 +200,7 @@ fn a_small_grid_fills_its_canvas_pane_whole() {
             .query_all_by_label("Resize workspace column")
             .map(|n| n.rect().center().x)
             .fold(f32::MAX, f32::min);
-        let side = h.get_by_label("Parts").rect().left();
+        let side = heading(&h, "Parts").rect().left();
         let pane =
             egui::Rect::from_x_y_ranges(tools.min(side).max(room.left())..=side, room.y_range());
         assert!(
@@ -432,4 +432,11 @@ fn a_part_picked_far_down_a_long_stack_is_brought_into_view() {
         r.is_some_and(|r| r.top() >= 0.0 && r.bottom() <= bottom + 0.5),
         "the picked part is at {r:?}, above {bottom}"
     );
+}
+
+/// The heading named `label`, not the search box named after it.
+fn heading<'t>(h: &'t H, label: &'t str) -> egui_kittest::Node<'t> {
+    h.query_all_by_label(label)
+        .find(|n| n.accesskit_node().role() != egui::accesskit::Role::TextInput)
+        .unwrap_or_else(|| panic!("no heading {label}"))
 }

@@ -382,12 +382,29 @@ impl<M: GameModel> App<M> {
         out: &mut Vec<Intent>,
     ) {
         let id = format!("{}/{}/search", screen.screen_id, list.head.id);
+        // Named as the list's heading reads: its own label, else that of the tabs it is the page of.
+        let holder = |c: &&Component| match c {
+            Component::Tabs(tabs) => tabs
+                .child
+                .as_deref()
+                .is_some_and(|c| c.id() == list.head.id),
+            _ => false,
+        };
+        let heading = list.head.label.as_ref().or_else(|| {
+            screen
+                .components()
+                .into_iter()
+                .find(holder)
+                .and_then(|c| c.head().label.as_ref())
+        });
+        let name = heading.map_or_else(|| tr("Search"), |l| markup::plain(&l.shown()));
         let typed = editor::search_box(
             ui,
             &editor::Search {
                 screen: &screen.screen_id,
                 id: &id,
                 label: &tr("Search"),
+                name: &name,
                 value: list.filter.as_deref().unwrap_or_default(),
                 busy: self.model.busy(),
                 // The focus asked for is the top screen's box, never that of a workspace under it.

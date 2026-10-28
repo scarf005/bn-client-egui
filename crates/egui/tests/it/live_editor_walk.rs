@@ -757,7 +757,7 @@ fn the_vehicle_editor_opens_a_prototype_installs_and_saves_a_mod_file() {
     wait_kind(&mut h, "vehicle_editor");
     rest(&mut h);
     shot(&mut h, "veh-1-editor");
-    click_input(&mut h, "Search");
+    click_input(&mut h, "Vehicles");
     rest(&mut h);
     shot(&mut h, "veh-2-filter-asks");
     type_text(&mut h, "car");
@@ -787,7 +787,7 @@ fn the_vehicle_editor_opens_a_prototype_installs_and_saves_a_mod_file() {
 
     // A headlight chosen from the filtered part list and installed by a click on the quarterpanel mount, then shown
     // on the Parts here tab.
-    click_input(&mut h, "Parts/Search");
+    click_input(&mut h, "Parts");
     type_text(&mut h, "headlight");
     key(&mut h, egui::Key::Enter);
     rest(&mut h);
@@ -860,7 +860,7 @@ fn the_vehicle_editor_sets_the_ammunition_of_a_turret_from_the_part_tab() {
     click(&mut h, "Yes");
     wait_kind(&mut h, "vehicle_editor");
     rest(&mut h);
-    click_input(&mut h, "Search");
+    click_input(&mut h, "Vehicles");
     type_text(&mut h, "armored_car");
     key(&mut h, egui::Key::Enter);
     double_click(&mut h, "Armored Car");
@@ -1893,7 +1893,7 @@ fn the_map_editor_draws_and_erases_the_squares_of_an_overmap_special_and_saves_t
             .find(|n| {
                 let a = n.accesskit_node();
                 a.role() == egui::accesskit::Role::TextInput
-                    && a.label().as_deref() == Some("Search")
+                    && a.label().as_deref() == Some("Catalog")
             })
             .map(|n| n.rect())
     };
@@ -2432,7 +2432,7 @@ fn the_vehicle_editor_turns_a_preview_reloads_a_file_and_asks_before_leaving() {
     click(&mut h, "Yes");
     wait_kind(&mut h, "vehicle_editor");
     rest(&mut h);
-    click_input(&mut h, "Search");
+    click_input(&mut h, "Vehicles");
     type_text(&mut h, "bicycle");
     key(&mut h, egui::Key::Enter);
     double_click(&mut h, "Bicycle");
@@ -2560,7 +2560,7 @@ fn the_map_editor_exports_a_spawned_vehicle_as_a_placement() {
     click_footer(&mut h, "Vehicle editor");
     wait_kind(&mut h, "vehicle_editor");
     rest(&mut h);
-    click_input(&mut h, "Search");
+    click_input(&mut h, "Vehicles");
     type_text(&mut h, "bicycle");
     key(&mut h, egui::Key::Enter);
     double_click(&mut h, "Bicycle");
@@ -2906,7 +2906,7 @@ fn a_modder_opens_draws_undoes_saves_tests_and_leaves_the_map_editor_workspace()
     dump(&h, "the start page");
 
     // A mapgen file of the game found by the browser's search and opened by a double click on its row.
-    click_input(&mut h, "Search");
+    click_input(&mut h, "Files");
     type_text(&mut h, "house/2story01");
     key(&mut h, egui::Key::Enter);
     rest(&mut h);
@@ -3043,7 +3043,7 @@ fn a_modder_opens_a_prototype_installs_a_part_spawns_and_leaves_the_vehicle_edit
     shot_both(&mut h, "ws-veh-01-start");
     dump(&h, "the vehicle editor");
 
-    click_input(&mut h, "Search");
+    click_input(&mut h, "Vehicles");
     type_text(&mut h, "bicycle");
     key(&mut h, egui::Key::Enter);
     rest(&mut h);
@@ -3059,7 +3059,7 @@ fn a_modder_opens_a_prototype_installs_a_part_spawns_and_leaves_the_vehicle_edit
     click_square(&mut h, "67.5cm bicycle wheel");
     rest(&mut h);
     shot_both(&mut h, "ws-veh-04-mount");
-    click_input(&mut h, "Parts/Search");
+    click_input(&mut h, "Parts");
     type_text(&mut h, "headlight");
     key(&mut h, egui::Key::Enter);
     rest(&mut h);
@@ -3274,7 +3274,7 @@ fn the_editors_keep_their_main_panes_in_view_and_stay_drawn_under_their_keybindi
     key(&mut h, egui::Key::Escape);
     click(&mut h, "Yes");
     wait_kind(&mut h, "vehicle_editor");
-    click_input(&mut h, "Search");
+    click_input(&mut h, "Vehicles");
     type_text(&mut h, "car");
     key(&mut h, egui::Key::Enter);
     double_click(&mut h, "Offroad Car");

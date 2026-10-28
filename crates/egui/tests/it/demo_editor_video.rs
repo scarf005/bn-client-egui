@@ -754,7 +754,7 @@ impl Rec {
     /// Searches the parts palette for `search`, picks the row named `part` and clicks each of `mounts` to install it
     /// there.
     fn install(&mut self, search: &str, part: &str, mounts: &[&str]) {
-        self.click_input("Search");
+        self.click_input("Parts");
         self.key_mod(egui::Modifiers::COMMAND, egui::Key::A);
         self.type_slowly(search);
         self.key(egui::Key::Enter);
