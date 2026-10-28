@@ -129,7 +129,7 @@ fn the_mounts_are_tile_sized_in_the_middle_of_the_canvas_and_the_stack_reads_who
         let h = open(screen.clone(), size);
         let square = mount(&h, &named);
         assert!(
-            (20.0..=64.0).contains(&square.width()),
+            square.width() >= 20.0,
             "at {size:?} a mount is {} wide",
             square.width()
         );
@@ -161,6 +161,53 @@ fn the_mounts_are_tile_sized_in_the_middle_of_the_canvas_and_the_stack_reads_who
         }
         let faults = legible::legible(&h, &screen);
         assert!(faults.is_empty(), "at {size:?}: {faults:?}");
+    }
+}
+
+#[test]
+fn a_small_grid_fills_its_canvas_pane_whole() {
+    let screen = editor();
+    let cells = find(&screen["root"], "vehicle:grid").unwrap();
+    let (cols, rows) = (
+        cells["cols"].as_f64().unwrap() as f32,
+        cells["rows"].as_f64().unwrap() as f32,
+    );
+    let named = cells["cells"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["label"].as_str().is_some_and(|l| l.contains(", ")))
+        .unwrap();
+    let (label, at) = (
+        named["label"].as_str().unwrap().to_owned(),
+        egui::vec2(
+            named["x"].as_f64().unwrap() as f32,
+            named["y"].as_f64().unwrap() as f32,
+        ),
+    );
+    for size in [egui::vec2(1290.0, 830.0), egui::vec2(1920.0, 1080.0)] {
+        let h = open(screen.clone(), size);
+        let square = mount(&h, &label);
+        let grid = egui::Rect::from_min_size(
+            square.min - at * square.width(),
+            egui::vec2(cols, rows) * square.width(),
+        );
+        let room = legible::room(&h);
+        let tools = h
+            .query_all_by_label("Resize workspace column")
+            .map(|n| n.rect().center().x)
+            .fold(f32::MAX, f32::min);
+        let side = h.get_by_label("Parts").rect().left();
+        let pane =
+            egui::Rect::from_x_y_ranges(tools.min(side).max(room.left())..=side, room.y_range());
+        assert!(
+            pane.expand(1.0).contains_rect(grid),
+            "at {size:?} the grid {grid:?} runs out of its pane {pane:?}"
+        );
+        assert!(
+            grid.width() >= 0.8 * pane.width() || grid.height() >= 0.6 * pane.height(),
+            "at {size:?} the grid {grid:?} leaves most of its pane {pane:?} empty"
+        );
     }
 }
 
