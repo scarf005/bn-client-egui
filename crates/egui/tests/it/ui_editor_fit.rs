@@ -246,3 +246,26 @@ fn a_right_column_the_player_resized_keeps_its_width_as_the_window_changes() {
         width(&h)
     );
 }
+
+#[test]
+fn a_part_that_arrives_in_the_right_column_is_scrolled_into_view() {
+    let size = egui::vec2(1290.0, 830.0);
+    let screen = editor();
+    let (mut h, script) = crate::ui_editor_drag::open_sized(screen.clone(), size);
+    crate::common::settle_windows(&mut h);
+    let mut grown = screen.clone();
+    let rows = (0..6)
+        .map(|n| json!({"id": format!("item:{n}"), "label": format!("spawned thing {n}"), "description": "",
+            "denial": "", "enabled": true, "selectable": true, "selected": false, "columns": []}))
+        .collect::<Vec<_>>();
+    grown["root"]["children"].as_array_mut().unwrap().push(json!({"id": "editor:loot", "kind": "list",
+        "label": "What can spawn here", "slot": "inspector", "columns": [], "total": rows.len(), "rows": rows,
+        "selection": "none"}));
+    crate::ui_editor_drag::restack(&script, 41, vec![grown]);
+    crate::common::settle_windows(&mut h);
+    let shown = h.get_by_label("spawned thing 0").rect();
+    assert!(
+        shown.top() > 40.0 && shown.bottom() < size.y - 40.0,
+        "the first row arrived at {shown:?}"
+    );
+}
