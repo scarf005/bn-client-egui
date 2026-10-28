@@ -651,3 +651,66 @@ fn a_grouped_action_a_list_names_is_drawn_under_that_list_too() {
         "Undo {undo:?} under Floor {floor:?}"
     );
 }
+
+#[test]
+fn a_right_column_shows_the_first_names_of_a_legend_whole_before_its_later_columns() {
+    let keys = [
+        "use",
+        "terrain",
+        "furniture",
+        "toilets",
+        "item_groups",
+        "nested",
+        "liquids",
+        "id",
+    ];
+    let values = [
+        "Fill",
+        "closed wooden door",
+        "wooden armchair",
+        "toilet",
+        "bathroom cabinet items",
+        "kitchen counter chunk",
+        "clean water",
+        "t_door_c, f_armchair, t_floor",
+    ];
+    let h = shown_with(SIZES[0], |parts| {
+        let columns = keys
+            .iter()
+            .map(|k| json!({"key": k, "label": k.replace('_', " ")}))
+            .collect::<Vec<_>>();
+        let cells = keys
+            .iter()
+            .zip(values)
+            .map(|(k, v)| json!({"key": k, "label": k, "value": v}))
+            .collect::<Vec<_>>();
+        let row = json!({"id": "symbol:+", "label": "+", "description": "", "denial": "", "enabled": true,
+            "selectable": true, "selected": false, "columns": cells,
+            "look": {"kind": "terrain", "id": "t_door_c", "glyph": "+", "color": "c_brown", "name": "closed wooden door"}});
+        parts[2] = json!({"id": "ws:palette", "kind": "list", "label": "Legend", "slot": "palette",
+            "columns": columns, "total": 1, "rows": [row], "selection": "single"});
+    });
+    for name in ["closed wooden door", "wooden armchair"] {
+        assert!(
+            !elided(&h, name).is_empty() && !elided(&h, name).iter().any(|e| *e),
+            "{name} is cut"
+        );
+    }
+}
+
+/// Whether each painted text that starts with `start` is cut short.
+fn elided(h: &H, start: &str) -> Vec<bool> {
+    fn walk(shape: &egui::Shape, start: &str, out: &mut Vec<bool>) {
+        match shape {
+            egui::Shape::Text(t) if t.galley.text().starts_with(start) => out.push(t.galley.elided),
+            egui::Shape::Vec(shapes) => shapes.iter().for_each(|s| walk(s, start, out)),
+            _ => {}
+        }
+    }
+    let mut out = vec![];
+    h.output()
+        .shapes
+        .iter()
+        .for_each(|c| walk(&c.shape, start, &mut out));
+    out
+}
