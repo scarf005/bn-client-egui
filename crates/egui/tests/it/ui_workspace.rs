@@ -5,7 +5,7 @@ use crate::common::legible::cut_text;
 use bn_client_egui::{App, EngineModel};
 use eframe::egui;
 use egui_kittest::Harness;
-use egui_kittest::kittest::Queryable;
+use egui_kittest::kittest::{NodeT, Queryable};
 use serde_json::{Value, json};
 
 type H<'a> = Harness<'a, App<EngineModel>>;
@@ -377,4 +377,31 @@ fn shots() {
         h.run_steps(7);
         crate::common::save_shot(&mut h, &format!("workspace-{}x{}.png", size.x, size.y));
     }
+}
+
+#[test]
+fn the_client_buttons_share_the_menu_bar_row() {
+    for size in SIZES {
+        let (h, _) = shown(size);
+        let file = rect(&h, "File");
+        for button in ["Actions", "Client settings"] {
+            let r = rect(&h, button);
+            assert!(
+                (r.center().y - file.center().y).abs() < 2.0 && r.left() > file.right(),
+                "{size:?}: {button} {r:?} off the menu bar's row at {file:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn the_client_buttons_of_the_menu_bar_open_the_action_palette_and_the_settings() {
+    let (mut h, _) = shown(SIZES[0]);
+    h.get_by_label("Client settings").click();
+    h.run_steps(4);
+    assert!(
+        h.query_all_by_role(egui::accesskit::Role::Window)
+            .any(|w| w.accesskit_node().label().as_deref() == Some("Client settings")),
+        "no settings window"
+    );
 }
