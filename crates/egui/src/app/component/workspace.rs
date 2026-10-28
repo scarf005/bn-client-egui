@@ -236,14 +236,18 @@ impl<M: GameModel> App<M> {
         }
         // Without tools the log takes the left column, and the canvas the whole height.
         let (tools, log) = (parts(root, Slot::Tools), parts(root, Slot::Log));
-        let (left, left_width, log) = match tools.is_empty() {
+        let left_is_log = tools.is_empty();
+        let (left, left_width, log) = match left_is_log {
             true => (log, LOG_WIDTH, vec![]),
             false => (tools, TOOLS_WIDTH, log),
         };
         if !left.is_empty() {
             egui::Panel::left(egui::Id::new(&tools_id))
                 .default_size(left_width)
-                .show(ui, |ui| self.column(ui, screen, &left, out));
+                .show(ui, |ui| match left_is_log {
+                    true => self.log_column(ui, screen, &left, out),
+                    false => self.column(ui, screen, &left, out),
+                });
             crate::app::label_resize_handle(ui.ctx(), &tools_id, &tr("Resize workspace column"));
         }
         let (lists, inspector) = (
@@ -279,7 +283,7 @@ impl<M: GameModel> App<M> {
         if !log.is_empty() {
             egui::Panel::bottom(egui::Id::new(&log_id))
                 .default_size(LOG_HEIGHT)
-                .show(ui, |ui| self.column(ui, screen, &log, out));
+                .show(ui, |ui| self.log_column(ui, screen, &log, out));
             crate::app::label_resize_handle(ui.ctx(), &log_id, &tr("Resize workspace log"));
         }
         egui::CentralPanel::no_frame().show(ui, |ui| {
@@ -328,6 +332,23 @@ impl<M: GameModel> App<M> {
         if let Some(child) = &panel.child {
             self.component(ui, screen, child, out);
         }
+    }
+
+    /// The log's `parts`: its words, the engine's latest news, over the column of the rest, so that no history
+    /// however long scrolls them out of view.
+    fn log_column(
+        &self,
+        ui: &mut egui::Ui,
+        screen: &Screen,
+        parts: &[&Component],
+        out: &mut Vec<Intent>,
+    ) {
+        let (words, rest): (Vec<&Component>, Vec<&Component>) =
+            parts.iter().partition(|c| matches!(c, Component::Text(_)));
+        words
+            .iter()
+            .for_each(|c| self.component(ui, screen, c, out));
+        self.column(ui, screen, &rest, out);
     }
 
     /// `parts` one above the other in a column that scrolls, whole lines in view. The column is as wide as the
