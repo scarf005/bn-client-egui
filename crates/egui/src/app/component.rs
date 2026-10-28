@@ -800,6 +800,12 @@ impl<M: GameModel> App<M> {
         c: &Component,
         out: &mut Vec<Intent>,
     ) {
+        // A grid of no squares, nor the buttons that act on them.
+        if let Component::Grid(grid) = c
+            && (grid.cols == 0 || grid.rows == 0)
+        {
+            return;
+        }
         match c {
             Component::List(list) => self.described_list(ui, screen, c, list, out),
             Component::Tabs(tabs) => {
