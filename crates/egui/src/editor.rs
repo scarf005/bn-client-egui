@@ -5,11 +5,13 @@ use bn_client_core::localise::tr;
 use bn_client_core::protocol::Editor;
 use eframe::egui::{self, accesskit};
 
-/// What the user typed so far, and the engine value it was started from.
+/// What the user typed so far, the engine value it was started from, and the text last sent.
 #[derive(Clone)]
 struct Draft {
     seen: String,
     text: String,
+    /// A field keeps losing its focus in a frame's every pass; its text goes out once.
+    sent: Option<String>,
 }
 
 /// The space between a field's frame and its text, on each side.
@@ -76,6 +78,7 @@ pub fn value_editor(ui: &mut egui::Ui, field: &ValueField) -> ValueEdit {
         .unwrap_or_else(|| Draft {
             seen: editor.value.clone(),
             text: editor.value.clone(),
+            sent: None,
         });
     let (mut committed, mut edited) = (None, false);
     ui.horizontal(|ui| {
@@ -165,8 +168,15 @@ pub fn value_editor(ui: &mut egui::Ui, field: &ValueField) -> ValueEdit {
                         b.set_invalid(accesskit::Invalid::True)
                     });
                 }
-                if edit.lost_focus() && draft.text != editor.value {
+                if edited {
+                    draft.sent = None;
+                }
+                if edit.lost_focus()
+                    && draft.text != editor.value
+                    && draft.sent.as_ref() != Some(&draft.text)
+                {
                     committed = Some(draft.text.clone());
+                    draft.sent = committed.clone();
                 }
             }
         });
