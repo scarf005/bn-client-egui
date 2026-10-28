@@ -354,7 +354,8 @@ impl<M: GameModel> App<M> {
                 label: &tr("Search"),
                 value: list.filter.as_deref().unwrap_or_default(),
                 busy: self.model.busy(),
-                focus: self.screens.focus_search.take(),
+                // The focus asked for is the top screen's box, never that of a workspace under it.
+                focus: !self.screens.under.get() && self.screens.focus_search.take(),
             },
         );
         if let Some(text) = typed.changed.or(typed.submit) {
