@@ -100,6 +100,25 @@ pub(super) struct Screens {
     paints: VecDeque<Paint>,
     /// A workspace under the top screen is being drawn: it is shown and takes no input.
     under: std::cell::Cell<bool>,
+    /// The form the player last sent or filled, by screen and form id, while nothing else was run since: the
+    /// engine's news is shown under it.
+    sent_form: Option<(String, String)>,
+    /// The value of a form field the client refused, and why, or the affordance it was sent with, until the field
+    /// is edited or filled again.
+    field_refusal: RefCell<Option<FieldRefusal>>,
+    /// The engine's news to show under the form of this id, this frame.
+    news: RefCell<Option<(String, Vec<TextBlock>)>>,
+}
+
+/// A form field whose value the client refused or sent, by screen, form and field id.
+struct FieldRefusal {
+    screen: String,
+    form: String,
+    field: String,
+    /// The client's refusal of the value.
+    text: Option<String>,
+    /// The affordance the value was sent with, whose command the engine may refuse.
+    sent: Option<String>,
 }
 
 /// The height the rows of the list `id` want, all of those it holds, and the height they take.
@@ -191,6 +210,33 @@ enum Intent {
     Pane(String),
     Confirm,
     Cancel,
+}
+
+/// Which form `intent` acts on, when it runs something: none for an action of no form; nothing to say for one
+/// that runs nothing.
+fn acted_form(screen: &Screen, intent: &Intent) -> Option<Option<String>> {
+    let form_of = |id: &str| {
+        screen.components().into_iter().find_map(|c| match c {
+            Component::Form(form)
+                if form.submit.as_deref() == Some(id)
+                    || form.head.affordances.iter().any(|a| a == id) =>
+            {
+                Some(form.head.id.clone())
+            }
+            _ => None,
+        })
+    };
+    match intent {
+        Intent::Fill { form, .. } => Some(Some(form.clone())),
+        Intent::Run(id) => Some(form_of(id)),
+        Intent::Paint(_)
+        | Intent::Move { .. }
+        | Intent::Search { .. }
+        | Intent::Reach(_)
+        | Intent::Pane(_)
+        | Intent::Confirm => Some(None),
+        _ => None,
+    }
 }
 
 fn find<'a>(screen: &'a Screen, id: &str) -> Option<&'a Affordance> {
@@ -519,6 +565,9 @@ impl<M: GameModel> App<M> {
                 .screens
                 .interaction
                 .press(top, &key, &page, &|list| model.rows(list));
+            if out.invoke.is_some() {
+                self.screens.sent_form = None;
+            }
             self.settle(out);
         }
     }
@@ -561,10 +610,23 @@ impl<M: GameModel> App<M> {
 
     /// Hands what the player did to the interaction core.
     fn apply(&mut self, intent: Intent) {
-        let interaction = &mut self.screens.interaction;
         let Some(top) = interaction::described(self.model.screens()) else {
             return;
         };
+        // The form the player sends takes the engine's news once it goes out; an act outside the forms gives the
+        // news back to the status line.
+        let acted = acted_form(top, &intent);
+        if let Some(None) = acted {
+            self.screens.sent_form = None;
+        }
+        let sent_form = acted.flatten().map(|form| (top.screen_id.clone(), form));
+        let filled = match &intent {
+            Intent::Fill { form, field, .. } => {
+                Some((top.screen_id.clone(), form.clone(), field.clone()))
+            }
+            _ => None,
+        };
+        let interaction = &mut self.screens.interaction;
         let out = match intent {
             Intent::More(component) => return self.model.more_rows(&component),
             Intent::Focus { component, row } => return interaction.focus_row(&component, &row),
@@ -619,6 +681,27 @@ impl<M: GameModel> App<M> {
             Intent::Pane(pane) => interaction.answer_pane(top, &pane),
             Intent::Confirm => interaction.confirm(top),
         };
+        if out.invoke.is_some() && sent_form.is_some() {
+            self.screens.sent_form = sent_form;
+        }
+        // A value the client refused stays by its field, and only there; one sent takes the refusal away.
+        if let Some((screen, form, field)) = filled {
+            let refusal = out.invoke.is_none().then(|| out.note()).flatten();
+            let refused = refusal.is_some();
+            let sent = out.invoke.as_ref().map(|(id, _)| id.clone());
+            self.screens.field_refusal.replace(Some(FieldRefusal {
+                screen,
+                form,
+                field,
+                text: refusal,
+                sent,
+            }));
+            if refused {
+                self.keys_consumed |= out.consumed;
+                self.screens.denial = None;
+                return;
+            }
+        }
         self.settle(out);
     }
 
@@ -890,6 +973,17 @@ impl<M: GameModel> App<M> {
         }
         if !matches!(c, Component::List(_)) {
             self.component_buttons(ui, screen, c, None, out);
+        }
+        // The engine's news after the form was sent, under its buttons.
+        if let Component::Form(form) = c
+            && let Some((_, news)) = self
+                .screens
+                .news
+                .borrow()
+                .as_ref()
+                .filter(|(id, _)| id == &form.head.id)
+        {
+            news.iter().for_each(|t| self.text_block(ui, t));
         }
     }
 
@@ -1422,9 +1516,17 @@ impl<M: GameModel> App<M> {
                             queue(ui, label.rect);
                             continue;
                         }
+                        // A canvas is one stop of the keyboard's walk, whose squares the arrows move among.
+                        let sense = match grid.role == Some(GridRole::Canvas) {
+                            true => egui::Sense::CLICK,
+                            false => egui::Sense::click(),
+                        };
                         let button = ui.add_enabled(
                             cell.enabled,
-                            egui::Button::new(shown).min_size(size).selected(marked),
+                            egui::Button::new(shown)
+                                .min_size(size)
+                                .selected(marked)
+                                .sense(sense),
                         );
                         queue(ui, button.rect);
                         if reached {

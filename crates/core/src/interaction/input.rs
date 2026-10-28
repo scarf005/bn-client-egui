@@ -588,7 +588,16 @@ impl Interaction {
                 self.focus_row(holder.id(), id);
                 Some(Outcome::revealing(id))
             }
-            (_, None, Some(by)) => self.switch_tab(screen, &parts, by, select),
+            (_, None, Some(by)) => {
+                // The strip that has the focus, else the screen's first.
+                let strips = parts
+                    .iter()
+                    .copied()
+                    .filter(|c| Some(c.id()) == focused.as_deref())
+                    .chain(parts.iter().copied())
+                    .collect::<Vec<_>>();
+                self.switch_tab(screen, &strips, by, select)
+            }
             _ => None,
         }
     }

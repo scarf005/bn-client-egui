@@ -263,12 +263,14 @@ fn reveal_rect(h: &mut H, what: &str, rect_of: impl Fn(&H) -> Option<egui::Rect>
         if in_view(h, r) {
             return;
         }
-        let dy = if r.center().y < size.y / 2.0 {
-            150.0
-        } else {
-            -150.0
+        // Cut by the end of the scroll area holding it: the wheel goes over that area, toward the cut side.
+        let (at, dy) = match shown(h, r) {
+            Some(c) if c.max.y < r.max.y - 1.0 => (egui::pos2(r.center().x, c.max.y - 4.0), -150.0),
+            Some(c) if c.min.y > r.min.y + 1.0 => (egui::pos2(r.center().x, c.min.y + 4.0), 150.0),
+            _ if r.center().y < size.y / 2.0 => (over(Some(r), stuck), 150.0),
+            _ => (over(Some(r), stuck), -150.0),
         };
-        wheel_at(h, over(Some(r), stuck), dy);
+        wheel_at(h, at, dy);
         // A column that scrolls no further leaves it where it was: its own list scrolls it into view, or another
         // section of the column holds it.
         if rect_of(h) == Some(r) {
@@ -287,15 +289,19 @@ fn reveal_rect(h: &mut H, what: &str, rect_of: impl Fn(&H) -> Option<egui::Rect>
 /// end of its scroll area).
 fn in_view(h: &H, r: egui::Rect) -> bool {
     let screen = h.ctx.content_rect();
-    let clipped = h.ctx.viewport(|v| {
+    shown(h, r).is_some_and(|c| c.contains_rect(r.shrink(1.0))) && screen.contains_rect(r)
+}
+
+/// What is left of the widget drawn at `r` after what clips it.
+fn shown(h: &H, r: egui::Rect) -> Option<egui::Rect> {
+    h.ctx.viewport(|v| {
         v.prev_pass
             .widgets
             .layers()
             .flat_map(|(_, ws)| ws)
             .find(|w| w.rect == r)
             .map(|w| w.interact_rect)
-    });
-    clipped.is_some_and(|c| c.contains_rect(r.shrink(1.0))) && screen.contains_rect(r)
+    })
 }
 
 /// A point in the gutter of a workspace's right column, left of the parts it indents under their headings: the
@@ -526,7 +532,12 @@ fn glyph(h: &H, x: usize, y: usize) -> Option<char> {
 /// A new mapgen file in the profile's mods directory, made from the editor's form, and its canvas.
 fn create_mapgen(h: &mut H, name: &str) -> std::path::PathBuf {
     let path = crate::common::live::profile_dir().join(format!("mods/{name}.json"));
-    click_beside(h, "New file/Path");
+    // The start page heads the form so; an open document, shorter.
+    let heading = match find(h, "New mapgen file") {
+        Some(_) => "New mapgen file/Path",
+        None => "New file/Path",
+    };
+    click_beside(h, heading);
     // The form keeps what the file made before it was given.
     replace_text(h, &path.to_string_lossy());
     click_beside(h, "Overmap terrain");
@@ -757,7 +768,7 @@ fn the_vehicle_editor_opens_a_prototype_installs_and_saves_a_mod_file() {
     wait_kind(&mut h, "vehicle_editor");
     rest(&mut h);
     shot(&mut h, "veh-1-editor");
-    click_input(&mut h, "Search");
+    click_input(&mut h, "Vehicles");
     rest(&mut h);
     shot(&mut h, "veh-2-filter-asks");
     type_text(&mut h, "car");
@@ -787,7 +798,7 @@ fn the_vehicle_editor_opens_a_prototype_installs_and_saves_a_mod_file() {
 
     // A headlight chosen from the filtered part list and installed by a click on the quarterpanel mount, then shown
     // on the Parts here tab.
-    click_input(&mut h, "Parts/Search");
+    click_input(&mut h, "Parts");
     type_text(&mut h, "headlight");
     key(&mut h, egui::Key::Enter);
     rest(&mut h);
@@ -860,7 +871,7 @@ fn the_vehicle_editor_sets_the_ammunition_of_a_turret_from_the_part_tab() {
     click(&mut h, "Yes");
     wait_kind(&mut h, "vehicle_editor");
     rest(&mut h);
-    click_input(&mut h, "Search");
+    click_input(&mut h, "Vehicles");
     type_text(&mut h, "armored_car");
     key(&mut h, egui::Key::Enter);
     double_click(&mut h, "Armored Car");
@@ -1893,7 +1904,7 @@ fn the_map_editor_draws_and_erases_the_squares_of_an_overmap_special_and_saves_t
             .find(|n| {
                 let a = n.accesskit_node();
                 a.role() == egui::accesskit::Role::TextInput
-                    && a.label().as_deref() == Some("Search")
+                    && a.label().as_deref() == Some("Catalog")
             })
             .map(|n| n.rect())
     };
@@ -2432,7 +2443,7 @@ fn the_vehicle_editor_turns_a_preview_reloads_a_file_and_asks_before_leaving() {
     click(&mut h, "Yes");
     wait_kind(&mut h, "vehicle_editor");
     rest(&mut h);
-    click_input(&mut h, "Search");
+    click_input(&mut h, "Vehicles");
     type_text(&mut h, "bicycle");
     key(&mut h, egui::Key::Enter);
     double_click(&mut h, "Bicycle");
@@ -2560,7 +2571,7 @@ fn the_map_editor_exports_a_spawned_vehicle_as_a_placement() {
     click_footer(&mut h, "Vehicle editor");
     wait_kind(&mut h, "vehicle_editor");
     rest(&mut h);
-    click_input(&mut h, "Search");
+    click_input(&mut h, "Vehicles");
     type_text(&mut h, "bicycle");
     key(&mut h, egui::Key::Enter);
     double_click(&mut h, "Bicycle");
@@ -2906,7 +2917,7 @@ fn a_modder_opens_draws_undoes_saves_tests_and_leaves_the_map_editor_workspace()
     dump(&h, "the start page");
 
     // A mapgen file of the game found by the browser's search and opened by a double click on its row.
-    click_input(&mut h, "Search");
+    click_input(&mut h, "Files");
     type_text(&mut h, "house/2story01");
     key(&mut h, egui::Key::Enter);
     rest(&mut h);
@@ -3043,7 +3054,7 @@ fn a_modder_opens_a_prototype_installs_a_part_spawns_and_leaves_the_vehicle_edit
     shot_both(&mut h, "ws-veh-01-start");
     dump(&h, "the vehicle editor");
 
-    click_input(&mut h, "Search");
+    click_input(&mut h, "Vehicles");
     type_text(&mut h, "bicycle");
     key(&mut h, egui::Key::Enter);
     rest(&mut h);
@@ -3059,7 +3070,7 @@ fn a_modder_opens_a_prototype_installs_a_part_spawns_and_leaves_the_vehicle_edit
     click_square(&mut h, "67.5cm bicycle wheel");
     rest(&mut h);
     shot_both(&mut h, "ws-veh-04-mount");
-    click_input(&mut h, "Parts/Search");
+    click_input(&mut h, "Parts");
     type_text(&mut h, "headlight");
     key(&mut h, egui::Key::Enter);
     rest(&mut h);
@@ -3274,7 +3285,7 @@ fn the_editors_keep_their_main_panes_in_view_and_stay_drawn_under_their_keybindi
     key(&mut h, egui::Key::Escape);
     click(&mut h, "Yes");
     wait_kind(&mut h, "vehicle_editor");
-    click_input(&mut h, "Search");
+    click_input(&mut h, "Vehicles");
     type_text(&mut h, "car");
     key(&mut h, egui::Key::Enter);
     double_click(&mut h, "Offroad Car");
@@ -3295,4 +3306,302 @@ fn the_editors_keep_their_main_panes_in_view_and_stay_drawn_under_their_keybindi
         "veh-keybindings",
     ));
     assert!(faults.is_empty(), "{faults:#?}");
+}
+
+/// What the walk of the editor audit's fixes found wrong, one line each.
+#[derive(Default)]
+struct Findings(Vec<String>);
+
+impl Findings {
+    fn check(&mut self, ok: bool, what: impl Into<String>) {
+        let what = what.into();
+        println!("{} {what}", if ok { "ok" } else { "WRONG" });
+        if !ok {
+            self.0.push(what);
+        }
+    }
+}
+
+/// The labels of the rows of the list `id` the engine chose, and of those drawn as chosen.
+fn chosen_rows(h: &H, id: &str) -> (Vec<String>, Vec<String>) {
+    let top = h.state().model.screens().last().unwrap();
+    let Some(Component::List(list)) = top.root.as_ref().unwrap().find(id) else {
+        return (vec![], vec![]);
+    };
+    let labels = list
+        .rows
+        .iter()
+        .map(|r| r.label.shown())
+        .collect::<Vec<_>>();
+    let engine = list
+        .rows
+        .iter()
+        .filter(|r| r.selected)
+        .map(|r| r.label.shown())
+        .collect();
+    let drawn = h
+        .root()
+        .children_recursive()
+        .filter(|n| n.accesskit_node().is_selected() == Some(true))
+        .filter_map(|n| n.accesskit_node().label())
+        .filter(|l| labels.iter().any(|r| r == l))
+        .collect();
+    (engine, drawn)
+}
+
+/// The engine's reason the affordance `id` is off.
+fn denial(h: &H, id: &str) -> String {
+    let top = h.state().model.screens().last().unwrap();
+    top.affordances
+        .iter()
+        .find(|a| a.id == id)
+        .and_then(|a| a.denial.as_ref())
+        .map(|d| d.shown())
+        .unwrap_or_default()
+}
+
+/// Whether a label drawn contains `text`.
+fn drawn(h: &H, text: &str) -> bool {
+    !text.is_empty() && labels(h).iter().any(|l| l.contains(text))
+}
+
+/// The search box above the list headed `heading`, named so, or "Search" on a client that names them all so.
+fn click_search(h: &mut H, heading: &str) {
+    let named = h.root().children_recursive().any(|n| {
+        let a = n.accesskit_node();
+        a.role() == egui::accesskit::Role::TextInput && a.label().as_deref() == Some(heading)
+    });
+    click_input(h, if named { heading } else { "Search" });
+}
+
+/// The names Tab stops at from the menu bar, a round of at most `most`.
+fn tab_stops(h: &mut H, most: usize) -> Vec<String> {
+    let mut out = vec![];
+    for _ in 0..most {
+        h.key_press(egui::Key::Tab);
+        h.run_steps(3);
+        let stop = h
+            .root()
+            .children_recursive()
+            .find(|n| {
+                n.accesskit_node().is_focused()
+                    && n.accesskit_node().role() != egui::accesskit::Role::Window
+            })
+            .map(|n| n.accesskit_node().label().unwrap_or_default());
+        let Some(stop) = stop else { continue };
+        if out.first() == Some(&stop) {
+            break;
+        }
+        out.push(stop);
+    }
+    out
+}
+
+/// The client and an engine, the window the smaller size the walks shoot.
+fn audit_start() -> H<'static> {
+    let dir = std::env::temp_dir().join(format!("bn-walk-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let (mut h, _root) = start(&dir);
+    h.set_size(egui::vec2(1290.0, 830.0));
+    rest(&mut h);
+    h
+}
+
+/// The audit's vehicle editor findings walked as a modder meets them: a single click on a tool row, a click on a menu
+/// item that is off, the engine's notice of a refused install, and a part value out of its field's bounds.
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn the_vehicle_editor_answers_the_audits_clicks() {
+    let mut h = audit_start();
+    let mut found = Findings::default();
+
+    // The vehicle editor: a prototype opened, a single click on a tool row, then a click on Undo while there is
+    // nothing to undo.
+    click(&mut h, "Editor");
+    click(&mut h, "Vehicle editor");
+    key(&mut h, egui::Key::Escape);
+    click(&mut h, "Yes");
+    wait_kind(&mut h, "vehicle_editor");
+    rest(&mut h);
+    shot(&mut h, "v1-open");
+    click_search(&mut h, "Vehicles");
+    type_text(&mut h, "bicycle");
+    key(&mut h, egui::Key::Enter);
+    rest(&mut h);
+    double_click(&mut h, "Bicycle");
+    wait_kind(&mut h, "vehicle_editor");
+    rest(&mut h);
+    shot(&mut h, "v2-prototype");
+    click(&mut h, "Install");
+    rest(&mut h);
+    shot(&mut h, "v3-tool-single-click");
+    let (engine, shown) = chosen_rows(&h, "vehicle:canvas_tools");
+    found.check(
+        engine == shown,
+        format!("vehicle tools: engine chose {engine:?}, drawn chosen {shown:?}"),
+    );
+    let why = denial(&h, "vehicle:undo");
+    press(&mut h, "Edit");
+    rest(&mut h);
+    shot(&mut h, "v4-edit-menu");
+    click_button(&mut h, "Undo");
+    rest(&mut h);
+    shot(&mut h, "v5-undo-off-clicked");
+    found.check(
+        drawn(&h, &why),
+        format!("vehicle Undo off: its reason {why:?} is shown"),
+    );
+    // A part installed again on the mount that has it: the engine's notice says so, by the status line.
+    click_search(&mut h, "Parts");
+    type_text(&mut h, "saddle");
+    key(&mut h, egui::Key::Enter);
+    rest(&mut h);
+    double_click(&mut h, "saddle");
+    click_square(&mut h, "saddle");
+    rest(&mut h);
+    shot(&mut h, "v6-install-refused-notice");
+    let size = h.ctx.content_rect().size();
+    let news = news(&h);
+    found.check(!news.is_empty(), "vehicle: the engine sent a notice");
+    for line in &news {
+        let at = find(&h, line);
+        found.check(
+            at.is_some_and(|r| r.top() > size.y - 120.0),
+            format!("vehicle notice {line:?} drawn at {at:?}, by the status line"),
+        );
+    }
+    // A value out of its field's bounds: a new car's turret ammunition at 500 %. The car is built by the
+    // affordances; the field is typed into as a player does.
+    click_footer(&mut h, "New vehicle");
+    key(&mut h, egui::Key::Enter);
+    wait_kind(&mut h, "vehicle_editor");
+    for (id, at) in [
+        ("frame_cross", "0,0"),
+        ("frame_cross", "-1,0"),
+        ("turret_mount", "-1,0"),
+        ("m249", "-1,0"),
+    ] {
+        install(&mut h, id, at);
+    }
+    click(&mut h, "Select");
+    crate::live_editor::invoke(
+        &mut h,
+        "vehicle:mount",
+        crate::live_editor::row("mount:-1,0"),
+    );
+    rest(&mut h);
+    let turret = {
+        let top = h.state().model.screens().last().unwrap();
+        let Some(Component::List(stack)) = top.root.as_ref().unwrap().find("vehicle:stack") else {
+            panic!("no stack");
+        };
+        stack
+            .rows
+            .iter()
+            .map(|r| r.label.shown())
+            .find(|l| l.contains("M249"))
+            .expect("an M249 on the mount")
+    };
+    pick_stacked(&mut h, &turret);
+    click_tab(&mut h, "Part settings");
+    click_beside(&mut h, "Ammo %");
+    replace_text(&mut h, "500");
+    key(&mut h, egui::Key::Enter);
+    rest(&mut h);
+    shot(&mut h, "v7-ammo-refused");
+    let invalid = h.root().children_recursive().any(|n| {
+        let a = n.accesskit_node();
+        a.role() == egui::accesskit::Role::TextInput
+            && a.label().as_deref() == Some("Ammo %")
+            && a.data().invalid().is_some()
+    });
+    found.check(invalid, "vehicle Ammo % 500: the field is marked refused");
+    assert!(found.0.is_empty(), "{:#?}", found.0);
+}
+
+/// Installs the part `id` on the mount at `at` by the vehicle editor's affordances.
+fn install(h: &mut H, id: &str, at: &str) {
+    use crate::live_editor::{invoke, row, text};
+    invoke(h, "vehicle:part_filter", text(id));
+    invoke(h, "vehicle:choose", row(&format!("vpart:{id}")));
+    invoke(h, "vehicle:mount", row(&format!("mount:{at}")));
+    rest(h);
+}
+
+/// The engine's news on top: the toned texts of its log.
+fn news(h: &H) -> Vec<String> {
+    let top = h.state().model.screens().last().unwrap();
+    top.components()
+        .into_iter()
+        .filter_map(|c| match c {
+            Component::Text(t) if t.tone.is_some() => Some(t.markup.shown()),
+            _ => None,
+        })
+        .collect()
+}
+
+/// The audit's map editor findings walked as a modder meets them: a new mapgen file with a wall mapped and painted,
+/// a single click on an older history row, a click on Redo while there is nothing to redo, and the Tab walk.
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn the_map_editor_answers_the_audits_clicks_keys_and_refusals() {
+    let mut h = audit_start();
+    let mut found = Findings::default();
+    open_map_editor(&mut h);
+    rest(&mut h);
+    shot(&mut h, "m1-open");
+    create_mapgen(&mut h, "audit_fixes");
+    rest(&mut h);
+    // A wall mapped by typing its symbol and terrain id into the mapping form.
+    click_beside(&mut h, "Mapping/Symbol");
+    replace_text(&mut h, "#");
+    key(&mut h, egui::Key::Enter);
+    click_beside(&mut h, "Places");
+    replace_text(&mut h, "t_brick_wall");
+    key(&mut h, egui::Key::Enter);
+    click(&mut h, "Set mapping");
+    paint(&mut h, 2, 2);
+    rest(&mut h);
+    shot(&mut h, "m2-painted");
+    // An older step, which the engine did not choose.
+    click_button(&mut h, "Opened");
+    rest(&mut h);
+    shot(&mut h, "m3-history-single-click");
+    let (engine, shown) = chosen_rows(&h, "editor:history");
+    found.check(
+        engine == shown,
+        format!("map history: engine chose {engine:?}, drawn chosen {shown:?}"),
+    );
+    let why = denial(&h, "editor:redo");
+    press(&mut h, "Edit");
+    rest(&mut h);
+    click_button(&mut h, "Redo");
+    rest(&mut h);
+    shot(&mut h, "m5-redo-off-clicked");
+    found.check(
+        drawn(&h, &why),
+        format!("map Redo off: its reason {why:?} is shown"),
+    );
+    let stops = tab_stops(&mut h, 80);
+    println!("tab stops: {stops:?}");
+    let at = |name: &str| stops.iter().position(|s| s == name);
+    found.check(
+        at("Canvas").is_some_and(|c| at("Legend").is_none_or(|l| c < l)),
+        format!("map Tab: the canvas comes before the right column: {stops:?}"),
+    );
+    found.check(stops.len() <= 70, format!("map Tab: {} stops", stops.len()));
+    while h
+        .root()
+        .children_recursive()
+        .find(|n| n.accesskit_node().is_focused())
+        .and_then(|n| n.accesskit_node().label())
+        .as_deref()
+        != Some("Canvas")
+        && at("Canvas").is_some()
+    {
+        h.key_press(egui::Key::Tab);
+        h.run_steps(3);
+    }
+    shot(&mut h, "m6-tab-on-canvas");
+    assert!(found.0.is_empty(), "{:#?}", found.0);
 }

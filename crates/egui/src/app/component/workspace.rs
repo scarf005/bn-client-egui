@@ -204,10 +204,23 @@ impl<M: GameModel> App<M> {
                     if let Some(key) = a.keys.first() {
                         item = item.shortcut_text(key);
                     }
-                    let button = ui.add_enabled(availability.enabled, item);
+                    // An item that is off looks off, yet takes a click and Return, which ask all the same for the
+                    // core to show the engine's reason where a refusal shows.
+                    let button = ui
+                        .scope(|ui| {
+                            if !availability.enabled {
+                                ui.multiply_opacity(ui.visuals().disabled_alpha());
+                            }
+                            ui.add(item)
+                        })
+                        .inner;
+                    if !availability.enabled {
+                        ui.ctx()
+                            .accesskit_node_builder(button.id, |b| b.set_disabled());
+                    }
                     let button = described(ui.ctx(), button, a);
                     let button = match (availability.enabled, availability.denial) {
-                        (false, Some(why)) => button.on_disabled_hover_text(why.shown()),
+                        (false, Some(why)) => button.on_hover_text(why.shown()),
                         _ => button,
                     };
                     if button.clicked() {
@@ -235,19 +248,48 @@ impl<M: GameModel> App<M> {
             format!("workspace-side {}", screen.screen_id),
             format!("workspace-log {}", screen.screen_id),
         );
-        // The canvas's place in the keyboard's walk comes before the columns' widgets.
-        self.canvas_stop(ui, screen, root, out);
         let status = parts(root, Slot::Status);
+        // The engine's news, a toned text of the log, is shown where the player acted: under the form they sent,
+        // else by the status line.
+        let (news, log) = parts(root, Slot::Log)
+            .into_iter()
+            .partition::<Vec<_>, _>(|c| matches!(c, Component::Text(t) if t.tone.is_some()));
+        let news = news
+            .into_iter()
+            .filter_map(|c| match c {
+                Component::Text(t) => Some(t.clone()),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        let sent = self
+            .screens
+            .sent_form
+            .as_ref()
+            .filter(|(at, form)| {
+                at == &screen.screen_id && screen.root.as_ref().and_then(|r| r.find(form)).is_some()
+            })
+            .map(|(_, form)| form.clone());
+        let strip_news = match (&sent, news.is_empty()) {
+            (Some(form), false) => {
+                self.screens.news.replace(Some((form.clone(), news)));
+                vec![]
+            }
+            _ => {
+                self.screens.news.replace(None);
+                news
+            }
+        };
         let footer_width = Self::footer_width(ui, footer, true);
         // The question and the refusal are the top screen's, which a workspace under it does not show.
         let under = self.screens.under.get();
         let asking =
             !under && (self.screens.interaction.ask().is_some() || self.screens.denial.is_some());
         // No strip at the bottom when it would be empty.
-        if !status.is_empty() || footer_width > 0.0 || asking {
+        if !status.is_empty() || footer_width > 0.0 || asking || !strip_news.is_empty() {
             egui::Panel::bottom(id("status"))
                 .resizable(false)
                 .show(ui, |ui| {
+                    strip_news.iter().for_each(|t| self.text_block(ui, t));
                     if !under {
                         self.question(ui, screen, out);
                         if let Some(denial) = &self.screens.denial {
@@ -277,7 +319,7 @@ impl<M: GameModel> App<M> {
                 });
         }
         // Without tools the log takes the left column, and the canvas the whole height.
-        let (tools, log) = (parts(root, Slot::Tools), parts(root, Slot::Log));
+        let tools = parts(root, Slot::Tools);
         let left_is_log = tools.is_empty();
         let (left, left_width, log) = match left_is_log {
             true => (log, LOG_WIDTH, vec![]),
@@ -299,43 +341,60 @@ impl<M: GameModel> App<M> {
             parts(root, Slot::Outline),
             parts(root, Slot::Inspector),
         );
+        // The right column and the log under the canvas take their room now and are filled after the canvas, so
+        // that the keyboard walks the canvas before them, as they are read.
         let lists = !palette.is_empty() || !outline.is_empty();
-        if lists || !inspector.is_empty() {
+        let side = (lists || !inspector.is_empty()).then(|| {
             let width = side_width(ui, root);
             follow(ui.ctx(), egui::Id::new(&side_id), width);
-            egui::Panel::right(egui::Id::new(&side_id))
+            let room = egui::Panel::right(egui::Id::new(&side_id))
                 .default_size(width)
-                .show(ui, |ui| {
-                    // Room for two columns puts the inspector beside the palette and the outline, both in view.
-                    match ui.available_width() >= 2.0 * SIDE_WIDTH.0
-                        && lists
-                        && !inspector.is_empty()
-                    {
-                        true => ui.columns(2, |halves| {
-                            // The halves are told apart by name: a column's own id is its parent's.
-                            halves[0].push_id("lists", |ui| {
-                                self.sections(ui, screen, &[&palette, &outline], out)
-                            });
-                            halves[1].push_id("inspector", |ui| {
-                                self.sections(ui, screen, &[&inspector], out)
-                            });
-                        }),
-                        false => self.sections(ui, screen, &[&palette, &outline, &inspector], out),
-                    }
-                });
+                .show(ui, reserve)
+                .inner;
             crate::app::label_resize_handle(ui.ctx(), &side_id, &tr("Resize workspace column"));
-        }
-        if !log.is_empty() {
-            egui::Panel::bottom(egui::Id::new(&log_id))
+            room
+        });
+        let below = (!log.is_empty()).then(|| {
+            let room = egui::Panel::bottom(egui::Id::new(&log_id))
                 .default_size(LOG_HEIGHT)
-                .show(ui, |ui| self.log_column(ui, screen, &log, out));
+                .show(ui, reserve)
+                .inner;
             crate::app::label_resize_handle(ui.ctx(), &log_id, &tr("Resize workspace log"));
-        }
-        egui::CentralPanel::no_frame().show(ui, |ui| {
+            room
+        });
+        // The canvas keeps clear of the columns' edges, so a press there grabs the edge, not a square.
+        let grab = ui.style().interaction.resize_grab_radius_side.ceil() as i8;
+        let clear = egui::Frame::NONE.inner_margin(egui::Margin::same(grab));
+        egui::CentralPanel::no_frame().frame(clear).show(ui, |ui| {
             parts(root, Slot::Canvas)
                 .into_iter()
                 .for_each(|c| self.component(ui, screen, c, out));
         });
+        self.canvas_stop(ui, screen, root, out);
+        let mut filled = |room: egui::Rect, name: &str| {
+            let mut column = ui.new_child(egui::UiBuilder::new().id_salt(name).max_rect(room));
+            column.set_clip_rect(room.intersect(ui.clip_rect()));
+            column
+        };
+        if let Some(room) = below {
+            self.log_column(&mut filled(room, &log_id), screen, &log, out);
+        }
+        if let Some(room) = side {
+            let ui = &mut filled(room, &side_id);
+            // Room for two columns puts the inspector beside the palette and the outline, both in view.
+            match ui.available_width() >= 2.0 * SIDE_WIDTH.0 && lists && !inspector.is_empty() {
+                true => ui.columns(2, |halves| {
+                    // The halves are told apart by name: a column's own id is its parent's.
+                    halves[0].push_id("lists", |ui| {
+                        self.sections(ui, screen, &[&palette, &outline], out)
+                    });
+                    halves[1].push_id("inspector", |ui| {
+                        self.sections(ui, screen, &[&inspector], out)
+                    });
+                }),
+                false => self.sections(ui, screen, &[&palette, &outline, &inspector], out),
+            }
+        }
     }
 
     /// A status part on one line: a panel's title and its facts side by side; any other part as it is drawn
@@ -607,4 +666,10 @@ impl<M: GameModel> App<M> {
         ui.data_mut(|d| d.insert_temp(key, ids));
         first
     }
+}
+
+/// Takes a panel's whole room without drawing in it, for what fills it later.
+fn reserve(ui: &mut egui::Ui) -> egui::Rect {
+    ui.expand_to_include_rect(ui.max_rect());
+    ui.max_rect()
 }

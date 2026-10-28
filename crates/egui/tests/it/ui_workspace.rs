@@ -893,7 +893,12 @@ fn ctrl_f_over_a_workspace_with_a_search_box_focuses_the_top_screens_box() {
         .push(json!({"id": "ws:filter", "label": "Filter",
         "keys": [], "enabled": true, "expect": "boundary", "args": {"text": {}}}));
     let (mut h, script) = over_workspace(under, top, egui::vec2(1290.0, 830.0));
-    assert_eq!(h.get_all_by_label("Search").count(), 2, "two search boxes");
+    assert_eq!(
+        h.query_all_by_role(egui::accesskit::Role::TextInput)
+            .count(),
+        2,
+        "two search boxes"
+    );
     h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::F);
     h.run_steps(3);
     h.event(egui::Event::Text("spawn".into()));
@@ -930,4 +935,133 @@ fn a_workspace_under_a_screen_the_engine_does_not_describe_still_paints_its_over
         !painted(&h, "F").is_empty(),
         "the overmap under the plain screen is not painted"
     );
+}
+
+/// Whether the row labelled `label` is shown selected.
+fn selected(h: &H, label: &str) -> bool {
+    h.get_by_label(label).accesskit_node().is_selected() == Some(true)
+}
+
+#[test]
+fn a_click_on_a_row_the_engine_has_not_chosen_leaves_its_choice_shown_selected() {
+    for size in [egui::vec2(1290.0, 830.0), egui::vec2(1920.0, 1080.0)] {
+        let (mut h, _) = shown(size);
+        assert!(selected(&h, "Pencil") && !selected(&h, "Eraser"));
+        h.get_by_label("Eraser").click();
+        h.run_steps(3);
+        assert!(
+            selected(&h, "Pencil") && !selected(&h, "Eraser"),
+            "{size:?}: the tools show a choice the engine did not make"
+        );
+    }
+}
+
+#[test]
+fn a_click_on_a_row_of_a_list_that_follows_the_focus_shows_it_selected() {
+    let mut screen = workspace();
+    screen["affordances"].as_array_mut().unwrap().push(
+        json!({"id": "ws:pick_tool", "label": "Pick tool",
+        "keys": [], "enabled": true, "expect": "boundary", "role": "select",
+        "args": {"row": {"component_id": "ws:tools"}}}),
+    );
+    let (app, script) = crate::common::staged(crate::common::over_map(screen));
+    let mut h = crate::common::themed_harness(SIZES[0], app);
+    h.run_steps(7);
+    crate::common::settle_windows(&mut h);
+    h.get_by_label("Eraser").click();
+    h.run_steps(3);
+    assert!(invoked(&script).contains(&"ws:pick_tool".to_string()));
+    assert!(selected(&h, "Eraser") && !selected(&h, "Pencil"));
+}
+
+#[test]
+fn a_click_on_a_row_of_a_list_holding_the_engines_cursor_shows_it_selected() {
+    let mut screen = workspace();
+    screen["focus"] = json!({"component_id": "ws:tools", "row_id": "ws:tools:0"});
+    let (app, _) = crate::common::staged(crate::common::over_map(screen));
+    let mut h = crate::common::themed_harness(SIZES[0], app);
+    h.run_steps(7);
+    crate::common::settle_windows(&mut h);
+    h.get_by_label("Eraser").click();
+    h.run_steps(3);
+    assert!(selected(&h, "Eraser") && !selected(&h, "Pencil"));
+}
+
+#[test]
+fn a_click_or_return_on_a_menu_item_that_is_off_shows_the_engines_reason() {
+    for size in [egui::vec2(1290.0, 830.0), egui::vec2(1920.0, 1080.0)] {
+        let (mut h, script) = shown(size);
+        h.get_by_label("File").click();
+        h.run_steps(3);
+        h.get_by_label("Save").click();
+        h.run_steps(3);
+        assert!(
+            h.query_by_label("Nothing to save").is_some(),
+            "{size:?}: a click on Save said nothing"
+        );
+        assert!(!invoked(&script).contains(&"ws:save".to_string()));
+        let (mut h, _) = shown(size);
+        h.get_by_label("File").click();
+        h.run_steps(3);
+        h.get_by_label("Save").focus();
+        h.run_steps(2);
+        h.key_press(egui::Key::Enter);
+        h.run_steps(3);
+        assert!(
+            h.query_by_label("Nothing to save").is_some(),
+            "{size:?}: Return on Save said nothing"
+        );
+    }
+}
+
+/// A value cut at the right column's edge reads whole once the player drags the column wider by its edge, which the
+/// canvas's squares reach.
+#[test]
+fn widening_the_right_column_shows_a_cut_id_whole() {
+    let id = "turret_mount_manual_steel_reinforced_foldable";
+    let mut h = shown_with(SIZES[0], |parts| {
+        let row = json!({"id": "vpart:turret", "label": "simple foldable wooden turret mount", "description": "",
+            "denial": "", "enabled": true, "selectable": true, "selected": false,
+            "columns": [{"key": "id", "label": "ID", "value": id}]});
+        parts[2] = json!({"id": "ws:palette", "kind": "list", "label": "Parts", "slot": "palette",
+            "columns": [{"key": "id", "label": "ID"}], "total": 1, "rows": [row],
+            "selection": "single"});
+    });
+    // Whether the id is painted and not cut short.
+    let whole = |h: &H| {
+        fn walk(shape: &egui::Shape, id: &str) -> Option<bool> {
+            match shape {
+                egui::Shape::Text(t) if t.galley.text() == id => Some(!t.galley.elided),
+                egui::Shape::Vec(shapes) => shapes.iter().find_map(|s| walk(s, id)),
+                _ => None,
+            }
+        }
+        h.output().shapes.iter().find_map(|c| walk(&c.shape, id))
+    };
+    assert_eq!(whole(&h), Some(false), "{id} is not cut before widening");
+    let edge = h
+        .query_all_by_label("Resize workspace column")
+        .map(|n| n.rect().center())
+        .max_by(|a, b| a.x.total_cmp(&b.x))
+        .unwrap();
+    let to = edge - egui::vec2(150.0, 0.0);
+    let press = |h: &mut H, pos: egui::Pos2, pressed: bool| {
+        h.event(egui::Event::PointerButton {
+            pos,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        });
+        h.run_steps(2);
+    };
+    h.hover_at(edge);
+    h.run_steps(2);
+    press(&mut h, edge, true);
+    for step in 1..=10 {
+        h.hover_at(edge.lerp(to, step as f32 / 10.0));
+        h.run_steps(2);
+    }
+    press(&mut h, to, false);
+    h.run_steps(4);
+    assert_eq!(whole(&h), Some(true), "{id} is still cut");
 }

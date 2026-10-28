@@ -5,11 +5,13 @@ use bn_client_core::localise::tr;
 use bn_client_core::protocol::Editor;
 use eframe::egui::{self, accesskit};
 
-/// What the user typed so far, and the engine value it was started from.
+/// What the user typed so far, the engine value it was started from, and the text last sent.
 #[derive(Clone)]
 struct Draft {
     seen: String,
     text: String,
+    /// A field keeps losing its focus in a frame's every pass; its text goes out once.
+    sent: Option<String>,
 }
 
 /// The space between a field's frame and its text, on each side.
@@ -42,14 +44,33 @@ fn wrapped_text(ui: &egui::Ui, text: &str, wrap: f32) -> std::sync::Arc<egui::Ga
     ui.fonts_mut(|f| f.layout_job(job))
 }
 
-/// Draws the control for `editor` next to `label`; returns the new value once it is committed.
-pub fn value_editor(
-    ui: &mut egui::Ui,
-    id: &str,
-    label: &str,
-    editor: &Editor,
-    enabled: bool,
-) -> Option<String> {
+/// A form field's control: its id, the label beside it, its value and kind, whether it takes input, and the
+/// refusal of the value last given it.
+pub struct ValueField<'a> {
+    pub id: &'a str,
+    pub label: &'a str,
+    pub editor: &'a Editor,
+    pub enabled: bool,
+    pub refusal: Option<&'a str>,
+}
+
+/// What the player did to a field this frame.
+pub struct ValueEdit {
+    /// The new value, once it is committed.
+    pub committed: Option<String>,
+    /// The text changed.
+    pub edited: bool,
+}
+
+/// Draws the control for `field` next to its label, marked and with its refusal under it when it has one.
+pub fn value_editor(ui: &mut egui::Ui, field: &ValueField) -> ValueEdit {
+    let ValueField {
+        id,
+        label,
+        editor,
+        enabled,
+        refusal,
+    } = *field;
     let key = egui::Id::new(("editor", id));
     let mut draft = ui
         .data(|d| d.get_temp::<Draft>(key))
@@ -57,8 +78,9 @@ pub fn value_editor(
         .unwrap_or_else(|| Draft {
             seen: editor.value.clone(),
             text: editor.value.clone(),
+            sent: None,
         });
-    let mut committed = None;
+    let (mut committed, mut edited) = (None, false);
     ui.horizontal(|ui| {
         ui.add_enabled_ui(enabled, |ui| match editor.kind.as_str() {
             "bool" => {
@@ -74,7 +96,7 @@ pub fn value_editor(
                     .iter()
                     .find(|v| v.id == editor.value)
                     .map_or(editor.value.as_str(), |v| v.label.as_str());
-                egui::ComboBox::from_id_salt(key)
+                let combo = egui::ComboBox::from_id_salt(key)
                     .selected_text(shown)
                     .show_ui(ui, |ui| {
                         for v in &editor.values {
@@ -86,6 +108,9 @@ pub fn value_editor(
                             }
                         }
                     });
+                // The box is named by its field, as its label beside it reads.
+                ui.ctx()
+                    .accesskit_node_builder(combo.response.id, |b| b.set_label(label));
             }
             _ => {
                 ui.label(label);
@@ -134,14 +159,35 @@ pub fn value_editor(
                 // The box is named by its field, as its label beside it reads.
                 ui.ctx()
                     .accesskit_node_builder(edit.id, |b| b.set_label(label));
-                if edit.lost_focus() && draft.text != editor.value {
+                edited = edit.changed();
+                if refusal.is_some() && !edited {
+                    let stroke = egui::Stroke::new(1.5, crate::kit::tokens::BAD);
+                    ui.painter()
+                        .rect_stroke(edit.rect, 0, stroke, egui::StrokeKind::Outside);
+                    ui.ctx().accesskit_node_builder(edit.id, |b| {
+                        b.set_invalid(accesskit::Invalid::True)
+                    });
+                }
+                if edited {
+                    draft.sent = None;
+                }
+                if edit.lost_focus()
+                    && draft.text != editor.value
+                    && draft.sent.as_ref() != Some(&draft.text)
+                {
                     committed = Some(draft.text.clone());
+                    draft.sent = committed.clone();
                 }
             }
         });
     });
+    if let Some(refusal) = refusal.filter(|_| !edited) {
+        let said = ui.colored_label(crate::kit::tokens::BAD, refusal);
+        ui.ctx()
+            .accesskit_node_builder(said.id, |b| b.set_live(accesskit::Live::Assertive));
+    }
     ui.data_mut(|d| d.insert_temp(key, draft));
-    committed
+    ValueEdit { committed, edited }
 }
 
 /// The engine asks for a key: the next key press names it. Escape is left to the cancel button.
@@ -209,7 +255,10 @@ pub struct Typed {
 pub struct Search<'a> {
     pub screen: &'a str,
     pub id: &'a str,
+    /// What the empty box shows.
     pub label: &'a str,
+    /// What a screen reader names the box: the heading of the list it searches.
+    pub name: &'a str,
     /// The filter text the engine holds.
     pub value: &'a str,
     pub busy: bool,
@@ -224,11 +273,18 @@ pub fn search_box(ui: &mut egui::Ui, search: &Search) -> Typed {
         screen,
         id,
         label,
+        name,
         value,
         busy,
         focus,
     } = *search;
-    typing(ui, (screen, id, label, value, busy), Some(focus))
+    let typed = typing(ui, (screen, id, label, value, busy), Some(focus));
+    let name = name.to_string();
+    ui.ctx()
+        .accesskit_node_builder(egui::Id::new(("typing-box", id)), move |b| {
+            b.set_label(name)
+        });
+    typed
 }
 
 /// A text box whose every change goes out as it is typed and whose Return submits, such as the prompt of a

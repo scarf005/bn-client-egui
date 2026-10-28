@@ -128,7 +128,44 @@ impl<M: GameModel> App<M> {
                     }
                     None
                 }
-                _ => editor::value_editor(ui, &id, &label, &editor_of(field), on),
+                _ => {
+                    let at = (
+                        screen.screen_id.as_str(),
+                        form.head.id.as_str(),
+                        field.id.as_str(),
+                    );
+                    // The client's refusal of the value, else the engine's of the command that sent it.
+                    let command = self.model.command();
+                    let rejected = |sent: &Option<String>| {
+                        command
+                            .as_ref()
+                            .filter(|c| c.finished && c.stage == "rejected")
+                            .filter(|c| c.target.is_some() && &c.target == sent)
+                            .map(|c| c.text.clone())
+                    };
+                    let refusal = self
+                        .screens
+                        .field_refusal
+                        .borrow()
+                        .as_ref()
+                        .filter(|r| (r.screen.as_str(), r.form.as_str(), r.field.as_str()) == at)
+                        .and_then(|r| r.text.clone().or_else(|| rejected(&r.sent)));
+                    let edit = editor::value_editor(
+                        ui,
+                        &editor::ValueField {
+                            id: &id,
+                            label: &label,
+                            editor: &editor_of(field),
+                            enabled: on,
+                            refusal: refusal.as_deref(),
+                        },
+                    );
+                    // Editing the refused value takes its refusal away.
+                    if edit.edited && refusal.is_some() {
+                        self.screens.field_refusal.replace(None);
+                    }
+                    edit.committed
+                }
             };
             if let (Some(value), Some(a)) = (committed, fill) {
                 out.push(Intent::Fill {
