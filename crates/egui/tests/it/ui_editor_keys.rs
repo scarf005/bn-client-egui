@@ -154,15 +154,15 @@ fn focused_on(h: &H, label: &str) -> bool {
     h.query_all_by_label(label).any(|n| Some(n.rect()) == rect)
 }
 
-/// Tab reaches the canvas early, before the side columns' widgets; there the arrows move over its squares and
-/// Return draws on the one reached.
+/// Tab reaches the canvas after the menus and the left column, before the right column's widgets; there the
+/// arrows move over its squares and Return draws on the one reached.
 #[test]
 fn tab_reaches_the_canvas_where_the_arrows_and_return_draw() {
     let (mut h, script) = open(editor(Some("trail")));
     let mut presses = 0;
     while !focused_on(&h, "Canvas") {
         presses += 1;
-        assert!(presses <= 12, "Tab does not reach the canvas");
+        assert!(presses <= 20, "Tab does not reach the canvas");
         h.key_press(egui::Key::Tab);
         h.run_steps(2);
     }

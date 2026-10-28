@@ -131,8 +131,9 @@ pub fn table<'a>(ui: &'a mut egui::Ui, widths: &Widths, label: f32) -> TableBuil
         })
         .column(Column::remainder())
         .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
-        // A click anywhere on a row is a click on the row, not only on its label.
-        .sense(egui::Sense::click())
+        // A click anywhere on a row is a click on the row, not only on its label; the keyboard stops at the
+        // row's label only, not at each of its cells.
+        .sense(egui::Sense::CLICK)
         .animate_scrolling(false)
 }
 

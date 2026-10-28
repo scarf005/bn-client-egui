@@ -59,6 +59,18 @@ impl<M: GameModel> App<M> {
             .map(|(l, tab)| width(&markup::plain(l), egui::TextStyle::Body) + key(tab))
             .collect::<Vec<_>>();
         let rows = tab_rows(&widths, ui.available_width());
+        // The strip is one stop of the keyboard's walk: its chosen tab when it is on, else its first on one; Left
+        // and Right switch. A strip with no tab on is not a stop, as a disabled button is not.
+        let on = |t: &Tab| t.enabled && select.map_or(self.screens.passive, |a| a.enabled);
+        let chosen = tabs.tabs.iter().position(|t| t.selected);
+        let stop = chosen
+            .filter(|i| on(&tabs.tabs[*i]))
+            .or_else(|| tabs.tabs.iter().position(on));
+        let keys = egui::Id::new(("tabs keyboard", &screen.screen_id, &tabs.head.id));
+        // The chosen tab the strip had the keyboard on last frame: a newly chosen one takes it over.
+        let keyed = ui.data(|d| d.get_temp::<Option<String>>(keys)).flatten();
+        let moved = keyed.is_some_and(|id| stop.is_some_and(|i| tabs.tabs[i].id != id));
+        let mut focused = false;
         egui::Frame::NONE
             .fill(crate::kit::tokens::PANEL)
             .show(ui, |ui| {
@@ -70,31 +82,45 @@ impl<M: GameModel> App<M> {
                     ui.horizontal(|ui| {
                         ui.spacing_mut().item_spacing.x = 0.0;
                         for i in row {
-                            self.tab(ui, tabs, select, &tabs.tabs[i], &labels[i], out);
+                            let strip = Strip {
+                                tabs,
+                                select,
+                                stop: stop == Some(i),
+                                moved,
+                            };
+                            focused |= self.tab(ui, &strip, &tabs.tabs[i], &labels[i], out);
                         }
                     });
                 }
             });
+        let held = focused
+            .then(|| stop.map(|i| tabs.tabs[i].id.clone()))
+            .flatten();
+        ui.data_mut(|d| d.insert_temp(keys, held));
     }
 
-    /// One tab labelled `label`; a click chooses it with `select`. Whether it was clicked.
+    /// One tab labelled `label`; a click chooses it with the strip's `select`. Whether it has the button.
     fn tab(
         &self,
         ui: &mut egui::Ui,
-        tabs: &Tabs,
-        select: Option<&Affordance>,
+        strip: &Strip,
         tab: &Tab,
         label: &str,
         out: &mut Vec<Intent>,
     ) -> bool {
+        let Strip { tabs, select, .. } = *strip;
         let on = tab.enabled && select.map_or(self.screens.passive, |a| a.enabled);
+        let sense = match strip.stop && on {
+            true => egui::Sense::click(),
+            false => egui::Sense::CLICK,
+        };
         let text = self.line(ui, label);
         let button = match &tab.hotkey {
             Some(key) => {
                 let key = egui::RichText::new(key).small().weak();
-                self.control(ui, (text, key), &tab.id, on, tab.selected)
+                self.control_sensed(ui, (text, key), &tab.id, (on, tab.selected), sense)
             }
-            None => self.control(ui, text, &tab.id, on, tab.selected),
+            None => self.control_sensed(ui, text, &tab.id, (on, tab.selected), sense),
         };
         let button = match (&tab.hotkey, on) {
             (Some(key), true) => button.on_hover_text(key),
@@ -117,13 +143,30 @@ impl<M: GameModel> App<M> {
         // A click on a tab that is off asks all the same, for the core to tell the engine's reason; its hover says
         // that reason too.
         let refused = !on && {
-            let off = ui.interact(button.rect, button.id.with("off"), egui::Sense::click());
+            let off = ui.interact(button.rect, button.id.with("off"), egui::Sense::CLICK);
             let off = match &tab.denial {
                 Some(denial) => off.on_hover_text(markup::plain(&denial.shown())),
                 None => off,
             };
             off.clicked()
         };
+        if strip.stop && strip.moved && !button.has_focus() {
+            button.request_focus();
+        }
+        let focused = button.has_focus();
+        if focused {
+            let arrows = egui::EventFilter {
+                horizontal_arrows: true,
+                ..Default::default()
+            };
+            ui.memory_mut(|m| m.set_focus_lock_filter(button.id, arrows));
+            if button.gained_focus() {
+                out.push(Intent::Focus {
+                    component: tabs.head.id.clone(),
+                    row: tab.id.clone(),
+                });
+            }
+        }
         if button.clicked() || refused {
             out.push(Intent::Focus {
                 component: tabs.head.id.clone(),
@@ -131,8 +174,19 @@ impl<M: GameModel> App<M> {
             });
             out.extend(select.map(|a| Intent::Run(a.id.clone())));
         }
-        button.clicked()
+        focused
     }
+}
+
+/// What every tab of a strip shares.
+struct Strip<'a> {
+    tabs: &'a Tabs,
+    /// What a click on a tab runs.
+    select: Option<&'a Affordance>,
+    /// Whether this tab is the strip's keyboard stop.
+    stop: bool,
+    /// Whether the strip had the keyboard last frame on another chosen tab, so its stop takes it over.
+    moved: bool,
 }
 
 #[cfg(test)]

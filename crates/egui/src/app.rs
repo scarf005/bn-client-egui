@@ -654,6 +654,19 @@ impl<M: GameModel> App<M> {
         enabled: bool,
         highlighted: bool,
     ) -> egui::Response {
+        self.control_sensed(ui, text, id, (enabled, highlighted), egui::Sense::click())
+    }
+
+    /// `control`, sensing `sense`: a row of a list senses clicks without being a stop of the keyboard's walk,
+    /// unless it is its list's stop.
+    fn control_sensed<'a>(
+        &self,
+        ui: &mut egui::Ui,
+        text: impl egui::IntoAtoms<'a>,
+        id: &str,
+        (enabled, highlighted): (bool, bool),
+        sense: egui::Sense,
+    ) -> egui::Response {
         let settled = self.settled();
         let pending = settled
             && self
@@ -664,7 +677,9 @@ impl<M: GameModel> App<M> {
         let usable = enabled && (self.screens.passive || !(settled && self.model.busy()));
         let button = ui.add_enabled(
             usable,
-            egui::Button::new(text).selected(pending || highlighted),
+            egui::Button::new(text)
+                .selected(pending || highlighted)
+                .sense(sense),
         );
         a11y::button(ui.ctx(), button.id, pending);
         // A clicked button must not keep the focus ring, nor Enter and Space for itself, once it has run.

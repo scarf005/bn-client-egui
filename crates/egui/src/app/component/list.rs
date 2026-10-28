@@ -31,6 +31,12 @@ struct RowLayout<'a> {
     /// The engine chose a row of the list and the focus does not move its choice: the chosen row is shown
     /// selected, and the focus only outlined.
     chosen: bool,
+    /// The row that is the list's one stop of the keyboard's walk: the arrows move among the rows from there.
+    stop: Option<&'a str>,
+    /// A row of the list had the keyboard the frame before: the stop takes it when the arrows move it.
+    keyed: bool,
+    /// A row of the list has the keyboard now.
+    focused: std::cell::Cell<bool>,
 }
 
 impl<M: GameModel> App<M> {
@@ -255,7 +261,28 @@ impl<M: GameModel> App<M> {
             };
             self.screens.column_lists.borrow_mut().push(fit);
         }
+        // The list is one stop of the keyboard's walk: its focused row, else its chosen one, else its first, when
+        // in view; else the first row in view.
+        let in_view = first
+            ..starts
+                .partition_point(|s| *s < starts.get(first).copied().unwrap_or(0.0) + list_height);
+        let choosable = |r: &&&Row| r.enabled && r.header != Some(true);
+        let preferred = at
+            .or(selected)
+            .or_else(|| rows.iter().position(|r| choosable(&r)));
+        let stop = preferred
+            .filter(|i| in_view.contains(i))
+            .or_else(|| {
+                rows[in_view.clone()]
+                    .iter()
+                    .position(|r| choosable(&r))
+                    .map(|i| i + in_view.start)
+            })
+            .map(|i| rows[i].id.as_str());
+        let keys = egui::Id::new(("list keyboard", &screen.screen_id, id));
+        let keyed = ui.data(|d| d.get_temp::<bool>(keys)).unwrap_or_default();
         let mut drawn = 0;
+        let mut focused = false;
         let body = |body: egui_extras::TableBody| {
             let layout = RowLayout {
                 widths: &widths,
@@ -263,12 +290,16 @@ impl<M: GameModel> App<M> {
                 answers: !self.screens.passive && Self::asks(screen),
                 filter: form::filter_submit(screen).is_some(),
                 chosen: rows.iter().any(|r| r.selected) && !follows_focus(screen, id),
+                stop,
+                keyed,
+                focused: std::cell::Cell::new(false),
             };
             body.heterogeneous_rows(heights.iter().copied(), |row| {
                 let at = row.index();
                 drawn = drawn.max(at + 1);
                 self.list_row(row, list, rows[at], cursor, &layout, out);
             });
+            focused = layout.focused.get();
         };
         let top = ui.cursor().top();
         let scrolled = ui
@@ -298,6 +329,7 @@ impl<M: GameModel> App<M> {
             })
             .inner;
         windows::note_hidden(ui, &scrolled);
+        ui.data_mut(|d| d.insert_temp(keys, focused));
         // The row is shown once it is in sight in the list and in what holds it: a list that changes its height as
         // it scrolls scrolls again, and what holds it scrolls too when the row moved there from another.
         if let (Some(i), true) = (shown, pending) {
@@ -489,9 +521,13 @@ impl<M: GameModel> App<M> {
                     .into(),
             };
             let justified = egui::Layout::top_down_justified(egui::Align::Min);
+            let sense = match layout.stop == Some(row.id.as_str()) {
+                true => egui::Sense::click(),
+                false => egui::Sense::CLICK,
+            };
             button = Some(
                 ui.with_layout(justified, |ui| {
-                    self.control(ui, text, &row.id, on, highlighted)
+                    self.control_sensed(ui, text, &row.id, (on, highlighted), sense)
                 })
                 .inner,
             );
@@ -534,6 +570,7 @@ impl<M: GameModel> App<M> {
         let Some(button) = button else {
             return;
         };
+        self.row_keys(&button, (list, row), at, layout, out);
         a11y::selected(&button.ctx, button.id, highlighted);
         button.widget_info(|| {
             WidgetInfo::selected(
@@ -569,6 +606,39 @@ impl<M: GameModel> App<M> {
                 (_, None, true) => out.push(Intent::Open),
                 _ => {}
             }
+        }
+    }
+
+    /// The keyboard on the list's stop: reached by Tab, it takes the focus to its row; while it has the keyboard,
+    /// the arrows are the list's, and the stop the arrows moved to takes the keyboard.
+    fn row_keys(
+        &self,
+        button: &egui::Response,
+        (list, row): (&List, &Row),
+        at: bool,
+        layout: &RowLayout,
+        out: &mut Vec<Intent>,
+    ) {
+        let stop = layout.stop == Some(row.id.as_str());
+        if stop && at && layout.keyed && !button.has_focus() {
+            button.request_focus();
+        }
+        if !button.has_focus() {
+            return;
+        }
+        layout.focused.set(true);
+        let arrows = egui::EventFilter {
+            vertical_arrows: true,
+            ..Default::default()
+        };
+        button
+            .ctx
+            .memory_mut(|m| m.set_focus_lock_filter(button.id, arrows));
+        if button.gained_focus() && !at {
+            out.push(Intent::Focus {
+                component: list.head.id.clone(),
+                row: row.id.clone(),
+            });
         }
     }
 

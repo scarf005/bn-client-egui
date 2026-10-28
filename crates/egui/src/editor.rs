@@ -93,7 +93,7 @@ pub fn value_editor(ui: &mut egui::Ui, field: &ValueField) -> ValueEdit {
                     .iter()
                     .find(|v| v.id == editor.value)
                     .map_or(editor.value.as_str(), |v| v.label.as_str());
-                egui::ComboBox::from_id_salt(key)
+                let combo = egui::ComboBox::from_id_salt(key)
                     .selected_text(shown)
                     .show_ui(ui, |ui| {
                         for v in &editor.values {
@@ -105,6 +105,9 @@ pub fn value_editor(ui: &mut egui::Ui, field: &ValueField) -> ValueEdit {
                             }
                         }
                     });
+                // The box is named by its field, as its label beside it reads.
+                ui.ctx()
+                    .accesskit_node_builder(combo.response.id, |b| b.set_label(label));
             }
             _ => {
                 ui.label(label);

@@ -104,9 +104,15 @@ fn tab_walks_the_map_editor_in_reading_order_and_names_every_stop() {
     walks(
         &screen,
         &[
-            "File", "History", "Pencil", "Canvas", "Legend", "Symbol", "Terrain",
+            "File",
+            "History",
+            "Rectangle",
+            "Canvas",
+            "Legend",
+            "Symbol",
+            "Terrain",
         ],
-        60,
+        70,
     );
 }
 

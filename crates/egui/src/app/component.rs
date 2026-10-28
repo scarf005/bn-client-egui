@@ -1509,9 +1509,17 @@ impl<M: GameModel> App<M> {
                             queue(ui, label.rect);
                             continue;
                         }
+                        // A canvas is one stop of the keyboard's walk, whose squares the arrows move among.
+                        let sense = match grid.role == Some(GridRole::Canvas) {
+                            true => egui::Sense::CLICK,
+                            false => egui::Sense::click(),
+                        };
                         let button = ui.add_enabled(
                             cell.enabled,
-                            egui::Button::new(shown).min_size(size).selected(marked),
+                            egui::Button::new(shown)
+                                .min_size(size)
+                                .selected(marked)
+                                .sense(sense),
                         );
                         queue(ui, button.rect);
                         if reached {
