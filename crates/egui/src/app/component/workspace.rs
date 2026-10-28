@@ -17,6 +17,20 @@ fn parts(root: &Split, slot: Slot) -> Vec<&Component> {
     root.children.iter().filter(slotted).collect()
 }
 
+/// The groups of `screen`'s affordances, in the order they first appear.
+fn groups(screen: &Screen) -> Vec<String> {
+    screen
+        .affordances
+        .iter()
+        .filter_map(|a| a.group.as_ref().map(Text::shown))
+        .fold(vec![], |mut groups, group| {
+            if !groups.contains(&group) {
+                groups.push(group);
+            }
+            groups
+        })
+}
+
 /// The split of a workspace screen that has a canvas part: the layout needs one, and any other is laid out as a
 /// screen.
 pub(super) fn laid_out(screen: &Screen) -> Option<&Split> {
@@ -31,67 +45,74 @@ pub(super) fn laid_out(screen: &Screen) -> Option<&Split> {
 }
 
 impl<M: GameModel> App<M> {
-    /// One menu per group of the screen's affordances, in the order the groups first appear.
-    /// A workspace's ends with its title, help and leave, which a window has in its title bar.
-    pub(super) fn menu_bar(
-        &self,
-        ui: &mut egui::Ui,
-        screen: &Screen,
-        title: &str,
-        out: &mut Vec<Intent>,
-    ) {
-        let groups = screen
-            .affordances
-            .iter()
-            .filter_map(|a| a.group.as_ref().map(Text::shown))
-            .fold(vec![], |mut groups, group| {
-                if !groups.contains(&group) {
-                    groups.push(group);
-                }
-                groups
-            });
-        let workspace = laid_out(screen).is_some();
-        if groups.is_empty() && !workspace {
+    /// One menu per group of the screen's affordances, in the order the groups first appear, in a bar over its
+    /// body. A workspace's are in the top bar instead (`workspace_bar`).
+    pub(super) fn menu_bar(&self, ui: &mut egui::Ui, screen: &Screen, out: &mut Vec<Intent>) {
+        if groups(screen).is_empty() || laid_out(screen).is_some() {
             return;
         }
         egui::Panel::top(egui::Id::new(("menu bar", &screen.screen_id))).show(ui, |ui| {
-            egui::MenuBar::new().ui(ui, |ui| {
-                for group in &groups {
-                    ui.menu_button(markup::plain(group), |ui| {
-                        let items = screen
-                            .affordances
-                            .iter()
-                            .filter(|a| a.group.as_ref().map(Text::shown).as_ref() == Some(group));
-                        for a in items {
-                            let availability = interaction::row_availability(a, None);
-                            let mut item = egui::Button::new(markup::plain(&a.label.shown()));
-                            if let Some(key) = a.keys.first() {
-                                item = item.shortcut_text(key);
-                            }
-                            let button = ui.add_enabled(availability.enabled, item);
-                            let button = described(ui.ctx(), button, a);
-                            let button = match (availability.enabled, availability.denial) {
-                                (false, Some(why)) => button.on_disabled_hover_text(why.shown()),
-                                _ => button,
-                            };
-                            if button.clicked() {
-                                out.push(Intent::Run(a.id.clone()));
-                                ui.close();
-                            }
-                        }
-                    });
-                }
-                if workspace {
-                    let ends = [AffordanceRole::Cancel, AffordanceRole::Help]
-                        .into_iter()
-                        .filter_map(|role| interaction::with_role(screen, role));
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        ends.for_each(|a| self.affordance_button(ui, a, None, out));
-                        ui.label(egui::RichText::new(title).strong());
-                    });
-                }
+            egui::MenuBar::new().ui(ui, |ui| self.menus(ui, screen, out));
+        });
+    }
+
+    /// The top bar while a workspace is the top screen: its menus, the client's buttons and status, and its title,
+    /// help and leave at the end, which a window has in its title bar. False when no workspace is up.
+    pub(in crate::app) fn workspace_bar(&mut self, ui: &mut egui::Ui) -> bool {
+        let Some(screen) = interaction::described(self.model.screens())
+            .filter(|s| laid_out(s).is_some())
+            .cloned()
+        else {
+            return false;
+        };
+        let title = markup::plain(&screen.title.as_ref().map(Text::shown).unwrap_or_default());
+        let mut out = vec![];
+        egui::MenuBar::new().ui(ui, |ui| {
+            self.menus(ui, &screen, &mut out);
+            ui.separator();
+            self.client_buttons(ui);
+            let ends = [AffordanceRole::Cancel, AffordanceRole::Help]
+                .into_iter()
+                .filter_map(|role| interaction::with_role(&screen, role));
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ends.for_each(|a| self.affordance_button(ui, a, None, &mut out));
+                ui.label(egui::RichText::new(title).strong());
+                ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                    self.status(ui)
+                });
             });
         });
+        out.into_iter().for_each(|intent| self.apply(intent));
+        true
+    }
+
+    /// The menus of `screen`'s groups.
+    fn menus(&self, ui: &mut egui::Ui, screen: &Screen, out: &mut Vec<Intent>) {
+        for group in &groups(screen) {
+            ui.menu_button(markup::plain(group), |ui| {
+                let items = screen
+                    .affordances
+                    .iter()
+                    .filter(|a| a.group.as_ref().map(Text::shown).as_ref() == Some(group));
+                for a in items {
+                    let availability = interaction::row_availability(a, None);
+                    let mut item = egui::Button::new(markup::plain(&a.label.shown()));
+                    if let Some(key) = a.keys.first() {
+                        item = item.shortcut_text(key);
+                    }
+                    let button = ui.add_enabled(availability.enabled, item);
+                    let button = described(ui.ctx(), button, a);
+                    let button = match (availability.enabled, availability.denial) {
+                        (false, Some(why)) => button.on_disabled_hover_text(why.shown()),
+                        _ => button,
+                    };
+                    if button.clicked() {
+                        out.push(Intent::Run(a.id.clone()));
+                        ui.close();
+                    }
+                }
+            });
+        }
     }
 
     /// The parts of `root` by slot, around the canvas that takes the room left.

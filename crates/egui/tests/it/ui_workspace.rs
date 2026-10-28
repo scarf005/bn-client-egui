@@ -400,8 +400,11 @@ fn the_client_buttons_of_the_menu_bar_open_the_action_palette_and_the_settings()
     h.get_by_label("Client settings").click();
     h.run_steps(4);
     assert!(
-        h.query_all_by_role(egui::accesskit::Role::Window)
-            .any(|w| w.accesskit_node().label().as_deref() == Some("Client settings")),
+        h.query_all_by_role(egui::accesskit::Role::Window).any(|w| w
+            .accesskit_node()
+            .label()
+            .as_deref()
+            == Some("Client settings")),
         "no settings window"
     );
 }

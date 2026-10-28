@@ -677,7 +677,7 @@ impl<M: GameModel> App<M> {
                     .frame(egui::Frame::NONE)
                     .show_separator_line(false)
                     .show(ui, |ui| footer(ui, out));
-                self.menu_bar(ui, screen, &title, out);
+                self.menu_bar(ui, screen, out);
                 if let Some(split) = workspace::laid_out(screen) {
                     return self.workspace(ui, screen, split, out);
                 }
@@ -708,7 +708,7 @@ impl<M: GameModel> App<M> {
             } else {
                 // A body taller than the room scrolls above the footer, which keeps the height it had last frame,
                 // by the window's kind.
-                self.menu_bar(ui, screen, &title, out);
+                self.menu_bar(ui, screen, out);
                 let kept = ui.id().with("footer height");
                 let reserve = ctx.data(|d| d.get_temp::<f32>(kept)).unwrap_or(0.0);
                 let scroll = egui::ScrollArea::vertical()

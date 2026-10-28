@@ -559,15 +559,23 @@ impl<M: GameModel> App<M> {
 
     /// The pressed control's name and stage, announced politely; stays until the next command.
     fn bar(&mut self, ui: &mut egui::Ui) {
+        if self.workspace_bar(ui) {
+            return;
+        }
         ui.horizontal(|ui| {
-            if ui.button(tr("Actions")).clicked() {
-                self.palette = self.palette.is_none().then(String::new);
-            }
-            if ui.button(tr("Client settings")).clicked() {
-                self.client_settings = !self.client_settings;
-            }
+            self.client_buttons(ui);
             self.status(ui);
         });
+    }
+
+    /// The action palette's and the client settings' buttons.
+    fn client_buttons(&mut self, ui: &mut egui::Ui) {
+        if ui.button(tr("Actions")).clicked() {
+            self.palette = self.palette.is_none().then(String::new);
+        }
+        if ui.button(tr("Client settings")).clicked() {
+            self.client_settings = !self.client_settings;
+        }
     }
 
     /// The command's name and stage is announced politely, with nothing drawn for it; only one that failed, or
