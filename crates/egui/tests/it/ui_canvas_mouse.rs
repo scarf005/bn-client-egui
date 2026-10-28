@@ -166,7 +166,9 @@ fn a_zoomed_grid_is_centred_again_when_its_room_widens_past_it() {
         let pull = egui::vec2(100.0, 0.0);
         drag_by(&mut h, at, pull, egui::PointerButton::Middle);
     }
-    h.set_size(egui::vec2(1700.0, 800.0));
+    // The right column takes what the grid leaves unzoomed, up to half the room: the room passes the zoomed grid
+    // only this wide.
+    h.set_size(egui::vec2(2600.0, 800.0));
     crate::common::settle_windows(&mut h);
     let (shown, wanted) = (centre_of(&h), pane_middle(&h));
     assert!((shown - wanted).abs() < 2.0, "{shown} {wanted}");

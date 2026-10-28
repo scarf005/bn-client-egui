@@ -177,8 +177,9 @@ fn the_parts_are_placed_by_slot() {
             canvas.0 < canvas.1,
             "{size:?}: tools {tools:?}, palette {palette:?}"
         );
+        // The right column takes at most half of what the tools leave.
         assert!(
-            canvas.1 - canvas.0 > size.x / 2.0,
+            canvas.1 - canvas.0 >= size.x - canvas.1,
             "{size:?}: the canvas has {canvas:?}"
         );
         assert!(

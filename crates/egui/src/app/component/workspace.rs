@@ -8,7 +8,8 @@ use bn_client_core::localise::tr;
 /// The width the tools' column, the log's column and the right column first have, which the player can change.
 const TOOLS_WIDTH: f32 = 180.0;
 const LOG_WIDTH: f32 = 240.0;
-/// The right column's first width: this share of the window, within these bounds.
+/// The right column's width beside a canvas without a grid: this share of the window, within these bounds; beside
+/// a grid, the room its whole grid leaves, from the least of these bounds to half the room.
 const SIDE_SHARE: f32 = 0.22;
 const SIDE_WIDTH: (f32, f32) = (360.0, 480.0);
 /// The height the log's strip first has, which the player can change.
@@ -18,6 +19,55 @@ const LOG_HEIGHT: f32 = 160.0;
 fn parts(root: &Split, slot: Slot) -> Vec<&Component> {
     let slotted = |c: &&Component| c.head().slot.unwrap_or(Slot::Inspector) == slot;
     root.children.iter().filter(slotted).collect()
+}
+
+/// The right column's width in the room `ui` has left: what the canvas's whole grid leaves at the cell size its
+/// height gives, else a share of the window.
+fn side_width(ui: &egui::Ui, root: &Split) -> f32 {
+    let room = ui.available_rect_before_wrap();
+    let grid = parts(root, Slot::Canvas)
+        .into_iter()
+        .flat_map(Component::nested)
+        .find_map(|c| match c {
+            Component::Grid(grid) => Some(grid),
+            _ => None,
+        });
+    let Some(grid) = grid else {
+        return (ui.ctx().content_rect().width() * SIDE_SHARE).clamp(SIDE_WIDTH.0, SIDE_WIDTH.1);
+    };
+    let (xs, ys) = drawn_span(grid);
+    // The canvas shares its height with a row of tools above it.
+    let height = room.height() - 2.0 * ui.spacing().interact_size.y;
+    let cell = (height / ys.len().max(1) as f32).clamp(GRID_CELL, GRID_MAX_CELL);
+    let gap = 2.0 * ui.spacing().item_spacing.x;
+    (room.width() - xs.len() as f32 * cell - gap)
+        .clamp(SIDE_WIDTH.0, (room.width() / 2.0).max(SIDE_WIDTH.0))
+}
+
+/// Keeps the panel `id` `width` wide as that changes, until the player resizes it: then it keeps the player's.
+fn follow(ctx: &egui::Context, id: egui::Id, width: f32) {
+    use egui::containers::panel::PanelState;
+    let (asked, player) = (id.with("asked width"), id.with("resized by the player"));
+    if ctx.data(|d| d.get_temp::<bool>(player)).unwrap_or_default() {
+        return;
+    }
+    let Some(state) = PanelState::load(ctx, id) else {
+        ctx.data_mut(|d| d.insert_temp(asked, width));
+        return;
+    };
+    let shown = state.size().x;
+    match ctx.data(|d| d.get_temp::<f32>(asked)) {
+        Some(was) if (shown - was).abs() > 0.5 => {
+            ctx.data_mut(|d| d.insert_temp(player, true));
+        }
+        _ => {
+            let outer_rect = state.outer_rect.with_min_x(state.outer_rect.max.x - width);
+            ctx.data_mut(|d| {
+                d.insert_persisted(id, PanelState { outer_rect });
+                d.insert_temp(asked, width);
+            });
+        }
+    }
 }
 
 /// The groups of `screen`'s affordances, in the order they first appear.
@@ -185,11 +235,10 @@ impl<M: GameModel> App<M> {
             .flat_map(|slot| parts(root, slot))
             .collect::<Vec<_>>();
         if !side.is_empty() {
+            let width = side_width(ui, root);
+            follow(ui.ctx(), egui::Id::new(&side_id), width);
             egui::Panel::right(egui::Id::new(&side_id))
-                .default_size(
-                    (ui.ctx().content_rect().width() * SIDE_SHARE)
-                        .clamp(SIDE_WIDTH.0, SIDE_WIDTH.1),
-                )
+                .default_size(width)
                 .show(ui, |ui| self.column(ui, screen, &side, out));
             crate::app::label_resize_handle(ui.ctx(), &side_id, &tr("Resize workspace column"));
         }
