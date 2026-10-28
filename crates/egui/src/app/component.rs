@@ -1162,18 +1162,25 @@ impl<M: GameModel> App<M> {
             let grid_size = egui::vec2(xs.len() as f32, ys.len() as f32) * cell;
             // The area clamps an asked offset to last frame's content, so the margins of a new zoom take it only
             // the frame after: it is asked for again then.
+            let zoomed = zoom > limits.0 + 1e-3;
             let placed = canvas::place(
                 (view, anchor.as_ref()),
-                zoom > limits.0 + 1e-3,
+                zoomed,
                 (whole, room, grid_size),
                 cell,
             );
             let offset = placed.offset;
             let asked = anchor.is_some().then_some(offset).flatten();
+
             let mut area = egui::ScrollArea::both()
                 .id_salt(("grid", &screen.screen_id, &grid.head.id))
                 .max_height(rows * cell)
                 .auto_shrink([true, true])
+                // The whole grid is in view until it is zoomed past that.
+                .scroll_bar_visibility(match zoomed {
+                    true => egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded,
+                    false => egui::scroll_area::ScrollBarVisibility::AlwaysHidden,
+                })
                 .scroll_source(egui::scroll_area::ScrollSource {
                     drag: egui::scroll_area::DragScroll::Never,
                     mouse_wheel: false,
