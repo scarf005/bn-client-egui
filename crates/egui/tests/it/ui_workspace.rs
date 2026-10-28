@@ -449,3 +449,30 @@ fn without_a_status_line_or_footer_the_columns_reach_the_bottom() {
         );
     }
 }
+
+#[test]
+fn without_tools_the_log_takes_the_left_column() {
+    for size in SIZES {
+        let h = shown_with(size, |parts| {
+            parts.retain(|c| c["slot"] != "tools");
+            for cell in parts[0]["cells"].as_array_mut().unwrap() {
+                cell["label"] = "square".into();
+                cell["affordance"] = "ws:validate".into();
+            }
+        });
+        let (log, palette) = (rect(&h, "Saved the room"), rect(&h, "Wall"));
+        let squares = h
+            .get_all_by_label("square")
+            .map(|n| n.rect())
+            .reduce(|a, b| a.union(b))
+            .unwrap();
+        assert!(
+            log.right() <= squares.left() && log.top() < size.y / 3.0,
+            "{size:?}: log {log:?}, canvas {squares:?}"
+        );
+        assert!(
+            squares.right() <= palette.left(),
+            "{size:?}: canvas {squares:?}, palette {palette:?}"
+        );
+    }
+}
