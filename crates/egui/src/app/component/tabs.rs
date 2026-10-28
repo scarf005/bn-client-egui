@@ -96,12 +96,8 @@ impl<M: GameModel> App<M> {
             }
             None => self.control(ui, text, &tab.id, on, tab.selected),
         };
-        let button = match (&tab.denial, on) {
-            (Some(denial), false) => button.on_disabled_hover_text(markup::plain(&denial.shown())),
-            (None, true) | (Some(_), true) => match &tab.hotkey {
-                Some(key) => button.on_hover_text(key),
-                None => button,
-            },
+        let button = match (&tab.hotkey, on) {
+            (Some(key), true) => button.on_hover_text(key),
             _ => button,
         };
         // Named by its name alone, its key as the shortcut.
@@ -118,7 +114,17 @@ impl<M: GameModel> App<M> {
             ui.painter()
                 .rect_filled(bar, 0.0, crate::kit::tokens::SELECTION);
         }
-        if button.clicked() {
+        // A click on a tab that is off asks all the same, for the core to tell the engine's reason; its hover says
+        // that reason too.
+        let refused = !on && {
+            let off = ui.interact(button.rect, button.id.with("off"), egui::Sense::click());
+            let off = match &tab.denial {
+                Some(denial) => off.on_hover_text(markup::plain(&denial.shown())),
+                None => off,
+            };
+            off.clicked()
+        };
+        if button.clicked() || refused {
             out.push(Intent::Focus {
                 component: tabs.head.id.clone(),
                 row: tab.id.clone(),
