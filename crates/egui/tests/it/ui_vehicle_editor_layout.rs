@@ -278,3 +278,19 @@ fn the_right_column_holds_every_design_tab_and_some_rows_of_each_list_in_view() 
         }
     }
 }
+
+/// The world list's rows run `Edit in place` on a double click, and it is a button beside the list's other
+/// actions on a row, `Export design` and `Copy vehicle`, as they are.
+#[test]
+fn a_lists_activate_is_a_button_beside_its_other_row_actions() {
+    let h = open(editor(), egui::vec2(1920.0, 1080.0));
+    for label in ["Export design", "Copy vehicle", "Edit in place"] {
+        assert!(
+            h.query_all_by_label(label)
+                .any(|n| n.accesskit_node().role() == egui::accesskit::Role::Button),
+            "no {label} button"
+        );
+    }
+    // The history's Go to step, the only action on its rows, has no button: its rows run it.
+    assert!(h.query_by_label("Go to step").is_none());
+}
