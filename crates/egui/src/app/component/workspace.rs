@@ -12,6 +12,9 @@ const LOG_WIDTH: f32 = 240.0;
 /// a grid, the room its whole grid leaves, from the least of these bounds to half the room.
 const SIDE_SHARE: f32 = 0.22;
 const SIDE_WIDTH: (f32, f32) = (360.0, 480.0);
+/// The least of the right column beside a grid, where its palette's tabs and the inspector's actions need the width
+/// to take fewer lines, which gives the rows under them the height.
+const GRID_SIDE_MIN: f32 = 440.0;
 /// The fewest rows a list of a column is fitted to, so that the column holds as many of its parts as it can.
 const FIT_ROWS: f32 = 8.0;
 /// The rows of a list a section of a column is sure to show of its first part: lists shrink to these before the
@@ -86,7 +89,7 @@ fn side_width(ui: &egui::Ui, root: &Split) -> f32 {
     let cell = (height / ys.len().max(1) as f32).clamp(GRID_CELL, GRID_MAX_CELL);
     let gap = 2.0 * ui.spacing().item_spacing.x;
     (room.width() - xs.len() as f32 * cell - gap)
-        .clamp(SIDE_WIDTH.0, (room.width() / 2.0).max(SIDE_WIDTH.0))
+        .clamp(GRID_SIDE_MIN, (room.width() / 2.0).max(GRID_SIDE_MIN))
 }
 
 /// The heights of `room` the lists that want `wanted` get: each what it wants up to an even share of what the
@@ -616,7 +619,7 @@ impl<M: GameModel> App<M> {
             .unwrap_or_else(|| vec![ColumnHeight::UNKNOWN; groups.len()]);
         // Each section is given, in turn, evenly up to what the sections want of each step: what keeps its head
         // reachable; its top through the first rows to pick from, and through `WORKED_ROWS` rows of the first list with
-        // a search box of them all; then what its parts want.
+        // a search box of them all; then what the parts of the others want; then what its parts want.
         let reach = REACH_ROWS * (tokens::ROW + gap);
         let worked = heights.iter().position(|h| h.searched.is_some());
         let ends = [
@@ -628,6 +631,15 @@ impl<M: GameModel> App<M> {
                 .iter()
                 .enumerate()
                 .map(|(i, h)| h.searched.filter(|_| Some(i) == worked).unwrap_or(h.listed))
+                .collect(),
+            // What the parts under the worked-in list want, its form fields among them, before it gets more rows.
+            heights
+                .iter()
+                .enumerate()
+                .map(|(i, h)| match Some(i) == worked {
+                    true => h.searched.unwrap_or(h.listed),
+                    false => h.whole,
+                })
                 .collect(),
             heights.iter().map(|h| h.whole).collect(),
         ];
