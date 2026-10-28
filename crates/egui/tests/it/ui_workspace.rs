@@ -726,3 +726,95 @@ fn an_action_on_a_square_of_the_canvas_is_no_button() {
     crate::common::settle_windows(&mut h);
     assert!(h.query_by_label("Open its mapgen").is_none());
 }
+
+/// The keybindings screen pushed over `workspace()`, which keeps no affordances under the top, at `size`.
+fn under_keybindings<'a>(size: egui::Vec2) -> (H<'a>, bn_client_egui::transport::ScriptHandle) {
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../core/tests/fixtures/0.2.examples/keybindings.json"
+    );
+    let all = serde_json::from_str::<Value>(&std::fs::read_to_string(path).unwrap()).unwrap();
+    let keys = all["valid"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["name"] == "keybindings screen")
+        .unwrap()["value"]
+        .clone();
+    let mut under = workspace();
+    under["affordances"] = json!([]);
+    let mut stack = crate::common::over_map(under);
+    stack.as_array_mut().unwrap().push(keys);
+    let (app, script) = crate::common::staged(stack);
+    let mut h = crate::common::themed_harness(size, app);
+    h.run_steps(7);
+    crate::common::settle_windows(&mut h);
+    (h, script)
+}
+
+/// The least opacity of the painted text `text`.
+fn least_alpha(h: &H, text: &str) -> Option<u8> {
+    h.output()
+        .shapes
+        .iter()
+        .filter_map(|c| match &c.shape {
+            egui::Shape::Text(t) if t.galley.text() == text => t
+                .galley
+                .rows
+                .iter()
+                .flat_map(|r| &r.visuals.mesh.vertices)
+                .map(|v| v.color.a())
+                .min(),
+            _ => None,
+        })
+        .min()
+}
+
+#[test]
+fn a_screen_over_a_workspace_is_drawn_over_the_workspace_which_takes_no_input() {
+    for size in [egui::vec2(1290.0, 830.0), egui::vec2(1920.0, 1080.0)] {
+        let (mut h, script) = under_keybindings(size);
+        assert!(
+            h.query_by_label("Exit screen").is_some() || !painted(&h, "Keybindings").is_empty(),
+            "{size:?}: the keybindings are not drawn"
+        );
+        for part in ["Pencil", "Wall", "Properties", "Saved the room"] {
+            assert!(
+                h.query_by_label_contains(part).is_some(),
+                "{size:?}: {part} of the workspace under the keybindings is not drawn"
+            );
+        }
+        assert_eq!(
+            painted(&h, "Room Editor").len(),
+            1,
+            "{size:?}: no title in the bar"
+        );
+        // Drawn as it is, not faded: a faded one shows the sprites its layers cover.
+        let (top, _) = shown(size);
+        assert_eq!(
+            least_alpha(&h, "Properties"),
+            least_alpha(&top, "Properties"),
+            "{size:?}: the workspace under the keybindings is faded"
+        );
+        let sent = script.sent().len();
+        let at = rect(&h, "Pencil").center();
+        for pressed in [true, false] {
+            h.event(egui::Event::PointerButton {
+                pos: at,
+                button: egui::PointerButton::Primary,
+                pressed,
+                modifiers: egui::Modifiers::NONE,
+            });
+            h.run_steps(2);
+        }
+        assert_eq!(
+            script.sent().len(),
+            sent,
+            "{size:?}: a click on the workspace under the keybindings reached the engine"
+        );
+        assert!(
+            !painted(&h, "Keybindings").is_empty(),
+            "{size:?}: the keybindings went under the workspace"
+        );
+    }
+}

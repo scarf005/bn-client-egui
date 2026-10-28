@@ -32,8 +32,21 @@ pub(super) fn frame_key(e: &egui::Event) -> Option<FrameKey> {
             token,
             key: Some((*key, *modifiers)),
         }),
+        // The platform hands the clipboard's chords over as its commands, not as their keys.
+        egui::Event::Cut => clipboard_chord(egui::Key::X),
+        egui::Event::Copy => clipboard_chord(egui::Key::C),
+        egui::Event::Paste(_) => clipboard_chord(egui::Key::V),
         _ => None,
     }
+}
+
+/// Ctrl and `key`, the chord the platform turned into a clipboard command.
+fn clipboard_chord(key: egui::Key) -> Option<FrameKey> {
+    let mods = egui::Modifiers::CTRL | egui::Modifiers::COMMAND;
+    key_name(key, mods).map(|token| FrameKey {
+        token,
+        key: Some((key, mods)),
+    })
 }
 
 /// The keys pressed this frame, in the order they came.

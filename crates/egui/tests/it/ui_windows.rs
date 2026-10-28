@@ -658,6 +658,7 @@ fn bare_spec(saved: Option<WindowState>, place: Option<Place>, width: Option<f32
         closable: false,
         scrolls: false,
         help: None,
+        inert: false,
     }
 }
 

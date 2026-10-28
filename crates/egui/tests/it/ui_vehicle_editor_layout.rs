@@ -129,7 +129,7 @@ fn the_mounts_are_tile_sized_in_the_middle_of_the_canvas_and_the_stack_reads_who
         let h = open(screen.clone(), size);
         let square = mount(&h, &named);
         assert!(
-            (20.0..=64.0).contains(&square.width()),
+            square.width() >= 20.0,
             "at {size:?} a mount is {} wide",
             square.width()
         );
@@ -148,9 +148,12 @@ fn the_mounts_are_tile_sized_in_the_middle_of_the_canvas_and_the_stack_reads_who
             (grid.center().x - middle).abs() < 40.0,
             "at {size:?} the grid {grid:?} is off the middle {middle} of the canvas pane"
         );
+        // The canvas pane ends above the log's strip.
+        let bottom = h.get_by_label("History").rect().top();
+        let centre = (room.top() + bottom) / 2.0;
         assert!(
-            grid.center().y > room.center().y - 120.0,
-            "at {size:?} the grid {grid:?} hugs the top of {room:?}"
+            (grid.center().y - centre).abs() < square.width(),
+            "at {size:?} the grid {grid:?} is off the middle {centre} of the pane above {bottom}"
         );
         let shown = painted(&h);
         for label in &stack {
@@ -161,6 +164,53 @@ fn the_mounts_are_tile_sized_in_the_middle_of_the_canvas_and_the_stack_reads_who
         }
         let faults = legible::legible(&h, &screen);
         assert!(faults.is_empty(), "at {size:?}: {faults:?}");
+    }
+}
+
+#[test]
+fn a_small_grid_fills_its_canvas_pane_whole() {
+    let screen = editor();
+    let cells = find(&screen["root"], "vehicle:grid").unwrap();
+    let (cols, rows) = (
+        cells["cols"].as_f64().unwrap() as f32,
+        cells["rows"].as_f64().unwrap() as f32,
+    );
+    let named = cells["cells"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["label"].as_str().is_some_and(|l| l.contains(", ")))
+        .unwrap();
+    let (label, at) = (
+        named["label"].as_str().unwrap().to_owned(),
+        egui::vec2(
+            named["x"].as_f64().unwrap() as f32,
+            named["y"].as_f64().unwrap() as f32,
+        ),
+    );
+    for size in [egui::vec2(1290.0, 830.0), egui::vec2(1920.0, 1080.0)] {
+        let h = open(screen.clone(), size);
+        let square = mount(&h, &label);
+        let grid = egui::Rect::from_min_size(
+            square.min - at * square.width(),
+            egui::vec2(cols, rows) * square.width(),
+        );
+        let room = legible::room(&h);
+        let tools = h
+            .query_all_by_label("Resize workspace column")
+            .map(|n| n.rect().center().x)
+            .fold(f32::MAX, f32::min);
+        let side = h.get_by_label("Parts").rect().left();
+        let pane =
+            egui::Rect::from_x_y_ranges(tools.min(side).max(room.left())..=side, room.y_range());
+        assert!(
+            pane.expand(1.0).contains_rect(grid),
+            "at {size:?} the grid {grid:?} runs out of its pane {pane:?}"
+        );
+        assert!(
+            grid.width() >= 0.8 * pane.width() || grid.height() >= 0.6 * pane.height(),
+            "at {size:?} the grid {grid:?} leaves most of its pane {pane:?} empty"
+        );
     }
 }
 
@@ -276,6 +326,53 @@ fn the_right_column_holds_every_design_tab_and_some_rows_of_each_list_in_view() 
                 "at {size:?} {id} shows {shown} rows in view above {bottom}"
             );
         }
+    }
+}
+
+/// Whether the widget drawn at `r` is whole in the window and uncut by what clips it.
+fn unclipped(h: &H, r: egui::Rect) -> bool {
+    let clipped = h.ctx.viewport(|v| {
+        v.prev_pass
+            .widgets
+            .layers()
+            .flat_map(|(_, ws)| ws)
+            .find(|w| w.rect == r)
+            .map(|w| w.interact_rect)
+    });
+    clipped.is_some_and(|c| c.contains_rect(r.shrink(1.0))) && h.ctx.content_rect().contains_rect(r)
+}
+
+#[test]
+fn the_design_inspector_of_the_picked_mount_is_whole_in_view_over_long_lists_without_scrolling() {
+    let screen = open_with_full_pages();
+    let tabs = find(&screen["root"], "vehicle:tools").unwrap()["tabs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|t| t["label"].as_str().unwrap().to_owned())
+        .collect::<Vec<_>>();
+    let stack = labels(&screen, "vehicle:stack");
+    for size in [egui::vec2(1290.0, 830.0), egui::vec2(1920.0, 1080.0)] {
+        let mut h =
+            crate::common::themed_harness(size, crate::common::staged(json!([screen.clone()])).0);
+        h.run_steps(12);
+        let mut out = vec![];
+        for tab in &tabs {
+            let r = h
+                .query_all_by_label(tab)
+                .find(|n| n.accesskit_node().role() == egui::accesskit::Role::Tab)
+                .map(|n| n.rect());
+            if !r.is_some_and(|r| unclipped(&h, r)) {
+                out.push(format!("tab {tab} at {r:?}"));
+            }
+        }
+        for label in &stack {
+            let r = h.query_by_label(label).map(|n| n.rect());
+            if !r.is_some_and(|r| unclipped(&h, r)) {
+                out.push(format!("{label} at {r:?}"));
+            }
+        }
+        assert!(out.is_empty(), "at {size:?} out of view: {out:#?}");
     }
 }
 

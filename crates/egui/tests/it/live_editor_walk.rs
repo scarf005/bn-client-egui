@@ -227,8 +227,19 @@ fn reveal_rect(h: &mut H, what: &str, rect_of: impl Fn(&H) -> Option<egui::Rect>
     let size = h.ctx.content_rect().size();
     // Over the right column's gutter the wheel scrolls the column; over its middle, the list there.
     let (bar, list) = (gutter(h), egui::pos2(size.x - 120.0, size.y * 0.5));
-    // How many times it was not drawn so far.
+    // How many times it was not drawn so far, and how many wheel turns over the column left it where it was.
     let mut misses = 0u32..;
+    let mut stuck = 0usize;
+    // The column is split into sections that scroll each on its own: the wheel goes over each in turn.
+    let over = |r: Option<egui::Rect>, turn: usize| {
+        let ys = [
+            r.map_or(size.y * 0.5, |r| r.center().y),
+            size.y * 0.25,
+            size.y * 0.5,
+            size.y * 0.75,
+        ];
+        egui::pos2(bar.x, ys[turn % ys.len()].clamp(60.0, size.y - 60.0))
+    };
     for _ in 0..200 {
         // A wheel turn scrolls on over a few frames: where it ends is what counts.
         let mut seen = None;
@@ -241,7 +252,11 @@ fn reveal_rect(h: &mut H, what: &str, rect_of: impl Fn(&H) -> Option<egui::Rect>
             // list, then up it, then down and up the column.
             let phase = misses.next().unwrap_or_default() / 20 % 4;
             let down = phase % 2 == 0;
-            let at = if phase < 2 { list } else { bar };
+            let at = if phase < 2 {
+                list
+            } else {
+                over(None, misses.start as usize / 80)
+            };
             wheel_at(h, at, if down { -150.0 } else { 150.0 });
             continue;
         };
@@ -253,10 +268,12 @@ fn reveal_rect(h: &mut H, what: &str, rect_of: impl Fn(&H) -> Option<egui::Rect>
         } else {
             -150.0
         };
-        wheel_at(h, bar, dy);
-        // A column that scrolls no further leaves it where it was: its own list scrolls it into view.
+        wheel_at(h, over(Some(r), stuck), dy);
+        // A column that scrolls no further leaves it where it was: its own list scrolls it into view, or another
+        // section of the column holds it.
         if rect_of(h) == Some(r) {
             wheel_at(h, r.center(), dy);
+            stuck += 1;
         }
     }
     let seen = rect_of(h);
@@ -3165,4 +3182,117 @@ fn the_map_editor_draws_by_the_keyboard_and_opens_its_keys_with_f1() {
         .last()
         .and_then(|s| s.kind.clone());
     assert_ne!(top.as_deref(), Some("editor"), "F1 opened nothing");
+}
+
+/// What of the editor on top is not in view at each of the two window sizes, by `what` and the size.
+fn out_of_view(h: &mut H, what: &str, rect_of: impl Fn(&H) -> Option<egui::Rect>) -> Vec<String> {
+    let mut faults = vec![];
+    for (w, ht) in [(1290.0, 830.0), (1920.0, 1080.0)] {
+        h.set_size(egui::vec2(w, ht));
+        settle(h);
+        if !rect_of(h).is_some_and(|r| in_view(h, r)) {
+            faults.push(format!("{what} at {w}x{ht}: {:?}", rect_of(h)));
+        }
+    }
+    h.set_size(egui::vec2(1290.0, 830.0));
+    settle(h);
+    faults
+}
+
+/// The labels of the rows of the list `id` of the screen on top.
+fn list_rows(h: &H, id: &str) -> Vec<String> {
+    let top = h.state().model.screens().last().unwrap();
+    match top.root.as_ref().and_then(|r| r.find(id)) {
+        Some(Component::List(list)) => list.rows.iter().map(|r| r.label.shown()).collect(),
+        _ => vec![],
+    }
+}
+
+/// Opens the keybindings over the editor on top from its bar, pictures it as `name`, checks `part` of the editor is
+/// still drawn under it, and closes it again.
+fn keybindings_over(h: &mut H, kind: &str, part: &str, name: &str) -> Vec<String> {
+    click(h, "Display keybindings menu");
+    run_until(h, "the keybindings", 60, |h| {
+        !h.state().model.busy()
+            && h.state()
+                .model
+                .screens()
+                .last()
+                .is_some_and(|s| s.kind.as_deref() != Some(kind))
+    });
+    rest(h);
+    shot(h, name);
+    let mut faults = vec![];
+    for (w, ht) in [(1290.0, 830.0), (1920.0, 1080.0)] {
+        h.set_size(egui::vec2(w, ht));
+        settle(h);
+        if find(h, part).is_none() {
+            faults.push(format!("{part} under the keybindings at {w}x{ht}"));
+        }
+    }
+    h.set_size(egui::vec2(1290.0, 830.0));
+    key(h, egui::Key::Escape);
+    wait_kind(h, kind);
+    faults
+}
+
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn the_editors_keep_their_main_panes_in_view_and_stay_drawn_under_their_keybindings() {
+    let dir = std::env::temp_dir().join(format!("bn-walk-panes-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let (mut h, _root) = start(&dir);
+    h.set_size(egui::vec2(1290.0, 830.0));
+    rest(&mut h);
+    open_map_editor(&mut h);
+    create_mapgen(&mut h, "zz_panes");
+    rest(&mut h);
+    shot(&mut h, "map-entries");
+    let mut faults = vec![];
+    let entries = list_rows(&h, "editor:objects");
+    assert!(!entries.is_empty(), "no entries: {}", labels(&h).join("\n"));
+    faults.extend(out_of_view(&mut h, "the Entries list", |h| {
+        find(h, &entries[0])
+    }));
+    faults.extend(keybindings_over(
+        &mut h,
+        "editor",
+        &entries[0],
+        "map-keybindings",
+    ));
+    key(&mut h, egui::Key::Escape);
+    if find(&h, "Leave without saving").is_some() {
+        click(&mut h, "Leave without saving");
+    }
+    run_until(&mut h, "the main menu", 300, |h| {
+        h.state().model.menu().is_some() && !h.state().model.busy()
+    });
+    rest(&mut h);
+
+    click(&mut h, "Editor");
+    click(&mut h, "Vehicle editor");
+    key(&mut h, egui::Key::Escape);
+    click(&mut h, "Yes");
+    wait_kind(&mut h, "vehicle_editor");
+    click_input(&mut h, "Search");
+    type_text(&mut h, "car");
+    key(&mut h, egui::Key::Enter);
+    double_click(&mut h, "Offroad Car");
+    wait_kind(&mut h, "vehicle_editor");
+    click(&mut h, "vehicle tank (60L)");
+    pick_stacked(&mut h, "vehicle tank (60L)");
+    rest(&mut h);
+    shot(&mut h, "veh-part-picked");
+    for row in list_rows(&h, "vehicle:stack") {
+        faults.extend(out_of_view(&mut h, &format!("the stack's {row}"), |h| {
+            find(h, &row)
+        }));
+    }
+    faults.extend(keybindings_over(
+        &mut h,
+        "vehicle_editor",
+        "vehicle tank (60L)",
+        "veh-keybindings",
+    ));
+    assert!(faults.is_empty(), "{faults:#?}");
 }

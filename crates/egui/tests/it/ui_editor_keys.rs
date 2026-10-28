@@ -182,3 +182,54 @@ fn tab_reaches_the_canvas_where_the_arrows_and_return_draw() {
         sent(&script)
     );
 }
+
+/// The platform hands Ctrl+X, Ctrl+C and Ctrl+V over as the clipboard's commands, not as keys: each runs the
+/// affordance bound to its chord.
+#[test]
+fn the_clipboard_chords_run_the_affordances_bound_to_them() {
+    for (event, id) in [
+        (egui::Event::Cut, "editor:cut"),
+        (egui::Event::Copy, "editor:copy"),
+        (egui::Event::Paste("text".into()), "editor:paste"),
+    ] {
+        let mut screen = editor(Some("trail"));
+        let affordances = screen["affordances"].as_array_mut().unwrap();
+        // The map editor pastes with a tool; a paste bound to Ctrl+V is the vehicle editor's.
+        if !affordances.iter().any(|a| a["id"] == id) {
+            affordances.push(json!({
+                "id": id, "label": "Paste vehicle", "keys": ["CTRL+V"], "enabled": true, "expect": "screen"
+            }));
+        }
+        let bound = affordances.iter_mut().find(|a| a["id"] == id).unwrap();
+        bound["enabled"] = json!(true);
+        let chord = bound["keys"][0].clone();
+        assert!(
+            chord.as_str().is_some_and(|k| k.starts_with("CTRL+")),
+            "{id} has no chord"
+        );
+        let (mut h, script) = open(screen);
+        h.event(event);
+        h.run_steps(4);
+        assert_eq!(sent(&script), [id], "{chord}");
+    }
+}
+
+/// A refused clipboard chord says why in the engine's words.
+#[test]
+fn a_refused_clipboard_chord_tells_the_engines_denial() {
+    let screen = editor(Some("trail"));
+    let copy = screen["affordances"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["id"] == "editor:copy")
+        .unwrap()
+        .clone();
+    assert_eq!(copy["enabled"], false);
+    let (mut h, script) = open(screen);
+    h.event(egui::Event::Copy);
+    h.run_steps(4);
+    let why = copy["denial"].as_str().unwrap();
+    assert!(h.query_by_label(why).is_some(), "no denial {why:?}");
+    assert_eq!(sent(&script), Vec::<String>::new());
+}

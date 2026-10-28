@@ -98,6 +98,8 @@ pub(super) struct Screens {
     column_lists: RefCell<Vec<ListFit>>,
     /// The squares a drag crossed that the engine has not taken yet: it holds few commands at once.
     paints: VecDeque<Paint>,
+    /// A workspace under the top screen is being drawn: it is shown and takes no input.
+    under: std::cell::Cell<bool>,
 }
 
 /// The height the rows of the list `id` want, all of those it holds, and the height they take.
@@ -367,6 +369,8 @@ impl<M: GameModel> App<M> {
     /// The screen on top drawn from its components when the engine describes it so, else the 0.1 menu.
     pub(super) fn menu_or_screen(&mut self, ctx: &egui::Context) {
         self.sync_screens();
+        self.backdrop(ctx);
+        self.paint_icons();
         let Some(top) = interaction::described(self.model.screens()) else {
             return self.menu(ctx);
         };
@@ -385,6 +389,25 @@ impl<M: GameModel> App<M> {
         self.paint_overmap();
         out.into_iter().for_each(|intent| self.apply(intent));
         self.send_paints(ctx);
+    }
+
+    /// The topmost workspace under a top screen that is not one, drawn behind it and taking no input, as an
+    /// application stays in view under its dialogs.
+    fn backdrop(&self, ctx: &egui::Context) {
+        let Some((top, below)) = self.model.screens().split_last() else {
+            return;
+        };
+        let under = below
+            .iter()
+            .rev()
+            .find(|s| workspace::laid_out(s).is_some());
+        let Some(under) = under.filter(|_| workspace::laid_out(top).is_none()) else {
+            return;
+        };
+        self.screens.under.set(true);
+        // What the player does on it is nothing: it has no affordances, and its widgets are off.
+        self.screen_window(ctx, under, &mut vec![]);
+        self.screens.under.set(false);
     }
 
     /// Runs the squares a drag crossed in order, as many as the engine takes now; the rest wait for a later frame.
@@ -683,7 +706,19 @@ impl<M: GameModel> App<M> {
         // The help sits in the title bar, or last in the footer of a window that has none.
         let titled = interaction::with_role(screen, AffordanceRole::Help)
             .filter(|a| a.enabled && base.title_bar && !workspace);
+        // Under a screen kept as its window, such as its list filter's prompt, it is a window of its own.
+        let under = self.screens.under.get();
+        let shared = under
+            && self.model.screens().last().is_some_and(|top| {
+                let title = markup::plain(&top.title.as_ref().map(Text::shown).unwrap_or_default());
+                a11y::dialog_id(self.window_kind(top).as_deref().unwrap_or(&title)) == base.id
+            });
         let spec = WindowSpec {
+            id: match shared {
+                true => base.id.with("under"),
+                false => base.id,
+            },
+            inert: under,
             title_bar: base.title_bar && !workspace,
             closable: interaction::with_role(screen, AffordanceRole::Cancel).is_some(),
             frame: Some(frame),
@@ -1166,8 +1201,12 @@ impl<M: GameModel> App<M> {
         let fit = (ui.available_width() / xs.len().max(1) as f32)
             .min(ui.available_height() / ys.len().max(1) as f32);
         let canvas = grid.role == Some(GridRole::Canvas);
-        // A canvas zooms out until the whole grid fits in its room, and in until a cell is as large as the room.
-        let base = fit.clamp(GRID_CELL, GRID_MAX_CELL);
+        // A canvas first fits its whole grid to its room, however few its squares; it zooms out until the whole grid
+        // fits, and in until a cell is as large as the room.
+        let base = match canvas {
+            true => fit.max(GRID_CELL),
+            false => fit.clamp(GRID_CELL, GRID_MAX_CELL),
+        };
         let limits = ((fit / base).min(1.0), GRID_ZOOM_MAX.max(fit / base));
         let view_key = egui::Id::new(("grid view", &screen.screen_id, &grid.head.id));
         // The workspace's stop for the keyboard over the canvas (`canvas_stop`).

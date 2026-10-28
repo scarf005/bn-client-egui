@@ -14,8 +14,34 @@ const SIDE_SHARE: f32 = 0.22;
 const SIDE_WIDTH: (f32, f32) = (360.0, 480.0);
 /// The fewest rows a list of a column is fitted to, so that the column holds as many of its parts as it can.
 const FIT_ROWS: f32 = 8.0;
+/// The rows of a list a section of a column is sure to show of its first part: lists shrink to these before the
+/// heads of the other sections leave the view.
+const HEAD_ROWS: f32 = 3.0;
 /// The height the log's strip first has, which the player can change.
 const LOG_HEIGHT: f32 = 160.0;
+
+/// The height a column's first part takes, and how many lists it holds.
+#[derive(Clone, Copy, Default)]
+struct First {
+    height: f32,
+    lists: usize,
+}
+
+/// How tall a column is with every row of its lists, and how tall its first part is with its lists at their fewest
+/// rows.
+#[derive(Clone, Copy)]
+struct ColumnHeight {
+    whole: f32,
+    first: f32,
+}
+
+impl ColumnHeight {
+    /// A column not drawn yet.
+    const UNKNOWN: Self = Self {
+        whole: f32::INFINITY,
+        first: 0.0,
+    };
+}
 
 /// The parts of `root` in `slot`; a part with none is the inspector.
 fn parts(root: &Split, slot: Slot) -> Vec<&Component> {
@@ -128,8 +154,12 @@ impl<M: GameModel> App<M> {
     /// The top bar while a workspace is the top screen: its menus, the client's buttons and status, and its title,
     /// help and leave at the end, which a window has in its title bar. False when no workspace is up.
     pub(in crate::app) fn workspace_bar(&mut self, ui: &mut egui::Ui) -> bool {
-        let Some(screen) = interaction::described(self.model.screens())
-            .filter(|s| laid_out(s).is_some())
+        // A workspace under the top screen keeps its bar: its title, and its menus, which it has none of there.
+        let screens = self.model.screens();
+        let Some(screen) = screens
+            .iter()
+            .rev()
+            .find(|s| laid_out(s).is_some())
             .cloned()
         else {
             return false;
@@ -204,15 +234,20 @@ impl<M: GameModel> App<M> {
         self.canvas_stop(ui, screen, root, out);
         let status = parts(root, Slot::Status);
         let footer_width = Self::footer_width(ui, footer, true);
-        let asking = self.screens.interaction.ask().is_some() || self.screens.denial.is_some();
+        // The question and the refusal are the top screen's, which a workspace under it does not show.
+        let under = self.screens.under.get();
+        let asking =
+            !under && (self.screens.interaction.ask().is_some() || self.screens.denial.is_some());
         // No strip at the bottom when it would be empty.
         if !status.is_empty() || footer_width > 0.0 || asking {
             egui::Panel::bottom(id("status"))
                 .resizable(false)
                 .show(ui, |ui| {
-                    self.question(ui, screen, out);
-                    if let Some(denial) = &self.screens.denial {
-                        ui.colored_label(BAD, markup::plain(denial));
+                    if !under {
+                        self.question(ui, screen, out);
+                        if let Some(denial) = &self.screens.denial {
+                            ui.colored_label(BAD, markup::plain(denial));
+                        }
                     }
                     // The buttons end the line, at most half of it; the facts wrap in what they leave.
                     let line = ui.available_rect_before_wrap();
@@ -248,18 +283,19 @@ impl<M: GameModel> App<M> {
                 .default_size(left_width)
                 .show(ui, |ui| match left_is_log {
                     true => self.log_column(ui, screen, &left, out),
-                    false => self.column(ui, screen, &left, out),
+                    false => {
+                        self.column(ui, screen, &left, out);
+                    }
                 });
             crate::app::label_resize_handle(ui.ctx(), &tools_id, &tr("Resize workspace column"));
         }
-        let (lists, inspector) = (
-            [Slot::Palette, Slot::Outline]
-                .into_iter()
-                .flat_map(|slot| parts(root, slot))
-                .collect::<Vec<_>>(),
+        let (palette, outline, inspector) = (
+            parts(root, Slot::Palette),
+            parts(root, Slot::Outline),
             parts(root, Slot::Inspector),
         );
-        if !lists.is_empty() || !inspector.is_empty() {
+        let lists = !palette.is_empty() || !outline.is_empty();
+        if lists || !inspector.is_empty() {
             let width = side_width(ui, root);
             follow(ui.ctx(), egui::Id::new(&side_id), width);
             egui::Panel::right(egui::Id::new(&side_id))
@@ -267,17 +303,19 @@ impl<M: GameModel> App<M> {
                 .show(ui, |ui| {
                     // Room for two columns puts the inspector beside the palette and the outline, both in view.
                     match ui.available_width() >= 2.0 * SIDE_WIDTH.0
-                        && !lists.is_empty()
+                        && lists
                         && !inspector.is_empty()
                     {
                         true => ui.columns(2, |halves| {
-                            self.column(&mut halves[0], screen, &lists, out);
-                            self.column(&mut halves[1], screen, &inspector, out);
+                            // The halves are told apart by name: a column's own id is its parent's.
+                            halves[0].push_id("lists", |ui| {
+                                self.sections(ui, screen, &[&palette, &outline], out)
+                            });
+                            halves[1].push_id("inspector", |ui| {
+                                self.sections(ui, screen, &[&inspector], out)
+                            });
                         }),
-                        false => {
-                            let side = [lists.as_slice(), inspector.as_slice()].concat();
-                            self.column(ui, screen, &side, out);
-                        }
+                        false => self.sections(ui, screen, &[&palette, &outline, &inspector], out),
                     }
                 });
             crate::app::label_resize_handle(ui.ctx(), &side_id, &tr("Resize workspace column"));
@@ -409,7 +447,7 @@ impl<M: GameModel> App<M> {
         screen: &Screen,
         parts: &[&Component],
         out: &mut Vec<Intent>,
-    ) {
+    ) -> ColumnHeight {
         let rect = ui.available_rect_before_wrap();
         let mut inner = ui.new_child(egui::UiBuilder::new().max_rect(rect));
         inner.set_clip_rect(rect.intersect(ui.clip_rect()));
@@ -421,8 +459,8 @@ impl<M: GameModel> App<M> {
         // least `FIT_ROWS` rows; until then a list is at most `PEER_ROWS` rows tall, so the parts under a long one
         // stay in reach.
         let key = ui.id().with("lists");
-        let (content, fits) = ui
-            .data(|d| d.get_temp::<(f32, Vec<ListFit>)>(key))
+        let (content, fits, _) = ui
+            .data(|d| d.get_temp::<(f32, Vec<ListFit>, First)>(key))
             .unwrap_or_default();
         let left = room - (content - fits.iter().map(|f| f.taken).sum::<f32>());
         let least = FIT_ROWS * (tokens::ROW + ui.spacing().item_spacing.y);
@@ -437,13 +475,77 @@ impl<M: GameModel> App<M> {
             // A column's lists are palettes, read by their names, as tall as their rows wherever they are.
             let was = self.screens.in_column.replace(true);
             let top = ui.cursor().top();
-            self.with_list_rows(Some(PEER_ROWS), || self.stack(ui, screen, parts, out));
+            let first = self.with_list_rows(Some(PEER_ROWS), || self.stack(ui, screen, parts, out));
             self.screens.in_column.set(was);
             let content = ui.min_rect().bottom() - top;
-            ui.data_mut(|d| d.insert_temp(key, (content, self.screens.column_lists.take())));
+            let fits = self.screens.column_lists.take();
+            ui.data_mut(|d| d.insert_temp(key, (content, fits, first)));
         });
         self.screens.column_caps.replace(caps);
         self.screens.column_lists.replace(lists);
+        ui.allocate_rect(rect, egui::Sense::hover());
+        let (content, fits, first) = ui
+            .data(|d| d.get_temp::<(f32, Vec<ListFit>, First)>(key))
+            .unwrap_or_default();
+        // As tall as its parts are with every row of their lists, and as its first part is with its lists at their
+        // fewest rows.
+        let fewest = HEAD_ROWS * (tokens::ROW + ui.spacing().item_spacing.y);
+        let shrunk = |f: &ListFit| f.wanted.min(fewest) - f.taken;
+        ColumnHeight {
+            whole: content + fits.iter().map(|f| f.wanted - f.taken).sum::<f32>(),
+            first: first.height + fits.iter().take(first.lists).map(shrunk).sum::<f32>(),
+        }
+    }
+
+    /// `groups` one above the other in the room `ui` has, each a column of its own that scrolls. Each first gets the
+    /// height of its first part whole, with its lists at their fewest rows, then what its parts want up to an even
+    /// share of what the others leave: the head of every group is in view however long the others are.
+    fn sections(
+        &self,
+        ui: &mut egui::Ui,
+        screen: &Screen,
+        groups: &[&Vec<&Component>],
+        out: &mut Vec<Intent>,
+    ) {
+        let groups = groups.iter().filter(|g| !g.is_empty()).collect::<Vec<_>>();
+        let rect = ui.available_rect_before_wrap();
+        let gap = ui.spacing().item_spacing.y;
+        let room = rect.height() - gap * groups.len().saturating_sub(1) as f32;
+        let key = ui.id().with("sections");
+        // Until a section is drawn, what it wants is not known: they share the room evenly.
+        let heights = ui
+            .data(|d| d.get_temp::<Vec<ColumnHeight>>(key))
+            .filter(|h| h.len() == groups.len())
+            .unwrap_or_else(|| vec![ColumnHeight::UNKNOWN; groups.len()]);
+        let firsts = heights.iter().map(|h| h.first).collect::<Vec<_>>();
+        let heads = firsts.iter().sum::<f32>();
+        let given = match heads <= room {
+            true => {
+                let more = heights
+                    .iter()
+                    .map(|h| h.whole - h.first)
+                    .collect::<Vec<_>>();
+                let rest = shares(room - heads, &more, 0.0);
+                firsts.iter().zip(rest).map(|(a, b)| a + b).collect()
+            }
+            false => shares(room, &firsts, 0.0),
+        };
+        let mut top = rect.top();
+        let mut drawn = vec![];
+        for (i, (group, height)) in groups.iter().zip(given).enumerate() {
+            let slice = egui::Rect::from_min_size(
+                egui::pos2(rect.left(), top),
+                egui::vec2(rect.width(), height),
+            );
+            let mut section = ui.new_child(
+                egui::UiBuilder::new()
+                    .id_salt(("section", i))
+                    .max_rect(slice),
+            );
+            drawn.push(self.column(&mut section, screen, group, out));
+            top += height + gap;
+        }
+        ui.data_mut(|d| d.insert_temp(key, drawn));
         ui.allocate_rect(rect, egui::Sense::hover());
     }
 
@@ -455,13 +557,14 @@ impl<M: GameModel> App<M> {
         screen: &Screen,
         parts: &[&Component],
         out: &mut Vec<Intent>,
-    ) {
+    ) -> First {
         let (key, follow) = (ui.id().with("parts"), ui.id().with("arrival"));
         let was = ui.data(|d| d.get_temp::<Vec<String>>(key));
         // The part that arrived and where it was drawn, followed until the column around it settles.
         let following = ui.data(|d| d.get_temp::<(String, egui::Rect)>(follow));
         let mut arrived = None;
-        for c in parts {
+        let mut first = First::default();
+        for (i, c) in parts.iter().enumerate() {
             let top = ui.cursor().top();
             match &c.head().label {
                 Some(label) => {
@@ -471,6 +574,12 @@ impl<M: GameModel> App<M> {
                         .show(ui, |ui| self.component_body(ui, screen, c, out));
                 }
                 None => self.component(ui, screen, c, out),
+            }
+            if i == 0 {
+                first = First {
+                    height: ui.min_rect().bottom() - top,
+                    lists: self.screens.column_lists.borrow().len(),
+                };
             }
             let new = was
                 .as_ref()
@@ -491,5 +600,6 @@ impl<M: GameModel> App<M> {
         }
         let ids = parts.iter().map(|c| c.id().to_string()).collect::<Vec<_>>();
         ui.data_mut(|d| d.insert_temp(key, ids));
+        first
     }
 }
