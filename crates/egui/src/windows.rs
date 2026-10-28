@@ -550,7 +550,9 @@ pub fn show<R>(
                 ui.set_invisible();
             }
             if spec.inert {
+                // Off, yet drawn as it is: a faded window would show the sprites its layers cover.
                 ui.disable();
+                ui.set_opacity(1.0);
             }
             let background = ui.painter().add(egui::Shape::Noop);
             // The area is exactly the window, whatever the contents ask for, so a press on any of it raises it.
