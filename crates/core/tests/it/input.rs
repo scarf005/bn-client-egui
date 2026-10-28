@@ -992,3 +992,28 @@ fn f1_opens_the_screens_help_when_no_affordance_binds_it() {
         Some(("help", json!({})))
     );
 }
+
+#[test]
+fn left_and_right_switch_the_tabs_of_the_strip_that_has_the_focus() {
+    let strip = |id: &str, select: &str| {
+        json!({"id": id, "kind": "tabs", "select": select, "tabs": [
+            {"id": format!("{id}:1"), "label": "1", "selected": true, "enabled": true},
+            {"id": format!("{id}:2"), "label": "2", "selected": false, "enabled": true}]})
+    };
+    let go = |id: &str, strip: &str| {
+        json!({"id": id, "label": "Go", "keys": [], "enabled": true, "expect": "boundary",
+            "args": {"row": {"component_id": strip}}})
+    };
+    let screen = screen_with(
+        json!({"id": "root", "kind": "split", "relation": "peers",
+            "children": [strip("tools", "tool"), strip("kinds", "kind")]}),
+        json!([go("tool", "tools"), go("kind", "kinds")]),
+    );
+    let mut ui = Interaction::default();
+    ui.sync(std::slice::from_ref(&screen));
+    ui.focus_row("kinds", "kinds:1");
+    assert_eq!(
+        invoked(&press(&mut ui, &screen, "RIGHT")),
+        Some(("kind", json!({"row": "kinds:2"})))
+    );
+}
