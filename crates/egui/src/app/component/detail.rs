@@ -26,11 +26,19 @@ impl<M: GameModel> App<M> {
     ) {
         let rows = self.known_rows(list);
         let focus = self.screens.interaction.focus();
-        let focused = focus
-            .row_id
-            .as_deref()
-            .filter(|_| focus.component_id.as_deref() == Some(list.head.id.as_str()))
-            .and_then(|id| rows.iter().find(|r| r.id == id).copied());
+        let here = focus.component_id.as_deref() == Some(list.head.id.as_str());
+        // While the focus is elsewhere, the row a list of one choice has selected is the one described, such as
+        // the entry open in an editor.
+        let focused = match here {
+            true => focus
+                .row_id
+                .as_deref()
+                .and_then(|id| rows.iter().find(|r| r.id == id).copied()),
+            false => rows
+                .iter()
+                .find(|r| r.selected && list.selection == Selection::Single)
+                .copied(),
+        };
         // Without descriptions, a refused row's reason is a line under the list.
         if rows.iter().all(|r| r.description.shown().is_empty()) {
             self.list(ui, screen, list, out);
