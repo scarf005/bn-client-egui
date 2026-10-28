@@ -103,18 +103,22 @@ pub(super) struct Screens {
     /// The form the player last sent or filled, by screen and form id, while nothing else was run since: the
     /// engine's news is shown under it.
     sent_form: Option<(String, String)>,
-    /// The value of a form field the client refused, and why, until the field is edited or filled again.
+    /// The value of a form field the client refused, and why, or the affordance it was sent with, until the field
+    /// is edited or filled again.
     field_refusal: RefCell<Option<FieldRefusal>>,
     /// The engine's news to show under the form of this id, this frame.
     news: RefCell<Option<(String, Vec<TextBlock>)>>,
 }
 
-/// A form field whose value the client refused, by screen, form and field id, and the refusal.
+/// A form field whose value the client refused or sent, by screen, form and field id.
 struct FieldRefusal {
     screen: String,
     form: String,
     field: String,
-    text: String,
+    /// The client's refusal of the value.
+    text: Option<String>,
+    /// The affordance the value was sent with, whose command the engine may refuse.
+    sent: Option<String>,
 }
 
 /// The height the rows of the list `id` want, all of those it holds, and the height they take.
@@ -677,14 +681,14 @@ impl<M: GameModel> App<M> {
         if let Some((screen, form, field)) = filled {
             let refusal = out.invoke.is_none().then(|| out.note()).flatten();
             let refused = refusal.is_some();
-            self.screens
-                .field_refusal
-                .replace(refusal.map(|text| FieldRefusal {
-                    screen,
-                    form,
-                    field,
-                    text,
-                }));
+            let sent = out.invoke.as_ref().map(|(id, _)| id.clone());
+            self.screens.field_refusal.replace(Some(FieldRefusal {
+                screen,
+                form,
+                field,
+                text: refusal,
+                sent,
+            }));
             if refused {
                 self.keys_consumed |= out.consumed;
                 self.screens.denial = None;

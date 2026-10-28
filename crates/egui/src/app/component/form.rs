@@ -134,13 +134,22 @@ impl<M: GameModel> App<M> {
                         form.head.id.as_str(),
                         field.id.as_str(),
                     );
+                    // The client's refusal of the value, else the engine's of the command that sent it.
+                    let command = self.model.command();
+                    let rejected = |sent: &Option<String>| {
+                        command
+                            .as_ref()
+                            .filter(|c| c.finished && c.stage == "rejected")
+                            .filter(|c| c.target.is_some() && &c.target == sent)
+                            .map(|c| c.text.clone())
+                    };
                     let refusal = self
                         .screens
                         .field_refusal
                         .borrow()
                         .as_ref()
                         .filter(|r| (r.screen.as_str(), r.form.as_str(), r.field.as_str()) == at)
-                        .map(|r| r.text.clone());
+                        .and_then(|r| r.text.clone().or_else(|| rejected(&r.sent)));
                     let edit = editor::value_editor(
                         ui,
                         &editor::ValueField {
