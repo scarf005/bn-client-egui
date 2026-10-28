@@ -904,3 +904,30 @@ fn ctrl_f_over_a_workspace_with_a_search_box_focuses_the_top_screens_box() {
         invoked(&script)
     );
 }
+
+#[test]
+fn a_workspace_under_a_screen_the_engine_does_not_describe_still_paints_its_overmap() {
+    let event = crate::common::overmap_event(100);
+    let mut map =
+        event["params"]["events"][0]["changes"]["interaction"]["stack"][1]["root"]["children"][0]
+            .clone();
+    map["slot"] = "canvas".into();
+    let mut under = workspace();
+    under["root"]["children"][1] = map;
+    let top =
+        json!({"screen_id": "screen:plain", "role": "dialog", "root": null, "affordances": []});
+    let (h, _) = over_workspace(under.clone(), top, egui::vec2(1290.0, 830.0));
+    let (alone, _) = over_workspace(
+        under,
+        crate::ui_window_class::example("keybindings", "keybindings screen"),
+        egui::vec2(1290.0, 830.0),
+    );
+    assert!(
+        !painted(&alone, "F").is_empty(),
+        "no overmap square under a described screen"
+    );
+    assert!(
+        !painted(&h, "F").is_empty(),
+        "the overmap under the plain screen is not painted"
+    );
+}
