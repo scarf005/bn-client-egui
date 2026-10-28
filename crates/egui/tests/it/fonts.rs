@@ -49,3 +49,11 @@ fn missing_font_file_leaves_the_defaults_and_reports_false() {
     frame(&ctx);
     assert!(!covers(&ctx, "한글"));
 }
+
+#[test]
+fn the_bundled_faces_draw_the_open_box_the_engine_names_the_space_by() {
+    let ctx = egui::Context::default();
+    fonts::install_bundled(&ctx);
+    frame(&ctx);
+    assert!(covers(&ctx, "␣"));
+}
