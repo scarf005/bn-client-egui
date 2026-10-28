@@ -128,7 +128,35 @@ impl<M: GameModel> App<M> {
                     }
                     None
                 }
-                _ => editor::value_editor(ui, &id, &label, &editor_of(field), on),
+                _ => {
+                    let at = (
+                        screen.screen_id.as_str(),
+                        form.head.id.as_str(),
+                        field.id.as_str(),
+                    );
+                    let refusal = self
+                        .screens
+                        .field_refusal
+                        .borrow()
+                        .as_ref()
+                        .filter(|r| (r.screen.as_str(), r.form.as_str(), r.field.as_str()) == at)
+                        .map(|r| r.text.clone());
+                    let edit = editor::value_editor(
+                        ui,
+                        &editor::ValueField {
+                            id: &id,
+                            label: &label,
+                            editor: &editor_of(field),
+                            enabled: on,
+                            refusal: refusal.as_deref(),
+                        },
+                    );
+                    // Editing the refused value takes its refusal away.
+                    if edit.edited && refusal.is_some() {
+                        self.screens.field_refusal.replace(None);
+                    }
+                    edit.committed
+                }
             };
             if let (Some(value), Some(a)) = (committed, fill) {
                 out.push(Intent::Fill {

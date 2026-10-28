@@ -103,8 +103,18 @@ pub(super) struct Screens {
     /// The form the player last sent or filled, by screen and form id, while nothing else was run since: the
     /// engine's news is shown under it.
     sent_form: Option<(String, String)>,
+    /// The value of a form field the client refused, and why, until the field is edited or filled again.
+    field_refusal: RefCell<Option<FieldRefusal>>,
     /// The engine's news to show under the form of this id, this frame.
     news: RefCell<Option<(String, Vec<TextBlock>)>>,
+}
+
+/// A form field whose value the client refused, by screen, form and field id, and the refusal.
+struct FieldRefusal {
+    screen: String,
+    form: String,
+    field: String,
+    text: String,
 }
 
 /// The height the rows of the list `id` want, all of those it holds, and the height they take.
@@ -602,6 +612,12 @@ impl<M: GameModel> App<M> {
         if let Some(form) = acted_form(top, &intent) {
             self.screens.sent_form = form.map(|form| (top.screen_id.clone(), form));
         }
+        let filled = match &intent {
+            Intent::Fill { form, field, .. } => {
+                Some((top.screen_id.clone(), form.clone(), field.clone()))
+            }
+            _ => None,
+        };
         let interaction = &mut self.screens.interaction;
         let out = match intent {
             Intent::More(component) => return self.model.more_rows(&component),
@@ -657,6 +673,24 @@ impl<M: GameModel> App<M> {
             Intent::Pane(pane) => interaction.answer_pane(top, &pane),
             Intent::Confirm => interaction.confirm(top),
         };
+        // A value the client refused stays by its field, and only there; one sent takes the refusal away.
+        if let Some((screen, form, field)) = filled {
+            let refusal = out.invoke.is_none().then(|| out.note()).flatten();
+            let refused = refusal.is_some();
+            self.screens
+                .field_refusal
+                .replace(refusal.map(|text| FieldRefusal {
+                    screen,
+                    form,
+                    field,
+                    text,
+                }));
+            if refused {
+                self.keys_consumed |= out.consumed;
+                self.screens.denial = None;
+                return;
+            }
+        }
         self.settle(out);
     }
 

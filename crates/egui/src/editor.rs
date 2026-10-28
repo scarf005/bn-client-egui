@@ -42,14 +42,33 @@ fn wrapped_text(ui: &egui::Ui, text: &str, wrap: f32) -> std::sync::Arc<egui::Ga
     ui.fonts_mut(|f| f.layout_job(job))
 }
 
-/// Draws the control for `editor` next to `label`; returns the new value once it is committed.
-pub fn value_editor(
-    ui: &mut egui::Ui,
-    id: &str,
-    label: &str,
-    editor: &Editor,
-    enabled: bool,
-) -> Option<String> {
+/// A form field's control: its id, the label beside it, its value and kind, whether it takes input, and the
+/// refusal of the value last given it.
+pub struct ValueField<'a> {
+    pub id: &'a str,
+    pub label: &'a str,
+    pub editor: &'a Editor,
+    pub enabled: bool,
+    pub refusal: Option<&'a str>,
+}
+
+/// What the player did to a field this frame.
+pub struct ValueEdit {
+    /// The new value, once it is committed.
+    pub committed: Option<String>,
+    /// The text changed.
+    pub edited: bool,
+}
+
+/// Draws the control for `field` next to its label, marked and with its refusal under it when it has one.
+pub fn value_editor(ui: &mut egui::Ui, field: &ValueField) -> ValueEdit {
+    let ValueField {
+        id,
+        label,
+        editor,
+        enabled,
+        refusal,
+    } = *field;
     let key = egui::Id::new(("editor", id));
     let mut draft = ui
         .data(|d| d.get_temp::<Draft>(key))
@@ -58,7 +77,7 @@ pub fn value_editor(
             seen: editor.value.clone(),
             text: editor.value.clone(),
         });
-    let mut committed = None;
+    let (mut committed, mut edited) = (None, false);
     ui.horizontal(|ui| {
         ui.add_enabled_ui(enabled, |ui| match editor.kind.as_str() {
             "bool" => {
@@ -134,14 +153,28 @@ pub fn value_editor(
                 // The box is named by its field, as its label beside it reads.
                 ui.ctx()
                     .accesskit_node_builder(edit.id, |b| b.set_label(label));
+                edited = edit.changed();
+                if refusal.is_some() && !edited {
+                    let stroke = egui::Stroke::new(1.5, crate::kit::tokens::BAD);
+                    ui.painter()
+                        .rect_stroke(edit.rect, 0, stroke, egui::StrokeKind::Outside);
+                    ui.ctx().accesskit_node_builder(edit.id, |b| {
+                        b.set_invalid(accesskit::Invalid::True)
+                    });
+                }
                 if edit.lost_focus() && draft.text != editor.value {
                     committed = Some(draft.text.clone());
                 }
             }
         });
     });
+    if let Some(refusal) = refusal.filter(|_| !edited) {
+        let said = ui.colored_label(crate::kit::tokens::BAD, refusal);
+        ui.ctx()
+            .accesskit_node_builder(said.id, |b| b.set_live(accesskit::Live::Assertive));
+    }
     ui.data_mut(|d| d.insert_temp(key, draft));
-    committed
+    ValueEdit { committed, edited }
 }
 
 /// The engine asks for a key: the next key press names it. Escape is left to the cancel button.
