@@ -1013,3 +1013,55 @@ fn a_click_or_return_on_a_menu_item_that_is_off_shows_the_engines_reason() {
         );
     }
 }
+
+/// A value cut at the right column's edge reads whole once the player drags the column wider by its edge, which the
+/// canvas's squares reach.
+#[test]
+fn widening_the_right_column_shows_a_cut_id_whole() {
+    let id = "turret_mount_manual_steel_reinforced_foldable";
+    let mut h = shown_with(SIZES[0], |parts| {
+        let row = json!({"id": "vpart:turret", "label": "simple foldable wooden turret mount", "description": "",
+            "denial": "", "enabled": true, "selectable": true, "selected": false,
+            "columns": [{"key": "id", "label": "ID", "value": id}]});
+        parts[2] = json!({"id": "ws:palette", "kind": "list", "label": "Parts", "slot": "palette",
+            "columns": [{"key": "id", "label": "ID"}], "total": 1, "rows": [row],
+            "selection": "single"});
+    });
+    // Whether the id is painted and not cut short.
+    let whole = |h: &H| {
+        fn walk(shape: &egui::Shape, id: &str) -> Option<bool> {
+            match shape {
+                egui::Shape::Text(t) if t.galley.text() == id => Some(!t.galley.elided),
+                egui::Shape::Vec(shapes) => shapes.iter().find_map(|s| walk(s, id)),
+                _ => None,
+            }
+        }
+        h.output().shapes.iter().find_map(|c| walk(&c.shape, id))
+    };
+    assert_eq!(whole(&h), Some(false), "{id} is not cut before widening");
+    let edge = h
+        .query_all_by_label("Resize workspace column")
+        .map(|n| n.rect().center())
+        .max_by(|a, b| a.x.total_cmp(&b.x))
+        .unwrap();
+    let to = edge - egui::vec2(150.0, 0.0);
+    let press = |h: &mut H, pos: egui::Pos2, pressed: bool| {
+        h.event(egui::Event::PointerButton {
+            pos,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        });
+        h.run_steps(2);
+    };
+    h.hover_at(edge);
+    h.run_steps(2);
+    press(&mut h, edge, true);
+    for step in 1..=10 {
+        h.hover_at(edge.lerp(to, step as f32 / 10.0));
+        h.run_steps(2);
+    }
+    press(&mut h, to, false);
+    h.run_steps(4);
+    assert_eq!(whole(&h), Some(true), "{id} is still cut");
+}
