@@ -567,3 +567,28 @@ fn a_tool_tab_shows_its_key_beside_its_name() {
         }
     }
 }
+
+#[test]
+fn a_status_fact_never_runs_under_the_footer_buttons() {
+    for size in SIZES {
+        let facts = (0..14)
+            .map(|n| (format!("Fact {n}"), format!("Off {n}")))
+            .collect::<Vec<_>>();
+        let h = shown_with(size, |parts| {
+            let stats = facts
+                .iter()
+                .map(|(label, value)| json!({"key": label, "label": label, "value": value}))
+                .collect::<Vec<_>>();
+            parts[5] = json!({"id": "ws:status", "kind": "panel", "slot": "status",
+                "title": "/tmp/bn-live-1428028-0/mods/zz_walk.json", "stats": stats});
+        });
+        let buttons = ["Validate", "Close"].map(|b| rect(&h, b));
+        let under = facts
+            .iter()
+            .flat_map(|(label, value)| [label, value])
+            .flat_map(|t| painted(&h, t))
+            .filter(|r| buttons.iter().any(|b| b.intersects(*r)))
+            .collect::<Vec<_>>();
+        assert!(under.is_empty(), "{size:?}: {under:?} under {buttons:?}");
+    }
+}
