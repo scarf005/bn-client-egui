@@ -539,3 +539,26 @@ fn a_palette_row_keeps_its_name_whole_and_cuts_its_id() {
         }
     }
 }
+
+#[test]
+fn a_tool_tab_shows_its_key_beside_its_name() {
+    for size in SIZES {
+        let h = shown_with(size, |parts| {
+            parts.push(json!({"id": "ws:modes", "kind": "tabs", "slot": "canvas", "tabs": [
+                {"id": "tool:pencil", "label": "Pencil", "selected": true, "enabled": true, "hotkey": "b"},
+                {"id": "tool:line", "label": "Line", "selected": false, "enabled": true, "hotkey": "l"}]}));
+        });
+        for (name, key) in [("Pencil", "b"), ("Line", "l")] {
+            let name = painted(&h, name);
+            let key = painted(&h, key);
+            assert!(
+                name.iter().any(
+                    |n| key.iter().any(|k| (k.center().y - n.center().y).abs() < 4.0
+                        && k.left() >= n.right()
+                        && k.left() - n.right() < 20.0)
+                ),
+                "{size:?}: {name:?} has no key beside it in {key:?}"
+            );
+        }
+    }
+}
