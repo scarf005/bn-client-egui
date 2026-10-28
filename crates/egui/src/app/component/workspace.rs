@@ -17,6 +17,8 @@ const FIT_ROWS: f32 = 8.0;
 /// The rows of a list a section of a column is sure to show of its first part: lists shrink to these before the
 /// heads of the other sections leave the view.
 const HEAD_ROWS: f32 = 3.0;
+/// The rows of the list worked in, the first with a search box over it, a section of a column keeps in view.
+const WORKED_ROWS: f32 = 5.0;
 /// The rows of its first part a section of a column keeps in view whatever the others hold.
 const REACH_ROWS: f32 = 1.0;
 /// The height the log's strip first has, which the player can change.
@@ -307,7 +309,12 @@ impl<M: GameModel> App<M> {
             egui::Panel::bottom(id("status"))
                 .resizable(false)
                 .show(ui, |ui| {
+                    // The news line is kept when there is none, so the canvas does not move as the news comes and goes.
+                    let before = ui.cursor().top();
                     strip_news.iter().for_each(|t| self.text_block(ui, t));
+                    let line =
+                        ui.text_style_height(&egui::TextStyle::Body) + ui.spacing().item_spacing.y;
+                    ui.add_space((line - (ui.cursor().top() - before)).max(0.0));
                     if !under {
                         self.question(ui, screen, out);
                         if let Some(denial) = &self.screens.denial {
@@ -572,13 +579,17 @@ impl<M: GameModel> App<M> {
         // As tall as its parts are with every row of their lists, and as its first part is with its lists at their
         // fewest rows.
         let fewest = HEAD_ROWS * (tokens::ROW + ui.spacing().item_spacing.y);
-        let shrunk = |f: &ListFit| f.wanted.min(fewest) - f.taken;
-        let head = |h: Head| h.height + fits.iter().take(h.lists).map(shrunk).sum::<f32>();
+        let worked = WORKED_ROWS * (tokens::ROW + ui.spacing().item_spacing.y);
+        let shrunk = |rows: f32| move |f: &ListFit| f.wanted.min(rows) - f.taken;
+        let head_to = |h: Head, rows: f32| {
+            h.height + fits.iter().take(h.lists).map(shrunk(rows)).sum::<f32>()
+        };
+        let head = |h: Head| head_to(h, fewest);
         ColumnHeight {
             whole: content + fits.iter().map(|f| f.wanted - f.taken).sum::<f32>(),
             part: head(first.part),
             listed: first.listed.map_or(0.0, head),
-            searched: first.searched.map(head),
+            searched: first.searched.map(|h| head_to(h, worked)),
         }
     }
 
@@ -604,8 +615,8 @@ impl<M: GameModel> App<M> {
             .filter(|h| h.len() == groups.len())
             .unwrap_or_else(|| vec![ColumnHeight::UNKNOWN; groups.len()]);
         // Each section is given, in turn, evenly up to what the sections want of each step: what keeps its head
-        // reachable; its top through the first rows to pick from, and through the first list with a search box
-        // of them all; then what its parts want.
+        // reachable; its top through the first rows to pick from, and through `WORKED_ROWS` rows of the first list with
+        // a search box of them all; then what its parts want.
         let reach = REACH_ROWS * (tokens::ROW + gap);
         let worked = heights.iter().position(|h| h.searched.is_some());
         let ends = [

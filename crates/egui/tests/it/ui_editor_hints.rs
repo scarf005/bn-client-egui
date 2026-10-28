@@ -57,7 +57,7 @@ fn pointer_away(h: &mut H) {
 
 #[test]
 fn a_button_shows_its_actions_description_on_hover_and_on_keyboard_focus_and_reads_it() {
-    let screen = example("vehicle_editor", WORLD_VEHICLE);
+    let screen = crate::common::unfolded(example("vehicle_editor", WORLD_VEHICLE));
     let description = affordance(&screen, "vehicle:copy")["description"]
         .as_str()
         .unwrap()

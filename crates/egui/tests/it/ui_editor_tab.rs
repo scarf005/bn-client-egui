@@ -118,10 +118,10 @@ fn tab_walks_the_map_editor_in_reading_order_and_names_every_stop() {
 
 #[test]
 fn tab_walks_the_vehicle_editor_in_reading_order_and_names_every_stop() {
-    let screen = crate::ui_window_class::example(
+    let screen = crate::common::unfolded(crate::ui_window_class::example(
         "vehicle_editor",
         "vehicle editor with a prototype open on a mount",
-    );
+    ));
     walks(
         &screen,
         &["File", "Tools", "Canvas", "Parts", "Prototypes"],
@@ -159,10 +159,10 @@ fn the_map_editors_search_boxes_are_named_by_their_lists_headings() {
 
 #[test]
 fn the_vehicle_editors_search_boxes_are_named_by_their_lists_headings() {
-    let screen = crate::ui_window_class::example(
+    let screen = crate::common::unfolded(crate::ui_window_class::example(
         "vehicle_editor",
         "vehicle editor with a prototype open on a mount",
-    );
+    ));
     searches_named(&screen, &["Vehicles", "Parts"]);
 }
 

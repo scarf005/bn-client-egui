@@ -17,6 +17,12 @@ struct Draft {
 /// The space between a field's frame and its text, on each side.
 const FIELD_MARGIN: egui::Margin = egui::Margin::symmetric(4, 2);
 
+/// The options a select field has before its popup offers a filter box.
+const SELECT_FILTER_FROM: usize = 12;
+
+/// The share of the window's height a long select's popup may take.
+const LONG_SELECT_HEIGHT: f32 = 0.7;
+
 /// The rows a multiline field shows before its text scrolls.
 const MULTILINE_ROWS: usize = 6;
 
@@ -99,18 +105,58 @@ pub fn value_editor(ui: &mut egui::Ui, field: &ValueField) -> ValueEdit {
                     .iter()
                     .find(|v| v.id == editor.value)
                     .map_or(editor.value.as_str(), |v| v.label.as_str());
-                let combo = egui::ComboBox::from_id_salt(key)
+                let long = editor.values.len() > SELECT_FILTER_FROM;
+                // The box is as wide as its value, no wider than the room the pane leaves it.
+                let room = ui
+                    .available_width()
+                    .min(ui.clip_rect().right() - ui.cursor().left());
+                let width = (field_width(ui, shown) + ui.spacing().icon_width * 2.0).min(room);
+                let mut combo = egui::ComboBox::from_id_salt(key)
                     .selected_text(shown)
-                    .show_ui(ui, |ui| {
-                        for v in &editor.values {
-                            if ui
-                                .selectable_label(v.id == editor.value, &v.label)
-                                .clicked()
-                            {
-                                committed = Some(v.id.clone());
-                            }
+                    .width(width.max(ui.spacing().interact_size.x))
+                    .truncate();
+                if long {
+                    combo = combo.height(ui.ctx().content_rect().height() * LONG_SELECT_HEIGHT);
+                }
+                let combo = combo.show_ui(ui, |ui| {
+                    let kept = key.with("filter");
+                    let mut query = ui.data(|d| d.get_temp::<String>(kept));
+                    let mut enter = false;
+                    if long {
+                        let typed = query.get_or_insert_with(String::new);
+                        let edit =
+                            ui.add(egui::TextEdit::singleline(typed).hint_text(tr("Search")));
+                        // The popup opens with the typing in its filter.
+                        if ui.data(|d| d.get_temp::<String>(kept)).is_none() {
+                            edit.request_focus();
                         }
-                    });
+                        enter = edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+                    }
+                    let needle = query.as_deref().unwrap_or_default().to_lowercase();
+                    let matching = editor
+                        .values
+                        .iter()
+                        .filter(|v| v.label.to_lowercase().contains(&needle));
+                    if enter && let Some(v) = matching.clone().next() {
+                        committed = Some(v.id.clone());
+                        ui.close();
+                    }
+                    for v in matching {
+                        if ui
+                            .selectable_label(v.id == editor.value, &v.label)
+                            .clicked()
+                        {
+                            committed = Some(v.id.clone());
+                        }
+                    }
+                    if let Some(q) = query {
+                        ui.data_mut(|d| d.insert_temp(kept, q));
+                    }
+                });
+                // The filter starts empty at each opening.
+                if combo.inner.is_none() {
+                    ui.data_mut(|d| d.remove::<String>(key.with("filter")));
+                }
                 // The box is named by its field, as its label beside it reads.
                 named(ui.ctx(), combo.response.id, label, required);
             }

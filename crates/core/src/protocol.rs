@@ -2402,6 +2402,9 @@ pub struct Grid {
     /// are not dragged.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub region_drag: Option<String>,
+    /// The affordance a secondary click of a cell runs, on the cell's `id`; none: a secondary click does nothing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub secondary: Option<String>,
 }
 
 /// A square of a canvas grid, counted from the same origin as its cells.
@@ -2478,6 +2481,9 @@ pub struct GridCell {
     /// The cell shows another level, such as the one below seen through open air, which a client draws faded.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub faded: Option<bool>,
+    /// Why the tool in hand cannot act on the cell, which stays enabled; a client draws it dimmed and says why on hover.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub refused: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]

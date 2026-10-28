@@ -34,8 +34,8 @@ fn editor() -> Value {
         .unwrap()
         .iter()
         .find(|e| e["name"] == "vehicle editor editing a world vehicle in place")
-        .unwrap()["value"]
-        .clone()
+        .map(|e| crate::common::unfolded(e["value"].clone()))
+        .unwrap()
 }
 
 fn open<'a>(screen: Value, size: egui::Vec2) -> H<'a> {
@@ -168,7 +168,7 @@ fn the_mounts_are_tile_sized_in_the_middle_of_the_canvas_and_the_stack_reads_who
 }
 
 #[test]
-fn a_small_grid_fills_its_canvas_pane_whole() {
+fn a_small_grid_sits_whole_and_centred_in_its_canvas_pane_at_a_readable_square_size() {
     let screen = editor();
     let cells = find(&screen["root"], "vehicle:grid").unwrap();
     let (cols, rows) = (
@@ -208,8 +208,13 @@ fn a_small_grid_fills_its_canvas_pane_whole() {
             "at {size:?} the grid {grid:?} runs out of its pane {pane:?}"
         );
         assert!(
-            grid.width() >= 0.8 * pane.width() || grid.height() >= 0.6 * pane.height(),
-            "at {size:?} the grid {grid:?} leaves most of its pane {pane:?} empty"
+            (26.0..=40.5).contains(&square.width()),
+            "at {size:?} the squares are {} wide, not a readable size no larger than the cap",
+            square.width()
+        );
+        assert!(
+            (grid.center() - pane.center()).abs().max_elem() < 0.2 * pane.width(),
+            "at {size:?} the grid {grid:?} is not centred in its pane {pane:?}"
         );
     }
 }
@@ -253,8 +258,8 @@ fn open_with_full_pages() -> Value {
         .unwrap()
         .iter()
         .find(|e| e["name"] == "vehicle editor with a prototype open on a mount")
-        .unwrap()["value"]
-        .clone();
+        .map(|e| crate::common::unfolded(e["value"].clone()))
+        .unwrap();
     fn find_mut<'a>(value: &'a mut Value, id: &str) -> Option<&'a mut Value> {
         if value["id"] == id {
             return Some(value);
@@ -308,7 +313,9 @@ fn the_right_column_holds_every_design_tab_and_some_rows_of_each_list_in_view() 
             );
         }
         for label in &stack {
-            let r = h.get_by_label(label).rect();
+            let r = h
+                .get_by_role_and_label(egui::accesskit::Role::Button, label)
+                .rect();
             assert!(
                 in_view(r),
                 "at {size:?} the stack's {label:?} at {r:?} is out of view above {bottom}"
@@ -367,7 +374,9 @@ fn the_design_inspector_of_the_picked_mount_is_whole_in_view_over_long_lists_wit
             }
         }
         for label in &stack {
-            let r = h.query_by_label(label).map(|n| n.rect());
+            let r = h
+                .query_by_role_and_label(egui::accesskit::Role::Button, label)
+                .map(|n| n.rect());
             if !r.is_some_and(|r| unclipped(&h, r)) {
                 out.push(format!("{label} at {r:?}"));
             }

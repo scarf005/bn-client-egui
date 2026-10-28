@@ -72,6 +72,7 @@ fn tabs<'a>(c: &'a Component, found: &mut Vec<(&'a bn_client_egui::protocol::Tab
 fn one_click_on_a_tab_or_a_button_of_any_example_screen_sends_its_affordance() {
     let mut clicked = 0;
     for (name, value) in screens() {
+        let value = crate::common::unfolded(value);
         let screen = serde_json::from_value::<Screen>(value.clone()).unwrap();
         let mut found = vec![];
         tabs(screen.root.as_ref().unwrap(), &mut found);

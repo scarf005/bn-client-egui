@@ -481,3 +481,19 @@ fn themed<'a>(
 }
 pub mod legible;
 pub mod live;
+
+/// `screen` with every part open, as a player who unfolded them sees it.
+pub fn unfolded(mut screen: Value) -> Value {
+    fn open(value: &mut Value) {
+        match value {
+            Value::Object(members) => {
+                members.remove("collapsed");
+                members.values_mut().for_each(open);
+            }
+            Value::Array(items) => items.iter_mut().for_each(open),
+            _ => {}
+        }
+    }
+    open(&mut screen);
+    screen
+}

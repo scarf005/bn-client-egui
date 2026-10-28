@@ -3939,6 +3939,39 @@ fn tool_tab_click(h: &mut H) {
     paint(h, 2, 2);
 }
 
+/// A click at `at`, for the other live walks.
+pub(crate) fn click_at_pub(h: &mut H, at: egui::Pos2) {
+    click_at(h, at);
+}
+
+/// The centre of the first canvas square whose label contains `label`.
+pub(crate) fn square_pub(h: &H, label: &str) -> Option<egui::Pos2> {
+    h.root()
+        .children_recursive()
+        .find(|n| {
+            let a = n.accesskit_node();
+            a.role() == egui::accesskit::Role::Button
+                && a.label().is_some_and(|l| l.contains(label))
+                && (n.rect().width() - n.rect().height()).abs() < 1.0
+        })
+        .map(|n| n.rect().center())
+}
+
+/// A right click at `at`.
+pub(crate) fn right_click_pub(h: &mut H, at: egui::Pos2) {
+    h.hover_at(at);
+    h.run_steps(2);
+    for pressed in [true, false] {
+        h.event(egui::Event::PointerButton {
+            pos: at,
+            button: egui::PointerButton::Secondary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        });
+        h.run_steps(3);
+    }
+}
+
 const CATALOG_SIZES: [(f32, f32); 2] = [(1920.0, 1080.0), (1280.0, 800.0)];
 
 #[test]
