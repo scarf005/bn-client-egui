@@ -3460,14 +3460,23 @@ fn the_vehicle_editor_answers_the_audits_clicks() {
     click_square(&mut h, "saddle");
     rest(&mut h);
     shot(&mut h, "v6-install-refused-notice");
-    let size = h.ctx.content_rect().size();
     let news = news(&h);
     found.check(!news.is_empty(), "vehicle: the engine sent a notice");
+    // By the status line, or by the part the refusal is about when its description already says it: once.
     for line in &news {
-        let at = find(&h, line);
+        let at = h
+            .root()
+            .children_recursive()
+            .filter(|n| {
+                let a = n.accesskit_node();
+                a.role() != egui::accesskit::Role::TextRun
+                    && a.label().or_else(|| a.value()).as_deref() == Some(line.as_str())
+            })
+            .map(|n| n.rect())
+            .collect::<Vec<_>>();
         found.check(
-            at.is_some_and(|r| r.top() > size.y - 120.0),
-            format!("vehicle notice {line:?} drawn at {at:?}, by the status line"),
+            at.len() == 1,
+            format!("vehicle notice {line:?} drawn once, at {at:?}"),
         );
     }
     // A value out of its field's bounds: a new car's turret ammunition at 500 %. The car is built by the

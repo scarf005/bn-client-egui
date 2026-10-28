@@ -25,20 +25,7 @@ impl<M: GameModel> App<M> {
         out: &mut Vec<Intent>,
     ) {
         let rows = self.known_rows(list);
-        let focus = self.screens.interaction.focus();
-        let here = focus.component_id.as_deref() == Some(list.head.id.as_str());
-        // While no row of it has the focus, the row a list of one choice has selected is the one described, such as
-        // the entry open in an editor.
-        let focused = focus
-            .row_id
-            .as_deref()
-            .filter(|_| here)
-            .and_then(|id| rows.iter().find(|r| r.id == id).copied())
-            .or_else(|| {
-                rows.iter()
-                    .find(|r| r.selected && list.selection == Selection::Single)
-                    .copied()
-            });
+        let focused = self.described(list);
         // Without descriptions, a refused row's reason is a line under the list.
         if rows.iter().all(|r| r.description.shown().is_empty()) {
             self.list(ui, screen, list, out);
@@ -89,6 +76,44 @@ impl<M: GameModel> App<M> {
                 self.row_detail(ui, &list.head.id, focused, lines)
             });
         });
+    }
+
+    /// The row of `list` described under or beside it: the focused one; while no row of it has the focus, the row a
+    /// list of one choice has selected, such as the entry open in an editor.
+    fn described<'a>(&'a self, list: &'a List) -> Option<&'a Row> {
+        let rows = self.known_rows(list);
+        let focus = self.screens.interaction.focus();
+        let here = focus.component_id.as_deref() == Some(list.head.id.as_str());
+        focus
+            .row_id
+            .as_deref()
+            .filter(|_| here)
+            .and_then(|id| rows.iter().find(|r| r.id == id).copied())
+            .or_else(|| {
+                rows.iter()
+                    .find(|r| r.selected && list.selection == Selection::Single)
+                    .copied()
+            })
+    }
+
+    /// What the described rows of `screen`'s lists say: their refusals and descriptions.
+    pub(super) fn said_by_rows(&self, screen: &Screen) -> Vec<String> {
+        screen
+            .components()
+            .into_iter()
+            .filter_map(|c| match c {
+                Component::List(list) => self.described(list),
+                _ => None,
+            })
+            .flat_map(|row| {
+                [
+                    (!row.enabled).then(|| row.denial.shown()),
+                    Some(row.description.shown()),
+                ]
+            })
+            .flatten()
+            .filter(|t| !t.is_empty())
+            .collect()
     }
 
     /// The focused row's description, in the height left up to `lines` lines, and why the row is refused when

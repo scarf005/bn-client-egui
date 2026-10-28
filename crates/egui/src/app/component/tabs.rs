@@ -68,9 +68,10 @@ impl<M: GameModel> App<M> {
             .or_else(|| tabs.tabs.iter().position(on));
         let keys = egui::Id::new(("tabs keyboard", &screen.screen_id, &tabs.head.id));
         // The chosen tab the strip had the keyboard on last frame: a newly chosen one takes it over.
-        let keyed = ui.data(|d| d.get_temp::<Option<String>>(keys)).flatten();
-        let moved = keyed.is_some_and(|id| stop.is_some_and(|i| tabs.tabs[i].id != id));
-        let mut focused = false;
+        let keyed = ui.data(|d| d.get_temp::<Option<Keyed>>(keys)).flatten();
+        let moved =
+            stop.is_some_and(|i| takes_keyboard(ui.ctx(), keyed.as_ref(), &tabs.tabs[i].id));
+        let mut focused = None;
         egui::Frame::NONE
             .fill(crate::kit::tokens::PANEL)
             .show(ui, |ui| {
@@ -88,18 +89,17 @@ impl<M: GameModel> App<M> {
                                 stop: stop == Some(i),
                                 moved,
                             };
-                            focused |= self.tab(ui, &strip, &tabs.tabs[i], &labels[i], out);
+                            focused =
+                                focused.or(self.tab(ui, &strip, &tabs.tabs[i], &labels[i], out));
                         }
                     });
                 }
             });
-        let held = focused
-            .then(|| stop.map(|i| tabs.tabs[i].id.clone()))
-            .flatten();
+        let held = focused.zip(stop).map(|(w, i)| (tabs.tabs[i].id.clone(), w));
         ui.data_mut(|d| d.insert_temp(keys, held));
     }
 
-    /// One tab labelled `label`; a click chooses it with the strip's `select`. Whether it has the button.
+    /// One tab labelled `label`; a click chooses it with the strip's `select`. Its button, when that has the keyboard.
     fn tab(
         &self,
         ui: &mut egui::Ui,
@@ -107,7 +107,7 @@ impl<M: GameModel> App<M> {
         tab: &Tab,
         label: &str,
         out: &mut Vec<Intent>,
-    ) -> bool {
+    ) -> Option<egui::Id> {
         let Strip { tabs, select, .. } = *strip;
         let on = tab.enabled && select.map_or(self.screens.passive, |a| a.enabled);
         let sense = match strip.stop && on {
@@ -153,8 +153,8 @@ impl<M: GameModel> App<M> {
         if strip.stop && strip.moved && !button.has_focus() {
             button.request_focus();
         }
-        let focused = button.has_focus();
-        if focused {
+        let focused = button.has_focus().then_some(button.id);
+        if focused.is_some() {
             let arrows = egui::EventFilter {
                 horizontal_arrows: true,
                 ..Default::default()

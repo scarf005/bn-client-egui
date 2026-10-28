@@ -3,7 +3,7 @@
 use bn_client_egui::{App, EngineModel};
 use eframe::egui;
 use egui_kittest::Harness;
-use egui_kittest::kittest::NodeT;
+use egui_kittest::kittest::{NodeT, Queryable};
 use serde_json::Value;
 
 type H<'a> = Harness<'a, App<EngineModel>>;
@@ -161,4 +161,67 @@ fn the_vehicle_editors_search_boxes_are_named_by_their_lists_headings() {
         "vehicle editor with a prototype open on a mount",
     );
     searches_named(&screen, &["Vehicles", "Parts"]);
+}
+
+/// The map editor with Tab walked to its legend's row, the list's stop.
+fn on_a_legend_row<'a>() -> H<'a> {
+    let screen =
+        crate::ui_window_class::example("editor", "map editor with a drawn room and a new mapping");
+    let mut h = shown(&screen, SIZES[0]);
+    let mut seen = vec![];
+    for _ in 0..80 {
+        h.key_press(egui::Key::Tab);
+        h.run_steps(2);
+        seen.extend(focused(&h));
+        if focused(&h).is_some_and(|f| f.1.as_deref() == Some("#")) {
+            h.run_steps(4);
+            assert_eq!(focused(&h).and_then(|f| f.1).as_deref(), Some("#"));
+            return h;
+        }
+    }
+    panic!("Tab never reaches the legend's row: {seen:?}");
+}
+
+#[test]
+fn tab_leaves_a_list_whose_row_has_the_focus_for_the_next_stop_and_stays_there() {
+    let mut h = on_a_legend_row();
+    h.key_press(egui::Key::Tab);
+    h.run_steps(2);
+    let next = focused(&h).and_then(|f| f.1);
+    assert_ne!(next.as_deref(), Some("#"));
+    h.run_steps(6);
+    assert_eq!(focused(&h).and_then(|f| f.1), next);
+}
+
+#[test]
+fn a_click_into_a_text_field_below_a_focused_list_row_takes_the_typing() {
+    let mut h = on_a_legend_row();
+    let legend = focused(&h).unwrap().2;
+    let field = h
+        .root()
+        .children_recursive()
+        .filter(|n| n.accesskit_node().role() == egui::accesskit::Role::TextInput)
+        .map(|n| n.rect())
+        .find(|r| r.top() > legend.bottom())
+        .expect("a text field below the legend");
+    h.query_all_by_role(egui::accesskit::Role::TextInput)
+        .find(|n| n.rect() == field)
+        .unwrap()
+        .click();
+    h.run_steps(4);
+    h.event(egui::Event::Text("q".into()));
+    h.run_steps(4);
+    let typed = h
+        .root()
+        .children_recursive()
+        .find(|n| {
+            n.accesskit_node().role() == egui::accesskit::Role::TextInput && n.rect() == field
+        })
+        .map(|n| (n.accesskit_node().is_focused(), n.accesskit_node().value()));
+    assert!(
+        typed
+            .as_ref()
+            .is_some_and(|(f, v)| *f && v.as_deref().is_some_and(|v| v.contains('q'))),
+        "{typed:?}"
+    );
 }
