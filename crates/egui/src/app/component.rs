@@ -1173,7 +1173,8 @@ impl<M: GameModel> App<M> {
             let mut area = egui::ScrollArea::both()
                 .id_salt(("grid", &screen.screen_id, &grid.head.id))
                 .max_height(rows * cell)
-                .auto_shrink([true, true])
+                // As wide as its room, which the grid is centred in.
+                .auto_shrink([false, true])
                 .scroll_source(egui::scroll_area::ScrollSource {
                     drag: egui::scroll_area::DragScroll::Never,
                     mouse_wheel: false,
