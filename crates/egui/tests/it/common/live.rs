@@ -33,6 +33,22 @@ pub fn english_transport() -> StdioTransport {
 thread_local! {
     /// The profile of the engine this test thread spawned last; tests run on threads of their own.
     static PROFILE: std::cell::RefCell<std::path::PathBuf> = std::cell::RefCell::default();
+    /// The profile `reserve_profile` set aside for the next engine this thread spawns.
+    static RESERVED: std::cell::RefCell<Option<std::path::PathBuf>> = std::cell::RefCell::default();
+}
+
+/// A profile directory no engine of this process has had yet.
+fn new_profile() -> std::path::PathBuf {
+    static SPAWNED: AtomicUsize = AtomicUsize::new(0);
+    let n = SPAWNED.fetch_add(1, Ordering::Relaxed);
+    std::env::temp_dir().join(format!("bn-live-{}-{n}", std::process::id()))
+}
+
+/// The profile directory the next engine this test spawns will have, for files it must find there at its start.
+pub fn reserve_profile() -> std::path::PathBuf {
+    let dir = new_profile();
+    RESERVED.set(Some(dir.clone()));
+    dir
 }
 
 /// The profile directory of the engine this test spawned last, where its mod files are written.
@@ -47,9 +63,7 @@ pub fn english_transport_on(seed: &str) -> StdioTransport {
 
 /// `english_transport_on(seed)` with `files` (name, content) written to the profile's config directory first.
 pub fn english_transport_with(seed: &str, files: &[(&str, String)]) -> StdioTransport {
-    static SPAWNED: AtomicUsize = AtomicUsize::new(0);
-    let n = SPAWNED.fetch_add(1, Ordering::Relaxed);
-    let dir = std::env::temp_dir().join(format!("bn-live-{}-{n}", std::process::id()));
+    let dir = RESERVED.take().unwrap_or_else(new_profile);
     PROFILE.set(dir.clone());
     let config = dir.join("config");
     std::fs::create_dir_all(&config).unwrap();

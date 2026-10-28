@@ -1291,9 +1291,9 @@ fn faded_squares(h: &H) -> Faded {
 fn the_map_editor_outlines_overmap_squares_and_shows_the_level_below_faded() {
     let sizes = [(1920.0, 1080.0)];
     let dir = std::env::temp_dir().join(format!("bn-walk-{}", std::process::id()));
-    // The first engine this process spawns has the profile `bn-live-<pid>-0`; its user mods are where the engine opens
-    // files from, and the recent documents name this one before the engine runs.
-    let profile = std::env::temp_dir().join(format!("bn-live-{}-0", std::process::id()));
+    // The engine this test spawns opens files from its profile's user mods, and the recent documents name this one
+    // before the engine runs.
+    let profile = crate::common::live::reserve_profile();
     let moddir = profile.join("mods").join("walk_levels");
     std::fs::create_dir_all(&moddir).unwrap();
     std::fs::create_dir_all(&dir).unwrap();
@@ -1366,7 +1366,7 @@ fn the_map_editor_outlines_overmap_squares_and_shows_the_level_below_faded() {
 fn the_map_editor_shows_the_squares_beside_the_entry_and_a_click_on_one_opens_it() {
     let sizes = [(1920.0, 1080.0)];
     let dir = std::env::temp_dir().join(format!("bn-walk-{}", std::process::id()));
-    let profile = std::env::temp_dir().join(format!("bn-live-{}-0", std::process::id()));
+    let profile = crate::common::live::reserve_profile();
     let moddir = profile.join("mods").join("walk_neighbours");
     std::fs::create_dir_all(&moddir).unwrap();
     std::fs::create_dir_all(&dir).unwrap();
@@ -1490,7 +1490,7 @@ fn drag_squares(
 fn the_map_editor_drags_a_placement_whole_and_by_its_corner() {
     let sizes = [(1290.0, 830.0)];
     let dir = std::env::temp_dir().join(format!("bn-walk-{}", std::process::id()));
-    let profile = std::env::temp_dir().join(format!("bn-live-{}-0", std::process::id()));
+    let profile = crate::common::live::reserve_profile();
     let moddir = profile.join("mods").join("walk_regions");
     std::fs::create_dir_all(&moddir).unwrap();
     std::fs::create_dir_all(&dir).unwrap();
@@ -1597,7 +1597,7 @@ fn selected_tool(h: &H) -> Option<String> {
 fn the_map_editor_tool_keys_choose_tools_and_z_turns_the_clipboard() {
     let sizes = [(1290.0, 830.0)];
     let dir = std::env::temp_dir().join(format!("bn-walk-{}", std::process::id()));
-    let profile = std::env::temp_dir().join(format!("bn-live-{}-0", std::process::id()));
+    let profile = crate::common::live::reserve_profile();
     let moddir = profile.join("mods").join("walk_keys");
     std::fs::create_dir_all(&moddir).unwrap();
     std::fs::create_dir_all(&dir).unwrap();
@@ -1678,7 +1678,7 @@ fn canvas_cells(h: &H) -> Vec<(String, String, String)> {
 fn the_map_editor_shows_an_overmap_special_by_level_and_a_click_on_a_square_opens_its_mapgen() {
     let sizes = [(1920.0, 1080.0)];
     let dir = std::env::temp_dir().join(format!("bn-walk-{}", std::process::id()));
-    let profile = std::env::temp_dir().join(format!("bn-live-{}-0", std::process::id()));
+    let profile = crate::common::live::reserve_profile();
     let moddir = profile.join("mods").join("walk_special");
     std::fs::create_dir_all(&moddir).unwrap();
     std::fs::create_dir_all(&dir).unwrap();
@@ -1797,7 +1797,7 @@ fn tabs_of(h: &H, of: &str) -> (Vec<String>, Option<String>) {
 fn the_map_editor_draws_and_erases_the_squares_of_an_overmap_special_and_saves_them() {
     let sizes = [(1920.0, 1080.0)];
     let dir = std::env::temp_dir().join(format!("bn-walk-{}", std::process::id()));
-    let profile = std::env::temp_dir().join(format!("bn-live-{}-0", std::process::id()));
+    let profile = crate::common::live::reserve_profile();
     let moddir = profile.join("mods").join("walk_draw");
     std::fs::create_dir_all(&moddir).unwrap();
     std::fs::create_dir_all(&dir).unwrap();
@@ -1981,7 +1981,7 @@ fn enabled(h: &H, id: &str) -> Option<bool> {
 fn the_map_editor_places_an_overmap_special_in_the_world_and_tests_it_there() {
     let sizes = [(1920.0, 1080.0)];
     let dir = std::env::temp_dir().join(format!("bn-walk-{}", std::process::id()));
-    let profile = std::env::temp_dir().join(format!("bn-live-{}-0", std::process::id()));
+    let profile = crate::common::live::reserve_profile();
     let moddir = profile.join("mods").join("walk_place");
     std::fs::create_dir_all(&moddir).unwrap();
     std::fs::create_dir_all(&dir).unwrap();
