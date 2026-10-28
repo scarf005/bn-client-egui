@@ -223,7 +223,7 @@ fn reveal(h: &mut H, label: &str) {
 }
 
 /// `reveal` for any widget `rect_of` finds, named `what` when it never comes into view.
-fn reveal_rect(h: &mut H, what: &str, rect_of: impl Fn(&H) -> Option<egui::Rect>) {
+pub(crate) fn reveal_rect(h: &mut H, what: &str, rect_of: impl Fn(&H) -> Option<egui::Rect>) {
     let size = h.ctx.content_rect().size();
     // Over the right column's gutter the wheel scrolls the column; over its middle, the list there.
     let (bar, list) = (gutter(h), egui::pos2(size.x - 120.0, size.y * 0.5));
@@ -287,7 +287,7 @@ fn reveal_rect(h: &mut H, what: &str, rect_of: impl Fn(&H) -> Option<egui::Rect>
 
 /// Whether the widget drawn at `r` is whole on screen, uncut by what clips it (the menu bar, the status line, the
 /// end of its scroll area).
-fn in_view(h: &H, r: egui::Rect) -> bool {
+pub(crate) fn in_view(h: &H, r: egui::Rect) -> bool {
     let screen = h.ctx.content_rect();
     shown(h, r).is_some_and(|c| c.contains_rect(r.shrink(1.0))) && screen.contains_rect(r)
 }
@@ -328,7 +328,7 @@ fn wheel(h: &mut H, dy: f32) {
 }
 
 /// Turns the wheel over `at` by `dy` points and lets the frames follow.
-fn wheel_at(h: &mut H, at: egui::Pos2, dy: f32) {
+pub(crate) fn wheel_at(h: &mut H, at: egui::Pos2, dy: f32) {
     h.hover_at(at);
     h.run_steps(2);
     h.event(egui::Event::MouseWheel {
@@ -1230,7 +1230,7 @@ fn the_map_editor_exports_two_squares_stamps_pasted_mapgen_and_takes_it_back() {
     click(&mut h, "OK");
     click_footer(&mut h, "Export width");
     shot_at(&mut h, "imp-4-width-kept", &sizes);
-    click(&mut h, "Cancel");
+    click(&mut h, "Stay");
 
     // Exported to a new mod file, whose first entry names the avatar's overmap terrain.
     let path = crate::common::live::profile_dir().join("mods/zz_export.json");
@@ -3850,4 +3850,91 @@ fn the_editors_show_the_engines_hints_and_answer_clicks_quickly() {
             t.what, t.total, t.frames, t.slowest
         );
     }
+}
+
+/// The editors' newer behaviour looked at live: the mod picker, required marks, mod-folder paths, the folded start
+/// page, the leave prompt and the fuel picker.
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn the_editors_show_mod_folders_required_marks_the_leave_prompt_and_the_fuel_picker() {
+    let sizes = [(1920.0, 1080.0)];
+    let mut h = audit_start();
+    click(&mut h, "Editor");
+    click(&mut h, "Map editor");
+    rest(&mut h);
+    shot_at(&mut h, "c1-mod-picker", &sizes);
+    dump(&h, "mod picker");
+    key(&mut h, egui::Key::Escape);
+    click(&mut h, "Yes");
+    wait_kind(&mut h, "editor");
+    rest(&mut h);
+    // A path outside any mod folder, and one in another mod's folder, are refused with a suggestion.
+    let mods = crate::common::live::profile_dir().join("mods");
+    click_beside(&mut h, "New mapgen file/Path");
+    replace_text(&mut h, &mods.join("live_check.json").to_string_lossy());
+    click_beside(&mut h, "Overmap terrain");
+    replace_text(&mut h, "live_check");
+    shot_at(&mut h, "c2-required-marks", &sizes);
+    click(&mut h, "Create");
+    rest(&mut h);
+    shot_at(&mut h, "c3-refused-outside-a-mod-folder", &sizes);
+    dump(&h, "refused");
+    click_beside(&mut h, "New mapgen file/Path");
+    replace_text(&mut h, &mods.join("bn/live_check.json").to_string_lossy());
+    click(&mut h, "Create");
+    rest(&mut h);
+    shot_at(&mut h, "c4-refused-another-mods-id", &sizes);
+    dump(&h, "refused bn");
+    click_beside(&mut h, "New mapgen file/Path");
+    replace_text(
+        &mut h,
+        &mods.join("my_mod/live_check.json").to_string_lossy(),
+    );
+    click(&mut h, "Create");
+    if find(&h, "Continue").is_some() {
+        click(&mut h, "Continue");
+    }
+    wait_kind(&mut h, "editor");
+    rest(&mut h);
+    shot_at(&mut h, "c5-document-open-parts-folded", &sizes);
+    dump(&h, "document open");
+    println!("MODINFO {}", mods.join("my_mod/modinfo.json").is_file());
+    // An edit makes the document unsaved; Escape asks.
+    tool_tab_click(&mut h);
+    rest(&mut h);
+    shot_at(&mut h, "c5b-painted", &sizes);
+    key(&mut h, egui::Key::Escape);
+    shot_at(&mut h, "c6-leave-prompt", &sizes);
+    dump(&h, "leave prompt");
+    click(&mut h, "Stay");
+    rest(&mut h);
+    shot_at(&mut h, "c7-after-cancel", &sizes);
+    key(&mut h, egui::Key::Escape);
+    click(&mut h, "Leave without saving");
+    run_until(&mut h, "the main menu", 300, |h| {
+        h.state().model.menu().is_some() && !h.state().model.busy()
+    });
+    rest(&mut h);
+    // The vehicle editor: a new design, a tank, and its fuel.
+    click(&mut h, "Editor");
+    click(&mut h, "Vehicle editor");
+    key(&mut h, egui::Key::Escape);
+    click(&mut h, "Yes");
+    wait_kind(&mut h, "vehicle_editor");
+    rest(&mut h);
+    menu(&mut h, "File", "New vehicle");
+    rest(&mut h);
+    shot_at(&mut h, "c8-new-vehicle-suggested-name", &sizes);
+    dump(&h, "new vehicle");
+}
+
+/// Paints one square of the open mapgen so the document counts as edited.
+fn tool_tab_click(h: &mut H) {
+    double_click(h, "adobe wall");
+    click_beside(h, "Symbol");
+    replace_text(h, "#");
+    key(h, egui::Key::Enter);
+    click(h, "Set mapping");
+    click_tab(h, "Pencil");
+    paint(h, 2, 2);
 }
