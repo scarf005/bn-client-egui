@@ -294,3 +294,45 @@ fn a_lists_activate_is_a_button_beside_its_other_row_actions() {
     // The history's Go to step, the only action on its rows, has no button: its rows run it.
     assert!(h.query_by_label("Go to step").is_none());
 }
+
+/// A part picked far down a mount's long stack, in place of one at its top, is brought into view.
+#[test]
+fn a_part_picked_far_down_a_long_stack_is_brought_into_view() {
+    let picked = |n: usize| {
+        let mut screen = open_with_full_pages();
+        fn stack_of(value: &mut Value) -> Option<&mut Value> {
+            if value["id"] == "vehicle:stack" {
+                return Some(value);
+            }
+            match value {
+                Value::Array(items) => items.iter_mut().find_map(stack_of),
+                Value::Object(members) => members.values_mut().find_map(stack_of),
+                _ => None,
+            }
+        }
+        let stack = stack_of(&mut screen["root"]).unwrap();
+        let first = stack["rows"][0].clone();
+        stack["rows"] = (0..30)
+            .map(|i| {
+                let mut row = first.clone();
+                row["id"] = json!(format!("part:{i}"));
+                row["label"] = json!(format!("stacked part {i}"));
+                row["selected"] = json!(i == n);
+                row
+            })
+            .collect();
+        stack["total"] = json!(30);
+        screen
+    };
+    let size = egui::vec2(1290.0, 830.0);
+    let (mut h, script) = crate::ui_editor_drag::open_sized(picked(0), size);
+    crate::common::settle_windows(&mut h);
+    crate::ui_editor_drag::restack(&script, 41, vec![picked(25)]);
+    h.run_steps(8);
+    let bottom = h.get_by_label("Mount").rect().top();
+    let r = h.query_by_label("stacked part 25").map(|n| n.rect());
+    assert!(
+        r.is_some_and(|r| r.top() >= 0.0 && r.bottom() <= bottom + 0.5),
+        "the picked part is at {r:?}, above {bottom}"
+    );
+}
