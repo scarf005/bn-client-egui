@@ -3087,3 +3087,82 @@ fn a_modder_opens_a_prototype_installs_a_part_spawns_and_leaves_the_vehicle_edit
     rest(&mut h);
     shot_both(&mut h, "ws-veh-09-main-menu");
 }
+
+/// Whether egui's keyboard focus is on the widget named `label`.
+fn focused_on(h: &H, label: &str) -> bool {
+    let Some(id) = h.ctx.memory(|m| m.focused()) else {
+        return false;
+    };
+    use egui_kittest::kittest::Queryable as _;
+    let rect = h
+        .ctx
+        .viewport(|v| v.prev_pass.widgets.get(id).map(|w| w.rect));
+    h.query_all_by_label(label).any(|n| Some(n.rect()) == rect)
+}
+
+/// The map editor by the keyboard alone: Tab reaches the canvas, the arrows move over it and Return draws; a tool
+/// that is off says the engine's reason; F1 opens the keys.
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn the_map_editor_draws_by_the_keyboard_and_opens_its_keys_with_f1() {
+    let sizes = [(1920.0, 1080.0), (1290.0, 830.0)];
+    let dir = std::env::temp_dir().join(format!("bn-walk-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let (mut h, _root) = start(&dir);
+    h.set_size(egui::vec2(1290.0, 830.0));
+    rest(&mut h);
+    open_map_editor(&mut h);
+    create_mapgen(&mut h, "zz_keys");
+    map_wall(&mut h);
+    click_tab(&mut h, "Pencil");
+
+    let mut presses = 0;
+    while !focused_on(&h, "Canvas") {
+        presses += 1;
+        assert!(presses <= 12, "Tab does not reach the canvas");
+        key(&mut h, egui::Key::Tab);
+    }
+    for arrow in [
+        egui::Key::ArrowRight,
+        egui::Key::ArrowRight,
+        egui::Key::ArrowDown,
+    ] {
+        key(&mut h, arrow);
+    }
+    shot_at(&mut h, "kb-1-canvas-reached", &sizes);
+    assert!(
+        focused_on(&h, "Canvas"),
+        "the arrows took the keyboard off the canvas"
+    );
+    key(&mut h, egui::Key::Enter);
+    rest(&mut h);
+    shot_at(&mut h, "kb-2-drawn", &sizes);
+    assert_eq!(glyph(&h, 2, 1), Some('#'), "{:?}", canvas_glyphs(&h));
+
+    // A tool that is off says why in the engine's words.
+    let paste = h
+        .state()
+        .model
+        .screens()
+        .last()
+        .and_then(|s| s.root.as_ref()?.find("editor:tools").cloned());
+    println!("TOOLS {paste:?}");
+    click_tab(&mut h, "Paste");
+    rest(&mut h);
+    shot_at(&mut h, "kb-3-paste", &sizes);
+    assert!(
+        !labels(&h).iter().any(|l| l.contains("needs other details")),
+        "a refusal without the engine's reason"
+    );
+
+    key(&mut h, egui::Key::F1);
+    rest(&mut h);
+    shot_at(&mut h, "kb-4-f1", &sizes);
+    let top = h
+        .state()
+        .model
+        .screens()
+        .last()
+        .and_then(|s| s.kind.clone());
+    assert_ne!(top.as_deref(), Some("editor"), "F1 opened nothing");
+}
