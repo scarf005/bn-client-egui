@@ -362,7 +362,10 @@ impl<M: GameModel> App<M> {
             crate::app::label_resize_handle(ui.ctx(), &log_id, &tr("Resize workspace log"));
             room
         });
-        egui::CentralPanel::no_frame().show(ui, |ui| {
+        // The canvas keeps clear of the columns' edges, so a press there grabs the edge, not a square.
+        let grab = ui.style().interaction.resize_grab_radius_side.ceil() as i8;
+        let clear = egui::Frame::NONE.inner_margin(egui::Margin::same(grab));
+        egui::CentralPanel::no_frame().frame(clear).show(ui, |ui| {
             parts(root, Slot::Canvas)
                 .into_iter()
                 .for_each(|c| self.component(ui, screen, c, out));
