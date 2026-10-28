@@ -759,6 +759,34 @@ fn an_arrow_on_a_canvas_drawn_by_a_drag_runs_nothing() {
     assert_eq!(invoked(&press(&mut ui, &screen, "RIGHT")), None);
 }
 
+/// With nothing focused, the arrows are a drawn canvas's beside a list: they move its focus from its cursor, and
+/// Return draws on the square they reached rather than open the list's row.
+#[test]
+fn unfocused_arrows_move_over_a_drawn_canvas_and_return_draws_there() {
+    let root = json!({"id": "root", "kind": "split", "relation": "peers", "children": [
+        list(vec![row("a", json!({})), row("b", json!({}))]),
+        {"id": "grid", "kind": "grid", "role": "canvas", "drag": "trail", "cols": 2, "rows": 1,
+            "cursor": {"x": 0, "y": 0}, "cells": [
+                {"x": 0, "y": 0, "id": "c0", "enabled": true, "affordance": "paint"},
+                {"x": 1, "y": 0, "id": "c1", "enabled": true, "affordance": "paint"}]}]});
+    let screen = screen_with(
+        root,
+        json!([pick(), {"id": "paint", "label": "Paint", "keys": [], "enabled": true,
+            "expect": "screen", "args": {"row": {"component_id": "grid"}}}]),
+    );
+    let mut ui = Interaction::default();
+    // The first arrow takes the focus onto the canvas at the engine's cursor, the next moves it.
+    assert_eq!(invoked(&press(&mut ui, &screen, "RIGHT")), None);
+    assert_eq!(ui.focus().component_id.as_deref(), Some("grid"));
+    assert_eq!(ui.focus().row_id.as_deref(), Some("c0"));
+    assert_eq!(invoked(&press(&mut ui, &screen, "RIGHT")), None);
+    assert_eq!(ui.focus().row_id.as_deref(), Some("c1"));
+    assert_eq!(
+        invoked(&press(&mut ui, &screen, "RETURN")),
+        Some(("paint", json!({"row": "c1"})))
+    );
+}
+
 /// The native query popup (Yes / No): the engine binds Left, Right and Confirm and keeps its own cursor.
 fn query_popup(cursor: &str) -> Screen {
     let mut screen = screen_with(
