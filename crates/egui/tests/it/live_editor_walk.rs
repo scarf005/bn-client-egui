@@ -227,8 +227,19 @@ fn reveal_rect(h: &mut H, what: &str, rect_of: impl Fn(&H) -> Option<egui::Rect>
     let size = h.ctx.content_rect().size();
     // Over the right column's gutter the wheel scrolls the column; over its middle, the list there.
     let (bar, list) = (gutter(h), egui::pos2(size.x - 120.0, size.y * 0.5));
-    // How many times it was not drawn so far.
+    // How many times it was not drawn so far, and how many wheel turns over the column left it where it was.
     let mut misses = 0u32..;
+    let mut stuck = 0usize;
+    // The column is split into sections that scroll each on its own: the wheel goes over each in turn.
+    let over = |r: Option<egui::Rect>, turn: usize| {
+        let ys = [
+            r.map_or(size.y * 0.5, |r| r.center().y),
+            size.y * 0.25,
+            size.y * 0.5,
+            size.y * 0.75,
+        ];
+        egui::pos2(bar.x, ys[turn % ys.len()].clamp(60.0, size.y - 60.0))
+    };
     for _ in 0..200 {
         // A wheel turn scrolls on over a few frames: where it ends is what counts.
         let mut seen = None;
@@ -241,7 +252,11 @@ fn reveal_rect(h: &mut H, what: &str, rect_of: impl Fn(&H) -> Option<egui::Rect>
             // list, then up it, then down and up the column.
             let phase = misses.next().unwrap_or_default() / 20 % 4;
             let down = phase % 2 == 0;
-            let at = if phase < 2 { list } else { bar };
+            let at = if phase < 2 {
+                list
+            } else {
+                over(None, misses.start as usize / 80)
+            };
             wheel_at(h, at, if down { -150.0 } else { 150.0 });
             continue;
         };
@@ -253,10 +268,12 @@ fn reveal_rect(h: &mut H, what: &str, rect_of: impl Fn(&H) -> Option<egui::Rect>
         } else {
             -150.0
         };
-        wheel_at(h, bar, dy);
-        // A column that scrolls no further leaves it where it was: its own list scrolls it into view.
+        wheel_at(h, over(Some(r), stuck), dy);
+        // A column that scrolls no further leaves it where it was: its own list scrolls it into view, or another
+        // section of the column holds it.
         if rect_of(h) == Some(r) {
             wheel_at(h, r.center(), dy);
+            stuck += 1;
         }
     }
     let seen = rect_of(h);
