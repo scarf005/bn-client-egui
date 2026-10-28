@@ -12,6 +12,8 @@ const LOG_WIDTH: f32 = 240.0;
 /// a grid, the room its whole grid leaves, from the least of these bounds to half the room.
 const SIDE_SHARE: f32 = 0.22;
 const SIDE_WIDTH: (f32, f32) = (360.0, 480.0);
+/// The fewest rows a list of a column is fitted to, so that the column holds as many of its parts as it can.
+const FIT_ROWS: f32 = 8.0;
 /// The height the log's strip first has, which the player can change.
 const LOG_HEIGHT: f32 = 160.0;
 
@@ -42,6 +44,20 @@ fn side_width(ui: &egui::Ui, root: &Split) -> f32 {
     let gap = 2.0 * ui.spacing().item_spacing.x;
     (room.width() - xs.len() as f32 * cell - gap)
         .clamp(SIDE_WIDTH.0, (room.width() / 2.0).max(SIDE_WIDTH.0))
+}
+
+/// The heights of `room` the lists that want `wanted` get: each what it wants up to an even share of what the
+/// others leave, the smallest served first, and up to `least` however little is left.
+fn shares(room: f32, wanted: &[f32], least: f32) -> Vec<f32> {
+    let mut order = (0..wanted.len()).collect::<Vec<_>>();
+    order.sort_by(|a, b| wanted[*a].total_cmp(&wanted[*b]));
+    let mut out = vec![0.0; wanted.len()];
+    let mut left = room.max(0.0);
+    for (served, i) in order.into_iter().enumerate() {
+        out[i] = wanted[i].min((left / (wanted.len() - served) as f32).max(least));
+        left -= out[i];
+    }
+    out
 }
 
 /// Keeps the panel `id` `width` wide as that changes, until the player resizes it: then it keeps the player's.
@@ -330,13 +346,33 @@ impl<M: GameModel> App<M> {
             .id_salt(ui.id().with("column"))
             .auto_shrink([false, false]);
         let room = rect.height();
-        // A list is at most `PEER_ROWS` rows tall, so the parts under a long one stay in reach.
+        // The lists share what the other parts leave of the column, as they took it the frame before, each at
+        // least `FIT_ROWS` rows; until then a list is at most `PEER_ROWS` rows tall, so the parts under a long one
+        // stay in reach.
+        let key = ui.id().with("lists");
+        let (content, fits) = ui
+            .data(|d| d.get_temp::<(f32, Vec<ListFit>)>(key))
+            .unwrap_or_default();
+        let left = room - (content - fits.iter().map(|f| f.taken).sum::<f32>());
+        let least = FIT_ROWS * (tokens::ROW + ui.spacing().item_spacing.y);
+        let wanted = fits.iter().map(|f| f.wanted).collect::<Vec<_>>();
+        let ids = fits.iter().map(|f| f.id.clone());
+        let caps = self
+            .screens
+            .column_caps
+            .replace(ids.zip(shares(left, &wanted, least)).collect());
+        let lists = self.screens.column_lists.take();
         body_scroll(&mut inner, scroll, room, |ui| {
             // A column's lists are palettes, read by their names, as tall as their rows wherever they are.
             let was = self.screens.in_column.replace(true);
+            let top = ui.cursor().top();
             self.with_list_rows(Some(PEER_ROWS), || self.stack(ui, screen, parts, out));
             self.screens.in_column.set(was);
+            let content = ui.min_rect().bottom() - top;
+            ui.data_mut(|d| d.insert_temp(key, (content, self.screens.column_lists.take())));
         });
+        self.screens.column_caps.replace(caps);
+        self.screens.column_lists.replace(lists);
         ui.allocate_rect(rect, egui::Sense::hover());
     }
 
@@ -349,8 +385,10 @@ impl<M: GameModel> App<M> {
         parts: &[&Component],
         out: &mut Vec<Intent>,
     ) {
-        let key = ui.id().with("parts");
+        let (key, follow) = (ui.id().with("parts"), ui.id().with("arrival"));
         let was = ui.data(|d| d.get_temp::<Vec<String>>(key));
+        // The part that arrived and where it was drawn, followed until the column around it settles.
+        let following = ui.data(|d| d.get_temp::<(String, egui::Rect)>(follow));
         let mut arrived = None;
         for c in parts {
             let top = ui.cursor().top();
@@ -363,17 +401,22 @@ impl<M: GameModel> App<M> {
                 }
                 None => self.component(ui, screen, c, out),
             }
-            if was
+            let new = was
                 .as_ref()
-                .is_some_and(|was| !was.iter().any(|id| id == c.id()))
-            {
-                arrived = arrived.or(Some(ui.min_rect().with_min_y(top)));
+                .is_some_and(|was| !was.iter().any(|id| id == c.id()));
+            let followed = following.as_ref().is_some_and(|(id, _)| id == c.id());
+            if new || followed {
+                arrived = arrived.or(Some((c.id().to_string(), ui.min_rect().with_min_y(top))));
             }
         }
         // Asked for after the parts, whose own lists would take the request for themselves.
-        if let Some(drawn) = arrived {
-            let at_once = egui::style::ScrollAnimation::none();
-            ui.scroll_to_rect_animation(drawn, Some(egui::Align::Min), at_once);
+        match arrived {
+            Some((id, drawn)) if following.as_ref().map(|(_, was)| *was) != Some(drawn) => {
+                let at_once = egui::style::ScrollAnimation::none();
+                ui.scroll_to_rect_animation(drawn, Some(egui::Align::Min), at_once);
+                ui.data_mut(|d| d.insert_temp(follow, (id, drawn)));
+            }
+            _ => ui.data_mut(|d| d.remove::<(String, egui::Rect)>(follow)),
         }
         let ids = parts.iter().map(|c| c.id().to_string()).collect::<Vec<_>>();
         ui.data_mut(|d| d.insert_temp(key, ids));

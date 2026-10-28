@@ -171,6 +171,16 @@ impl<M: GameModel> App<M> {
         });
         let list_height =
             self.list_height(ui, step, below, held) - header.map_or(0.0, |h| h + spacing.y);
+        // In a column, the rows take the height the column gives them, so it holds all its parts.
+        let wanted = starts
+            .last()
+            .zip(heights.last())
+            .map_or(0.0, |(start, h)| start + h);
+        let cap = match self.screens.in_column.get() {
+            true => self.screens.column_caps.borrow().get(id).copied(),
+            false => None,
+        };
+        let list_height = cap.map_or(list_height, |cap| cap.min(wanted).max(MIN_ROWS * step));
         // A page is the rows the list has room for.
         let page = ((list_height + spacing.y) / step) as usize;
         self.screens
@@ -215,6 +225,14 @@ impl<M: GameModel> App<M> {
             .take_while(|end| *end <= list_height)
             .last()
             .unwrap_or(list_height);
+        if self.screens.in_column.get() {
+            let fit = ListFit {
+                id: id.clone(),
+                wanted,
+                taken: list_height,
+            };
+            self.screens.column_lists.borrow_mut().push(fit);
+        }
         let mut drawn = 0;
         let body = |body: egui_extras::TableBody| {
             let layout = RowLayout {

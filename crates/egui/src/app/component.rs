@@ -92,8 +92,20 @@ pub(super) struct Screens {
     /// before their values, as palettes, and are as tall as their rows up to `list_rows`, however little of the
     /// column is left below them.
     in_column: std::cell::Cell<bool>,
+    /// The heights the rows of the lists of the column drawn now are given, by list.
+    column_caps: RefCell<HashMap<String, f32>>,
+    /// The heights the rows of the lists of the column drawn now want and take, in the order they are drawn.
+    column_lists: RefCell<Vec<ListFit>>,
     /// The squares a drag crossed that the engine has not taken yet: it holds few commands at once.
     paints: VecDeque<Paint>,
+}
+
+/// The height the rows of the list `id` want, all of those it holds, and the height they take.
+#[derive(Clone, Default)]
+struct ListFit {
+    id: String,
+    wanted: f32,
+    taken: f32,
 }
 
 /// A square of a canvas grid a drag runs its affordance on.
