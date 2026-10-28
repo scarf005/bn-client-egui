@@ -83,8 +83,12 @@ impl Filter {
 
     /// The filter of `field`'s box.
     fn of(field: &FormField) -> Self {
-        let bound =
-            |n: &Option<serde_json::Number>| n.as_ref().and_then(serde_json::Number::as_i64);
+        // Written as `359` or as `359.0`.
+        let bound = |n: &Option<serde_json::Number>| {
+            let n = n.as_ref()?;
+            n.as_i64()
+                .or_else(|| n.as_f64().filter(|f| f.fract() == 0.0).map(|f| f as i64))
+        };
         match field.kind {
             FieldKind::Integer => Filter::Integer {
                 min: bound(&field.min),
