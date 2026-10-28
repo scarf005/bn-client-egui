@@ -307,7 +307,12 @@ impl<M: GameModel> App<M> {
             egui::Panel::bottom(id("status"))
                 .resizable(false)
                 .show(ui, |ui| {
+                    // The news line is kept when there is none, so the canvas does not move as the news comes and goes.
+                    let before = ui.cursor().top();
                     strip_news.iter().for_each(|t| self.text_block(ui, t));
+                    let line =
+                        ui.text_style_height(&egui::TextStyle::Body) + ui.spacing().item_spacing.y;
+                    ui.add_space((line - (ui.cursor().top() - before)).max(0.0));
                     if !under {
                         self.question(ui, screen, out);
                         if let Some(denial) = &self.screens.denial {

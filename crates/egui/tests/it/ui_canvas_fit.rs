@@ -156,3 +156,21 @@ fn a_refused_square_says_why_on_hover_and_still_takes_its_click() {
     }
     assert_eq!(painted(&script), ["square:3,3"]);
 }
+
+#[test]
+fn the_canvas_keeps_its_place_when_the_news_in_the_status_strip_comes_and_goes() {
+    for size in [SMALL, LARGE] {
+        let mut tops = vec![];
+        for news in [false, true] {
+            let mut screen = screen(5);
+            if news {
+                screen["root"]["children"].as_array_mut().unwrap().push(json!({
+                    "id": "ed:news", "kind": "text", "slot": "log", "markup": "Installed frame at 1,0.",
+                    "tone": "good"}));
+            }
+            let (h, _) = open_sized(screen, size);
+            tops.push(square(&h, 0, 0).top());
+        }
+        assert_eq!(tops[0], tops[1], "at {size:?}");
+    }
+}
