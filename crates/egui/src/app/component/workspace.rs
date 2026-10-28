@@ -200,6 +200,8 @@ impl<M: GameModel> App<M> {
             format!("workspace-side {}", screen.screen_id),
             format!("workspace-log {}", screen.screen_id),
         );
+        // The canvas's place in the keyboard's walk comes before the columns' widgets.
+        self.canvas_stop(ui, screen, root, out);
         let status = parts(root, Slot::Status);
         let footer_width = Self::footer_width(ui, footer, true);
         let asking = self.screens.interaction.ask().is_some() || self.screens.denial.is_some();
@@ -331,6 +333,54 @@ impl<M: GameModel> App<M> {
         });
         if let Some(child) = &panel.child {
             self.component(ui, screen, child, out);
+        }
+    }
+
+    /// The canvas as one stop of the keyboard's walk, where it was drawn the frame before: while it has the
+    /// keyboard, the arrows and Return are its squares' (the interaction core's focus is kept on it, at the
+    /// engine's cursor until the arrows move it).
+    fn canvas_stop(&self, ui: &mut egui::Ui, screen: &Screen, root: &Split, out: &mut Vec<Intent>) {
+        let grid = parts(root, Slot::Canvas)
+            .into_iter()
+            .flat_map(Component::nested)
+            .find_map(|c| match c {
+                Component::Grid(grid) if grid.role == Some(GridRole::Canvas) => Some(grid),
+                _ => None,
+            });
+        let Some(grid) = grid else {
+            return;
+        };
+        let view_key = egui::Id::new(("grid view", &screen.screen_id, &grid.head.id));
+        let Some(view) = ui.data(|d| d.get_temp::<canvas::View>(view_key)) else {
+            return;
+        };
+        let id = view_key.with("keyboard");
+        let stop = ui.interact(view.rect, id, egui::Sense::FOCUSABLE);
+        stop.widget_info(|| WidgetInfo::labeled(WidgetType::Other, true, tr("Canvas")));
+        if !stop.has_focus() {
+            return;
+        }
+        let arrows = egui::EventFilter {
+            horizontal_arrows: true,
+            vertical_arrows: true,
+            ..Default::default()
+        };
+        ui.memory_mut(|m| m.set_focus_lock_filter(id, arrows));
+        let focus = self.screens.interaction.focus();
+        if focus.component_id.as_deref() == Some(&grid.head.id) {
+            return;
+        }
+        let at = |c: &&bn_client_core::protocol::GridCell| {
+            grid.cursor
+                .is_some_and(|at| (at.x, at.y) == (c.x as i32, c.y as i32))
+        };
+        let cells = grid.cells.iter().filter(|c| c.id.is_some());
+        let first = cells.clone().find(at).or(cells.clone().next());
+        if let Some(row) = first.and_then(|c| c.id.clone()) {
+            out.push(Intent::Focus {
+                component: grid.head.id.clone(),
+                row,
+            });
         }
     }
 

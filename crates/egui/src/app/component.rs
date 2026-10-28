@@ -1170,6 +1170,8 @@ impl<M: GameModel> App<M> {
         let base = fit.clamp(GRID_CELL, GRID_MAX_CELL);
         let limits = ((fit / base).min(1.0), GRID_ZOOM_MAX.max(fit / base));
         let view_key = egui::Id::new(("grid view", &screen.screen_id, &grid.head.id));
+        // The workspace's stop for the keyboard over the canvas (`canvas_stop`).
+        let keyboard = ui.memory(|m| m.has_focus(view_key.with("keyboard")));
         let view = ui
             .data(|d| d.get_temp::<canvas::View>(view_key))
             .filter(|v| v.span == (xs.len(), ys.len()));
@@ -1233,7 +1235,11 @@ impl<M: GameModel> App<M> {
                 if let Some(pan) = pan.filter(|_| ui.rect_contains_pointer(ui.clip_rect())) {
                     ui.scroll_with_delta(pan);
                 }
-                let cells = GridCells { size, glyph_size };
+                let cells = GridCells {
+                    size,
+                    glyph_size,
+                    keyboard,
+                };
                 // The cells sit `lead` in from the corner, and the area runs on `tail` past them.
                 let corner = ui.cursor().min;
                 let laid = ui.scope_builder(
@@ -1265,7 +1271,11 @@ impl<M: GameModel> App<M> {
             ui.data_mut(|d| d.insert_temp(view_key, view));
             self.hover_outline(ui, shown.inner_rect, &squares);
         } else {
-            let cells = GridCells { size, glyph_size };
+            let cells = GridCells {
+                size,
+                glyph_size,
+                keyboard,
+            };
             layout = Some(self.grid_cells(ui, grid, cells, &mut squares, out));
         }
         if let Some(mode) = grid.drag {
@@ -1299,12 +1309,21 @@ impl<M: GameModel> App<M> {
         &self,
         ui: &mut egui::Ui,
         grid: &Grid,
-        GridCells { size, glyph_size }: GridCells,
+        GridCells {
+            size,
+            glyph_size,
+            keyboard,
+        }: GridCells,
         squares: &mut HashMap<drag::Square, (egui::Rect, String, String)>,
         out: &mut Vec<Intent>,
     ) -> GridLayout {
         let (xs, ys) = drawn_span(grid);
         let opacity = ui.opacity();
+        let focus = self.screens.interaction.focus();
+        let focus = focus
+            .row_id
+            .as_deref()
+            .filter(|_| keyboard && focus.component_id.as_deref() == Some(&grid.head.id));
         let drawn = ui.scope(|ui| {
             ui.spacing_mut().item_spacing = egui::Vec2::ZERO;
             for y in ys.clone() {
@@ -1341,6 +1360,8 @@ impl<M: GameModel> App<M> {
                             shown = shown.color(color);
                         }
                         let marked = cell.selected == Some(true) || at_cursor;
+                        // The square the keyboard reached is outlined over its sprites.
+                        let reached = focus.is_some() && cell.id.as_deref() == focus;
                         // A marked cell keeps a rim of its highlight around the sprite.
                         let queue = |ui: &egui::Ui, rect: egui::Rect| {
                             if let Some(cell) = sprite.clone() {
@@ -1366,6 +1387,13 @@ impl<M: GameModel> App<M> {
                             egui::Button::new(shown).min_size(size).selected(marked),
                         );
                         queue(ui, button.rect);
+                        if reached {
+                            let ring = outline_shapes(button.rect, tokens::TEXT);
+                            self.screens
+                                .rules
+                                .borrow_mut()
+                                .push((ui.painter().clone(), ring));
+                        }
                         // An empty square to draw on shows as an outlined one, not a gap in the grid;
                         // a blank glyph that shows something, such as open air, is no empty square.
                         if glyph.trim().is_empty() && looks.is_empty() {
@@ -1661,6 +1689,8 @@ struct GridCells {
     size: egui::Vec2,
     /// Side of the glyphs.
     glyph_size: f32,
+    /// Whether the keyboard is on the grid, which then outlines the square its focus reached.
+    keyboard: bool,
 }
 
 /// The columns and rows of `grid` from its first to its last cell or cursor: the empty edges around them draw
