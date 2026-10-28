@@ -645,10 +645,28 @@ impl<M: GameModel> App<M> {
             .flat_map(|id| row_actions(screen, id))
             .map(|a| a.id.as_str())
             .collect::<HashSet<_>>();
+        // An action on a grid's square runs from the squares whose cells name it, never from a button.
+        let grids = screen.root.as_ref().map_or(vec![], |root| {
+            root.nested()
+                .into_iter()
+                .filter_map(|c| match c {
+                    Component::Grid(g) => Some(g.head.id.as_str()),
+                    _ => None,
+                })
+                .collect()
+        });
+        let on_square = |a: &Affordance| {
+            a.args
+                .as_ref()
+                .and_then(|args| args.row.as_ref())
+                .is_some_and(|row| grids.contains(&row.component_id.as_str()))
+        };
         let rest = screen
             .affordances
             .iter()
-            .filter(|a| !named.contains(a.id.as_str()) && !listed.contains(a.id.as_str()))
+            .filter(|a| {
+                !named.contains(a.id.as_str()) && !listed.contains(a.id.as_str()) && !on_square(a)
+            })
             .collect::<Vec<_>>();
         // The help sits in the title bar, or last in the footer of a window that has none.
         let titled = interaction::with_role(screen, AffordanceRole::Help)
