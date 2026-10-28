@@ -60,6 +60,7 @@ mod ui_editor_keys;
 mod ui_editor_levels;
 mod ui_editor_notice;
 mod ui_editor_special;
+mod ui_editor_tab;
 mod ui_editor_window;
 mod ui_effects;
 mod ui_empty_list;
