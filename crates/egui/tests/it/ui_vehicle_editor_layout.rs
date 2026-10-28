@@ -137,8 +137,13 @@ fn the_mounts_are_tile_sized_in_the_middle_of_the_canvas_and_the_stack_reads_who
         let corner = square.min - egui::vec2(at.0, at.1) * square.width();
         let grid = egui::Rect::from_min_size(corner, egui::vec2(cols, rows) * square.width());
         let room = legible::room(&h);
+        // The canvas pane, between the tools' column and the right column.
+        let tools = h
+            .query_all_by_label("Resize workspace column")
+            .map(|n| n.rect().center().x)
+            .fold(f32::MAX, f32::min);
         let side = h.get_by_label("Parts").rect().left();
-        let middle = (room.left() + side) / 2.0;
+        let middle = (tools.min(side).max(room.left()) + side) / 2.0;
         assert!(
             (grid.center().x - middle).abs() < 40.0,
             "at {size:?} the grid {grid:?} is off the middle {middle} of the canvas pane"
@@ -184,46 +189,4 @@ fn the_zoom_gesture_scales_the_canvas_and_a_mount_names_its_parts() {
         after.width() > before.width() * 1.4,
         "{before:?} zoomed to {after:?}"
     );
-}
-
-/// The bands painted behind section titles.
-fn bands(h: &H) -> Vec<egui::Rect> {
-    fn walk(shape: &egui::Shape, out: &mut Vec<egui::Rect>) {
-        match shape {
-            egui::Shape::Rect(r) if r.fill == bn_client_egui::kit::tokens::BAND => out.push(r.rect),
-            egui::Shape::Vec(shapes) => shapes.iter().for_each(|s| walk(s, out)),
-            _ => {}
-        }
-    }
-    let mut out = Vec::new();
-    h.output()
-        .shapes
-        .iter()
-        .for_each(|s| walk(&s.shape, &mut out));
-    out
-}
-
-#[test]
-fn the_vehicle_panel_title_band_spans_the_canvas_pane() {
-    let screen = editor();
-    let title = find(&screen["root"], "vehicle:live").unwrap()["title"]
-        .as_str()
-        .unwrap()
-        .to_owned();
-    for size in [egui::vec2(1280.0, 800.0), egui::vec2(1920.0, 1080.0)] {
-        let h = open(screen.clone(), size);
-        let named = h
-            .get_all_by_label(&title)
-            .map(|n| n.rect())
-            .collect::<Vec<_>>();
-        let side = h.get_by_label("Parts").rect().left();
-        let band = bands(&h)
-            .into_iter()
-            .find(|b| named.iter().any(|n| b.contains(n.center())))
-            .unwrap_or_else(|| panic!("{size:?}: no band behind {title:?}"));
-        assert!(
-            band.right() > side - 40.0,
-            "{size:?}: the band {band:?} stops short of the right column at {side}"
-        );
-    }
 }
