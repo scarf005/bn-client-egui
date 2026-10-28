@@ -251,16 +251,47 @@ impl<M: GameModel> App<M> {
         // The canvas's place in the keyboard's walk comes before the columns' widgets.
         self.canvas_stop(ui, screen, root, out);
         let status = parts(root, Slot::Status);
+        // The engine's news, a toned text of the log, is shown where the player acted: under the form they sent,
+        // else by the status line.
+        let (news, log) = parts(root, Slot::Log)
+            .into_iter()
+            .partition::<Vec<_>, _>(|c| matches!(c, Component::Text(t) if t.tone.is_some()));
+        let news = news
+            .into_iter()
+            .filter_map(|c| match c {
+                Component::Text(t) => Some(t.clone()),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        let sent = self
+            .screens
+            .sent_form
+            .as_ref()
+            .filter(|(at, form)| {
+                at == &screen.screen_id && screen.root.as_ref().and_then(|r| r.find(form)).is_some()
+            })
+            .map(|(_, form)| form.clone());
+        let strip_news = match (&sent, news.is_empty()) {
+            (Some(form), false) => {
+                self.screens.news.replace(Some((form.clone(), news)));
+                vec![]
+            }
+            _ => {
+                self.screens.news.replace(None);
+                news
+            }
+        };
         let footer_width = Self::footer_width(ui, footer, true);
         // The question and the refusal are the top screen's, which a workspace under it does not show.
         let under = self.screens.under.get();
         let asking =
             !under && (self.screens.interaction.ask().is_some() || self.screens.denial.is_some());
         // No strip at the bottom when it would be empty.
-        if !status.is_empty() || footer_width > 0.0 || asking {
+        if !status.is_empty() || footer_width > 0.0 || asking || !strip_news.is_empty() {
             egui::Panel::bottom(id("status"))
                 .resizable(false)
                 .show(ui, |ui| {
+                    strip_news.iter().for_each(|t| self.text_block(ui, t));
                     if !under {
                         self.question(ui, screen, out);
                         if let Some(denial) = &self.screens.denial {
@@ -290,7 +321,7 @@ impl<M: GameModel> App<M> {
                 });
         }
         // Without tools the log takes the left column, and the canvas the whole height.
-        let (tools, log) = (parts(root, Slot::Tools), parts(root, Slot::Log));
+        let tools = parts(root, Slot::Tools);
         let left_is_log = tools.is_empty();
         let (left, left_width, log) = match left_is_log {
             true => (log, LOG_WIDTH, vec![]),

@@ -100,6 +100,11 @@ pub(super) struct Screens {
     paints: VecDeque<Paint>,
     /// A workspace under the top screen is being drawn: it is shown and takes no input.
     under: std::cell::Cell<bool>,
+    /// The form the player last sent or filled, by screen and form id, while nothing else was run since: the
+    /// engine's news is shown under it.
+    sent_form: Option<(String, String)>,
+    /// The engine's news to show under the form of this id, this frame.
+    news: RefCell<Option<(String, Vec<TextBlock>)>>,
 }
 
 /// The height the rows of the list `id` want, all of those it holds, and the height they take.
@@ -191,6 +196,33 @@ enum Intent {
     Pane(String),
     Confirm,
     Cancel,
+}
+
+/// Which form `intent` acts on, when it runs something: none for an action of no form; nothing to say for one
+/// that runs nothing.
+fn acted_form(screen: &Screen, intent: &Intent) -> Option<Option<String>> {
+    let form_of = |id: &str| {
+        screen.components().into_iter().find_map(|c| match c {
+            Component::Form(form)
+                if form.submit.as_deref() == Some(id)
+                    || form.head.affordances.iter().any(|a| a == id) =>
+            {
+                Some(form.head.id.clone())
+            }
+            _ => None,
+        })
+    };
+    match intent {
+        Intent::Fill { form, .. } => Some(Some(form.clone())),
+        Intent::Run(id) => Some(form_of(id)),
+        Intent::Paint(_)
+        | Intent::Move { .. }
+        | Intent::Search { .. }
+        | Intent::Reach(_)
+        | Intent::Pane(_)
+        | Intent::Confirm => Some(None),
+        _ => None,
+    }
 }
 
 fn find<'a>(screen: &'a Screen, id: &str) -> Option<&'a Affordance> {
@@ -519,6 +551,9 @@ impl<M: GameModel> App<M> {
                 .screens
                 .interaction
                 .press(top, &key, &page, &|list| model.rows(list));
+            if out.invoke.is_some() {
+                self.screens.sent_form = None;
+            }
             self.settle(out);
         }
     }
@@ -561,10 +596,13 @@ impl<M: GameModel> App<M> {
 
     /// Hands what the player did to the interaction core.
     fn apply(&mut self, intent: Intent) {
-        let interaction = &mut self.screens.interaction;
         let Some(top) = interaction::described(self.model.screens()) else {
             return;
         };
+        if let Some(form) = acted_form(top, &intent) {
+            self.screens.sent_form = form.map(|form| (top.screen_id.clone(), form));
+        }
+        let interaction = &mut self.screens.interaction;
         let out = match intent {
             Intent::More(component) => return self.model.more_rows(&component),
             Intent::Focus { component, row } => return interaction.focus_row(&component, &row),
@@ -890,6 +928,17 @@ impl<M: GameModel> App<M> {
         }
         if !matches!(c, Component::List(_)) {
             self.component_buttons(ui, screen, c, None, out);
+        }
+        // The engine's news after the form was sent, under its buttons.
+        if let Component::Form(form) = c
+            && let Some((_, news)) = self
+                .screens
+                .news
+                .borrow()
+                .as_ref()
+                .filter(|(id, _)| id == &form.head.id)
+        {
+            news.iter().for_each(|t| self.text_block(ui, t));
         }
     }
 
