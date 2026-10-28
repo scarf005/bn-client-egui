@@ -128,3 +128,37 @@ fn tab_walks_the_vehicle_editor_in_reading_order_and_names_every_stop() {
         60,
     );
 }
+
+/// The search boxes of `screen` are named by the headings of the lists they search, never "Search".
+fn searches_named(screen: &Value, headings: &[&str]) {
+    let h = shown(screen, SIZES[0]);
+    let boxes = h
+        .root()
+        .children_recursive()
+        .filter(|n| n.accesskit_node().role() == egui::accesskit::Role::TextInput)
+        .filter_map(|n| n.accesskit_node().label())
+        .collect::<Vec<_>>();
+    for heading in headings {
+        assert!(
+            boxes.iter().any(|b| b == heading),
+            "no search box named {heading:?}: {boxes:?}"
+        );
+    }
+    assert!(!boxes.iter().any(|b| b == "Search"), "{boxes:?}");
+}
+
+#[test]
+fn the_map_editors_search_boxes_are_named_by_their_lists_headings() {
+    let screen =
+        crate::ui_window_class::example("editor", "map editor with a drawn room and a new mapping");
+    searches_named(&screen, &["Catalog", "Files"]);
+}
+
+#[test]
+fn the_vehicle_editors_search_boxes_are_named_by_their_lists_headings() {
+    let screen = crate::ui_window_class::example(
+        "vehicle_editor",
+        "vehicle editor with a prototype open on a mount",
+    );
+    searches_named(&screen, &["Vehicles", "Parts"]);
+}
