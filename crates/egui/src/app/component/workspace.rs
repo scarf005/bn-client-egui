@@ -204,10 +204,23 @@ impl<M: GameModel> App<M> {
                     if let Some(key) = a.keys.first() {
                         item = item.shortcut_text(key);
                     }
-                    let button = ui.add_enabled(availability.enabled, item);
+                    // An item that is off looks off, yet takes a click and Return, which ask all the same for the
+                    // core to show the engine's reason where a refusal shows.
+                    let button = ui
+                        .scope(|ui| {
+                            if !availability.enabled {
+                                ui.multiply_opacity(ui.visuals().disabled_alpha());
+                            }
+                            ui.add(item)
+                        })
+                        .inner;
+                    if !availability.enabled {
+                        ui.ctx()
+                            .accesskit_node_builder(button.id, |b| b.set_disabled());
+                    }
                     let button = described(ui.ctx(), button, a);
                     let button = match (availability.enabled, availability.denial) {
-                        (false, Some(why)) => button.on_disabled_hover_text(why.shown()),
+                        (false, Some(why)) => button.on_hover_text(why.shown()),
                         _ => button,
                     };
                     if button.clicked() {
