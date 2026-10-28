@@ -880,3 +880,27 @@ fn the_bar_of_a_workspace_under_a_screen_runs_nothing_and_leaves_the_keys_to_tha
         );
     }
 }
+
+#[test]
+fn ctrl_f_over_a_workspace_with_a_search_box_focuses_the_top_screens_box() {
+    let top = crate::ui_window_class::example("generic", "filterable list screen");
+    let mut under = workspace();
+    under["root"]["children"][2]["filterable"] = true.into();
+    under["root"]["children"][2]["affordances"] = json!(["ws:filter"]);
+    under["affordances"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({"id": "ws:filter", "label": "Filter",
+        "keys": [], "enabled": true, "expect": "boundary", "args": {"text": {}}}));
+    let (mut h, script) = over_workspace(under, top, egui::vec2(1290.0, 830.0));
+    assert_eq!(h.get_all_by_label("Search").count(), 2, "two search boxes");
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::F);
+    h.run_steps(3);
+    h.event(egui::Event::Text("spawn".into()));
+    h.run_steps(3);
+    assert!(
+        invoked(&script).contains(&"bn:filter:list:choices".to_string()),
+        "the typing went elsewhere: {:?}",
+        invoked(&script)
+    );
+}
