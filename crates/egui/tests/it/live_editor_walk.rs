@@ -2865,6 +2865,21 @@ fn a_modder_opens_draws_undoes_saves_tests_and_leaves_the_map_editor_workspace()
     assert_eq!(glyph(&h, 2, 10), Some('#'));
     shot_both(&mut h, "ws-map-07-undone");
 
+    // What can spawn on squares marked by the select tool, from the View menu: the list comes into view.
+    click_tab(&mut h, "Select");
+    paint(&mut h, 4, 9);
+    paint(&mut h, 8, 12);
+    menu(&mut h, "View", "What can spawn here");
+    rest(&mut h);
+    shot_both(&mut h, "ws-map-07b-loot");
+    let top_screen = h.state().model.screens().last().unwrap();
+    let Some(Component::List(loot)) = top_screen.root.as_ref().unwrap().find("editor:loot") else {
+        panic!("no loot list: {:#?}", labels(&h));
+    };
+    let first = loot.rows.first().expect("a kind of item").label.shown();
+    let at = find(&h, &first).expect("the first kind drawn");
+    assert!(in_view(&h, at), "{first} at {at:?}");
+
     // Saved as a mod file from the File menu, which asks for the path as the footer would.
     let path = crate::common::live::profile_dir().join("mods/zz_ws_house.json");
     menu(&mut h, "File", "Save as");
