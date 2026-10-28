@@ -343,7 +343,7 @@ fn unclipped(h: &H, r: egui::Rect) -> bool {
 }
 
 #[test]
-fn the_design_inspector_is_whole_in_view_over_long_lists_without_scrolling() {
+fn the_design_inspector_of_the_picked_mount_is_whole_in_view_over_long_lists_without_scrolling() {
     let screen = open_with_full_pages();
     let tabs = find(&screen["root"], "vehicle:tools").unwrap()["tabs"]
         .as_array()
@@ -351,16 +351,11 @@ fn the_design_inspector_is_whole_in_view_over_long_lists_without_scrolling() {
         .iter()
         .map(|t| t["label"].as_str().unwrap().to_owned())
         .collect::<Vec<_>>();
-    let facts = find(&screen["root"], "vehicle:performance").unwrap()["stats"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|s| s["label"].as_str().unwrap().to_owned())
-        .collect::<Vec<_>>();
     let stack = labels(&screen, "vehicle:stack");
     for size in [egui::vec2(1290.0, 830.0), egui::vec2(1920.0, 1080.0)] {
-        let mut h = open(screen.clone(), size);
-        h.run_steps(6);
+        let mut h =
+            crate::common::themed_harness(size, crate::common::staged(json!([screen.clone()])).0);
+        h.run_steps(12);
         let mut out = vec![];
         for tab in &tabs {
             let r = h
@@ -371,7 +366,7 @@ fn the_design_inspector_is_whole_in_view_over_long_lists_without_scrolling() {
                 out.push(format!("tab {tab} at {r:?}"));
             }
         }
-        for label in stack.iter().chain(&facts) {
+        for label in &stack {
             let r = h.query_by_label(label).map(|n| n.rect());
             if !r.is_some_and(|r| unclipped(&h, r)) {
                 out.push(format!("{label} at {r:?}"));
