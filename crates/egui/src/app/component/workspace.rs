@@ -14,8 +14,34 @@ const SIDE_SHARE: f32 = 0.22;
 const SIDE_WIDTH: (f32, f32) = (360.0, 480.0);
 /// The fewest rows a list of a column is fitted to, so that the column holds as many of its parts as it can.
 const FIT_ROWS: f32 = 8.0;
+/// The rows of a list a section of a column is sure to show of its first part: lists shrink to these before the
+/// heads of the other sections leave the view.
+const HEAD_ROWS: f32 = 3.0;
 /// The height the log's strip first has, which the player can change.
 const LOG_HEIGHT: f32 = 160.0;
+
+/// The height a column's first part takes, and how many lists it holds.
+#[derive(Clone, Copy, Default)]
+struct First {
+    height: f32,
+    lists: usize,
+}
+
+/// How tall a column is with every row of its lists, and how tall its first part is with its lists at their fewest
+/// rows.
+#[derive(Clone, Copy)]
+struct ColumnHeight {
+    whole: f32,
+    first: f32,
+}
+
+impl ColumnHeight {
+    /// A column not drawn yet.
+    const UNKNOWN: Self = Self {
+        whole: f32::INFINITY,
+        first: 0.0,
+    };
+}
 
 /// The parts of `root` in `slot`; a part with none is the inspector.
 fn parts(root: &Split, slot: Slot) -> Vec<&Component> {
@@ -421,7 +447,7 @@ impl<M: GameModel> App<M> {
         screen: &Screen,
         parts: &[&Component],
         out: &mut Vec<Intent>,
-    ) -> f32 {
+    ) -> ColumnHeight {
         let rect = ui.available_rect_before_wrap();
         let mut inner = ui.new_child(egui::UiBuilder::new().max_rect(rect));
         inner.set_clip_rect(rect.intersect(ui.clip_rect()));
@@ -433,8 +459,8 @@ impl<M: GameModel> App<M> {
         // least `FIT_ROWS` rows; until then a list is at most `PEER_ROWS` rows tall, so the parts under a long one
         // stay in reach.
         let key = ui.id().with("lists");
-        let (content, fits) = ui
-            .data(|d| d.get_temp::<(f32, Vec<ListFit>)>(key))
+        let (content, fits, _) = ui
+            .data(|d| d.get_temp::<(f32, Vec<ListFit>, First)>(key))
             .unwrap_or_default();
         let left = room - (content - fits.iter().map(|f| f.taken).sum::<f32>());
         let least = FIT_ROWS * (tokens::ROW + ui.spacing().item_spacing.y);
@@ -449,24 +475,31 @@ impl<M: GameModel> App<M> {
             // A column's lists are palettes, read by their names, as tall as their rows wherever they are.
             let was = self.screens.in_column.replace(true);
             let top = ui.cursor().top();
-            self.with_list_rows(Some(PEER_ROWS), || self.stack(ui, screen, parts, out));
+            let first = self.with_list_rows(Some(PEER_ROWS), || self.stack(ui, screen, parts, out));
             self.screens.in_column.set(was);
             let content = ui.min_rect().bottom() - top;
-            ui.data_mut(|d| d.insert_temp(key, (content, self.screens.column_lists.take())));
+            let fits = self.screens.column_lists.take();
+            ui.data_mut(|d| d.insert_temp(key, (content, fits, first)));
         });
         self.screens.column_caps.replace(caps);
         self.screens.column_lists.replace(lists);
         ui.allocate_rect(rect, egui::Sense::hover());
-        // As tall as its parts are with every row of their lists.
-        let (content, fits) = ui
-            .data(|d| d.get_temp::<(f32, Vec<ListFit>)>(key))
+        let (content, fits, first) = ui
+            .data(|d| d.get_temp::<(f32, Vec<ListFit>, First)>(key))
             .unwrap_or_default();
-        content + fits.iter().map(|f| f.wanted - f.taken).sum::<f32>()
+        // As tall as its parts are with every row of their lists, and as its first part is with its lists at their
+        // fewest rows.
+        let fewest = HEAD_ROWS * (tokens::ROW + ui.spacing().item_spacing.y);
+        let shrunk = |f: &ListFit| f.wanted.min(fewest) - f.taken;
+        ColumnHeight {
+            whole: content + fits.iter().map(|f| f.wanted - f.taken).sum::<f32>(),
+            first: first.height + fits.iter().take(first.lists).map(shrunk).sum::<f32>(),
+        }
     }
 
-    /// `groups` one above the other in the room `ui` has, each a column of its own that scrolls: each is as tall as
-    /// its parts want up to an even share of what the others leave, so that the start of every one is in view however
-    /// long the others are.
+    /// `groups` one above the other in the room `ui` has, each a column of its own that scrolls. Each first gets the
+    /// height of its first part whole, with its lists at their fewest rows, then what its parts want up to an even
+    /// share of what the others leave: the head of every group is in view however long the others are.
     fn sections(
         &self,
         ui: &mut egui::Ui,
@@ -480,13 +513,26 @@ impl<M: GameModel> App<M> {
         let room = rect.height() - gap * groups.len().saturating_sub(1) as f32;
         let key = ui.id().with("sections");
         // Until a section is drawn, what it wants is not known: they share the room evenly.
-        let wanted = ui
-            .data(|d| d.get_temp::<Vec<f32>>(key))
-            .filter(|w| w.len() == groups.len())
-            .unwrap_or_else(|| vec![f32::INFINITY; groups.len()]);
+        let heights = ui
+            .data(|d| d.get_temp::<Vec<ColumnHeight>>(key))
+            .filter(|h| h.len() == groups.len())
+            .unwrap_or_else(|| vec![ColumnHeight::UNKNOWN; groups.len()]);
+        let firsts = heights.iter().map(|h| h.first).collect::<Vec<_>>();
+        let heads = firsts.iter().sum::<f32>();
+        let given = match heads <= room {
+            true => {
+                let more = heights
+                    .iter()
+                    .map(|h| h.whole - h.first)
+                    .collect::<Vec<_>>();
+                let rest = shares(room - heads, &more, 0.0);
+                firsts.iter().zip(rest).map(|(a, b)| a + b).collect()
+            }
+            false => shares(room, &firsts, 0.0),
+        };
         let mut top = rect.top();
-        let mut natural = vec![];
-        for (i, (group, height)) in groups.iter().zip(shares(room, &wanted, 0.0)).enumerate() {
+        let mut drawn = vec![];
+        for (i, (group, height)) in groups.iter().zip(given).enumerate() {
             let slice = egui::Rect::from_min_size(
                 egui::pos2(rect.left(), top),
                 egui::vec2(rect.width(), height),
@@ -496,10 +542,10 @@ impl<M: GameModel> App<M> {
                     .id_salt(("section", i))
                     .max_rect(slice),
             );
-            natural.push(self.column(&mut section, screen, group, out));
+            drawn.push(self.column(&mut section, screen, group, out));
             top += height + gap;
         }
-        ui.data_mut(|d| d.insert_temp(key, natural));
+        ui.data_mut(|d| d.insert_temp(key, drawn));
         ui.allocate_rect(rect, egui::Sense::hover());
     }
 
@@ -511,13 +557,14 @@ impl<M: GameModel> App<M> {
         screen: &Screen,
         parts: &[&Component],
         out: &mut Vec<Intent>,
-    ) {
+    ) -> First {
         let (key, follow) = (ui.id().with("parts"), ui.id().with("arrival"));
         let was = ui.data(|d| d.get_temp::<Vec<String>>(key));
         // The part that arrived and where it was drawn, followed until the column around it settles.
         let following = ui.data(|d| d.get_temp::<(String, egui::Rect)>(follow));
         let mut arrived = None;
-        for c in parts {
+        let mut first = First::default();
+        for (i, c) in parts.iter().enumerate() {
             let top = ui.cursor().top();
             match &c.head().label {
                 Some(label) => {
@@ -527,6 +574,12 @@ impl<M: GameModel> App<M> {
                         .show(ui, |ui| self.component_body(ui, screen, c, out));
                 }
                 None => self.component(ui, screen, c, out),
+            }
+            if i == 0 {
+                first = First {
+                    height: ui.min_rect().bottom() - top,
+                    lists: self.screens.column_lists.borrow().len(),
+                };
             }
             let new = was
                 .as_ref()
@@ -547,5 +600,6 @@ impl<M: GameModel> App<M> {
         }
         let ids = parts.iter().map(|c| c.id().to_string()).collect::<Vec<_>>();
         ui.data_mut(|d| d.insert_temp(key, ids));
+        first
     }
 }
