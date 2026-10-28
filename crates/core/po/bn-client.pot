@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: bn-client\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-28 14:28+0900\n"
+"POT-Creation-Date: 2026-10-28 14:34+0900\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -65,36 +65,52 @@ msgstr ""
 msgid "The engine stopped."
 msgstr ""
 
-#: crates/core/src/interaction.rs:118
+#: crates/core/src/interaction.rs:123
 msgid "Not available."
 msgstr ""
 
-#: crates/core/src/interaction.rs:119
+#: crates/core/src/interaction.rs:124
 msgid "Not for this row."
 msgstr ""
 
-#: crates/core/src/interaction.rs:120
+#: crates/core/src/interaction.rs:125
 msgid "Choose a row first."
 msgstr ""
 
-#: crates/core/src/interaction.rs:121
+#: crates/core/src/interaction.rs:126
 msgid "Enter a count first."
 msgstr ""
 
-#: crates/core/src/interaction.rs:122
+#: crates/core/src/interaction.rs:127
 msgid "Enter text first."
 msgstr ""
 
-#: crates/core/src/interaction.rs:123
+#: crates/core/src/interaction.rs:128
 msgid "Choose a square first."
 msgstr ""
 
-#: crates/core/src/interaction.rs:124
+#: crates/core/src/interaction.rs:129
 msgid "Choose a pane first."
 msgstr ""
 
-#: crates/core/src/interaction.rs:125
+#: crates/core/src/interaction.rs:130
 msgid "Busy."
+msgstr ""
+
+#: crates/core/src/interaction.rs:133
+msgid "Enter a whole number from %d to %d."
+msgstr ""
+
+#: crates/core/src/interaction.rs:137
+msgid "Enter a whole number of at least %d."
+msgstr ""
+
+#: crates/core/src/interaction.rs:140
+msgid "Enter a whole number of at most %d."
+msgstr ""
+
+#: crates/core/src/interaction.rs:142
+msgid "Enter a whole number."
 msgstr ""
 
 #: crates/core/src/launch.rs:115

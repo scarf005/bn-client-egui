@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: bn-client\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-28 14:28+0900\n"
+"POT-Creation-Date: 2026-10-28 14:34+0900\n"
 "PO-Revision-Date: 2026-10-18 09:30+0900\n"
 "Language-Team: Korean\n"
 "Language: ko\n"
@@ -60,37 +60,53 @@ msgstr "엔진이 멈췄습니다(%s)."
 msgid "The engine stopped."
 msgstr "엔진이 멈췄습니다."
 
-#: crates/core/src/interaction.rs:118
+#: crates/core/src/interaction.rs:123
 msgid "Not available."
 msgstr "사용할 수 없습니다."
 
-#: crates/core/src/interaction.rs:119
+#: crates/core/src/interaction.rs:124
 msgid "Not for this row."
 msgstr "이 줄에는 쓸 수 없습니다."
 
-#: crates/core/src/interaction.rs:120
+#: crates/core/src/interaction.rs:125
 msgid "Choose a row first."
 msgstr "먼저 줄을 고르세요."
 
-#: crates/core/src/interaction.rs:121
+#: crates/core/src/interaction.rs:126
 msgid "Enter a count first."
 msgstr "먼저 개수를 입력하세요."
 
-#: crates/core/src/interaction.rs:122
+#: crates/core/src/interaction.rs:127
 msgid "Enter text first."
 msgstr "먼저 글을 입력하세요."
 
-#: crates/core/src/interaction.rs:123
+#: crates/core/src/interaction.rs:128
 msgid "Choose a square first."
 msgstr "먼저 칸을 고르세요."
 
-#: crates/core/src/interaction.rs:124
+#: crates/core/src/interaction.rs:129
 msgid "Choose a pane first."
 msgstr "먼저 창을 고르세요."
 
-#: crates/core/src/interaction.rs:125
+#: crates/core/src/interaction.rs:130
 msgid "Busy."
 msgstr "처리 중입니다."
+
+#: crates/core/src/interaction.rs:133
+msgid "Enter a whole number from %d to %d."
+msgstr "%d부터 %d까지의 정수를 입력하세요."
+
+#: crates/core/src/interaction.rs:137
+msgid "Enter a whole number of at least %d."
+msgstr "%d 이상의 정수를 입력하세요."
+
+#: crates/core/src/interaction.rs:140
+msgid "Enter a whole number of at most %d."
+msgstr "%d 이하의 정수를 입력하세요."
+
+#: crates/core/src/interaction.rs:142
+msgid "Enter a whole number."
+msgstr "정수를 입력하세요."
 
 #: crates/core/src/launch.rs:115
 msgid "no Cataclysm: Bright Nights engine found. Searched:"

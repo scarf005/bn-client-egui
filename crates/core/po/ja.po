@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: bn-client\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-28 14:28+0900\n"
+"POT-Creation-Date: 2026-10-28 14:34+0900\n"
 "PO-Revision-Date: 2026-10-18 09:30+0900\n"
 "Language-Team: Japanese\n"
 "Language: ja\n"
@@ -60,37 +60,53 @@ msgstr "エンジンが停止しました(%s)。"
 msgid "The engine stopped."
 msgstr "エンジンが停止しました。"
 
-#: crates/core/src/interaction.rs:118
+#: crates/core/src/interaction.rs:123
 msgid "Not available."
 msgstr "利用できません。"
 
-#: crates/core/src/interaction.rs:119
+#: crates/core/src/interaction.rs:124
 msgid "Not for this row."
 msgstr "この行には使えません。"
 
-#: crates/core/src/interaction.rs:120
+#: crates/core/src/interaction.rs:125
 msgid "Choose a row first."
 msgstr "先に行を選んでください。"
 
-#: crates/core/src/interaction.rs:121
+#: crates/core/src/interaction.rs:126
 msgid "Enter a count first."
 msgstr "先に数を入力してください。"
 
-#: crates/core/src/interaction.rs:122
+#: crates/core/src/interaction.rs:127
 msgid "Enter text first."
 msgstr "先に文字を入力してください。"
 
-#: crates/core/src/interaction.rs:123
+#: crates/core/src/interaction.rs:128
 msgid "Choose a square first."
 msgstr "先にマスを選んでください。"
 
-#: crates/core/src/interaction.rs:124
+#: crates/core/src/interaction.rs:129
 msgid "Choose a pane first."
 msgstr "先にペインを選んでください。"
 
-#: crates/core/src/interaction.rs:125
+#: crates/core/src/interaction.rs:130
 msgid "Busy."
 msgstr "処理中です。"
+
+#: crates/core/src/interaction.rs:133
+msgid "Enter a whole number from %d to %d."
+msgstr "%dから%dまでの整数を入力してください。"
+
+#: crates/core/src/interaction.rs:137
+msgid "Enter a whole number of at least %d."
+msgstr "%d以上の整数を入力してください。"
+
+#: crates/core/src/interaction.rs:140
+msgid "Enter a whole number of at most %d."
+msgstr "%d以下の整数を入力してください。"
+
+#: crates/core/src/interaction.rs:142
+msgid "Enter a whole number."
+msgstr "整数を入力してください。"
 
 #: crates/core/src/launch.rs:115
 msgid "no Cataclysm: Bright Nights engine found. Searched:"

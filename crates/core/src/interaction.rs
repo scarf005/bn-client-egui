@@ -107,12 +107,17 @@ pub enum Reason {
     Busy,
     /// The arguments do not fit the affordance's shape.
     BadArgs,
+    /// A whole-number field's text is no whole number within its bounds.
+    Range {
+        min: Option<i64>,
+        max: Option<i64>,
+    },
 }
 
 impl Reason {
     /// The client's words for a refusal of its own; none for what the engine turned off, whose `denial` says why.
     pub fn words(self) -> Option<String> {
-        use crate::localise::tr;
+        use crate::localise::{Value, tr, tr_format};
         Some(match self {
             Reason::Disabled | Reason::RowDisabled => return None,
             Reason::NoScreen | Reason::Unknown | Reason::BadArgs => tr("Not available."),
@@ -123,6 +128,19 @@ impl Reason {
             Reason::Missing(ArgKind::Pos) => tr("Choose a square first."),
             Reason::Missing(ArgKind::Pane) => tr("Choose a pane first."),
             Reason::Busy => tr("Busy."),
+            Reason::Range { min, max } => match (min, max) {
+                (Some(min), Some(max)) => tr_format(
+                    "Enter a whole number from %d to %d.",
+                    &[Value::Int(min), Value::Int(max)],
+                ),
+                (Some(min), None) => {
+                    tr_format("Enter a whole number of at least %d.", &[Value::Int(min)])
+                }
+                (None, Some(max)) => {
+                    tr_format("Enter a whole number of at most %d.", &[Value::Int(max)])
+                }
+                (None, None) => tr("Enter a whole number."),
+            },
         })
     }
 }

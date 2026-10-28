@@ -238,15 +238,28 @@ impl Interaction {
         value: &str,
     ) -> Outcome {
         let affordance = screen.affordances.iter().find(|a| a.id == affordance_id);
-        let known = screen.components().into_iter().any(|c| match c {
-            Component::Form(form) => {
-                form.head.id == form_id && form.fields.iter().any(|f| f.id == field_id)
+        let field = screen.components().into_iter().find_map(|c| match c {
+            Component::Form(form) if form.head.id == form_id => {
+                form.fields.iter().find(|f| f.id == field_id)
             }
-            _ => false,
+            _ => None,
         });
-        let (Some(affordance), true) = (affordance, known) else {
+        let (Some(affordance), Some(field)) = (affordance, field) else {
             return Outcome::because(Reason::Unknown);
         };
+        if field.kind == FieldKind::Integer {
+            let (min, max) = (
+                field.min.as_ref().and_then(serde_json::Number::as_i64),
+                field.max.as_ref().and_then(serde_json::Number::as_i64),
+            );
+            let inside = value
+                .trim()
+                .parse::<i64>()
+                .is_ok_and(|n| min.is_none_or(|min| n >= min) && max.is_none_or(|max| n <= max));
+            if !inside {
+                return Outcome::because(Reason::Range { min, max });
+            }
+        }
         let shape = affordance.args.as_ref();
         let args = InvokeArgs {
             row: shape
