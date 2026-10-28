@@ -55,6 +55,7 @@ mod ui_character;
 mod ui_component;
 mod ui_editmap;
 mod ui_editor_drag;
+mod ui_editor_hints;
 mod ui_editor_fit;
 mod ui_editor_keys;
 mod ui_editor_levels;
