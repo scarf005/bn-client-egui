@@ -11,7 +11,8 @@ use serde_json::Value;
 pub enum Kind {
     /// Text painted partly outside its clip rectangle.
     Cut,
-    /// Text cut short with an ellipsis, but for a window's title, which a narrowed window shortens.
+    /// Text cut short with an ellipsis, but for a window's title, which a narrowed window shortens, and a list's
+    /// column value (an id), which is cut before the row's label wraps.
     Elided,
     /// A word broken over two lines.
     Broken,
@@ -165,6 +166,35 @@ pub fn column_list_labels(screen: &Value) -> Vec<String> {
     out
 }
 
+/// The plain values of the columns of every list's rows in `screen`.
+pub fn column_values(screen: &Value) -> Vec<String> {
+    fn walk(v: &Value, out: &mut Vec<String>) {
+        match v {
+            Value::Object(o) => {
+                if o.get("kind").and_then(Value::as_str) == Some("list") {
+                    let rows = o
+                        .get("rows")
+                        .and_then(Value::as_array)
+                        .into_iter()
+                        .flatten();
+                    let columns = rows.flat_map(|r| r["columns"].as_array().into_iter().flatten());
+                    out.extend(
+                        columns
+                            .filter_map(|c| c["value"].as_str())
+                            .map(bn_client_core::markup::plain),
+                    );
+                }
+                o.values().for_each(|v| walk(v, out));
+            }
+            Value::Array(a) => a.iter().for_each(|v| walk(v, out)),
+            _ => {}
+        }
+    }
+    let mut out = Vec::new();
+    walk(screen, &mut out);
+    out
+}
+
 /// Everything that keeps the last frame of `h`, showing `screen`, from being read: the whole window for the map
 /// screen, the room for any other, whose own faults the map's chrome must not hide.
 pub fn legible(h: &Harness<'_, App<EngineModel>>, screen: &Value) -> Vec<Fault> {
@@ -183,6 +213,7 @@ pub fn legible(h: &Harness<'_, App<EngineModel>>, screen: &Value) -> Vec<Fault> 
     let titles = h
         .query_all_by_role(egui::accesskit::Role::Window)
         .filter_map(|w| w.accesskit_node().label())
+        .chain(column_values(screen))
         .collect::<Vec<_>>();
     cut_text(&unmapped, area)
         .into_iter()

@@ -130,15 +130,24 @@ fn the_wheel_zooms_a_short_wide_canvas_about_the_pointer() {
     }
 }
 
+/// The middle of the canvas pane: halfway between the columns' resize handles on either side of it.
+fn pane_middle(h: &H) -> f32 {
+    let handles = h
+        .get_all_by_label("Resize workspace column")
+        .map(|n| n.rect().center().x)
+        .collect::<Vec<_>>();
+    let left = handles.iter().copied().fold(f32::MAX, f32::min);
+    let right = handles.iter().copied().fold(0.0, f32::max);
+    (left + right) / 2.0
+}
+
 #[test]
 fn a_grid_narrower_than_its_canvas_is_centred_in_it() {
-    let centre = |width: f32| {
+    for width in [1300.0, 1700.0] {
         let (h, _script) = open_sized(screen(), egui::vec2(width, 800.0));
-        (square(&h, 0, 5).unwrap().min.x + square(&h, SIDE - 1, 5).unwrap().max.x) / 2.0
-    };
-    // The canvas room grows by what the window does, and the grid stays in the middle of it.
-    let moved = centre(1700.0) - centre(1300.0);
-    assert!((moved - 200.0).abs() < 1.5, "{moved}");
+        let (shown, middle) = (centre_of(&h), pane_middle(&h));
+        assert!((shown - middle).abs() < 2.0, "{width}: {shown} {middle}");
+    }
 }
 
 /// The middle of the drawn grid along the row of the fifth square.
@@ -148,7 +157,6 @@ fn centre_of(h: &H) -> f32 {
 
 #[test]
 fn a_zoomed_grid_is_centred_again_when_its_room_widens_past_it() {
-    let (fresh, _) = open_sized(screen(), egui::vec2(1700.0, 800.0));
     let (mut h, _script) = open_sized(screen(), egui::vec2(1100.0, 800.0));
     let at = square(&h, 5, 5).unwrap().center();
     wheel(&mut h, at, 60.0);
@@ -160,7 +168,7 @@ fn a_zoomed_grid_is_centred_again_when_its_room_widens_past_it() {
     }
     h.set_size(egui::vec2(1700.0, 800.0));
     crate::common::settle_windows(&mut h);
-    let (shown, wanted) = (centre_of(&h), centre_of(&fresh));
+    let (shown, wanted) = (centre_of(&h), pane_middle(&h));
     assert!((shown - wanted).abs() < 2.0, "{shown} {wanted}");
 }
 

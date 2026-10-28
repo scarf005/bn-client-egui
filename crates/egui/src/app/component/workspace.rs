@@ -8,7 +8,9 @@ use bn_client_core::localise::tr;
 /// The width the tools' column, the log's column and the right column first have, which the player can change.
 const TOOLS_WIDTH: f32 = 180.0;
 const LOG_WIDTH: f32 = 240.0;
-const SIDE_WIDTH: f32 = 300.0;
+/// The right column's first width: this share of the window, within these bounds.
+const SIDE_SHARE: f32 = 0.21;
+const SIDE_WIDTH: (f32, f32) = (320.0, 480.0);
 /// The height the log's strip first has, which the player can change.
 const LOG_HEIGHT: f32 = 160.0;
 
@@ -184,7 +186,10 @@ impl<M: GameModel> App<M> {
             .collect::<Vec<_>>();
         if !side.is_empty() {
             egui::Panel::right(egui::Id::new(&side_id))
-                .default_size(SIDE_WIDTH)
+                .default_size(
+                    (ui.ctx().content_rect().width() * SIDE_SHARE)
+                        .clamp(SIDE_WIDTH.0, SIDE_WIDTH.1),
+                )
                 .show(ui, |ui| self.column(ui, screen, &side, out));
             crate::app::label_resize_handle(ui.ctx(), &side_id, &tr("Resize workspace column"));
         }
@@ -251,7 +256,10 @@ impl<M: GameModel> App<M> {
         let room = rect.height();
         // A list is at most `PEER_ROWS` rows tall, so the parts under a long one stay in reach.
         body_scroll(&mut inner, scroll, room, |ui| {
-            self.with_list_rows(Some(PEER_ROWS), || self.stack(ui, screen, parts, out))
+            // A column's lists are palettes, read by their names.
+            let was = self.screens.names_first.replace(true);
+            self.with_list_rows(Some(PEER_ROWS), || self.stack(ui, screen, parts, out));
+            self.screens.names_first.set(was);
         });
         ui.allocate_rect(rect, egui::Sense::hover());
     }
