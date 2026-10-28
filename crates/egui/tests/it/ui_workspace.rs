@@ -1065,3 +1065,69 @@ fn widening_the_right_column_shows_a_cut_id_whole() {
     h.run_steps(4);
     assert_eq!(whole(&h), Some(true), "{id} is still cut");
 }
+
+fn stats(id: &str, label: &str, slot: &str, n: usize) -> Value {
+    let stats = (0..n)
+        .map(|k| json!({"key": format!("k{k}"), "label": format!("{label} {k}"), "value": "v"}))
+        .collect::<Vec<_>>();
+    json!({"id": id, "kind": "panel", "label": label, "slot": slot, "title": label, "stats": stats})
+}
+
+/// `workspace()` whose palette is two panels and a searchable list of 40 rows, over an outline of 40 rows.
+fn catalog_workspace() -> Value {
+    let mut screen = workspace();
+    screen["affordances"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({"id": "ws:search", "label": "Search",
+        "keys": [], "enabled": true, "expect": "boundary", "args": {"text": {}}}));
+    let parts = screen["root"]["children"].as_array_mut().unwrap();
+    let names = (0..40).map(|n| format!("Entry {n}")).collect::<Vec<_>>();
+    let rows = names.iter().map(String::as_str).collect::<Vec<_>>();
+    let mut catalog = list("ws:catalog", "Catalog", &rows, "palette");
+    catalog["filterable"] = true.into();
+    catalog["affordances"] = json!(["ws:search"]);
+    parts[2] = stats("ws:legend", "Legend", "palette", 2);
+    parts.push(stats("ws:mapping", "Mapping", "palette", 3));
+    parts.push(catalog);
+    let outline = (0..40).map(|n| format!("Mapgen {n}")).collect::<Vec<_>>();
+    let outline = outline.iter().map(String::as_str).collect::<Vec<_>>();
+    parts.push(list("ws:outline", "Entries", &outline, "outline"));
+    screen
+}
+
+/// `cargo test --test it ui_workspace::catalog_shots -- --ignored`.
+#[test]
+#[ignore]
+fn catalog_shots() {
+    for size in SIZES {
+        let app = crate::common::staged(crate::common::over_map(catalog_workspace())).0;
+        let mut h = crate::common::shot_harness(size, app);
+        h.run_steps(30);
+        crate::common::save_shot(&mut h, &format!("catalog-{}x{}.png", size.x, size.y));
+    }
+}
+
+#[test]
+fn a_searchable_list_after_other_parts_of_the_palette_shows_its_search_box_and_rows() {
+    for size in SIZES {
+        let (app, _) = crate::common::staged(crate::common::over_map(catalog_workspace()));
+        let mut h = crate::common::themed_harness(size, app);
+        h.run_steps(30);
+        crate::common::settle_windows(&mut h);
+        let search = h.get_by_role_and_label(egui::accesskit::Role::TextInput, "Catalog");
+        let rows = (0..4)
+            .map(|n| rect(&h, &format!("Entry {n}")))
+            .collect::<Vec<_>>();
+        let (heads, window) = ([rect(&h, "Entries"), rect(&h, "Properties")], size.y - 40.0);
+        assert!(
+            search.rect().bottom() < window && rows[3].bottom() < window,
+            "{size:?}: search {:?}, rows {rows:?} below the fold",
+            search.rect()
+        );
+        assert!(
+            heads.iter().all(|r| r.bottom() < window),
+            "{size:?}: the heads of the other groups left the view: {heads:?}"
+        );
+    }
+}

@@ -17,29 +17,44 @@ const FIT_ROWS: f32 = 8.0;
 /// The rows of a list a section of a column is sure to show of its first part: lists shrink to these before the
 /// heads of the other sections leave the view.
 const HEAD_ROWS: f32 = 3.0;
+/// The rows of its first part a section of a column keeps in view whatever the others hold.
+const REACH_ROWS: f32 = 1.0;
 /// The height the log's strip first has, which the player can change.
 const LOG_HEIGHT: f32 = 160.0;
 
-/// The height a column's first part takes, and how many lists it holds.
+/// The height the top of a column takes, and how many lists it holds.
 #[derive(Clone, Copy, Default)]
-struct First {
+struct Head {
     height: f32,
     lists: usize,
 }
 
-/// How tall a column is with every row of its lists, and how tall its first part is with its lists at their fewest
-/// rows.
+/// Three tops of a column: its first part, through its first part that holds rows to pick from, and through its
+/// first part that holds rows with a search box over them, which is the one worked in.
+#[derive(Clone, Copy, Default)]
+struct First {
+    part: Head,
+    listed: Option<Head>,
+    searched: Option<Head>,
+}
+
+/// How tall a column is with every row of its lists, and how tall each of its tops is with its lists at their
+/// fewest rows; a top it has none of is not as tall.
 #[derive(Clone, Copy)]
 struct ColumnHeight {
     whole: f32,
-    first: f32,
+    part: f32,
+    listed: f32,
+    searched: Option<f32>,
 }
 
 impl ColumnHeight {
     /// A column not drawn yet.
     const UNKNOWN: Self = Self {
         whole: f32::INFINITY,
-        first: 0.0,
+        part: 0.0,
+        listed: 0.0,
+        searched: None,
     };
 }
 
@@ -558,15 +573,19 @@ impl<M: GameModel> App<M> {
         // fewest rows.
         let fewest = HEAD_ROWS * (tokens::ROW + ui.spacing().item_spacing.y);
         let shrunk = |f: &ListFit| f.wanted.min(fewest) - f.taken;
+        let head = |h: Head| h.height + fits.iter().take(h.lists).map(shrunk).sum::<f32>();
         ColumnHeight {
             whole: content + fits.iter().map(|f| f.wanted - f.taken).sum::<f32>(),
-            first: first.height + fits.iter().take(first.lists).map(shrunk).sum::<f32>(),
+            part: head(first.part),
+            listed: first.listed.map_or(0.0, head),
+            searched: first.searched.map(head),
         }
     }
 
-    /// `groups` one above the other in the room `ui` has, each a column of its own that scrolls. Each first gets the
-    /// height of its first part whole, with its lists at their fewest rows, then what its parts want up to an even
-    /// share of what the others leave: the head of every group is in view however long the others are.
+    /// `groups` one above the other in the room `ui` has, each a column of its own that scrolls. Each first gets
+    /// the height that keeps its first part reachable, then its top through its first rows to pick from and, for
+    /// the first list with a search box of them all, through that list; then what its parts want up to an even
+    /// share of what the others leave.
     fn sections(
         &self,
         ui: &mut egui::Ui,
@@ -584,19 +603,36 @@ impl<M: GameModel> App<M> {
             .data(|d| d.get_temp::<Vec<ColumnHeight>>(key))
             .filter(|h| h.len() == groups.len())
             .unwrap_or_else(|| vec![ColumnHeight::UNKNOWN; groups.len()]);
-        let firsts = heights.iter().map(|h| h.first).collect::<Vec<_>>();
-        let heads = firsts.iter().sum::<f32>();
-        let given = match heads <= room {
-            true => {
-                let more = heights
-                    .iter()
-                    .map(|h| h.whole - h.first)
-                    .collect::<Vec<_>>();
-                let rest = shares(room - heads, &more, 0.0);
-                firsts.iter().zip(rest).map(|(a, b)| a + b).collect()
-            }
-            false => shares(room, &firsts, 0.0),
-        };
+        // Each section is given, in turn, evenly up to what the sections want of each step: what keeps its head
+        // reachable; its top through the first rows to pick from, and through the first list with a search box
+        // of them all; then what its parts want.
+        let reach = REACH_ROWS * (tokens::ROW + gap);
+        let worked = heights.iter().position(|h| h.searched.is_some());
+        let ends = [
+            heights
+                .iter()
+                .map(|h| h.part.min(reach))
+                .collect::<Vec<_>>(),
+            heights
+                .iter()
+                .enumerate()
+                .map(|(i, h)| h.searched.filter(|_| Some(i) == worked).unwrap_or(h.listed))
+                .collect(),
+            heights.iter().map(|h| h.whole).collect(),
+        ];
+        let mut given = vec![0.0; heights.len()];
+        for end in ends {
+            let wanted = end
+                .iter()
+                .zip(&given)
+                .map(|(e, g)| (e - g).max(0.0))
+                .collect::<Vec<_>>();
+            let left = room - given.iter().sum::<f32>();
+            given
+                .iter_mut()
+                .zip(shares(left, &wanted, 0.0))
+                .for_each(|(g, s)| *g += s);
+        }
         let mut top = rect.top();
         let mut drawn = vec![];
         for (i, (group, height)) in groups.iter().zip(given).enumerate() {
@@ -631,6 +667,7 @@ impl<M: GameModel> App<M> {
         let following = ui.data(|d| d.get_temp::<(String, egui::Rect)>(follow));
         let mut arrived = None;
         let mut first = First::default();
+        let start = ui.cursor().top();
         for (i, c) in parts.iter().enumerate() {
             let top = ui.cursor().top();
             match &c.head().label {
@@ -651,11 +688,21 @@ impl<M: GameModel> App<M> {
                 }
                 None => self.component(ui, screen, c, out),
             }
+            let head = || Head {
+                height: ui.min_rect().bottom() - start,
+                lists: self.screens.column_lists.borrow().len(),
+            };
+            let rows = |n: &&Component| matches!(n, Component::List(l) if !l.rows.is_empty());
+            let nested = c.nested();
             if i == 0 {
-                first = First {
-                    height: ui.min_rect().bottom() - top,
-                    lists: self.screens.column_lists.borrow().len(),
-                };
+                first.part = head();
+            }
+            if first.listed.is_none() && nested.iter().any(rows) {
+                first.listed = Some(head());
+            }
+            let search = |n: &&Component| matches!(n, Component::List(l) if !l.rows.is_empty() && l.search(screen).is_some());
+            if first.searched.is_none() && nested.iter().any(search) {
+                first.searched = Some(head());
             }
             let new = was
                 .as_ref()
