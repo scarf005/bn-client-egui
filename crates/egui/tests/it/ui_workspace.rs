@@ -931,3 +931,40 @@ fn a_workspace_under_a_screen_the_engine_does_not_describe_still_paints_its_over
         "the overmap under the plain screen is not painted"
     );
 }
+
+/// Whether the row labelled `label` is shown selected.
+fn selected(h: &H, label: &str) -> bool {
+    h.get_by_label(label).accesskit_node().is_selected() == Some(true)
+}
+
+#[test]
+fn a_click_on_a_row_the_engine_has_not_chosen_leaves_its_choice_shown_selected() {
+    for size in [egui::vec2(1290.0, 830.0), egui::vec2(1920.0, 1080.0)] {
+        let (mut h, _) = shown(size);
+        assert!(selected(&h, "Pencil") && !selected(&h, "Eraser"));
+        h.get_by_label("Eraser").click();
+        h.run_steps(3);
+        assert!(
+            selected(&h, "Pencil") && !selected(&h, "Eraser"),
+            "{size:?}: the tools show a choice the engine did not make"
+        );
+    }
+}
+
+#[test]
+fn a_click_on_a_row_of_a_list_that_follows_the_focus_shows_it_selected() {
+    let mut screen = workspace();
+    screen["affordances"].as_array_mut().unwrap().push(
+        json!({"id": "ws:pick_tool", "label": "Pick tool",
+        "keys": [], "enabled": true, "expect": "boundary", "role": "select",
+        "args": {"row": {"component_id": "ws:tools"}}}),
+    );
+    let (app, script) = crate::common::staged(crate::common::over_map(screen));
+    let mut h = crate::common::themed_harness(SIZES[0], app);
+    h.run_steps(7);
+    crate::common::settle_windows(&mut h);
+    h.get_by_label("Eraser").click();
+    h.run_steps(3);
+    assert!(invoked(&script).contains(&"ws:pick_tool".to_string()));
+    assert!(selected(&h, "Eraser") && !selected(&h, "Pencil"));
+}
