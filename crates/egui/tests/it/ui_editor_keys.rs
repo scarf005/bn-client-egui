@@ -73,6 +73,34 @@ fn an_affordance_key_runs_the_affordance() {
     assert_eq!(sent(&script), ["editor:rotate"]);
 }
 
+/// A tool the engine turns off says why in the engine's words, at a click and at its key, and nothing is sent.
+#[test]
+fn a_disabled_tool_tells_the_engines_denial_at_a_click_and_its_key() {
+    let mut screen = editor(Some("trail"));
+    let mut stack = vec![&mut screen];
+    while let Some(v) = stack.pop() {
+        match v {
+            Value::Object(o) if o.get("id") == Some(&json!("tool:paste")) => {
+                o.insert("enabled".into(), json!(false));
+                o.insert("denial".into(), json!("Copy squares first."));
+            }
+            Value::Object(o) => stack.extend(o.values_mut()),
+            Value::Array(a) => stack.extend(a.iter_mut()),
+            _ => {}
+        }
+    }
+    let (mut h, script) = open(screen);
+    let denied = |h: &H| h.query_by_label("Copy squares first.").is_some();
+    type_text(&mut h, "v");
+    assert!(denied(&h), "no denial at the key");
+    h.key_press(egui::Key::Escape);
+    h.run_steps(4);
+    h.get_by_label("Paste").click();
+    h.run_steps(4);
+    assert!(denied(&h), "no denial at the click");
+    assert_eq!(tool_rows(&script), Vec::<String>::new());
+}
+
 /// The editor whose canvas also drags regions as `editor:placement_span`.
 fn with_region_drag() -> Value {
     let mut screen = editor(Some("trail"));

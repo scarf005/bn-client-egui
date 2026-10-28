@@ -873,3 +873,20 @@ fn an_off_tab_is_refused_with_the_engines_denial() {
         refused(Reason::RowDisabled, Some("Empty"))
     );
 }
+
+#[test]
+fn a_disabled_tabs_key_tells_its_denial_and_sends_nothing() {
+    let tabs = json!({"id": "tabs", "kind": "tabs", "select": "goto", "tabs": [
+        {"id": "t1", "label": "Pencil", "selected": true, "enabled": true, "hotkey": "b"},
+        {"id": "t2", "label": "Paste", "selected": false, "enabled": false, "hotkey": "v",
+            "denial": "Copy something first."}]});
+    let screen = screen_with(
+        tabs,
+        json!([{"id": "goto", "label": "Go", "keys": [], "enabled": true, "expect": "boundary",
+            "args": {"row": {"component_id": "tabs"}}}]),
+    );
+    let mut ui = Interaction::default();
+    let out = press(&mut ui, &screen, "v");
+    assert_eq!(invoked(&out), None);
+    assert_eq!(out.note().as_deref(), Some("Copy something first."));
+}
