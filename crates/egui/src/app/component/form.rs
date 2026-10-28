@@ -158,6 +158,7 @@ impl<M: GameModel> App<M> {
                             editor: &editor_of(field),
                             enabled: on,
                             refusal: refusal.as_deref(),
+                            required: field.required,
                         },
                     );
                     // Editing the refused value takes its refusal away.
