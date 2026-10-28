@@ -9,8 +9,8 @@ use bn_client_core::localise::tr;
 const TOOLS_WIDTH: f32 = 180.0;
 const LOG_WIDTH: f32 = 240.0;
 /// The right column's first width: this share of the window, within these bounds.
-const SIDE_SHARE: f32 = 0.21;
-const SIDE_WIDTH: (f32, f32) = (320.0, 480.0);
+const SIDE_SHARE: f32 = 0.22;
+const SIDE_WIDTH: (f32, f32) = (360.0, 480.0);
 /// The height the log's strip first has, which the player can change.
 const LOG_HEIGHT: f32 = 160.0;
 

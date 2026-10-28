@@ -16,7 +16,7 @@ use egui_extras::{Column, TableBuilder, TableRow};
 pub const CHECK: f32 = 3.0 * tokens::U;
 /// The width a value column keeps beside a label that wants the room, where names come first: a narrower value is
 /// kept whole, a wider one is cut to this before the label wraps.
-pub const VALUE_KEPT: f32 = 20.0 * tokens::U;
+pub const VALUE_KEPT: f32 = 16.0 * tokens::U;
 
 /// What each of a list's columns needs, measured from its rows; a column 0 wide is left out.
 #[derive(Default)]
