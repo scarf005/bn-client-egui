@@ -1118,13 +1118,13 @@ impl<M: GameModel> App<M> {
     fn grid(&self, ui: &mut egui::Ui, screen: &Screen, grid: &Grid, out: &mut Vec<Intent>) {
         let (xs, ys) = drawn_span(grid);
         // The cells grow with the room the grid has, up to twice their size, their glyphs with them; a canvas's
-        // fill its room, and the zoom gesture over it scales them from there.
+        // the same, and the zoom gesture over it scales them from there.
         let fit = (ui.available_width() / xs.len().max(1) as f32)
             .min(ui.available_height() / ys.len().max(1) as f32);
         let canvas = grid.role == Some(GridRole::Canvas);
-        // A canvas zooms from the size that fills its room, no smaller than the whole grid fitting in it.
-        let base = fit.max(GRID_CELL);
-        let limits = ((fit / base).min(1.0), GRID_ZOOM_MAX);
+        // A canvas zooms out until the whole grid fits in its room, and in until a cell is as large as the room.
+        let base = fit.clamp(GRID_CELL, GRID_MAX_CELL);
+        let limits = ((fit / base).min(1.0), GRID_ZOOM_MAX.max(fit / base));
         let view_key = egui::Id::new(("grid view", &screen.screen_id, &grid.head.id));
         let view = ui
             .data(|d| d.get_temp::<canvas::View>(view_key))
@@ -1150,15 +1150,16 @@ impl<M: GameModel> App<M> {
                     .then(|| i.pointer.delta())
             });
             // The viewport is a whole number of cells tall, so none is cut across.
-            let rows = (ui.available_height() / cell).floor().max(1.0);
-            let room = egui::vec2(ui.available_width(), rows * cell);
+            let whole = ui.available_size();
+            let rows = (whole.y / cell).floor().max(1.0);
+            let room = egui::vec2(whole.x, rows * cell);
             let grid_size = egui::vec2(xs.len() as f32, ys.len() as f32) * cell;
             // The area clamps an asked offset to last frame's content, so the margins of a new zoom take it only
             // the frame after: it is asked for again then.
             let placed = canvas::place(
                 (view, anchor.as_ref()),
                 zoom > limits.0 + 1e-3,
-                (room, grid_size),
+                (whole, room, grid_size),
                 cell,
             );
             let offset = placed.offset;
@@ -1206,7 +1207,7 @@ impl<M: GameModel> App<M> {
                 offset: offset.unwrap_or(shown.state.offset),
                 pending: asked,
                 lead: placed.lead,
-                room_width: room.x,
+                room: whole,
             };
             ui.data_mut(|d| d.insert_temp(view_key, view));
             self.hover_outline(ui, shown.inner_rect, &squares);

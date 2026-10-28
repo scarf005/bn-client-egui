@@ -116,7 +116,12 @@ fn the_mounts_are_tile_sized_in_the_middle_of_the_canvas_and_the_stack_reads_who
         .unwrap()
         .iter()
         .find(|c| c["label"].as_str() == Some(named.as_str()))
-        .map(|c| (c["x"].as_f64().unwrap() as f32, c["y"].as_f64().unwrap() as f32))
+        .map(|c| {
+            (
+                c["x"].as_f64().unwrap() as f32,
+                c["y"].as_f64().unwrap() as f32,
+            )
+        })
         .unwrap();
     let stack = labels(&screen, "vehicle:stack");
     assert!(!stack.is_empty());

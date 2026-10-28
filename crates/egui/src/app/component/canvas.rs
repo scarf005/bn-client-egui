@@ -18,8 +18,8 @@ pub(super) struct View {
     pub offset: egui::Vec2,
     /// The room left before the first cell, which centres a grid narrower than the room.
     pub lead: egui::Vec2,
-    /// The width of the room that `lead` was made for.
-    pub room_width: f32,
+    /// The room the canvas had when `lead` was made for it, before it was cut to whole rows.
+    pub room: egui::Vec2,
     /// The offset a zoom asked for, which the scrolled area may have clamped to the content of the frame before.
     pub pending: Option<egui::Vec2>,
 }
@@ -41,14 +41,15 @@ pub(super) struct Placement {
     pub offset: Option<egui::Vec2>,
 }
 
-/// The placement of a grid of `grid` size in `room` with cells of `cell`, `zoomed` past the whole grid fitting.
+/// The placement of a grid of `grid` size in `room` with cells of `cell`, `zoomed` past the whole grid fitting;
+/// `room` is the canvas's `whole` room cut to whole rows.
 pub(super) fn place(
     (view, anchor): (Option<View>, Option<&Anchor>),
     zoomed: bool,
-    (room, grid): (egui::Vec2, egui::Vec2),
+    (whole, room, grid): (egui::Vec2, egui::Vec2, egui::Vec2),
     cell: f32,
 ) -> Placement {
-    let centred = egui::vec2(((room.x - grid.x) / 2.0).max(0.0), 0.0);
+    let centred = ((room - grid) / 2.0).max(egui::Vec2::ZERO);
     if !zoomed {
         return Placement {
             lead: centred,
@@ -57,9 +58,9 @@ pub(super) fn place(
         };
     }
     let tail = (room - egui::vec2(cell, cell)).max(egui::Vec2::ZERO);
-    // A lead kept from a room of another width is a blank margin, or none where one is wanted.
+    // A lead kept from a room of another size is a blank margin, or none where one is wanted.
     let lead = view
-        .filter(|v| (v.room_width - room.x).abs() < 0.5)
+        .filter(|v| (v.room - whole).length() < 0.5)
         .map_or(centred, |v| v.lead);
     let Some(anchor) = anchor else {
         return Placement {
