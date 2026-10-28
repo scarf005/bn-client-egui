@@ -317,3 +317,16 @@ fn the_newest_log_line_is_in_view_under_a_long_history_and_problems() {
         "the new line is at {line:?}"
     );
 }
+
+/// Each text box of a form is named by its field's label for a screen reader and a test, beside its value.
+#[test]
+fn a_forms_text_boxes_are_named_by_their_fields() {
+    let h = open(editor(), egui::vec2(1920.0, 1080.0));
+    for label in ["Path", "Terrain", "Chunk size"] {
+        assert!(
+            h.query_all_by_label(label)
+                .any(|n| n.accesskit_node().role() == egui::accesskit::Role::TextInput),
+            "no text box named {label}"
+        );
+    }
+}
