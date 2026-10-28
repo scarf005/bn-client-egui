@@ -2,7 +2,7 @@
 //! and what only moves the client's own focus. A renderer passes key names and ids and draws what comes back.
 
 use super::*;
-use crate::protocol::{FieldKind, GridRole};
+use crate::protocol::{FieldKind, FormField, GridRole};
 
 /// Whether the arrows move `grid`'s cursor by running its cells' affordance: a canvas with a cursor whose cells
 /// are not drawn on by a drag, so the affordance picks the cell rather than draws there.
@@ -76,9 +76,35 @@ impl Filter {
     pub(super) fn takes(self, c: char) -> bool {
         match self {
             Filter::Any => true,
-            Filter::Integer => c.is_ascii_digit() || c == '-',
+            Filter::Integer { .. } => c.is_ascii_digit() || c == '-',
             Filter::Float => c.is_ascii_digit() || c == '-' || c == '.',
         }
+    }
+
+    /// The filter of `field`'s box.
+    fn of(field: &FormField) -> Self {
+        let bound =
+            |n: &Option<serde_json::Number>| n.as_ref().and_then(serde_json::Number::as_i64);
+        match field.kind {
+            FieldKind::Integer => Filter::Integer {
+                min: bound(&field.min),
+                max: bound(&field.max),
+            },
+            FieldKind::Float => Filter::Float,
+            _ => Filter::Any,
+        }
+    }
+
+    /// Why `text` may not be sent from a box of this filter: a whole number's box holds none within its bounds.
+    fn refusal(self, text: &str) -> Option<Reason> {
+        let Filter::Integer { min, max } = self else {
+            return None;
+        };
+        let inside = text
+            .trim()
+            .parse::<i64>()
+            .is_ok_and(|n| min.is_none_or(|min| n >= min) && max.is_none_or(|max| n <= max));
+        (!inside).then_some(Reason::Range { min, max })
     }
 }
 
@@ -247,18 +273,8 @@ impl Interaction {
         let (Some(affordance), Some(field)) = (affordance, field) else {
             return Outcome::because(Reason::Unknown);
         };
-        if field.kind == FieldKind::Integer {
-            let (min, max) = (
-                field.min.as_ref().and_then(serde_json::Number::as_i64),
-                field.max.as_ref().and_then(serde_json::Number::as_i64),
-            );
-            let inside = value
-                .trim()
-                .parse::<i64>()
-                .is_ok_and(|n| min.is_none_or(|min| n >= min) && max.is_none_or(|max| n <= max));
-            if !inside {
-                return Outcome::because(Reason::Range { min, max });
-            }
+        if let Some(refusal) = Filter::of(field).refusal(value) {
+            return Outcome::because(refusal);
         }
         let shape = affordance.args.as_ref();
         let args = InvokeArgs {
@@ -303,6 +319,11 @@ impl Interaction {
             Ok(args) => args,
             Err(missing) => return Outcome::because(Reason::Missing(missing[0])),
         };
+        // A box's text out of what its field takes stays in the box to mend.
+        let typed = self.ask.as_ref().zip(args.text.as_deref());
+        if let Some(refusal) = typed.and_then(|(ask, text)| ask.filter.refusal(text)) {
+            return Outcome::because(refusal);
+        }
         if let Err(refusal) = gate(screen, affordance, &args) {
             self.ask = None;
             return Outcome::refused(*refusal);
@@ -726,9 +747,8 @@ impl Interaction {
         ask.text = Some(field.value.clone());
         ask.suggested = false;
         ask.max_len = field.max_length.filter(|n| *n > 0).map(|n| n as usize);
+        ask.filter = Filter::of(field);
         match field.kind {
-            FieldKind::Integer => ask.filter = Filter::Integer,
-            FieldKind::Float => ask.filter = Filter::Float,
             FieldKind::Key => {
                 ask.capture = true;
                 ask.text = None;
@@ -742,7 +762,7 @@ impl Interaction {
                 ask.text = options.get(at).map(|o| o.id.clone());
                 ask.select = Some(Select { options, at });
             }
-            FieldKind::Text | FieldKind::Bool => {}
+            FieldKind::Text | FieldKind::Bool | FieldKind::Integer | FieldKind::Float => {}
         }
     }
 }

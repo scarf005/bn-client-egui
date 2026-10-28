@@ -452,7 +452,10 @@ fn form_field_set_by_the_player_runs_the_forms_affordance_with_the_field_and_tex
         .find(|n| n.accesskit_node().value().as_deref() == Some("7"))
         .unwrap();
     field.focus();
-    field.type_text("5");
+    h.run_steps(2);
+    // Within the field's bounds of 0 to 60.
+    h.key_press(egui::Key::Backspace);
+    h.event(egui::Event::Text("5".into()));
     h.run_steps(2);
     h.key_press(egui::Key::Enter);
     h.run_steps(3);

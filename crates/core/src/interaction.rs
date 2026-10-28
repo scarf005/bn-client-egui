@@ -422,7 +422,11 @@ pub struct Window {
 enum Filter {
     #[default]
     Any,
-    Integer,
+    /// A whole number within the field's bounds.
+    Integer {
+        min: Option<i64>,
+        max: Option<i64>,
+    },
     Float,
 }
 
