@@ -371,14 +371,15 @@ impl<M: GameModel> App<M> {
         self.sync_screens();
         self.backdrop(ctx);
         self.paint_icons();
+        self.paint_overmap();
+        // Only the lists of the top screen drawn this frame have a page: the backdrop's take no keys.
+        self.screens.list_pages.borrow_mut().clear();
         let Some(top) = interaction::described(self.model.screens()) else {
             return self.menu(ctx);
         };
         let mut out = vec![];
         let cancel = interaction::with_role(top, AffordanceRole::Cancel).map(|a| a.id.clone());
         let kind = self.window_kind(top);
-        // Only the lists drawn this frame have a page.
-        self.screens.list_pages.borrow_mut().clear();
         let shown = self.screen_window(ctx, top, &mut out);
         if self.keep_window(ctx, kind.as_deref(), &shown)
             && let Some(cancel) = cancel
