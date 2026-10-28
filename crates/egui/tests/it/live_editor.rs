@@ -181,7 +181,14 @@ pub(crate) fn start_with(
         .with_size(egui::vec2(1280.0, 800.0))
         .with_step_dt(1.0 / 60.0)
         .wgpu()
-        .build_ui_state(|ui, app: &mut App<EngineModel>| app.show(ui), app);
+        .build_ui_state(
+            |ui, app: &mut App<EngineModel>| {
+                // A GPU's texture side, which the tileset's sheets need from the first frame.
+                ui.ctx().input_mut(|i| i.max_texture_side = 8192);
+                app.show(ui)
+            },
+            app,
+        );
     bn_client_egui::fonts::install(&h.ctx, &root);
     // The theme the game's window applies, solid scroll bars among it.
     bn_client_egui::kit::tokens::apply(&h.ctx);
