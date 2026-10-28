@@ -318,6 +318,47 @@ fn the_newest_log_line_is_in_view_under_a_long_history_and_problems() {
     );
 }
 
+/// The log's words stay in view over a history and problems longer than the log shows, however far it is scrolled
+/// and however short the window.
+#[test]
+fn the_logs_words_are_in_view_above_a_long_history_and_problems() {
+    let size = egui::vec2(1290.0, 420.0);
+    let mut screen = editor();
+    for (id, name) in [
+        ("editor:history", "step"),
+        ("editor:diagnostics", "problem"),
+    ] {
+        let list = find(&mut screen["root"], id).unwrap();
+        list["rows"] = (0..40)
+            .map(|n| json!({"id": format!("{name}:{n}"), "label": format!("{name} {n}"), "description": "",
+                "denial": "", "enabled": true, "selectable": true, "selected": false, "columns": []}))
+            .collect();
+        list["total"] = json!(40);
+    }
+    screen["root"]["children"].as_array_mut().unwrap().push(
+        json!({"id": "editor:status", "kind": "text", "slot": "log", "markup": "Saved to a file.", "tone": "good"}),
+    );
+    let (mut h, _script) = crate::ui_editor_drag::open_sized(screen, size);
+    h.run_steps(6);
+    let history = h.get_by_label("History").rect();
+    for turn in [0.0, -2000.0, 4000.0] {
+        // Over the column's edge, which scrolls the column rather than a list in it.
+        h.hover_at(egui::pos2(history.left() - 8.0, history.bottom() + 40.0));
+        h.event(egui::Event::MouseWheel {
+            unit: egui::MouseWheelUnit::Point,
+            delta: egui::vec2(0.0, turn),
+            modifiers: egui::Modifiers::NONE,
+            phase: egui::TouchPhase::Move,
+        });
+        h.run_steps(4);
+        let line = h.get_by_label("Saved to a file.").rect();
+        assert!(
+            line.top() > 30.0 && line.bottom() < size.y - 30.0,
+            "the log's words are at {line:?} after a wheel turn of {turn}"
+        );
+    }
+}
+
 /// Each text box of a form is named by its field's label for a screen reader and a test, beside its value.
 #[test]
 fn a_forms_text_boxes_are_named_by_their_fields() {
