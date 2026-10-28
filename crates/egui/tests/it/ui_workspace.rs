@@ -182,8 +182,9 @@ fn the_parts_are_placed_by_slot() {
             canvas.1 - canvas.0 >= size.x - canvas.1,
             "{size:?}: the canvas has {canvas:?}"
         );
+        // Under the palette, or beside it in a column wide enough for two.
         assert!(
-            inspector.top() > palette.top(),
+            inspector.top() > palette.top() || inspector.left() > palette.right(),
             "{size:?}: inspector {inspector:?}"
         );
         assert!(
@@ -316,7 +317,7 @@ fn an_action_on_a_row_of_a_list_no_part_names_is_drawn_under_that_list() {
         );
         assert!(
             inside.top() >= floor.bottom()
-                && inside.bottom() <= inspector.top()
+                && (inside.bottom() <= inspector.top() || inspector.left() > floor.right())
                 && inside.left() >= floor.left() - 8.0,
             "{size:?}: Inside {inside:?} under Floor {floor:?}, over {inspector:?}"
         );

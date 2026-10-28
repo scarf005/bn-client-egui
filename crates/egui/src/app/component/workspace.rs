@@ -230,16 +230,34 @@ impl<M: GameModel> App<M> {
                 .show(ui, |ui| self.column(ui, screen, &left, out));
             crate::app::label_resize_handle(ui.ctx(), &tools_id, &tr("Resize workspace column"));
         }
-        let side = [Slot::Palette, Slot::Outline, Slot::Inspector]
-            .into_iter()
-            .flat_map(|slot| parts(root, slot))
-            .collect::<Vec<_>>();
-        if !side.is_empty() {
+        let (lists, inspector) = (
+            [Slot::Palette, Slot::Outline]
+                .into_iter()
+                .flat_map(|slot| parts(root, slot))
+                .collect::<Vec<_>>(),
+            parts(root, Slot::Inspector),
+        );
+        if !lists.is_empty() || !inspector.is_empty() {
             let width = side_width(ui, root);
             follow(ui.ctx(), egui::Id::new(&side_id), width);
             egui::Panel::right(egui::Id::new(&side_id))
                 .default_size(width)
-                .show(ui, |ui| self.column(ui, screen, &side, out));
+                .show(ui, |ui| {
+                    // Room for two columns puts the inspector beside the palette and the outline, both in view.
+                    match ui.available_width() >= 2.0 * SIDE_WIDTH.0
+                        && !lists.is_empty()
+                        && !inspector.is_empty()
+                    {
+                        true => ui.columns(2, |halves| {
+                            self.column(&mut halves[0], screen, &lists, out);
+                            self.column(&mut halves[1], screen, &inspector, out);
+                        }),
+                        false => {
+                            let side = [lists.as_slice(), inspector.as_slice()].concat();
+                            self.column(ui, screen, &side, out);
+                        }
+                    }
+                });
             crate::app::label_resize_handle(ui.ctx(), &side_id, &tr("Resize workspace column"));
         }
         if !log.is_empty() {
