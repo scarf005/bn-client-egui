@@ -58,6 +58,10 @@ impl<M: GameModel> App<M> {
         // The cells grow with the room the grid has, up to twice their size, their glyphs with them; a canvas's
         // the same, and the zoom gesture over it scales them from there.
         let fit = (available.x / xs.len().max(1) as f32).min(available.y / ys.len().max(1) as f32);
+        // Columns the player widened may leave it no room: then no square is drawn, rather than squares of no size.
+        if fit <= 0.0 {
+            return;
+        }
         let canvas = grid.role == Some(GridRole::Canvas);
         // A canvas first fits its whole grid to its room, its squares no larger than `CANVAS_MAX_CELL`; it zooms out
         // until the whole grid fits, and in until a cell is as large as the room.
