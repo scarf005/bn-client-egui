@@ -376,8 +376,9 @@ fn a_click_on_the_middle_row_of_a_24_square_canvas_paints_it_in_a_laptop_window(
     }
 }
 
-/// The rows of the symbols picked by double clicks on the legend row of `#`, at its label or at its value.
-fn picked_by_double_click_on(label: bool) -> Vec<String> {
+/// The rows of the symbols picked by a click, or a double click, on the legend row of `#`, at its label or at its
+/// value: the legend's `select`-role affordance picks a row on one click.
+fn picked_by_click_on(label: bool, double: bool) -> Vec<String> {
     let (mut h, script) = open(editor(Some("span")));
     let value = h.get_all_by_label("t_wall").next().unwrap().rect().center();
     let symbol = h
@@ -385,9 +386,23 @@ fn picked_by_double_click_on(label: bool) -> Vec<String> {
         .map(|n| n.rect().center())
         .find(|c| (c.y - value.y).abs() < 4.0)
         .unwrap();
-    h.hover_at(value);
+    let at = if label { symbol } else { value };
+    h.hover_at(at);
     h.run_steps(2);
-    crate::common::double_click(&mut h, if label { symbol } else { value });
+    match double {
+        true => crate::common::double_click(&mut h, at),
+        false => {
+            h.input_mut().events.push(egui::Event::PointerMoved(at));
+            for pressed in [true, false] {
+                h.input_mut().events.push(egui::Event::PointerButton {
+                    pos: at,
+                    button: egui::PointerButton::Primary,
+                    pressed,
+                    modifiers: egui::Modifiers::NONE,
+                });
+            }
+        }
+    }
     h.run_steps(6);
     script
         .sent()
@@ -400,13 +415,19 @@ fn picked_by_double_click_on(label: bool) -> Vec<String> {
 }
 
 #[test]
-fn a_double_click_on_a_legend_rows_label_runs_its_symbol() {
-    assert_eq!(picked_by_double_click_on(true), ["symbol:#"]);
+fn a_click_on_a_legend_rows_label_or_value_runs_its_symbol_once() {
+    assert_eq!(picked_by_click_on(true, false), ["symbol:#"]);
+    assert_eq!(picked_by_click_on(false, false), ["symbol:#"]);
 }
 
 #[test]
-fn a_double_click_on_a_legend_rows_value_runs_its_symbol() {
-    assert_eq!(picked_by_double_click_on(false), ["symbol:#"]);
+fn a_double_click_on_a_legend_rows_label_runs_its_symbol_once() {
+    assert_eq!(picked_by_click_on(true, true), ["symbol:#"]);
+}
+
+#[test]
+fn a_double_click_on_a_legend_rows_value_runs_its_symbol_once() {
+    assert_eq!(picked_by_click_on(false, true), ["symbol:#"]);
 }
 
 /// The editor on its placements tool: a 4×3 region at (2,2) with its corner squares, a lone square at (9,9), and the

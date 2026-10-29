@@ -109,16 +109,55 @@ fn the_catalog_under_a_full_canvas_scrolls_into_the_window() {
     assert!(shown(&h), "a catalog row is inside the window {room:?}");
 }
 
+/// `editor` with a legend of a dozen symbols, showing at most `rows_shown` of them at once.
+fn dozen_symbols(rows_shown: Option<u32>) -> Value {
+    let mut screen = editor();
+    let legend = find(&mut screen["root"], "editor:legend").unwrap();
+    legend["rows"] = (0..12)
+        .map(|n| json!({ "id": format!("symbol:{n}"), "label": format!("{n}"), "description": "", "denial": "", "enabled": true, "selectable": true, "selected": false, "columns": [{ "key": "terrain", "label": "terrain", "value": format!("\"t_wall_{n}\"") }] }))
+        .collect();
+    legend["total"] = json!(12);
+    match rows_shown {
+        Some(n) => legend["rows_shown"] = json!(n),
+        None => _ = legend.as_object_mut().unwrap().remove("rows_shown"),
+    }
+    screen
+}
+
+/// Whether the legend row of symbol `n` is whole in the window and in its list.
+fn whole_symbol(h: &H, n: usize) -> bool {
+    h.query_all_by_label_contains(&format!("t_wall_{n}\""))
+        .any(|node| unclipped(h, node.rect()))
+}
+
+#[test]
+fn a_legend_shows_the_rows_the_engine_asks_for_and_scrolls_to_the_rest() {
+    for size in [egui::vec2(1290.0, 830.0), egui::vec2(1920.0, 1080.0)] {
+        let mut h = open(dozen_symbols(Some(5)), size);
+        let whole = (0..12).filter(|&n| whole_symbol(&h, n)).count();
+        assert_eq!(whole, 5, "symbols shown at once at {size:?}");
+        let first = h.get_by_label_contains("t_wall_0\"").rect();
+        for _ in 0..10 {
+            h.hover_at(first.center());
+            h.event(egui::Event::MouseWheel {
+                unit: egui::MouseWheelUnit::Point,
+                delta: egui::vec2(0.0, -100.0),
+                modifiers: egui::Modifiers::NONE,
+                phase: egui::TouchPhase::Move,
+            });
+            h.run_steps(2);
+        }
+        assert!(
+            whole_symbol(&h, 11),
+            "the last symbol scrolls into the legend at {size:?}"
+        );
+    }
+}
+
 #[test]
 fn the_legend_under_a_full_canvas_shows_most_of_a_dozen_symbols_at_once() {
     for size in [egui::vec2(1290.0, 830.0), egui::vec2(1920.0, 1080.0)] {
-        let mut screen = editor();
-        let legend = find(&mut screen["root"], "editor:legend").unwrap();
-        legend["rows"] = (0..12)
-            .map(|n| json!({ "id": format!("symbol:{n}"), "label": format!("{n}"), "description": "", "denial": "", "enabled": true, "selectable": true, "selected": false, "columns": [{ "key": "terrain", "label": "terrain", "value": format!("\"t_wall_{n}\"") }] }))
-            .collect();
-        legend["total"] = json!(12);
-        let mut h = open(screen, size);
+        let mut h = open(dozen_symbols(None), size);
         // Above the canvas, which the window scrolls under, below the menu bar, which does not scroll: the wheel
         // over the canvas zooms it.
         let over = egui::pos2(40.0, h.get_by_label("View").rect().bottom() + 8.0);
