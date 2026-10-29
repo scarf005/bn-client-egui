@@ -12,6 +12,8 @@ pub(super) struct View {
     pub span: (usize, usize),
     /// The cells' scale from the size that fills the room.
     pub zoom: f32,
+    /// The player zoomed in past the whole grid fitting its room.
+    pub zoomed: bool,
     pub cell: f32,
     /// The part of the screen the canvas shows its squares in.
     pub rect: egui::Rect,

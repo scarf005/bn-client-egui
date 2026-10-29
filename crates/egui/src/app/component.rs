@@ -1344,9 +1344,12 @@ impl<M: GameModel> App<M> {
             .data(|d| d.get_temp::<canvas::View>(view_key))
             .filter(|v| v.span == (xs.len(), ys.len()));
         let anchor = view.and_then(|view| canvas::zoomed(ui, view, limits));
+        // Until the player zooms, the whole grid is in view at any size of the room: a cell shrinks below its usual
+        // size to fit.
+        let kept = view.filter(|v| v.zoomed).map(|v| v.zoom);
         let zoom = anchor
             .as_ref()
-            .map_or(view.map_or(1.0, |v| v.zoom), |a| a.zoom)
+            .map_or(kept.unwrap_or(limits.0), |a| a.zoom)
             .clamp(limits.0, limits.1);
         let cell = match canvas {
             true => base * zoom,
@@ -1428,6 +1431,7 @@ impl<M: GameModel> App<M> {
             let view = canvas::View {
                 span: (xs.len(), ys.len()),
                 zoom,
+                zoomed,
                 cell,
                 rect: shown.inner_rect,
                 // While zooming, the offset asked for: one a smaller square clamped must not drift the anchor.
