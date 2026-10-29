@@ -5,8 +5,8 @@ use crate::interaction::{self, InvokeError};
 use crate::keys;
 use crate::localise::tr;
 use crate::markup;
-use crate::model::{CommandStatus, MenuChoice, MenuModel};
-use crate::protocol::Operation;
+use crate::model::{ActionEntry, CommandStatus, MenuChoice, MenuModel};
+use crate::protocol::{self, Operation};
 
 impl EngineModel {
     /// Sends the kept command once the engine has published a newer boundary of a timed screen; a screen
@@ -162,5 +162,36 @@ impl EngineModel {
             return false;
         };
         self.submit(Operation::Action { action_id })
+    }
+
+    /// The enabled affordance of the map that is the registered action `id`.
+    pub(super) fn map_affordance(&self, id: &str) -> Option<&protocol::Affordance> {
+        let map = self
+            .replica
+            .stack()
+            .last()
+            .filter(|s| s.role == protocol::ScreenRole::Map)?;
+        map.affordances
+            .iter()
+            .find(|a| a.enabled && a.id.eq_ignore_ascii_case(id))
+    }
+
+    pub(super) fn refresh_actions(&mut self) {
+        let offered = self.replica.boundary().map_or(&[][..], |b| &b.actions);
+        if !offered.is_empty() || !self.busy {
+            // An action with no keys is offered only where the map's affordances run it.
+            self.shown = offered
+                .iter()
+                .filter(|a| {
+                    a.keys.as_ref().is_none_or(|keys| !keys.is_empty())
+                        || self.map_affordance(&a.id).is_some()
+                })
+                .map(|a| ActionEntry {
+                    id: a.id.clone(),
+                    name: a.name.clone(),
+                    keys: a.keys.clone().unwrap_or_default(),
+                })
+                .collect();
+        }
     }
 }

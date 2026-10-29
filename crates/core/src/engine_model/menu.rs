@@ -95,6 +95,17 @@ fn row(c: &Choice, tab: bool, highlighted: bool) -> MenuChoice {
 }
 
 impl EngineModel {
+    /// The fetched pages of this interaction, when they belong to it.
+    fn more_of(&self, i: &protocol::Interaction) -> &[protocol::Choice] {
+        let b = self.replica.boundary();
+        match b {
+            Some(b) if self.paged.key == (b.boundary_id.clone(), i.schema_id.clone()) => {
+                &self.paged.more
+            }
+            _ => &[],
+        }
+    }
+
     /// The generic menu an interaction shows, with the pages fetched after its first.
     pub(super) fn menu_of(&self, i: &Interaction) -> Menu {
         let panes = panes(i);
