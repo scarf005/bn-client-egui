@@ -5,8 +5,7 @@
 //! The pick column holds a drawn checkbox, the engine's mark and the favourite; the key column the row's key,
 //! right-aligned so the labels line up. Columns no row uses take no room. A label takes its natural width when the
 //! table has it, so the values sit right after it and the spare width goes to the empty last column; with less
-//! room it wraps between words, or, where the names matter most (a workspace's palette), a long value (an id) is cut
-//! first, down to `VALUE_KEPT`, and then the label wraps.
+//! room it wraps between words, down to its longest word, before a value is cut.
 
 use super::tokens;
 use eframe::egui;
@@ -14,9 +13,6 @@ use egui_extras::{Column, TableBuilder, TableRow};
 
 /// Side of a drawn checkbox.
 pub const CHECK: f32 = 3.0 * tokens::U;
-/// The width a value column keeps beside a label that wants the room, where names come first: a narrower value is
-/// kept whole, a wider one is cut to this before the label wraps.
-pub const VALUE_KEPT: f32 = 16.0 * tokens::U;
 
 /// What each of a list's columns needs, measured from its rows; a column 0 wide is left out.
 #[derive(Default)]
@@ -59,58 +55,33 @@ impl Widths {
     /// The label's width in `room`: its natural width when that fits beside the other columns, else what they
     /// leave it, where it wraps between words. It keeps its longest word whole up to half the room, and the columns
     /// that do not fit beside it are cut (`fitted`).
-    pub fn label_in(&self, room: f32, gap: f32, kept: f32) -> f32 {
-        // The spare last column stands a gap after the others; a value column is counted at the `kept` width.
-        let cut = (self.values.iter().chain([&self.count]))
-            .map(|w| (w - kept).max(0.0))
-            .sum::<f32>();
-        let others = self.natural(gap) - self.label + gap - cut;
+    pub fn label_in(&self, room: f32, gap: f32) -> f32 {
+        // The spare last column stands a gap after the others.
+        let others = self.natural(gap) - self.label + gap;
         (room - others)
             .max(self.label_min.min(room / 2.0))
             .min(self.label)
             .max(0.0)
     }
 
-    /// These widths in `room` beside a label `label` wide: each value column first keeps up to `kept`, then the
-    /// room left widens them in order; a value column past the room's edge is cut at it, and one wholly past it is
-    /// left out, so the scroll bar stays at the room's edge.
-    pub fn fitted(mut self, room: f32, gap: f32, label: f32, kept: f32) -> Self {
+    /// These widths in `room` beside a label `label` wide: each value column in order takes the room it wants; a
+    /// value column past the room's edge is cut at it, and one wholly past it is left out, so the scroll bar stays
+    /// at the room's edge.
+    pub fn fitted(mut self, room: f32, gap: f32, label: f32) -> Self {
         let lead = [self.pick, self.item, self.key]
             .into_iter()
             .filter(|w| *w > 0.0);
         // The spare last column stands a gap after the others.
         let mut left = room - gap - label - lead.map(|w| w + gap).sum::<f32>();
         let apart = gap + tokens::COLUMN_GAP - tokens::ITEM_GAP;
-        let mut columns = self
+        for w in self
             .values
             .iter_mut()
             .chain([&mut self.count])
             .filter(|w| **w > 0.0)
-            .map(|w| {
-                let wanted = *w;
-                *w = wanted.min(kept).min(left - apart).max(0.0);
-                left -= *w + apart;
-                (w, wanted)
-            })
-            .collect::<Vec<_>>();
-        for (w, wanted) in &mut columns {
-            let more = (*wanted - **w).min(left).max(0.0);
-            **w += more;
-            left -= more;
-        }
-        // A column still cut takes the width of the cut columns after it, the last first: the engine orders them by
-        // what matters most. A whole one keeps its width.
-        for at in 0..columns.len() {
-            for from in (at + 1..columns.len()).rev() {
-                let short = columns[at].1 - *columns[at].0;
-                let cut = *columns[from].0 < columns[from].1;
-                if short <= 0.0 || !cut {
-                    continue;
-                }
-                let taken = short.min(*columns[from].0);
-                *columns[from].0 -= taken;
-                *columns[at].0 += taken;
-            }
+        {
+            *w = w.min(left - apart).max(0.0);
+            left -= *w + apart;
         }
         self
     }
@@ -285,35 +256,35 @@ mod tests {
     fn a_label_keeps_its_natural_width_when_there_is_room_and_else_what_the_other_columns_leave_but_its_longest_word()
      {
         let w = widths();
-        assert_eq!(w.label_in(1000.0, 8.0, f32::INFINITY), 200.0);
-        assert_eq!(w.label_in(250.0, 8.0, f32::INFINITY), 250.0 - 174.0);
-        assert_eq!(w.label_in(200.0, 8.0, f32::INFINITY), 60.0);
-        assert_eq!(w.label_in(100.0, 8.0, f32::INFINITY), 50.0);
+        assert_eq!(w.label_in(1000.0, 8.0), 200.0);
+        assert_eq!(w.label_in(250.0, 8.0), 250.0 - 174.0);
+        assert_eq!(w.label_in(200.0, 8.0), 60.0);
+        assert_eq!(w.label_in(100.0, 8.0), 50.0);
         assert_eq!(w.wrapped_label_in(1000.0, 8.0), 1000.0 - 166.0);
     }
 
     #[test]
     fn value_columns_past_the_room_are_cut_at_its_edge_and_those_wholly_past_it_left_out() {
         assert_eq!(
-            widths().fitted(374.0, 8.0, 200.0, f32::INFINITY).values,
+            widths().fitted(374.0, 8.0, 200.0).values,
             vec![40.0, 0.0, 50.0]
         );
         assert_eq!(
-            widths().fitted(338.0, 8.0, 200.0, f32::INFINITY).values,
+            widths().fitted(338.0, 8.0, 200.0).values,
             vec![40.0, 0.0, 14.0]
         );
         assert_eq!(
-            widths().fitted(308.0, 8.0, 200.0, f32::INFINITY).values,
+            widths().fitted(308.0, 8.0, 200.0).values,
             vec![40.0, 0.0, 0.0]
         );
         assert_eq!(
-            widths().fitted(278.0, 8.0, 200.0, f32::INFINITY).values,
+            widths().fitted(278.0, 8.0, 200.0).values,
             vec![10.0, 0.0, 0.0]
         );
     }
 
     #[test]
-    fn a_long_value_is_cut_to_what_it_keeps_before_the_label_wraps() {
+    fn a_long_value_is_whole_and_the_label_wraps_to_its_longest_word_before_the_value_is_cut() {
         let w = || Widths {
             item: 24.0,
             label_min: 60.0,
@@ -321,30 +292,13 @@ mod tests {
             values: vec![300.0],
             ..Widths::default()
         };
-        let kept = 80.0;
-        assert_eq!(w().label_in(400.0, 8.0, kept), 200.0);
-        assert_eq!(w().fitted(400.0, 8.0, 200.0, kept).values, vec![144.0]);
-        assert_eq!(w().label_in(300.0, 8.0, kept), 164.0);
-        assert_eq!(w().fitted(300.0, 8.0, 164.0, kept).values, vec![kept]);
-    }
-
-    #[test]
-    fn a_cut_value_takes_the_width_of_the_cut_values_after_it_but_not_of_a_whole_one() {
-        let w = |values: Vec<f32>| Widths {
-            label: 20.0,
-            values,
-            ..Widths::default()
-        };
-        let room =
-            |n: f32| 20.0 + 8.0 + n * (40.0 + 8.0 + tokens::COLUMN_GAP - tokens::ITEM_GAP) + 8.0;
-        let values = w(vec![100.0, 100.0, 100.0])
-            .fitted(room(3.0), 8.0, 20.0, 40.0)
-            .values;
-        assert_eq!((values[0], values[2]), (100.0, 0.0), "{values:?}");
-        assert!(values[1] > 0.0 && values[1] < 40.0, "{values:?}");
-        let values = w(vec![100.0, 30.0])
-            .fitted(room(2.0) - 10.0, 8.0, 20.0, 40.0)
-            .values;
-        assert!(values[0] < 100.0 && values[1] == 30.0, "{values:?}");
+        assert_eq!(w().label_in(400.0, 8.0), 60.0);
+        let label = w().label_in(500.0, 8.0);
+        assert_eq!(w().fitted(500.0, 8.0, label).values, vec![300.0]);
+        let label = w().label_in(300.0, 8.0);
+        assert_eq!(
+            (label, w().fitted(300.0, 8.0, label).values[0] < 300.0),
+            (60.0, true)
+        );
     }
 }

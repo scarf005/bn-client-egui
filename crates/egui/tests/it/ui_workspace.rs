@@ -1023,7 +1023,7 @@ fn a_click_or_return_on_a_menu_item_that_is_off_shows_the_engines_reason() {
 /// canvas's squares reach.
 #[test]
 fn widening_the_right_column_shows_a_cut_id_whole() {
-    let id = "turret_mount_manual_steel_reinforced_foldable";
+    let id = "turret_mount_manual_steel_reinforced_foldable_with_a_longer_tail";
     let mut h = shown_with(SIZES[0], |parts| {
         let row = json!({"id": "vpart:turret", "label": "simple foldable wooden turret mount", "description": "",
             "denial": "", "enabled": true, "selectable": true, "selected": false,

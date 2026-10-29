@@ -121,16 +121,11 @@ impl<M: GameModel> App<M> {
         let room = ui.available_width() - ui.spacing().scroll.allocated_width();
         let widths = self.list_widths(ui, list, &rows);
         // Without columns to keep beside it, the label takes the room.
-        // Where names come first, a long value is cut before the label wraps.
-        let kept = match self.screens.in_column.get() {
-            true => table::VALUE_KEPT,
-            false => f32::INFINITY,
-        };
         let label = match list.columns.is_empty() {
             true => widths.wrapped_label_in(room, spacing.x),
-            false => widths.label_in(room, spacing.x, kept),
+            false => widths.label_in(room, spacing.x),
         };
-        let widths = widths.fitted(room, spacing.x, label, kept);
+        let widths = widths.fitted(room, spacing.x, label);
         let height = match self.squares(&rows) {
             true => tokens::ROW_ITEM,
             false => tokens::ROW,
