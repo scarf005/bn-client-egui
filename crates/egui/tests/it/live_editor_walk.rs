@@ -380,23 +380,38 @@ fn canvas_glyphs(h: &H) -> Vec<String> {
     crate::live_editor::glyphs(h, "editor:canvas")
 }
 
+/// The names of the canvas's squares row by row, as a screen reader reads them: each square's label, else its glyph.
+fn canvas_names(h: &H) -> Vec<String> {
+    let top = h.state().model.screens().last().unwrap();
+    let Some(Component::Grid(grid)) = top.root.as_ref().unwrap().find("editor:canvas") else {
+        panic!("no editor:canvas");
+    };
+    let mut names = vec![" ".to_string(); (grid.cols * grid.rows) as usize];
+    for cell in &grid.cells {
+        names[(cell.y * grid.cols + cell.x) as usize] = cell
+            .label
+            .as_ref()
+            .map(|l| l.shown())
+            .or_else(|| cell.glyph.clone())
+            .unwrap_or_else(|| " ".into());
+    }
+    names
+}
+
 /// The screen rectangle of canvas square (`x`, `y`), found among the drawn buttons in the order the grid draws them.
 fn square(h: &H, x: usize, y: usize) -> egui::Rect {
-    let glyphs = canvas_glyphs(h);
-    let cols = glyphs[0].chars().count();
+    let cols = canvas_glyphs(h)[0].chars().count();
     let buttons = h
         .root()
         .children_recursive()
         .filter(|n| {
             let a = n.accesskit_node();
-            a.role() == egui::accesskit::Role::Button
-                && a.label()
-                    .is_some_and(|l| l.chars().count() <= 1 && l != "⋯")
+            a.role() == egui::accesskit::Role::Button && a.label().is_some_and(|l| l != "⋯")
         })
         .collect::<Vec<_>>();
-    // The squares are the run of buttons that spells the canvas row by row and lies on its grid; a legend's
+    // The squares are the run of buttons that names the canvas row by row and lies on its grid; a legend's
     // symbols are buttons too, and spell a blank canvas as well one button earlier.
-    let spelled = glyphs.concat().chars().collect::<Vec<_>>();
+    let spelled = canvas_names(h);
     let on_grid = |i: usize| {
         let rect = |k: usize| buttons[k].rect();
         let (first, next, under) = (rect(i), rect(i + 1), rect(i + cols));
@@ -404,27 +419,12 @@ fn square(h: &H, x: usize, y: usize) -> egui::Rect {
     };
     let names = buttons
         .iter()
-        .map(|b| {
-            b.accesskit_node()
-                .label()
-                .unwrap_or_default()
-                .chars()
-                .next()
-                .unwrap_or(' ')
-        })
+        .map(|b| b.accesskit_node().label().unwrap_or_default().to_string())
         .collect::<Vec<_>>();
     let start = (0..=names.len().saturating_sub(spelled.len()))
         .find(|&i| names[i..i + spelled.len()] == spelled[..] && on_grid(i))
-        .unwrap_or_else(|| panic!("no run of buttons spells the canvas"));
-    let at = start + y * cols + x;
-    let want = glyphs[y].chars().nth(x).unwrap().to_string();
-    let found = &buttons[at];
-    assert_eq!(
-        found.accesskit_node().label().unwrap_or_default(),
-        want,
-        "square {x},{y}"
-    );
-    found.rect()
+        .unwrap_or_else(|| panic!("no run of buttons names the canvas"));
+    buttons[start + y * cols + x].rect()
 }
 
 /// Presses and releases the primary button at `at`, as a click does.
@@ -4010,4 +4010,186 @@ fn the_vehicle_editor_shows_its_lists_with_a_design_open() {
     wait_kind(&mut h, "vehicle_editor");
     rest(&mut h);
     shot_at(&mut h, "vehicle-design-open", &CATALOG_SIZES);
+}
+
+/// Pictures of the window at 1280x800 and 1920x1080, back at the desktop size, where the walk is driven.
+fn walk_shot(h: &mut H, name: &str) {
+    shot_at(h, name, &[(1280.0, 800.0), (1920.0, 1080.0)]);
+    h.set_size(egui::vec2(1920.0, 1080.0));
+    settle(h);
+}
+
+/// Types `query` into the catalog's search box and clicks the first row it ranks: one click puts it in hand.
+fn pick_first(h: &mut H, query: &str) -> String {
+    click_input(h, "Catalog");
+    replace_text(h, query);
+    let top = h.state().model.screens().last().unwrap();
+    let Some(Component::List(catalog)) = top.root.as_ref().unwrap().find("editor:catalog") else {
+        panic!("no catalog");
+    };
+    let first = catalog.rows[0].label.shown();
+    click(h, &first);
+    first
+}
+
+/// One drag on the canvas from square `from` to square `to`.
+fn stroke(h: &mut H, name: &str, from: (usize, usize), to: (usize, usize)) {
+    drag_squares(h, name, from, &[to], egui::Vec2::ZERO);
+}
+
+/// Clicks square (`x`, `y`) of the canvas where it is drawn, scrolling the window only when it is out of view: the
+/// wheel over a whole canvas would zoom it.
+fn put(h: &mut H, x: usize, y: usize) {
+    match in_view(h, square(h, x, y)) {
+        true => click_at(h, square(h, x, y).center()),
+        false => paint(h, x, y),
+    }
+}
+
+/// A first-time modder builds a 24 by 24 house from a new mod folder: outer walls, four rooms, doors, windows, a
+/// floor, a bed, an item and a monster, all from catalog picks and the drawing tools, no symbol typed. Then a hover
+/// over a square, a save, a test in the world and a preview. Counts the strokes.
+///
+/// `BN_ENGINE=<engine> SHOT_DIR=<dir> cargo test --release -p bn-client-egui --test it
+/// live_editor_walk::a_first_time_modder_builds_a_house -- --ignored --nocapture`
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn a_first_time_modder_builds_a_house_in_a_new_mod_with_picks_and_shape_tools() {
+    let dir = std::env::temp_dir().join(format!("bn-house-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let (mut h, _root) = start(&dir);
+    h.set_size(egui::vec2(1920.0, 1080.0));
+    rest(&mut h);
+    open_map_editor(&mut h);
+    rest(&mut h);
+    walk_shot(&mut h, "01-start-page");
+    dump(&h, "start page");
+    // Every click, drag, typed query and key the building takes, in order.
+    let mut gestures = Vec::<String>::new();
+    click(&mut h, "New mod folder");
+    walk_shot(&mut h, "02-new-mod-folder");
+    dump(&h, "new mod folder");
+    println!("PATH {}", field(&h, "editor:new", "path"));
+    click_beside(&mut h, "Overmap terrain");
+    replace_text(&mut h, "house_zz");
+    click(&mut h, "Create");
+    if find(&h, "Continue").is_some() {
+        click(&mut h, "Continue");
+    }
+    wait_kind(&mut h, "editor");
+    rest(&mut h);
+    walk_shot(&mut h, "03-new-mapgen");
+    dump(&h, "new mapgen");
+
+    // Outer walls: a brick wall in hand, a room from corner to corner.
+    let wall = pick_first(&mut h, "brick wall");
+    gestures.push(format!("pick {wall}"));
+    walk_shot(&mut h, "04-wall-picked");
+    click_tab(&mut h, "Room");
+    gestures.push("tool Room".into());
+    stroke(&mut h, "05-outer-walls-drag", (0, 0), (23, 23));
+    gestures.push("drag outer walls".into());
+    walk_shot(&mut h, "05-outer-walls");
+    // Four rooms: two dividing lines.
+    click_tab(&mut h, "Line");
+    gestures.push("tool Line".into());
+    stroke(&mut h, "06-divider-drag", (12, 1), (12, 22));
+    stroke(&mut h, "06-divider-drag-2", (1, 12), (22, 12));
+    gestures.push("drag divider across".into());
+    gestures.push("drag divider down".into());
+    walk_shot(&mut h, "06-four-rooms");
+    println!("CANVAS\n{}", canvas_glyphs(&h).join("\n"));
+
+    // Doors: one into each room and the front door.
+    let door = pick_first(&mut h, "t_door_c");
+    gestures.push(format!("pick {door}"));
+    click_tab(&mut h, "Pencil");
+    gestures.push("tool Pencil".into());
+    for (x, y) in [(12, 6), (12, 17), (6, 12), (17, 12), (6, 23)] {
+        put(&mut h, x, y);
+        gestures.push(format!("click door {x},{y}"));
+    }
+    walk_shot(&mut h, "07-doors");
+
+    // A bed, an item and a monster, each picked in its tab and put down by one click.
+    for (tab, query, x, y, name) in [
+        ("Furniture", "bed", 3, 3, "08-bed"),
+        ("Items", "pillow", 4, 3, "09-item"),
+        ("Monsters", "zombie", 18, 18, "10-monster"),
+    ] {
+        click_tab(&mut h, tab);
+        gestures.push(format!("tab {tab}"));
+        let picked = pick_first(&mut h, query);
+        gestures.push(format!("pick {picked}"));
+        put(&mut h, x, y);
+        gestures.push(format!("click {name} {x},{y}"));
+        walk_shot(&mut h, name);
+    }
+
+    // Windows, mirrored across and down: one click puts four.
+    click_tab(&mut h, "Terrain");
+    gestures.push("tab Terrain".into());
+    let window = pick_first(&mut h, "t_window_domestic");
+    gestures.push(format!("pick {window}"));
+    menu(&mut h, "Edit", "Mirror across");
+    menu(&mut h, "Edit", "Mirror down");
+    gestures.push("mirror across".into());
+    gestures.push("mirror down".into());
+    for (x, y) in [(0, 5), (5, 0)] {
+        put(&mut h, x, y);
+        gestures.push(format!("click window {x},{y} (mirrored)"));
+    }
+    walk_shot(&mut h, "11-windows");
+    println!("CANVAS\n{}", canvas_glyphs(&h).join("\n"));
+    let strokes = gestures
+        .iter()
+        .filter(|g| g.starts_with("drag") || g.starts_with("click"))
+        .count();
+    println!("GESTURES {} {gestures:#?}", gestures.len());
+    println!("STROKES {strokes}");
+
+    // A hover over the bed's square reads what is there.
+    scroll_to(&mut h, 3, 3);
+    let at = square(&h, 3, 3).center();
+    h.hover_at(at);
+    h.run_steps(40);
+    walk_shot(&mut h, "12-hover-bed");
+    println!("LABEL 3,3 {}", canvas_names(&h)[3 * 24 + 3]);
+    key_mod(&mut h, egui::Modifiers::CTRL, egui::Key::S);
+    walk_shot(&mut h, "13-saved");
+    dump(&h, "saved");
+    let path = field(&h, "editor:file", "path");
+    println!(
+        "SAVEDFILE {path}\n{}",
+        std::fs::read_to_string(&path).unwrap_or_else(|e| format!("{e}"))
+    );
+
+    // Test in the world, and back.
+    menu(&mut h, "World", "Test");
+    run_until(&mut h, "the map", 120, |h| {
+        !h.state().model.busy() && top(h).as_deref() != Some("editor")
+    });
+    rest(&mut h);
+    walk_shot(&mut h, "14-tested");
+    dump(&h, "tested");
+    click(&mut h, "Map Editor");
+    wait_kind(&mut h, "editor");
+    rest(&mut h);
+    walk_shot(&mut h, "15-back-from-test");
+
+    // Preview: the game's own generation of the entry.
+    menu(&mut h, "View", "Preview");
+    walk_shot(&mut h, "16-preview-asks");
+    dump(&h, "preview asks");
+    click_footer(&mut h, "OK");
+    run_until(&mut h, "the preview", 60, |h| {
+        let top = h.state().model.screens().last().unwrap();
+        top.root.as_ref().unwrap().find("editor:preview").is_some()
+    });
+    rest(&mut h);
+    walk_shot(&mut h, "17-preview");
+    println!(
+        "PREVIEW\n{}",
+        crate::live_editor::glyphs(&h, "editor:preview").join("\n")
+    );
 }
