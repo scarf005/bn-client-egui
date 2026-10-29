@@ -992,6 +992,45 @@ fn of_the_rows_clicked_while_the_engine_is_busy_the_last_is_selected_once_it_is_
     );
 }
 
+/// The same double click is dropped when another screen is on top by the time the engine is done: the select was for
+/// the list it was made on.
+#[test]
+fn a_select_waiting_for_a_busy_engine_is_dropped_when_another_screen_opens_meanwhile() {
+    let mut screen = recipe_screen("crafting:tabs", "crafting:recipes", "craft:select");
+    screen["root"]["child"]["children"][0]["activate"] = json!("craft:select");
+    screen["affordances"][0]["keys"] = json!(["g"]);
+    let mut other = screen.clone();
+    other["screen_id"] = json!("screen:10");
+    let (mut h, script) = harness(screen);
+    h.event(egui::Event::Text("g".into()));
+    h.run_steps(3);
+    let at = h.get_by_label("Row b").rect().center();
+    crate::common::double_click(&mut h, at);
+    h.run_steps(3);
+    let go = script
+        .sent()
+        .into_iter()
+        .find(|m| m["method"] == "bn.command.submit")
+        .unwrap();
+    script.push(json!({"jsonrpc": "2.0", "method": "bn.events", "params": {"epoch": "e7f3", "events": [{
+        "sequence": "41", "revision": "32", "type": "interaction.changed", "changes": {"interaction": {
+        "boundary_id": "b:61",
+        "readiness": {"phase": "playing", "game_ready": true, "accepts_interaction_commands": true,
+            "accepts_registered_actions": true},
+        "actions": [], "interaction": null, "stack": [other]}}}]}}));
+    let mut received = fixture("submit_result");
+    received["id"] = go["id"].clone();
+    script.push(received);
+    script.push(fixture("command_completed"));
+    h.run_steps(6);
+    let sent = submits(&script);
+    assert_eq!(
+        sent.last(),
+        Some(&boundary_invoke("go", json!({"row": "a"}))),
+        "{sent:?}"
+    );
+}
+
 #[test]
 fn the_editmap_screen_draws_the_engines_cursor_parts_and_a_click_runs_its_edit_affordance() {
     let map = json!({"id": "editmap:map", "kind": "map", "affordances": ["target:move"],
