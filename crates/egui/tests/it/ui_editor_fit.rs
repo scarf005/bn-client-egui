@@ -542,3 +542,29 @@ fn a_whole_overmap_square_canvas_fits_a_laptop_window_from_the_start_and_after_a
         }
     }
 }
+
+/// A canvas in a room too low for its usual squares draws them smaller and still square: every row and column steps
+/// by the same side, and the whole grid is in view.
+#[test]
+fn a_canvas_in_a_low_room_keeps_its_squares_square_and_whole() {
+    // In the game's theme, whose controls are taller than such a square.
+    let mut h = crate::common::themed_harness(
+        egui::vec2(1280.0, 560.0),
+        crate::common::staged(json!([named_squares()])).0,
+    );
+    h.run_steps(12);
+    let (first, right, under) = (square(&h, 0, 0), square(&h, 1, 0), square(&h, 0, 1));
+    assert!(
+        first.width() < 24.0,
+        "the squares shrink below their usual size: {first:?}"
+    );
+    let (across, down) = (right.left() - first.left(), under.top() - first.top());
+    assert!(
+        (across - down).abs() < 0.5 && (across - first.width()).abs() < 0.5,
+        "a step of {across} across and {down} down for a square of {first:?}"
+    );
+    for (x, y) in [(23, 0), (0, 23), (23, 23)] {
+        let r = square(&h, x, y);
+        assert!(unclipped(&h, r), "square {x},{y} at {r:?} is cut");
+    }
+}
