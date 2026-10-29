@@ -1136,3 +1136,25 @@ fn a_searchable_list_after_other_parts_of_the_palette_shows_its_search_box_and_r
         );
     }
 }
+
+#[test]
+fn a_tools_column_whose_part_needs_more_than_half_the_window_is_held_to_half() {
+    let size = egui::vec2(700.0, 600.0);
+    let h = shown_with(size, |parts| {
+        parts.retain(|c| c["slot"] != "palette" && c["slot"] != "inspector");
+        parts[0] = list("ws:tools", "Tools", &[&"W".repeat(60)], "tools");
+        for cell in parts[1]["cells"].as_array_mut().unwrap() {
+            cell["label"] = "square".into();
+            cell["affordance"] = "ws:validate".into();
+        }
+    });
+    let squares = h
+        .get_all_by_label("square")
+        .map(|n| n.rect())
+        .reduce(|a, b| a.union(b))
+        .unwrap();
+    assert!(
+        squares.width() > 0.0 && squares.left() <= size.x / 2.0 + 24.0,
+        "{size:?}: the canvas {squares:?} starts past the left column's half of the window"
+    );
+}
