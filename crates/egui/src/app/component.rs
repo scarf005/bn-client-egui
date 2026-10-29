@@ -1500,7 +1500,11 @@ impl<M: GameModel> App<M> {
             .as_deref()
             .filter(|_| keyboard && focus.component_id.as_deref() == Some(&grid.head.id));
         let drawn = ui.scope(|ui| {
-            ui.spacing_mut().item_spacing = egui::Vec2::ZERO;
+            // A square is its cell's size, however small: no row is as tall as a control, no button pads its glyph.
+            let spacing = ui.spacing_mut();
+            spacing.item_spacing = egui::Vec2::ZERO;
+            spacing.interact_size = egui::Vec2::ZERO;
+            spacing.button_padding = egui::Vec2::ZERO;
             for y in ys.clone() {
                 ui.horizontal(|ui| {
                     for x in xs.clone() {
