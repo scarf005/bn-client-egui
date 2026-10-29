@@ -115,7 +115,7 @@ pub(crate) fn sent(script: &ScriptHandle) -> Vec<String> {
 }
 
 /// A square's centre: the squares are drawn in rows from the canvas's top left.
-fn square(h: &H, x: u32, y: u32) -> egui::Pos2 {
+pub(crate) fn square(h: &H, x: u32, y: u32) -> egui::Pos2 {
     let first = h
         .get_all_by_label(".")
         .map(|n| n.rect())

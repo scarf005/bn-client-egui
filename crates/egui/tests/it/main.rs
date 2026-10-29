@@ -92,6 +92,7 @@ mod ui_play_view;
 mod ui_prompt_click;
 mod ui_row_sprites;
 mod ui_screen_placement;
+mod ui_secondary_drag;
 mod ui_select_filter;
 mod ui_shots_all;
 mod ui_shots_c;
