@@ -205,6 +205,13 @@ impl<M: GameModel> App<M> {
             false => None,
         };
         let list_height = cap.map_or(list_height, |cap| cap.min(wanted).max(MIN_ROWS * step));
+        // The engine may show no more than `rows_shown` rows at once, scrolling the rest, so the parts beside the
+        // list keep their room.
+        let most = list
+            .rows_shown
+            .and_then(|n| (n as usize).min(rows.len()).checked_sub(1))
+            .map(|last| starts[last] + heights[last]);
+        let list_height = most.map_or(list_height, |most| list_height.min(most));
         // A page is the rows the list has room for.
         let page = ((list_height + spacing.y) / step) as usize;
         self.screens
@@ -277,7 +284,7 @@ impl<M: GameModel> App<M> {
         if self.screens.in_column.get() {
             let fit = ListFit {
                 id: id.clone(),
-                wanted,
+                wanted: most.map_or(wanted, |most| wanted.min(most)),
                 taken: list_height,
             };
             self.screens.column_lists.borrow_mut().push(fit);
