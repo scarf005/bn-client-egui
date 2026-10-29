@@ -929,10 +929,9 @@ fn a_double_click_on_a_recipe_crafts_it() {
     );
 }
 
-/// A double click on a row of a list whose `activate` is its `select`, as a catalog's, while the engine still runs
-/// another command, moves the engine's cursor there once that command is done.
-#[test]
-fn a_double_click_on_a_row_while_the_engine_is_busy_selects_it_once_the_engine_is_done() {
+/// The submits after `click` on a list whose `activate` is its `select`, as a catalog's, while the engine still
+/// runs another command, and then that command is done.
+fn submits_once_a_busy_engine_is_done(click: impl FnOnce(&mut H)) -> Vec<Value> {
     let mut screen = recipe_screen("crafting:tabs", "crafting:recipes", "craft:select");
     screen["root"]["child"]["children"][0]["activate"] = json!("craft:select");
     screen["affordances"][0]["keys"] = json!(["g"]);
@@ -943,9 +942,7 @@ fn a_double_click_on_a_row_while_the_engine_is_busy_selects_it_once_the_engine_i
         submits(&script),
         [boundary_invoke("go", json!({"row": "a"}))]
     );
-    let at = h.get_by_label("Row b").rect().center();
-    crate::common::double_click(&mut h, at);
-    h.run_steps(3);
+    click(&mut h);
     let go = script
         .sent()
         .into_iter()
@@ -956,14 +953,42 @@ fn a_double_click_on_a_row_while_the_engine_is_busy_selects_it_once_the_engine_i
     script.push(received);
     script.push(fixture("command_completed"));
     h.run_steps(3);
-    let sent = submits(&script);
+    submits(&script)
+}
+
+/// A double click on a row while the engine still runs another command moves the engine's cursor there once
+/// that command is done.
+#[test]
+fn a_double_click_on_a_row_while_the_engine_is_busy_selects_it_once_the_engine_is_done() {
+    let sent = submits_once_a_busy_engine_is_done(|h| {
+        let at = h.get_by_label("Row b").rect().center();
+        crate::common::double_click(h, at);
+        h.run_steps(3);
+    });
     assert_eq!(
-        (h.state().model.busy(), sent.last()),
-        (
-            false,
-            Some(&boundary_invoke("craft:select", json!({"row": "b"})))
-        ),
-        "{sent:?}"
+        sent,
+        [
+            boundary_invoke("go", json!({"row": "a"})),
+            boundary_invoke("craft:select", json!({"row": "b"}))
+        ]
+    );
+}
+
+/// Of the rows clicked while the engine is busy, only the last one is selected once it is done.
+#[test]
+fn of_the_rows_clicked_while_the_engine_is_busy_the_last_is_selected_once_it_is_done() {
+    let sent = submits_once_a_busy_engine_is_done(|h| {
+        for row in ["Row b", "Row c"] {
+            h.get_by_label(row).click();
+            h.run_steps(3);
+        }
+    });
+    assert_eq!(
+        sent,
+        [
+            boundary_invoke("go", json!({"row": "a"})),
+            boundary_invoke("craft:select", json!({"row": "c"}))
+        ]
     );
 }
 

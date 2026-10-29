@@ -96,8 +96,13 @@ impl<M: GameModel> App<M> {
         {
             self.screens.sent_form = None;
         }
-        if let Some((id, args)) = self.screens.interaction.take_select() {
-            let _ = self.model.invoke_affordance(&id, args);
+        if let Some(select) = self.screens.interaction.take_select() {
+            self.screens.select = Some(select);
+        }
+        if let Some((id, args)) = self.screens.select.take()
+            && let Err(InvokeError::Busy) = self.model.invoke_affordance(&id, args.clone())
+        {
+            self.screens.select = Some((id, args));
         }
         self.reach_row();
     }
