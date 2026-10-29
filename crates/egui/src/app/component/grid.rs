@@ -69,7 +69,7 @@ impl<M: GameModel> App<M> {
             false => fit.clamp(GRID_CELL, GRID_MAX_CELL),
         };
         let limits = ((fit / base).min(1.0), GRID_ZOOM_MAX.max(fit / base));
-        let view_key = egui::Id::new(("grid view", &screen.screen_id, &grid.head.id));
+        let view_key = view_key(screen, grid);
         // The workspace's stop for the keyboard over the canvas (`canvas_stop`).
         let keyboard = ui.memory(|m| m.has_focus(view_key.with("keyboard")));
         let view = ui
@@ -89,12 +89,14 @@ impl<M: GameModel> App<M> {
             .as_ref()
             .map_or(kept.unwrap_or(limits.0), |a| a.zoom)
             .clamp(limits.0, limits.1);
-        let cell = match canvas {
-            true => base * zoom,
-            false => fit.clamp(GRID_CELL, GRID_MAX_CELL),
-        };
+        let cell = if canvas { base * zoom } else { base };
         let size = egui::vec2(cell, cell);
         let glyph_size = egui::TextStyle::Monospace.resolve(ui.style()).size * cell / GRID_CELL;
+        let cells = GridCells {
+            size,
+            glyph_size,
+            keyboard,
+        };
         let mut squares = HashMap::new();
         let layout;
         if canvas {
@@ -144,11 +146,6 @@ impl<M: GameModel> App<M> {
                 if let Some(pan) = pan.filter(|_| ui.rect_contains_pointer(ui.clip_rect())) {
                     ui.scroll_with_delta(pan);
                 }
-                let cells = GridCells {
-                    size,
-                    glyph_size,
-                    keyboard,
-                };
                 // The cells sit `lead` in from the corner, and the area runs on `tail` past them.
                 let corner = ui.cursor().min;
                 let laid = ui.scope_builder(
@@ -181,18 +178,13 @@ impl<M: GameModel> App<M> {
             ui.data_mut(|d| d.insert_temp(view_key, view));
             self.hover_outline(ui, shown.inner_rect, &squares);
         } else {
-            let cells = GridCells {
-                size,
-                glyph_size,
-                keyboard,
-            };
             layout = Some(self.grid_cells(ui, grid, cells, &mut squares, out));
         }
         if let Some(mode) = grid.drag {
-            self.drag_squares(ui, grid, mode, &squares, out);
+            self.drag_squares(ui, grid, DragBy::Primary(mode), &squares, out);
         }
         if let (Some(_), Some(secondary)) = (grid.secondary_drag, &grid.secondary) {
-            self.drag_squares_by(ui, grid, DragBy::Secondary(secondary), &squares, out);
+            self.drag_squares(ui, grid, DragBy::Secondary(secondary), &squares, out);
         }
         if let (Some(affordance), Some(layout)) = (&grid.region_drag, layout) {
             self.drag_region(ui, grid, affordance, (&squares, &layout), out);
@@ -201,12 +193,7 @@ impl<M: GameModel> App<M> {
     }
 
     /// Where the tool in hand would put its squares down from the square under the pointer, outlined.
-    fn stamp_outline(
-        &self,
-        ui: &egui::Ui,
-        grid: &Grid,
-        squares: &HashMap<drag::Square, (egui::Rect, String, String)>,
-    ) {
+    fn stamp_outline(&self, ui: &egui::Ui, grid: &Grid, squares: &Squares) {
         let pointer = ui.ctx().pointer_hover_pos();
         let Some((x, y)) = pointer.and_then(|at| {
             squares
@@ -239,12 +226,7 @@ impl<M: GameModel> App<M> {
     }
 
     /// The square under the pointer, outlined over the sprites.
-    fn hover_outline(
-        &self,
-        ui: &egui::Ui,
-        viewport: egui::Rect,
-        squares: &HashMap<drag::Square, (egui::Rect, String, String)>,
-    ) {
+    fn hover_outline(&self, ui: &egui::Ui, viewport: egui::Rect, squares: &Squares) {
         let at = canvas::pointer_over(ui, viewport);
         let Some((rect, ..)) = at.and_then(|at| squares.values().find(|s| s.0.contains(at))) else {
             return;
@@ -266,7 +248,7 @@ impl<M: GameModel> App<M> {
             glyph_size,
             keyboard,
         }: GridCells,
-        squares: &mut HashMap<drag::Square, (egui::Rect, String, String)>,
+        squares: &mut Squares,
         out: &mut Vec<Intent>,
     ) -> GridLayout {
         let (xs, ys) = drawn_span(grid);
@@ -302,9 +284,7 @@ impl<M: GameModel> App<M> {
                             || cell.refused.is_some())
                             && cell.looks.is_empty();
                         // The square the cursor or a selection marks keeps its full look, to be seen.
-                        let at_cursor = grid
-                            .cursor
-                            .is_some_and(|c| (c.x, c.y) == (x as i32, y as i32));
+                        let at_cursor = cursor_square(grid) == Some((x, y));
                         let marked = cell.selected == Some(true) || at_cursor;
                         ui.set_opacity(match (cell.faded == Some(true) || off) && !marked {
                             true => opacity * GRID_FADED,
@@ -406,33 +386,21 @@ impl<M: GameModel> App<M> {
                             (true, false) => button.on_hover_text(tip),
                             (false, false) => button.on_disabled_hover_text(tip),
                         };
-                        // A secondary drag, which a click is the shortest of, runs the secondary itself.
-                        if let (true, Some(id), Some(a)) = (
-                            button.secondary_clicked()
-                                && grid.secondary_drag.is_none()
-                                && !canvas::panning(ui),
-                            &cell.id,
-                            &grid.secondary,
-                        ) {
-                            out.push(Intent::Focus {
-                                component: self.row_component(a, &grid.head.id),
-                                row: id.clone(),
-                            });
-                            out.push(Intent::Run(a.clone()));
-                        }
-                        // A pointer click on a draggable canvas is the drag's press and release.
+                        // A secondary drag, which a click is the shortest of, runs the secondary itself. A
+                        // pointer click on a draggable canvas is the drag's press and release.
+                        let secondary = button.secondary_clicked() && grid.secondary_drag.is_none();
                         let pointer_click =
                             grid.drag.is_some() && ui.input(|i| i.pointer.any_released());
-                        if let (true, Some(id), Some(a)) = (
-                            button.clicked() && !pointer_click && !canvas::panning(ui),
-                            &cell.id,
-                            &cell.affordance,
-                        ) {
-                            out.push(Intent::Focus {
-                                component: self.row_component(a, &grid.head.id),
-                                row: id.clone(),
-                            });
-                            out.push(Intent::Run(a.clone()));
+                        let primary = button.clicked() && !pointer_click;
+                        let runs = [(secondary, &grid.secondary), (primary, &cell.affordance)];
+                        for (_, a) in runs.iter().filter(|(on, _)| *on && !canvas::panning(ui)) {
+                            if let (Some(id), Some(a)) = (&cell.id, a) {
+                                out.push(Intent::Focus {
+                                    component: self.row_component(a, &grid.head.id),
+                                    row: id.clone(),
+                                });
+                                out.push(Intent::Run(a.clone()));
+                            }
                         }
                     }
                 });
@@ -534,10 +502,7 @@ impl<M: GameModel> App<M> {
         ui: &egui::Ui,
         grid: &Grid,
         affordance: &str,
-        (squares, layout): (
-            &HashMap<drag::Square, (egui::Rect, String, String)>,
-            &GridLayout,
-        ),
+        (squares, layout): (&Squares, &GridLayout),
         out: &mut Vec<Intent>,
     ) {
         let key = egui::Id::new(("region-drag", &grid.head.id));
@@ -561,25 +526,13 @@ impl<M: GameModel> App<M> {
         keep_recent(ui.ctx(), key, held);
     }
 
-    /// Runs the affordance of the squares a primary drag over `squares` crosses.
+    /// Runs the affordance of the squares a drag of `by` over `squares` crosses.
     fn drag_squares(
         &self,
         ui: &egui::Ui,
         grid: &Grid,
-        mode: GridDrag,
-        squares: &HashMap<drag::Square, (egui::Rect, String, String)>,
-        out: &mut Vec<Intent>,
-    ) {
-        self.drag_squares_by(ui, grid, DragBy::Primary(mode), squares, out);
-    }
-
-    /// Runs the affordance of the squares a drag of `by` over `squares` crosses.
-    fn drag_squares_by(
-        &self,
-        ui: &egui::Ui,
-        grid: &Grid,
         by: DragBy,
-        squares: &HashMap<drag::Square, (egui::Rect, String, String)>,
+        squares: &Squares,
         out: &mut Vec<Intent>,
     ) {
         let (mode, button, name, other) = match by {
@@ -666,6 +619,10 @@ impl GridLayout {
     }
 }
 
+/// The squares of a grid that take a drag, by column and row: the part of each in view, its row id and its own
+/// affordance.
+type Squares = HashMap<drag::Square, (egui::Rect, String, String)>;
+
 /// A button's drag over a grid's squares, and the affordance of the square it was pressed on.
 type Stroke = (Option<drag::Drag>, Option<String>);
 
@@ -679,11 +636,7 @@ enum DragBy<'a> {
 }
 
 /// The pointer over the drawn squares of a grid this frame; a press counts only on the grid's own layer.
-fn grid_pointer(
-    ui: &egui::Ui,
-    squares: &HashMap<drag::Square, (egui::Rect, String, String)>,
-    button: egui::PointerButton,
-) -> drag::Pointer {
+fn grid_pointer(ui: &egui::Ui, squares: &Squares, button: egui::PointerButton) -> drag::Pointer {
     let at = ui.input(|i| i.pointer.interact_pos());
     let on = at.and_then(|at| {
         squares
@@ -748,11 +701,8 @@ fn content_span(
             at_origin != *blank
         })
         .map(|c| (c.x, c.y));
-    let cursor = grid
-        .cursor
-        .and_then(|c| Some((u32::try_from(c.x).ok()?, u32::try_from(c.y).ok()?)));
     shown
-        .chain(cursor)
+        .chain(cursor_square(grid))
         .map(|(x, y)| {
             let at = egui::pos2(
                 x.saturating_sub(xs.start) as f32,
@@ -763,13 +713,25 @@ fn content_span(
         .reduce(|a, b| a.union(b))
 }
 
+/// Where the canvas view of `grid` on `screen` is kept.
+pub(super) fn view_key(screen: &Screen, grid: &Grid) -> egui::Id {
+    egui::Id::new(("grid view", &screen.screen_id, &grid.head.id))
+}
+
+/// The square of `grid`'s cursor, as its cells name theirs; none at a negative column or row.
+pub(super) fn cursor_square(grid: &Grid) -> Option<(u32, u32)> {
+    let c = grid.cursor?;
+    Some((u32::try_from(c.x).ok()?, u32::try_from(c.y).ok()?))
+}
+
 /// The columns and rows of `grid` from its first to its last cell or cursor: the empty edges around them draw
 /// nothing, so they take no room.
 pub(super) fn drawn_span(grid: &Grid) -> (std::ops::Range<u32>, std::ops::Range<u32>) {
-    let cursor = grid
-        .cursor
-        .and_then(|c| Some((u32::try_from(c.x).ok()?, u32::try_from(c.y).ok()?)));
-    let at = grid.cells.iter().map(|c| (c.x, c.y)).chain(cursor);
+    let at = grid
+        .cells
+        .iter()
+        .map(|c| (c.x, c.y))
+        .chain(cursor_square(grid));
     let span = |pick: fn((u32, u32)) -> u32, end: u32| {
         let (lo, hi) = at
             .clone()

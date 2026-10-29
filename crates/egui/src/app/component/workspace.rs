@@ -69,18 +69,22 @@ fn parts(root: &Split, slot: Slot) -> Vec<&Component> {
     root.children.iter().filter(slotted).collect()
 }
 
+/// The grids in the canvas slot of `root`.
+fn canvas_grids(root: &Split) -> impl Iterator<Item = &Grid> {
+    let nested = parts(root, Slot::Canvas)
+        .into_iter()
+        .flat_map(Component::nested);
+    nested.filter_map(|c| match c {
+        Component::Grid(grid) => Some(grid),
+        _ => None,
+    })
+}
+
 /// The right column's width in the room `ui` has left: what the canvas's whole grid leaves at the cell size its
 /// height gives, else a share of the window.
 fn side_width(ui: &egui::Ui, root: &Split) -> f32 {
     let room = ui.available_rect_before_wrap();
-    let grid = parts(root, Slot::Canvas)
-        .into_iter()
-        .flat_map(Component::nested)
-        .find_map(|c| match c {
-            Component::Grid(grid) => Some(grid),
-            _ => None,
-        });
-    let Some(grid) = grid else {
+    let Some(grid) = canvas_grids(root).next() else {
         return (ui.ctx().content_rect().width() * SIDE_SHARE).clamp(SIDE_WIDTH.0, SIDE_WIDTH.1);
     };
     let (xs, ys) = drawn_span(grid);
@@ -471,17 +475,10 @@ impl<M: GameModel> App<M> {
     /// keyboard, the arrows and Return are its squares' (the interaction core's focus is kept on it, at the
     /// engine's cursor until the arrows move it).
     fn canvas_stop(&self, ui: &mut egui::Ui, screen: &Screen, root: &Split, out: &mut Vec<Intent>) {
-        let grid = parts(root, Slot::Canvas)
-            .into_iter()
-            .flat_map(Component::nested)
-            .find_map(|c| match c {
-                Component::Grid(grid) if grid.role == Some(GridRole::Canvas) => Some(grid),
-                _ => None,
-            });
-        let Some(grid) = grid else {
+        let Some(grid) = canvas_grids(root).find(|g| g.role == Some(GridRole::Canvas)) else {
             return;
         };
-        let view_key = egui::Id::new(("grid view", &screen.screen_id, &grid.head.id));
+        let view_key = view_key(screen, grid);
         let Some(view) = ui.data(|d| d.get_temp::<canvas::View>(view_key)) else {
             return;
         };
@@ -501,10 +498,7 @@ impl<M: GameModel> App<M> {
         if focus.component_id.as_deref() == Some(&grid.head.id) {
             return;
         }
-        let at = |c: &&bn_client_core::protocol::GridCell| {
-            grid.cursor
-                .is_some_and(|at| (at.x, at.y) == (c.x as i32, c.y as i32))
-        };
+        let at = |c: &&GridCell| cursor_square(grid) == Some((c.x, c.y));
         let cells = grid.cells.iter().filter(|c| c.id.is_some());
         let first = cells.clone().find(at).or(cells.clone().next());
         if let Some(row) = first.and_then(|c| c.id.clone()) {
