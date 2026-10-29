@@ -257,12 +257,7 @@ impl<M: GameModel> App<M> {
         self.effects.paint(
             painter,
             (now, canvas.cell_px, shot),
-            |p| {
-                canvas.standing(Pos {
-                    x: p.x - origin.x,
-                    y: p.y - origin.y,
-                })
-            },
+            |p| canvas.standing(p - origin),
             &mut self.display,
             !tiles,
         );

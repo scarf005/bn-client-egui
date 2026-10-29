@@ -12,6 +12,27 @@ pub struct Pos {
     pub y: i32,
 }
 
+/// A view square plus the view's origin is its absolute square; an absolute square less the origin, its view square.
+impl std::ops::Add for Pos {
+    type Output = Pos;
+    fn add(self, by: Pos) -> Pos {
+        Pos {
+            x: self.x + by.x,
+            y: self.y + by.y,
+        }
+    }
+}
+
+impl std::ops::Sub for Pos {
+    type Output = Pos;
+    fn sub(self, by: Pos) -> Pos {
+        Pos {
+            x: self.x - by.x,
+            y: self.y - by.y,
+        }
+    }
+}
+
 /// View squares a screen highlights besides its cursor, from `min` to `max` with both included; a mark the
 /// engine gives square by square is one per square.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

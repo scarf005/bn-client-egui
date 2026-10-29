@@ -17,10 +17,6 @@ impl<M: GameModel> App<M> {
         mut cursor: Pos,
     ) -> MapInput {
         let origin = self.model.origin();
-        let to_abs = |view: Pos| Pos {
-            x: view.x + origin.x,
-            y: view.y + origin.y,
-        };
         let cell_at = |p: egui::Pos2| canvas.square_at(p, scene);
         // Only a moving pointer moves the cursor, so it cannot undo keyboard navigation, nor take the cursor
         // to where it rests when a window over the map closes.
@@ -35,7 +31,7 @@ impl<M: GameModel> App<M> {
             match self.model.focus() {
                 Some(_) => {
                     self.aim = Some(Aim {
-                        at: to_abs(cursor),
+                        at: cursor + origin,
                         sent: false,
                     })
                 }
@@ -50,11 +46,7 @@ impl<M: GameModel> App<M> {
                 true => self.aim = None,
                 false => {
                     aim.sent = true;
-                    let at = Pos {
-                        x: aim.at.x - origin.x,
-                        y: aim.at.y - origin.y,
-                    };
-                    self.model.aim(at, false);
+                    self.model.aim(aim.at - origin, false);
                 }
             }
         }
@@ -69,7 +61,7 @@ impl<M: GameModel> App<M> {
             ui.ctx().request_repaint();
         }
         if response.secondary_clicked() {
-            self.menu_cell = to_abs(clicked);
+            self.menu_cell = clicked + origin;
         }
         // With nothing focused, an arrow key would move egui's focus onto a toolbar widget and a later
         // Space would press it, so the map holds the focus.
@@ -99,7 +91,7 @@ impl<M: GameModel> App<M> {
             }
             // Shift+F10, the keyboard's context-menu key, is the right click on the cursor square.
             if ui.input(|i| i.modifiers.shift && i.key_pressed(egui::Key::F10)) {
-                self.menu_cell = to_abs(cursor);
+                self.menu_cell = cursor + origin;
                 menu_key = true;
             }
         }
@@ -219,17 +211,12 @@ impl<M: GameModel> App<M> {
         menu_key: bool,
     ) {
         // The menu's square is absolute: a view that scrolls under the open menu does not change it.
-        let origin = self.model.origin();
-        let at = Pos {
-            x: self.menu_cell.x - origin.x,
-            y: self.menu_cell.y - origin.y,
-        };
+        let at = self.menu_cell - self.model.origin();
         let mut popup = egui::Popup::context_menu(response).anchor(egui::Rect::from_min_size(
             match canvas.view {
                 // The 3D scene has no square grid to place the menu on; it opens at the map's centre.
                 Some(_) => response.rect.center(),
-                None if canvas.diamond.is_some() => canvas.rect(at).left_top(),
-                None => canvas.flat_rect(at).min,
+                None => canvas.grid().square(at).min,
             },
             egui::Vec2::splat(canvas.cell_px),
         ));

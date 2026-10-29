@@ -21,15 +21,22 @@ impl Canvas {
     /// A square on the screen: its rectangle on the flat map, the diamond of its ground in the 3D one and the
     /// box around the diamond on the isometric flat one.
     pub(super) fn rect(&self, p: Pos) -> egui::Rect {
-        if let Some(d) = &self.diamond {
-            return d.tile(p);
-        }
-        match &self.view {
-            Some(v) => ground_point(v, self.rect, p, (0.5, 0.5), 0.5)
+        match self.view.as_ref().filter(|_| self.diamond.is_none()) {
+            Some(v) => self
+                .ground_point(v, p, (0.5, 0.5), 0.5)
                 .map_or(egui::Rect::NOTHING, |at| {
                     egui::Rect::from_center_size(at, egui::Vec2::splat(self.cell_px))
                 }),
-            None => self.flat_rect(p),
+            None => self.grid().square(p),
+        }
+    }
+
+    /// Where the squares of the flat map lie.
+    pub(super) fn grid(&self) -> MapView {
+        MapView {
+            origin: self.rect.min,
+            cell: self.cell_px,
+            diamond: self.diamond,
         }
     }
 
@@ -39,7 +46,7 @@ impl Canvas {
         let Some(v) = self.view.as_ref().filter(|_| self.diamond.is_none()) else {
             return self.rect(p);
         };
-        let at = |z| ground_point(v, self.rect, p, (0.5, 0.5), z);
+        let at = |z| self.ground_point(v, p, (0.5, 0.5), z);
         let body = iso::aim::BODY;
         match (at(body), at(body - 0.5), at(body + 0.5)) {
             (Some(middle), Some(low), Some(high)) => {
@@ -49,62 +56,36 @@ impl Canvas {
         }
     }
 
-    /// A square's rectangle on the flat map.
-    pub(super) fn flat_rect(&self, p: Pos) -> egui::Rect {
-        egui::Rect::from_min_size(
-            self.rect.min + egui::vec2(p.x as f32, p.y as f32) * self.cell_px,
-            egui::Vec2::splat(self.cell_px),
-        )
-    }
-
-    /// The corners of a square's ground; none when one lies behind the eye.
-    fn corners(&self, v: &Viewport, p: Pos) -> Option<Vec<egui::Pos2>> {
+    /// The corners of a square's ground on the isometric flat map and the 3D one; none on the square grid or when
+    /// one lies behind the eye.
+    fn corners(&self, p: Pos) -> Option<Vec<egui::Pos2>> {
+        if let Some(d) = &self.diamond {
+            return Some(d.corners(p).to_vec());
+        }
+        let v = self.view.as_ref()?;
         [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]
             .into_iter()
-            .map(|(dx, dy)| ground_point(v, self.rect, p, (dx, dy), 0.0))
+            .map(|(dx, dy)| self.ground_point(v, p, (dx, dy), 0.0))
             .collect()
     }
 
     pub(super) fn fill(&self, painter: &egui::Painter, p: Pos, color: egui::Color32) {
-        if let Some(d) = &self.diamond {
-            painter.add(egui::Shape::convex_polygon(
-                d.corners(p).to_vec(),
-                color,
-                egui::Stroke::NONE,
-            ));
-            return;
-        }
-        match &self.view {
-            Some(v) => {
-                if let Some(corners) = self.corners(v, p) {
-                    painter.add(egui::Shape::convex_polygon(
-                        corners,
-                        color,
-                        egui::Stroke::NONE,
-                    ));
-                }
-            }
-            None => {
-                painter.rect_filled(self.rect(p), 0.0, color);
-            }
-        }
+        painter.add(match self.corners(p) {
+            Some(corners) => egui::Shape::convex_polygon(corners, color, egui::Stroke::NONE),
+            None if self.view.is_none() => egui::Shape::rect_filled(self.rect(p), 0.0, color),
+            None => return,
+        });
     }
 
     pub(super) fn outline(&self, painter: &egui::Painter, p: Pos, stroke: egui::Stroke) {
-        if let Some(d) = &self.diamond {
-            painter.add(egui::Shape::closed_line(d.corners(p).to_vec(), stroke));
-            return;
-        }
-        match &self.view {
-            Some(v) => {
-                if let Some(corners) = self.corners(v, p) {
-                    painter.add(egui::Shape::closed_line(corners, stroke));
-                }
+        let inside = egui::StrokeKind::Inside;
+        painter.add(match self.corners(p) {
+            Some(corners) => egui::Shape::closed_line(corners, stroke),
+            None if self.view.is_none() => {
+                egui::Shape::rect_stroke(self.rect(p), 0.0, stroke, inside)
             }
-            None => {
-                painter.rect_stroke(self.rect(p), 0.0, stroke, egui::StrokeKind::Inside);
-            }
-        }
+            None => return,
+        });
     }
 
     /// The screen point of the ground at (`x`, `y`) in view squares; none behind the eye.
@@ -113,9 +94,7 @@ impl Canvas {
             return Some(d.ground(x, y));
         }
         match &self.view {
-            Some(v) => v
-                .project(glam::Vec3::new(x, y, 0.0))
-                .map(|on| self.rect.min + egui::vec2(on.x, on.y)),
+            Some(v) => self.project(v, glam::Vec3::new(x, y, 0.0)),
             None => Some(self.rect.min + egui::vec2(x, y) * self.cell_px),
         }
     }
@@ -145,8 +124,7 @@ impl Canvas {
         let corner = |(dx, dy, up): (f32, f32, bool)| {
             let z = floor + if up { iso::aim::BODY * 2.0 } else { 0.0 };
             let at = glam::Vec3::new(square.at.x as f32 + dx, square.at.y as f32 + dy, z);
-            v.project(at)
-                .map(|on| self.rect.min + egui::vec2(on.x, on.y))
+            self.project(v, at)
         };
         let ring = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)];
         let edges = (0..4).flat_map(|i| {
@@ -233,6 +211,18 @@ impl Canvas {
             y: (at.y as i32).clamp(0, self.size.y - 1),
         }
     }
+
+    /// Where the world point `at` lies on the screen of the 3D map; none behind the eye.
+    fn project(&self, v: &Viewport, at: glam::Vec3) -> Option<egui::Pos2> {
+        let on = v.project(at)?;
+        Some(self.rect.min + egui::vec2(on.x, on.y))
+    }
+
+    /// Where the point `at` (across and down the square, 0 to 1) of square `p`, `z` over its ground, lies on the
+    /// screen of the 3D map; none behind the eye.
+    fn ground_point(&self, v: &Viewport, p: Pos, at: (f32, f32), z: f32) -> Option<egui::Pos2> {
+        self.project(v, glam::Vec3::new(p.x as f32 + at.0, p.y as f32 + at.1, z))
+    }
 }
 
 /// A square the line of fire crosses: where it lies in the view, and how many z-levels over the avatar's.
@@ -240,19 +230,6 @@ impl Canvas {
 pub(super) struct FireSquare {
     pub(super) at: Pos,
     pub(super) up: i32,
-}
-
-/// Where the point `at` (across and down the square, 0 to 1) of square `p`, `z` over its ground, lies on the
-/// screen of a 3D map drawn into `rect`; none behind the eye.
-fn ground_point(
-    v: &Viewport,
-    rect: egui::Rect,
-    p: Pos,
-    at: (f32, f32),
-    z: f32,
-) -> Option<egui::Pos2> {
-    let on = v.project(glam::Vec3::new(p.x as f32 + at.0, p.y as f32 + at.1, z))?;
-    Some(rect.min + egui::vec2(on.x, on.y))
 }
 
 #[cfg(test)]

@@ -78,25 +78,22 @@ impl<M: GameModel> App<M> {
         // The cursor is kept on a map square, so it stays there when the view scrolls; the engine's own
         // cursor (look mode) wins. The map may also have been replaced by a smaller one since it was set.
         let origin = self.model.origin();
-        let to_abs = |view: Pos| Pos {
-            x: view.x + origin.x,
-            y: view.y + origin.y,
-        };
         let looking = self.model.focus();
         match looking {
             // The square the pointer asked for stands until the engine has answered, so no frame shows the
             // square the engine's cursor is leaving.
-            Some(focus) => self.cursor = self.aim.map_or(to_abs(focus), |aim| aim.at),
+            Some(focus) => self.cursor = self.aim.map_or(focus + origin, |aim| aim.at),
             None => self.aim = None,
         }
         let player = self.model.player();
         // Native shows no cursor outside look mode and the mouse: without a pointer it is the player's square.
         if looking.is_none() && self.last_hover.is_none() {
-            self.cursor = to_abs(player);
+            self.cursor = player + origin;
         }
+        let cursor = self.cursor - origin;
         let cursor = Pos {
-            x: (self.cursor.x - origin.x).clamp(0, size.x - 1),
-            y: (self.cursor.y - origin.y).clamp(0, size.y - 1),
+            x: cursor.x.clamp(0, size.x - 1),
+            y: cursor.y.clamp(0, size.y - 1),
         };
         let route = self.model.route();
         // The cursor's square is said politely and never drawn; the map's own description says it too.
@@ -123,10 +120,7 @@ impl<M: GameModel> App<M> {
             .inner;
         self.face_aim(first_person);
         let view = three.then(|| {
-            let scale = self
-                .display
-                .tileset()
-                .map_or(cell_px, |(t, _)| iso::scene::world_scale(t, cell_px));
+            let scale = self.world_scale(cell_px);
             self.iso
                 .viewport(player, scale, response.rect.size(), first_person)
         });
@@ -169,15 +163,11 @@ impl<M: GameModel> App<M> {
         response
             .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Other, true, tr("Map")));
         self.map_wheel(ui, &response);
-        self.map_view = Some(MapView {
-            origin: canvas.rect.min,
-            cell: cell_px,
-            diamond,
-        });
+        self.map_view = Some(canvas.grid());
         let scene = shown.as_ref().map(|(scene, _)| scene.as_ref());
         let input = self.map_pointer(ui, &response, &canvas, scene, cursor);
         let cursor = input.cursor;
-        self.cursor = to_abs(cursor);
+        self.cursor = cursor + origin;
         let status = self.map_status(origin, cursor);
         said.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, &status));
         ui.ctx()
@@ -211,11 +201,7 @@ impl<M: GameModel> App<M> {
     /// A click on a map square: the engine plans the route, a repeat walks it.
     fn go_to(&mut self, view: Pos) {
         self.model.travel(view);
-        let origin = self.model.origin();
-        self.marker = self.model.busy().then_some(Pos {
-            x: view.x + origin.x,
-            y: view.y + origin.y,
-        });
+        self.marker = self.model.busy().then_some(view + self.model.origin());
     }
 
     /// Asks the engine for as many squares as the room holds, and takes the animation facts; returns the time
@@ -224,10 +210,7 @@ impl<M: GameModel> App<M> {
         // The room left for the map, in whole cells.
         let room = ui.available_size();
         // The 3D map asks for the squares across the room's diagonal, so a turned camera finds none missing.
-        let scale = self
-            .display
-            .tileset()
-            .map_or(cell_px, |(t, _)| iso::scene::world_scale(t, cell_px));
+        let scale = self.world_scale(cell_px);
         let reach =
             ((room.length() / scale).ceil() as i32 + 2).clamp(iso::REACH, iso::MAX_REACH) | 1;
         self.model.set_viewport(match (three, tilted) {
@@ -252,6 +235,12 @@ impl<M: GameModel> App<M> {
         self.effects
             .add(now, produced, self.display.reduced_motion());
         now
+    }
+
+    /// Points per world unit of the 3D map when a square is `cell_px` points wide.
+    fn world_scale(&self, cell_px: f32) -> f32 {
+        let tileset = self.display.tileset();
+        tileset.map_or(cell_px, |(t, _)| iso::scene::world_scale(t, cell_px))
     }
 
     /// What a screen reader says of the map: the player's and the cursor's squares, the planned route and the aim.
