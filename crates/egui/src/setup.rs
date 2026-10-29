@@ -58,7 +58,7 @@ impl Launcher {
         ui.heading(tr("No engine found"));
         ui.label(&self.searched);
         ui.label(tr("Path to cataclysm-bn-tiles:"));
-        let field = ui.text_edit_singleline(&mut self.input);
+        let field = crate::kit::field::add(ui, egui::TextEdit::singleline(&mut self.input));
         let submitted = field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
         if ui.button(tr("Use")).clicked() || submitted {
             self.use_input(ui.ctx());

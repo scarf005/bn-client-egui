@@ -1,6 +1,7 @@
 //! Value editors for form fields and the key prompt of the keybindings screen. Each draws one control
 //! and returns the value to send.
 
+use crate::kit::field;
 use bn_client_core::localise::tr;
 use bn_client_core::protocol::Editor;
 use eframe::egui::{self, accesskit};
@@ -124,8 +125,10 @@ pub fn value_editor(ui: &mut egui::Ui, field: &ValueField) -> ValueEdit {
                     let mut enter = false;
                     if long {
                         let typed = query.get_or_insert_with(String::new);
-                        let edit =
-                            ui.add(egui::TextEdit::singleline(typed).hint_text(tr("Search")));
+                        let edit = field::add(
+                            ui,
+                            egui::TextEdit::singleline(typed).hint_text(tr("Search")),
+                        );
                         // The popup opens with the typing in its filter.
                         if ui.data(|d| d.get_temp::<String>(kept)).is_none() {
                             edit.request_focus();
@@ -174,7 +177,8 @@ pub fn value_editor(ui: &mut egui::Ui, field: &ValueField) -> ValueEdit {
                             .id_salt(key)
                             .max_height(MULTILINE_ROWS as f32 * line)
                             .show(ui, |ui| {
-                                ui.add(
+                                field::add(
+                                    ui,
                                     egui::TextEdit::multiline(&mut draft.text)
                                         .id_salt(key)
                                         .desired_rows(MULTILINE_ROWS)
@@ -195,7 +199,8 @@ pub fn value_editor(ui: &mut egui::Ui, field: &ValueField) -> ValueEdit {
                         let mut wrapped = |ui: &egui::Ui, text: &dyn egui::TextBuffer, _: f32| {
                             wrapped_text(ui, text.as_str(), wrap)
                         };
-                        ui.add(
+                        field::add(
+                            ui,
                             egui::TextEdit::singleline(&mut draft.text)
                                 .desired_width(width)
                                 .layouter(&mut wrapped)
@@ -435,7 +440,7 @@ fn typing(
         .desired_width(f32::INFINITY)
         .layouter(&mut wrapped)
         .clip_text(false);
-    let response = ui.add(edit.hint_text(label));
+    let response = field::add(ui, edit.hint_text(label));
     // egui drops the focus of a box on Escape unless the box's event filter says it handles it.
     if response.has_focus() && (search.is_some() || !state.text.is_empty()) {
         ui.memory_mut(|m| {
