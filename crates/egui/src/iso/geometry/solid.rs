@@ -2,27 +2,24 @@
 //! names, and boards crossed through a square.
 
 use super::*;
+use glam::Vec3;
 
 /// A whole block of the square from `low` to `high`, painted with `p`'s sprite as a wall is.
 pub fn band(m: &Metrics, p: &Placement, (low, high): (f32, f32)) -> Vec<Instance> {
-    let corner = glam::Vec3::new(p.square.0 as f32, p.square.1 as f32, p.floor);
     let whole = Cuboid {
-        lo: glam::Vec3::new(0.0, 0.0, low),
-        hi: glam::Vec3::new(1.0, 1.0, high),
+        lo: Vec3::new(0.0, 0.0, low),
+        hi: Vec3::new(1.0, 1.0, high),
         paint: Paint::Blocks,
     };
-    let flags = [p.filter << 8, u32::from(p.haze), {
-        let [r, g, b] = p.light;
-        u32::from_le_bytes([r, g, b, 0])
-    }];
-    cuboid(m, p, (corner, m.level / LEVEL_BLOCKS), &whole, flags)
+    let corner = p.corner().extend(p.floor);
+    cuboid(m, p, (corner, m.block()), &whole, p.flags())
 }
 
 /// A box from `lo` to `hi` in a square, of world units over its ground, and how its faces are painted.
 #[derive(Clone, Copy)]
 pub(super) struct Cuboid {
-    pub(super) lo: glam::Vec3,
-    pub(super) hi: glam::Vec3,
+    pub(super) lo: Vec3,
+    pub(super) hi: Vec3,
     pub(super) paint: Paint,
 }
 
@@ -42,16 +39,16 @@ pub(super) enum Paint {
 pub(super) fn cuboid(
     m: &Metrics,
     p: &Placement,
-    (corner, block): (glam::Vec3, f32),
+    (corner, block): (Vec3, f32),
     c: &Cuboid,
     flags: [u32; 3],
 ) -> Vec<Instance> {
     let s = p.sprite;
     let at = |q: Vec2| page_point(m, s, p.turn, q);
     let (lo, hi) = (c.lo, c.hi);
-    let world = |x: f32, y: f32, z: f32| (corner + glam::Vec3::new(x, y, z)).to_array();
+    let world = |x: f32, y: f32, z: f32| (corner + Vec3::new(x, y, z)).to_array();
     // The whole sprite per block across `along` and down `down`, a part of it for a part of a block.
-    let tiled = |origin: glam::Vec3, along: glam::Vec3, down: glam::Vec3| -> Vec<Instance> {
+    let tiled = |origin: Vec3, along: Vec3, down: Vec3| -> Vec<Instance> {
         let (wide, tall) = (along.length() / block, down.length() / block);
         let (a, d) = (
             along.normalize_or_zero() * block,
@@ -68,11 +65,7 @@ pub(super) fn cuboid(
                 quads.push(instance(
                     (corner + o).to_array(),
                     ((a * w).to_array(), (d * h).to_array()),
-                    [
-                        s.at,
-                        Vec2::new(s.src.x * w, 0.0),
-                        Vec2::new(0.0, s.src.y * h),
-                    ],
+                    s.uv(w, h),
                     flags,
                 ));
                 column += 1.0;
@@ -82,27 +75,27 @@ pub(super) fn cuboid(
         quads
     };
     let height = hi.z - lo.z;
-    let down = glam::Vec3::new(0.0, 0.0, -height);
+    let down = Vec3::new(0.0, 0.0, -height);
     // From the outside: the top left corner of each side, the way across it, and the way inward from its edge.
     let sides = [
         (
-            glam::Vec3::new(lo.x, hi.y, hi.z),
-            glam::Vec3::X * (hi.x - lo.x),
+            Vec3::new(lo.x, hi.y, hi.z),
+            Vec3::X * (hi.x - lo.x),
             Vec2::NEG_Y,
         ),
         (
-            glam::Vec3::new(hi.x, hi.y, hi.z),
-            glam::Vec3::NEG_Y * (hi.y - lo.y),
+            Vec3::new(hi.x, hi.y, hi.z),
+            Vec3::NEG_Y * (hi.y - lo.y),
             Vec2::NEG_X,
         ),
         (
-            glam::Vec3::new(hi.x, lo.y, hi.z),
-            glam::Vec3::NEG_X * (hi.x - lo.x),
+            Vec3::new(hi.x, lo.y, hi.z),
+            Vec3::NEG_X * (hi.x - lo.x),
             Vec2::Y,
         ),
         (
-            glam::Vec3::new(lo.x, lo.y, hi.z),
-            glam::Vec3::Y * (hi.y - lo.y),
+            Vec3::new(lo.x, lo.y, hi.z),
+            Vec3::Y * (hi.y - lo.y),
             Vec2::X,
         ),
     ];
@@ -133,7 +126,7 @@ pub(super) fn cuboid(
                 quads.push(instance(
                     (corner + origin).to_array(),
                     (along.to_array(), down.to_array()),
-                    [s.at, Vec2::new(s.src.x, 0.0), Vec2::new(0.0, s.src.y)],
+                    s.uv(1.0, 1.0),
                     flags,
                 ));
                 continue;
@@ -155,21 +148,35 @@ pub(super) fn cuboid(
 
 /// Two boards crossed through the diagonals of a square, `top` tall, each the whole sprite, as a block game draws a
 /// plant.
-pub(super) fn crossed(
-    corner: glam::Vec3,
-    top: f32,
-    s: &SpriteSource,
-    flags: [u32; 3],
-) -> Vec<Instance> {
-    let uv = [s.at, Vec2::new(s.src.x, 0.0), Vec2::new(0.0, s.src.y)];
+pub(super) fn crossed(corner: Vec3, top: f32, s: &SpriteSource, flags: [u32; 3]) -> Vec<Instance> {
+    let uv = s.uv(1.0, 1.0);
     let down = [0.0, 0.0, -top];
     [
-        (glam::Vec3::new(0.0, 1.0, top), [1.0, -1.0, 0.0]),
-        (glam::Vec3::new(0.0, 0.0, top), [1.0, 1.0, 0.0]),
+        (Vec3::new(0.0, 1.0, top), [1.0, -1.0, 0.0]),
+        (Vec3::new(0.0, 0.0, top), [1.0, 1.0, 0.0]),
     ]
     .into_iter()
     .map(|(o, a)| instance((corner + o).to_array(), (a, down), uv, flags))
     .collect()
+}
+
+/// Whether a door, a window pane or a fence with the walls `joined` south, east, north and west of it stands along
+/// the line from east to west: unless only the north or the south one joins it.
+fn along_x(joined: [bool; 4]) -> bool {
+    joined[1] || joined[3] || !(joined[0] || joined[2])
+}
+
+/// The box across the middle of the square from `a` to `b` of its width, along the line of walls `joined` says,
+/// from `low` to `high`.
+pub(super) fn in_line(
+    joined: [bool; 4],
+    (a, b): (f32, f32),
+    (low, high): (f32, f32),
+) -> (Vec3, Vec3) {
+    match along_x(joined) {
+        true => (Vec3::new(0.0, a, low), Vec3::new(1.0, b, high)),
+        false => (Vec3::new(a, 0.0, low), Vec3::new(b, 1.0, high)),
+    }
 }
 
 /// The boxes a thing of `form` is built of in its square, `block` a block's size: a door and its lintel, a fence, a
@@ -177,15 +184,9 @@ pub(super) fn crossed(
 /// stand along the line of walls `joined` says, east to west unless only the north or the south one joins it; a
 /// seat's back is at the top of its sprite, as the sprite turns.
 pub(super) fn built(form: Form, block: f32, turn: Turn, joined: [bool; 4]) -> Vec<Cuboid> {
-    use glam::Vec3;
-    let along_x = joined[1] || joined[3] || !(joined[0] || joined[2]);
-    // A slab `thick` across the middle of the square along the line, from `low` to `high`.
-    let slab = |thick: f32, low: f32, high: f32| {
-        let (a, b) = (0.5 - thick / 2.0, 0.5 + thick / 2.0);
-        match along_x {
-            true => (Vec3::new(0.0, a, low), Vec3::new(1.0, b, high)),
-            false => (Vec3::new(a, 0.0, low), Vec3::new(b, 1.0, high)),
-        }
+    // A slab `thick` across the middle of the square along the line, from the ground to `high`.
+    let slab = |thick: f32, high: f32| {
+        in_line(joined, (0.5 - thick / 2.0, 0.5 + thick / 2.0), (0.0, high))
     };
     let boxed = |(lo, hi): (Vec3, Vec3), paint: Paint| Cuboid { lo, hi, paint };
     let legs = |inset: f32, side: f32, high: f32| {
@@ -201,16 +202,16 @@ pub(super) fn built(form: Form, block: f32, turn: Turn, joined: [bool; 4]) -> Ve
     // The wall over a door is its wall's: see `wall_bands`.
     let door = DOOR_BLOCKS * block;
     match form {
-        Form::Door { open: false } => vec![boxed(slab(0.12, 0.0, door), Paint::Whole)],
+        Form::Door { open: false } => vec![boxed(slab(0.12, door), Paint::Whole)],
         // Swung open against the west or the north edge of its square.
         Form::Door { open: true } => {
-            let leaf = match along_x {
+            let leaf = match along_x(joined) {
                 true => (Vec3::new(0.0, 0.0, 0.0), Vec3::new(0.12, 1.0, door)),
                 false => (Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, 0.12, door)),
             };
             vec![boxed(leaf, Paint::Whole)]
         }
-        Form::Fence => vec![boxed(slab(0.12, 0.0, block), Paint::Blocks)],
+        Form::Fence => vec![boxed(slab(0.12, block), Paint::Blocks)],
         Form::Gas => vec![boxed(
             (Vec3::ZERO, Vec3::new(1.0, 1.0, block)),
             Paint::Blocks,

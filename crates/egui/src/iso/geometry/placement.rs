@@ -29,6 +29,25 @@ pub struct Placement<'a> {
     pub joined: [bool; 4],
 }
 
+impl Placement<'_> {
+    /// The north-west corner of the square.
+    pub(super) fn corner(&self) -> Vec2 {
+        Vec2::new(self.square.0 as f32, self.square.1 as f32)
+    }
+
+    /// How far toward the eye the sprite is drawn from the earlier ones of its square.
+    fn bias(&self) -> f32 {
+        LAYER_BIAS * self.order as f32
+    }
+
+    /// What every instance of the sprite carries: its filter, its haze and its coloured light.
+    pub(super) fn flags(&self) -> [u32; 3] {
+        let [r, g, b] = self.light;
+        let light = u32::from_le_bytes([r, g, b, 0]);
+        [self.filter << 8, u32::from(self.haze), light]
+    }
+}
+
 /// The sprite corners `[top left, top right, bottom right, bottom left]` as they are drawn: each is the corner of
 /// the sprite in its page that lands there under `turn`.
 fn corners(turn: Turn, s: &SpriteSource) -> [Vec2; 4] {
@@ -81,7 +100,7 @@ fn sides(m: &Metrics, p: &Placement) -> Vec<Side> {
     let [tl, tr, _, bl] = corners(p.turn, s);
     // How far across and down the laid sprite a page pixel is.
     let across = Mat2::from_cols(tr - tl, bl - tl).inverse();
-    let square = Vec2::new(p.square.0 as f32, p.square.1 as f32);
+    let square = p.corner();
     let laid = |q: Vec2| {
         square + (lo + (hi - lo) * (across * (s.at + q - tl))) * Vec2::new(m.across, m.up)
     };
@@ -126,7 +145,7 @@ pub fn borders(m: &Metrics, p: &Placement) -> [bool; 4] {
     match shape(m, p.sprite, p.kind) {
         Shape::Box { .. } | Shape::Blocks { .. } => [true; 4],
         Shape::Extrude { .. } => {
-            let square = Vec2::new(p.square.0 as f32, p.square.1 as f32);
+            let square = p.corner();
             let mut length = [0.0; 4];
             for side in sides(m, p) {
                 if let Some(n) = border(m, square, &side) {
@@ -170,8 +189,8 @@ fn board_sides(
 ) -> Vec<Instance> {
     let s = p.sprite;
     let size = s.size();
-    let (x, y) = (p.square.0 as f32, p.square.1 as f32);
-    let flags = [flags[0] | SIDE, flags[1], flags[2]];
+    let Vec2 { x, y } = p.corner();
+    let flags = marked(flags, SIDE);
     let of_page = Mat2::from_cols(br - bl, tl - bl).inverse();
     // Where a pixel of the sprite lies on the board: across from its centre and up from the ground.
     let on_board = |q: Vec2| {
@@ -179,7 +198,7 @@ fn board_sides(
         Vec2::new(left + c.x * size.x * m.across, rest + c.y * size.y * m.up)
     };
     let texel = s.scale * m.across;
-    let bias = LAYER_BIAS * p.order as f32;
+    let bias = p.bias();
     outline
         .edges
         .iter()
@@ -199,14 +218,21 @@ fn board_sides(
 pub fn place(m: &Metrics, p: &Placement) -> Vec<Instance> {
     let s = p.sprite;
     let size = s.size();
-    let (x, y) = (p.square.0 as f32, p.square.1 as f32);
-    let [r, g, b] = p.light;
-    let light = u32::from_le_bytes([r, g, b, 0]);
-    let flags = [p.filter << 8, u32::from(p.haze), light];
+    let Vec2 { x, y } = p.corner();
+    let flags = p.flags();
     // A point of the sprite given in tile pixels from its top left corner, in its page's pixels.
     let at = |px: f32, py: f32| s.at + Vec2::new(px, py) / s.scale;
     // A span of the sprite in tile pixels, in its page's pixels.
     let span = |px: f32, py: f32| Vec2::new(px, py) / s.scale;
+    let (w, h, t) = (size.x, size.y, m.diamond);
+    // The diamond of an isometric sprite whose left corner is `left` pixels down the sprite.
+    let diamond = |left: f32| {
+        [
+            at(0.0, left),
+            span(w / 2.0, -t / 2.0),
+            span(w / 2.0, t / 2.0),
+        ]
+    };
     // An isometric tile is only ever mirrored, never turned.
     let turn = match (m.iso, p.turn) {
         (true, Turn::Mirror) => Turn::Mirror,
@@ -229,11 +255,10 @@ pub fn place(m: &Metrics, p: &Placement) -> Vec<Instance> {
     // The sprite pushed up from `low` to `high` over the ground: the top first, where it covers what is under it
     // that colour is not written again.
     let pushed = |low: f32, high: f32| -> Vec<Instance> {
-        let (bottom, height) = (p.floor + LAYER_BIAS * p.order as f32 + low, high - low);
-        let square = Vec2::new(x, y);
+        let (bottom, height) = (p.floor + p.bias() + low, high - low);
         let seen = sides(m, p)
             .into_iter()
-            .filter(|side| border(m, square, side).is_none_or(|n| !p.covered[n]))
+            .filter(|side| border(m, p.corner(), side).is_none_or(|n| !p.covered[n]))
             .map(|side| {
                 let (e, run) = (side.edge, side.to - side.from);
                 // The pixels inside the edge, drawn all the way down.
@@ -251,16 +276,15 @@ pub fn place(m: &Metrics, p: &Placement) -> Vec<Instance> {
             .chain(std::iter::once(lying(bottom)))
             .collect()
     };
-    let corner = glam::Vec3::new(x, y, p.floor + LAYER_BIAS * p.order as f32);
+    let corner = glam::Vec3::new(x, y, p.floor + p.bias());
     match shape(m, s, p.kind) {
         Shape::Blocks { top } => {
-            let block = m.level / LEVEL_BLOCKS;
             let all = Cuboid {
                 lo: glam::Vec3::ZERO,
                 hi: glam::Vec3::new(1.0, 1.0, top),
                 paint: Paint::Blocks,
             };
-            cuboid(m, p, (corner, block), &all, flags)
+            cuboid(m, p, (corner, m.block()), &all, flags)
         }
         Shape::Built { form, block } => {
             let glow = match form {
@@ -272,7 +296,7 @@ pub fn place(m: &Metrics, p: &Placement) -> Vec<Instance> {
             // square, so nothing below shows through, over the square's earlier layers and inside its square.
             let ground = (matches!(form, Form::Door { .. } | Form::Fence) && fits(m, s))
                 .then(|| lying(corner.z));
-            let flags = [flags[0] | glow, flags[1], flags[2]];
+            let flags = marked(flags, glow);
             let standing = match form {
                 Form::Plant | Form::Fire => crossed(corner, block, s, flags),
                 _ => built(form, block, p.turn, p.joined)
@@ -287,56 +311,31 @@ pub fn place(m: &Metrics, p: &Placement) -> Vec<Instance> {
             match m.iso {
                 // The diamond of the tile lies in the lowest rows of an isometric sprite, drawn as the game draws
                 // it: the square's north-west corner at its left corner, so its north-east corner is at the top.
-                true => {
-                    let (w, h, t) = (size.x, size.y, m.diamond);
-                    let uv = [
-                        at(0.0, h - t / 2.0),
-                        span(w / 2.0, -t / 2.0),
-                        span(w / 2.0, t / 2.0),
-                    ];
-                    vec![instance([x, y, z], ground, uv, flags)]
-                }
+                true => vec![instance([x, y, z], ground, diamond(h - t / 2.0), flags)],
                 // Later sprites of a square lie over the earlier ones.
-                false => vec![lying(z + LAYER_BIAS * p.order as f32)],
+                false => vec![lying(z + p.bias())],
             }
         }
         Shape::Extrude { top } => pushed(0.0, top),
         // The sprite as a pane in the line of the walls, from the sill to the lintel; the blocks under and over it
         // are its wall's: see `wall_bands`.
         Shape::Window { sill, lintel, .. } => {
-            let block = m.level / LEVEL_BLOCKS;
-            let along_x = p.joined[1] || p.joined[3] || !(p.joined[0] || p.joined[2]);
-            let (a, b) = (0.47, 0.53);
-            let (lo, hi) = match along_x {
-                true => (
-                    glam::Vec3::new(0.0, a, sill),
-                    glam::Vec3::new(1.0, b, lintel),
-                ),
-                false => (
-                    glam::Vec3::new(a, 0.0, sill),
-                    glam::Vec3::new(b, 1.0, lintel),
-                ),
-            };
+            let (lo, hi) = in_line(p.joined, (0.47, 0.53), (sill, lintel));
             let pane = Cuboid {
                 lo,
                 hi,
                 paint: Paint::Blocks,
             };
-            cuboid(m, p, (corner, block), &pane, flags)
+            cuboid(m, p, (corner, m.block()), &pane, flags)
         }
         Shape::Box { top, bottom } => {
-            let (w, h, t) = (size.x, size.y, m.diamond);
             let (top, drop) = (p.floor + top, top - bottom);
             let down = [0.0, 0.0, -drop];
             // The sprite shows the west face on its left and the south face on its right; the others reuse them,
             // seen from behind.
             let west = [at(0.0, t / 2.0), span(w / 2.0, t / 2.0), span(0.0, h - t)];
             let south = [at(w / 2.0, t), span(w / 2.0, -t / 2.0), span(0.0, h - t)];
-            let lid = [
-                at(0.0, t / 2.0),
-                span(w / 2.0, -t / 2.0),
-                span(w / 2.0, t / 2.0),
-            ];
+            let lid = diamond(t / 2.0);
             let faces = [
                 ([x, y + 1.0, top], ([1.0, 0.0, 0.0], down), south),
                 ([x + 1.0, y + 1.0, top], ([0.0, -1.0, 0.0], down), west),
@@ -357,14 +356,10 @@ pub fn place(m: &Metrics, p: &Placement) -> Vec<Instance> {
             // The sprite's bottom edge rests on the ground where its tile's bottom edge would.
             let left = (s.offset.x - m.tile.x / 2.0) * m.across;
             let rest = (m.tile.y - (s.offset.y + size.y)) * m.up;
-            let bias = LAYER_BIAS * p.order as f32;
+            let bias = p.bias();
             let edges = ([size.x * m.across, left, bias], [size.y * m.up, rest, 0.0]);
             // From the bottom left corner: along the width to the right, and up.
-            let flags = [
-                flags[0] | BOARD | if m.iso { EDGE } else { 0 },
-                flags[1],
-                flags[2],
-            ];
+            let flags = marked(flags, BOARD | if m.iso { EDGE } else { 0 });
             let front = instance(
                 [x + 0.5, y + 0.5, p.floor],
                 edges,

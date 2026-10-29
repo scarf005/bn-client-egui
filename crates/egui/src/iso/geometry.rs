@@ -45,6 +45,15 @@ impl SpriteSource {
     pub fn size(&self) -> Vec2 {
         self.src * self.scale
     }
+
+    /// The uv of a quad showing `w` of the sprite's width and `h` of its height from its top left corner.
+    fn uv(&self, w: f32, h: f32) -> [Vec2; 3] {
+        [
+            self.at,
+            Vec2::new(self.src.x * w, 0.0),
+            Vec2::new(0.0, self.src.y * h),
+        ]
+    }
 }
 
 /// How tile pixels turn into world units. A square is one unit wide.
@@ -103,6 +112,11 @@ impl Metrics {
             // UltimateCataclysm gives 0: no height.
             level: zlevel_height.filter(|h| *h > 0.0).map_or(LEVEL, |h| h * up),
         }
+    }
+
+    /// The size of a block of a tileset drawn from above.
+    fn block(&self) -> f32 {
+        self.level / LEVEL_BLOCKS
     }
 }
 
@@ -203,7 +217,7 @@ pub fn shape(m: &Metrics, sprite: &SpriteSource, kind: Kind) -> Shape {
     let size = sprite.size();
     if !m.iso {
         let inside = fits(m, sprite);
-        let block = m.level / LEVEL_BLOCKS;
+        let block = m.block();
         return match (kind, inside) {
             (Kind::Formed(form), _) => Shape::Built { form, block },
             // A creature stands, as a block game's figure does.

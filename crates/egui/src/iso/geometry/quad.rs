@@ -69,6 +69,11 @@ pub(super) fn instance(
     }
 }
 
+/// `flags` with the bits `bits` of its first word set too.
+pub(super) fn marked(flags: [u32; 3], bits: u32) -> [u32; 3] {
+    [flags[0] | bits, flags[1], flags[2]]
+}
+
 /// The gray of the ground nothing is known about and of the faces down to it, in the haze byte of its instances: dark,
 /// but not the black of nothing, so that the pit reads as ground and walls.
 const VOID_LID: u32 = 22;
@@ -76,13 +81,7 @@ const VOID_FACE: u32 = 10;
 
 /// The dark ground at height `z` of `square`, whose ground nothing is known about.
 pub fn void_lid(square: (i32, i32), z: f32) -> Instance {
-    let ground = ([1.0, 0.0, 0.0], [0.0, 1.0, 0.0]);
-    instance(
-        [square.0 as f32, square.1 as f32, z],
-        ground,
-        [Vec2::ZERO; 3],
-        [VOID, VOID_LID, 0],
-    )
+    lid(square, z, ([1.0, 0.0, 0.0], [0.0, 1.0, 0.0]), VOID_LID)
 }
 
 /// The gray of a ceiling, in the haze byte of its instance: a plain dark, lighter than the unknown ground.
@@ -90,13 +89,13 @@ const CEILING: u32 = 56;
 
 /// The flat ceiling at height `z` over `square`, facing down at whoever stands under it.
 pub fn ceiling_lid(square: (i32, i32), z: f32) -> Instance {
-    let ceiling = ([0.0, 1.0, 0.0], [1.0, 0.0, 0.0]);
-    instance(
-        [square.0 as f32, square.1 as f32, z],
-        ceiling,
-        [Vec2::ZERO; 3],
-        [VOID, CEILING, 0],
-    )
+    lid(square, z, ([0.0, 1.0, 0.0], [1.0, 0.0, 0.0]), CEILING)
+}
+
+/// The flat `gray` square of `square` at height `z`, facing the way its `edges` turn.
+fn lid(square: (i32, i32), z: f32, edges: ([f32; 3], [f32; 3]), gray: u32) -> Instance {
+    let origin = [square.0 as f32, square.1 as f32, z];
+    instance(origin, edges, [Vec2::ZERO; 3], [VOID, gray, 0])
 }
 
 /// The face of `square` on its south (0), east, north or west edge, from height `low` up to `high`: the step down to
