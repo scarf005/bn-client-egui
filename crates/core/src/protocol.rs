@@ -2110,6 +2110,9 @@ pub struct List {
     /// What the list says while it has no rows.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub empty: Option<Text>,
+    /// The most rows the list shows at once, scrolling the rest; none: no limit.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rows_shown: Option<u32>,
 }
 
 impl List {

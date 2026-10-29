@@ -109,7 +109,7 @@ fn tab_walks_the_map_editor_in_reading_order_and_names_every_stop() {
             "Rectangle",
             "Canvas",
             "Legend",
-            "Symbol",
+            "Mapping",
             "Terrain",
         ],
         70,
@@ -166,7 +166,7 @@ fn the_vehicle_editors_search_boxes_are_named_by_their_lists_headings() {
     searches_named(&screen, &["Vehicles", "Parts"]);
 }
 
-/// The map editor with Tab walked to its legend's row, the list's stop.
+/// The map editor with Tab walked to its legend's row, the list's stop: the new mapping's `x`, the pen.
 fn on_a_legend_row<'a>() -> H<'a> {
     let screen =
         crate::ui_window_class::example("editor", "map editor with a drawn room and a new mapping");
@@ -176,9 +176,9 @@ fn on_a_legend_row<'a>() -> H<'a> {
         h.key_press(egui::Key::Tab);
         h.run_steps(2);
         seen.extend(focused(&h));
-        if focused(&h).is_some_and(|f| f.1.as_deref() == Some("#")) {
+        if focused(&h).is_some_and(|f| f.1.as_deref() == Some("x")) {
             h.run_steps(4);
-            assert_eq!(focused(&h).and_then(|f| f.1).as_deref(), Some("#"));
+            assert_eq!(focused(&h).and_then(|f| f.1).as_deref(), Some("x"));
             return h;
         }
     }
@@ -191,7 +191,7 @@ fn tab_leaves_a_list_whose_row_has_the_focus_for_the_next_stop_and_stays_there()
     h.key_press(egui::Key::Tab);
     h.run_steps(2);
     let next = focused(&h).and_then(|f| f.1);
-    assert_ne!(next.as_deref(), Some("#"));
+    assert_ne!(next.as_deref(), Some("x"));
     h.run_steps(6);
     assert_eq!(focused(&h).and_then(|f| f.1), next);
 }
