@@ -66,13 +66,13 @@ const GRID_FADED: f32 = 0.45;
 const GRID_ZOOM_MAX: f32 = 4.0;
 
 /// What a square says on hover: what it holds and, when it is off, why.
-fn cell_tip(cell: &GridCell) -> String {
+fn cell_tip(cell: &GridCell, refusals: &[String]) -> String {
     let label = cell.label.as_ref().map(|l| markup::plain(&l.shown()));
     let why = cell.denial.as_ref().filter(|_| !cell.enabled);
     label
         .into_iter()
         .chain(why.map(|w| markup::plain(&w.shown())))
-        .chain(cell.refused.clone())
+        .chain(cell.refused.and_then(|i| refusals.get(i).cloned()))
         .filter(|line| !line.is_empty())
         .collect::<Vec<_>>()
         .join("\n")
@@ -1001,7 +1001,10 @@ impl<M: GameModel> App<M> {
             }
             Component::Form(form) => self.form(ui, screen, form, out),
             Component::Text(block) => self.text_block(ui, block),
-            Component::Grid(grid) => self.grid(ui, screen, grid, out),
+            Component::Grid(grid) => {
+                let buttons = !footer::own_buttons(screen, c).is_empty();
+                self.grid(ui, screen, (grid, buttons), out)
+            }
             Component::Map(map) => self.map_slot(ui, screen, map, out),
             Component::Canvas(canvas) => self.canvas(ui, canvas),
         }
@@ -1323,12 +1326,23 @@ impl<M: GameModel> App<M> {
         });
     }
 
-    fn grid(&self, ui: &mut egui::Ui, screen: &Screen, grid: &Grid, out: &mut Vec<Intent>) {
+    /// `grid`, with room left under it for a row of its `buttons` when it has any.
+    fn grid(
+        &self,
+        ui: &mut egui::Ui,
+        screen: &Screen,
+        (grid, buttons): (&Grid, bool),
+        out: &mut Vec<Intent>,
+    ) {
         let (xs, ys) = drawn_span(grid);
+        let below = match buttons {
+            true => ui.spacing().interact_size.y + ui.spacing().item_spacing.y,
+            false => 0.0,
+        };
+        let available = (ui.available_size() - egui::vec2(0.0, below)).max(egui::Vec2::ZERO);
         // The cells grow with the room the grid has, up to twice their size, their glyphs with them; a canvas's
         // the same, and the zoom gesture over it scales them from there.
-        let fit = (ui.available_width() / xs.len().max(1) as f32)
-            .min(ui.available_height() / ys.len().max(1) as f32);
+        let fit = (available.x / xs.len().max(1) as f32).min(available.y / ys.len().max(1) as f32);
         let canvas = grid.role == Some(GridRole::Canvas);
         // A canvas first fits its whole grid to its room, its squares no larger than `CANVAS_MAX_CELL`; it zooms out
         // until the whole grid fits, and in until a cell is as large as the room.
@@ -1343,7 +1357,13 @@ impl<M: GameModel> App<M> {
         let view = ui
             .data(|d| d.get_temp::<canvas::View>(view_key))
             .filter(|v| v.span == (xs.len(), ys.len()));
-        let anchor = view.and_then(|view| canvas::zoomed(ui, view, limits));
+        // A canvas with room to draw around what it holds first shows what it holds, at a readable size.
+        let anchor = match view {
+            Some(view) => canvas::zoomed(ui, view, limits),
+            None if canvas => content_span(grid, (&xs, &ys))
+                .and_then(|content| canvas::framed(content, available, base, limits)),
+            None => None,
+        };
         // Until the player zooms, the whole grid is in view at any size of the room: a cell shrinks below its usual
         // size to fit.
         let kept = view.filter(|v| v.zoomed).map(|v| v.zoom);
@@ -1367,7 +1387,7 @@ impl<M: GameModel> App<M> {
                     .then(|| i.pointer.delta())
             });
             // The viewport is a whole number of cells tall, so none is cut across.
-            let whole = ui.available_size();
+            let whole = available;
             let rows = (whole.y / cell).floor().max(1.0);
             let room = egui::vec2(whole.x, rows * cell);
             let grid_size = egui::vec2(xs.len() as f32, ys.len() as f32) * cell;
@@ -1459,6 +1479,45 @@ impl<M: GameModel> App<M> {
         if let (Some(affordance), Some(layout)) = (&grid.region_drag, layout) {
             self.drag_region(ui, grid, affordance, (&squares, &layout), out);
         }
+        self.stamp_outline(ui, grid, &squares);
+    }
+
+    /// Where the tool in hand would put its squares down from the square under the pointer, outlined.
+    fn stamp_outline(
+        &self,
+        ui: &egui::Ui,
+        grid: &Grid,
+        squares: &HashMap<drag::Square, (egui::Rect, String, String)>,
+    ) {
+        let pointer = ui.ctx().pointer_hover_pos();
+        let Some((x, y)) = pointer.and_then(|at| {
+            squares
+                .iter()
+                .find(|(_, s)| s.0.contains(at))
+                .map(|(square, _)| *square)
+        }) else {
+            return;
+        };
+        let shapes = grid
+            .stamp
+            .iter()
+            .filter_map(|d| {
+                let to = (x.checked_add_signed(d.x)?, y.checked_add_signed(d.y)?);
+                squares.get(&to).map(|s| s.0)
+            })
+            .flat_map(|rect| {
+                std::iter::once(egui::Shape::rect_filled(
+                    rect,
+                    0.0,
+                    tokens::REGION_PICKED.gamma_multiply(0.35),
+                ))
+                .chain(outline_shapes(rect, tokens::REGION_PICKED))
+            })
+            .collect::<Vec<_>>();
+        if !shapes.is_empty() {
+            let painter = ui.painter().with_clip_rect(ui.clip_rect());
+            self.screens.rules.borrow_mut().push((painter, shapes));
+        }
     }
 
     /// The square under the pointer, outlined over the sprites.
@@ -1505,10 +1564,15 @@ impl<M: GameModel> App<M> {
             spacing.item_spacing = egui::Vec2::ZERO;
             spacing.interact_size = egui::Vec2::ZERO;
             spacing.button_padding = egui::Vec2::ZERO;
+            let cells = grid
+                .cells
+                .iter()
+                .map(|c| ((c.x, c.y), c))
+                .collect::<HashMap<_, _>>();
             for y in ys.clone() {
                 ui.horizontal(|ui| {
                     for x in xs.clone() {
-                        let Some(cell) = grid.cells.iter().find(|c| (c.x, c.y) == (x, y)) else {
+                        let Some(&cell) = cells.get(&(x, y)) else {
                             ui.allocate_space(size);
                             continue;
                         };
@@ -1567,7 +1631,7 @@ impl<M: GameModel> App<M> {
                             };
                             let label = ui.add_sized(size, egui::Label::new(shown));
                             queue(ui, label.rect);
-                            let tip = cell_tip(cell);
+                            let tip = cell_tip(cell, &grid.refusals);
                             if !tip.is_empty() {
                                 label.on_hover_text(tip);
                             }
@@ -1618,7 +1682,7 @@ impl<M: GameModel> App<M> {
                                 markup::plain(&name),
                             )
                         });
-                        let tip = cell_tip(cell);
+                        let tip = cell_tip(cell, &grid.refusals);
                         let button = match (cell.enabled, tip.is_empty()) {
                             (_, true) => button,
                             (true, false) => button.on_hover_text(tip),
@@ -1956,6 +2020,41 @@ struct GridCells {
     glyph_size: f32,
     /// Whether the keyboard is on the grid, which then outlines the square its focus reached.
     keyboard: bool,
+}
+
+/// The squares of a grid sent with `blank` that show something else, and its cursor, from the first of `drawn`
+/// columns and rows; none when every square is blank.
+fn content_span(
+    grid: &Grid,
+    (xs, ys): (&std::ops::Range<u32>, &std::ops::Range<u32>),
+) -> Option<egui::Rect> {
+    let blank = grid.blank.as_ref()?;
+    let shown = grid
+        .cells
+        .iter()
+        .filter(|c| {
+            let at_origin = GridCell {
+                x: blank.x,
+                y: blank.y,
+                id: blank.id.clone(),
+                ..(*c).clone()
+            };
+            at_origin != *blank
+        })
+        .map(|c| (c.x, c.y));
+    let cursor = grid
+        .cursor
+        .and_then(|c| Some((u32::try_from(c.x).ok()?, u32::try_from(c.y).ok()?)));
+    shown
+        .chain(cursor)
+        .map(|(x, y)| {
+            let at = egui::pos2(
+                x.saturating_sub(xs.start) as f32,
+                y.saturating_sub(ys.start) as f32,
+            );
+            egui::Rect::from_min_size(at, egui::Vec2::splat(1.0))
+        })
+        .reduce(|a, b| a.union(b))
 }
 
 /// The columns and rows of `grid` from its first to its last cell or cursor: the empty edges around them draw

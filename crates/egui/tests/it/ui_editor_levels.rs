@@ -269,12 +269,13 @@ fn refused_editor() -> Value {
     for cell in canvas["cells"].as_array_mut().unwrap() {
         let at = (cell["x"].as_u64().unwrap(), cell["y"].as_u64().unwrap());
         if at == (2, 1) || at == (2, 2) {
-            cell["refused"] = json!("Goes on a frame");
+            cell["refused"] = json!(0);
         }
         if at == (2, 2) {
             cell["looks"] = json!([0]);
         }
     }
+    canvas["refusals"] = json!(["Goes on a frame"]);
     screen
 }
 

@@ -6278,12 +6278,6 @@
         "empty": {
           "$ref": "#/$defs/text",
           "description": "What the list says while it has no rows, in the player's language, naming the filter text when one leaves none. Absent: a client shows nothing in its place."
-        },
-        "rows_shown": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 200,
-          "description": "The most rows a client shows at once, scrolling the rest, so the parts beside the list keep their room. Absent: no limit."
         }
       },
       "required": [
@@ -6806,20 +6800,13 @@
         },
         "cells": {
           "type": "array",
+          "description": "The squares the grid shows. In a grid with `blank`, runs of squares of one style, from the north-west, west to east; otherwise one whole cell per square."
+        },
+        "styles": {
+          "type": "array",
           "items": {
             "type": "object",
             "properties": {
-              "x": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "y": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "id": {
-                "$ref": "#/$defs/opaque_id"
-              },
               "glyph": {
                 "type": "string"
               },
@@ -6857,13 +6844,12 @@
                 "description": "Whether the cell shows another level, such as the one below seen through open air on the map editor's canvas, which a client draws faded. Absent for false."
               },
               "refused": {
-                "type": "string",
-                "description": "Why the tool in hand cannot act on the cell, as the vehicle editor's canvas says where the part in hand cannot go; a client draws the cell dimmed and shows the text on hover. The cell stays enabled and its click still runs. Absent when the tool can act."
+                "type": "integer",
+                "minimum": 0,
+                "description": "Why the tool in hand cannot act on the cell, as an index into the grid's `refusals`, as the vehicle editor's canvas says where the part in hand cannot go; a client draws the cell dimmed and shows the text on hover. The cell stays enabled and its click still runs. Absent when the tool can act."
               }
             },
             "required": [
-              "x",
-              "y",
               "enabled"
             ],
             "additionalProperties": false,
@@ -6893,7 +6879,13 @@
                 }
               }
             ]
-          }
+          },
+          "description": "In a grid with `blank`, each look its squares show once, with every member of a cell but its place and id, in the order they first show: the blank one first, then from the north-west, west to east. Absent otherwise."
+        },
+        "blank": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "The index in `styles` of what every square shows that `cells` does not list, such as the empty squares of the vehicle editor's canvas. A grid with it names every square `square:<x>,<y>`, its place on the grid, as a row, which the engine reads as the cell there; its cells carry no `id`. Absent for a grid that lists each cell whole with its own `id`."
         },
         "looks": {
           "type": "array",
@@ -6901,6 +6893,13 @@
             "$ref": "#/$defs/look"
           },
           "description": "The looks the cells name, each once."
+        },
+        "refusals": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Why the tool in hand cannot act on cells, each reason once, which the cells' `refused` name by index. Absent for none."
         },
         "role": {
           "enum": [
@@ -7011,6 +7010,26 @@
             "trail"
           ],
           "description": "`trail` when a secondary drag, such as a right drag, runs `secondary` on every square it crosses, each once, with `drag_begin` sent before and `drag_end` after, so the drag is one step. Absent for none: a secondary click only."
+        },
+        "stamp": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "integer"
+              },
+              "y": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "x",
+              "y"
+            ],
+            "additionalProperties": false
+          },
+          "description": "The squares a client outlines around the square under the pointer while the pointer is over the cells, as offsets east (`x`) and south (`y`) of it, such as where the vehicle editor's paste lands when that square is clicked. Absent for none."
         }
       },
       "required": [
@@ -7021,6 +7040,154 @@
         "cells"
       ],
       "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "blank"
+            ]
+          },
+          "then": {
+            "properties": {
+              "cells": {
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "x": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "y": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "style": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "description": "What the squares show, as an index into the grid's `styles`."
+                    },
+                    "n": {
+                      "type": "integer",
+                      "minimum": 2,
+                      "description": "How many squares east from `x` show the style, this one included. Absent for one."
+                    }
+                  },
+                  "required": [
+                    "x",
+                    "y",
+                    "style"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "styles"
+            ]
+          },
+          "else": {
+            "properties": {
+              "cells": {
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "x": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "y": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "id": {
+                      "$ref": "#/$defs/opaque_id",
+                      "description": "The row the cell's affordance names."
+                    },
+                    "glyph": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "$ref": "#/$defs/text"
+                    },
+                    "color": {
+                      "type": "string",
+                      "description": "A game color name."
+                    },
+                    "affordance": {
+                      "$ref": "#/$defs/opaque_id",
+                      "description": "What picking the cell invokes."
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "denial": {
+                      "$ref": "#/$defs/text",
+                      "description": "Why it is off, in the player's language: the screen's own reason, else that it is not available now. Present whenever it is off."
+                    },
+                    "selected": {
+                      "type": "boolean"
+                    },
+                    "looks": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "description": "What the cell shows from the bottom up, as indexes into the grid's `looks`, for a client that draws sprites; `glyph` stands for it otherwise."
+                    },
+                    "faded": {
+                      "type": "boolean",
+                      "description": "Whether the cell shows another level, such as the one below seen through open air on the map editor's canvas, which a client draws faded. Absent for false."
+                    },
+                    "refused": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "description": "Why the tool in hand cannot act on the cell, as an index into the grid's `refusals`, as the vehicle editor's canvas says where the part in hand cannot go; a client draws the cell dimmed and shows the text on hover. The cell stays enabled and its click still runs. Absent when the tool can act."
+                    }
+                  },
+                  "required": [
+                    "x",
+                    "y",
+                    "enabled"
+                  ],
+                  "additionalProperties": false,
+                  "allOf": [
+                    {
+                      "if": {
+                        "properties": {
+                          "enabled": {
+                            "const": false
+                          }
+                        },
+                        "required": [
+                          "enabled"
+                        ]
+                      },
+                      "then": {
+                        "properties": {
+                          "denial": {
+                            "not": {
+                              "const": ""
+                            }
+                          }
+                        },
+                        "required": [
+                          "denial"
+                        ]
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "not": {
+              "required": [
+                "styles"
+              ]
+            }
+          }
+        }
+      ],
       "description": "Cells placed on a grid of `cols` by `rows`, counted from the top-left."
     },
     "map": {
