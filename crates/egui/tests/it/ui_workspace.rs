@@ -1158,3 +1158,15 @@ fn a_tools_column_whose_part_needs_more_than_half_the_window_is_held_to_half() {
         "{size:?}: the canvas {squares:?} starts past the left column's half of the window"
     );
 }
+
+#[test]
+fn a_window_whose_side_columns_leave_the_canvas_no_room_does_not_crash() {
+    let h = shown_with(egui::vec2(700.0, 600.0), |parts| {
+        parts[0] = list("ws:tools", "Tools", &[&"W".repeat(60)], "tools");
+        for cell in parts[1]["cells"].as_array_mut().unwrap() {
+            cell["label"] = "square".into();
+            cell["affordance"] = "ws:validate".into();
+        }
+    });
+    assert!(h.query_by_label("Tools").is_some());
+}
