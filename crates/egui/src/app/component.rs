@@ -93,6 +93,9 @@ pub(super) struct Screens {
     column_lists: RefCell<Vec<ListFit>>,
     /// The squares a drag crossed that the engine has not taken yet: it holds few commands at once.
     paints: VecDeque<Paint>,
+    /// The `select` invoke the focus moving called for while the engine was too busy to take it, sent once it takes
+    /// commands again; a later one takes its place.
+    select: Option<(String, InvokeArgs)>,
     /// A workspace under the top screen is being drawn: it is shown and takes no input.
     under: std::cell::Cell<bool>,
     /// The form the player last sent or filled, by screen and form id, while nothing else was run since: the

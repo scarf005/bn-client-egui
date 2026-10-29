@@ -529,9 +529,10 @@ fn glyph(h: &H, x: usize, y: usize) -> Option<char> {
     canvas_glyphs(h)[y].chars().nth(x)
 }
 
-/// A new mapgen file in the profile's mods directory, made from the editor's form, and its canvas.
+/// A new mapgen file in a mod folder `name` of the profile's mods directory, made from the editor's form, and its
+/// canvas: the editor refuses a path outside a mod folder.
 fn create_mapgen(h: &mut H, name: &str) -> std::path::PathBuf {
-    let path = crate::common::live::profile_dir().join(format!("mods/{name}.json"));
+    let path = crate::common::live::profile_dir().join(format!("mods/{name}/{name}.json"));
     // The start page heads the form so; an open document, shorter.
     let heading = match find(h, "New mapgen file") {
         Some(_) => "New mapgen file/Path",
@@ -4192,4 +4193,153 @@ fn a_first_time_modder_builds_a_house_in_a_new_mod_with_picks_and_shape_tools() 
         "PREVIEW\n{}",
         crate::live_editor::glyphs(&h, "editor:preview").join("\n")
     );
+}
+
+/// The words of the lists drawn broken across lines at 1280x800 and 1920x1080, with pictures of both as `name`;
+/// back at 1920x1080 after.
+fn broken_words_at_both_sizes(h: &mut H, name: &str) -> Vec<String> {
+    let broken = [(1280.0, 800.0), (1920.0, 1080.0)]
+        .into_iter()
+        .flat_map(|(w, ht)| {
+            h.set_size(egui::vec2(w, ht));
+            settle(h);
+            shot_at(h, name, &[(w, ht)]);
+            h.set_size(egui::vec2(w, ht));
+            settle(h);
+            crate::common::legible::broken_words(&h.output().shapes)
+                .into_iter()
+                .map(move |b| format!("{w}x{ht}: {b}"))
+        })
+        .collect();
+    h.set_size(egui::vec2(1920.0, 1080.0));
+    settle(h);
+    broken
+}
+
+/// The vehicle editor's tools keep their names whole beside their states, and its part palette its names beside
+/// their ids, at both sizes.
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn the_vehicle_editors_lists_keep_their_words_whole_at_both_sizes() {
+    let dir = std::env::temp_dir().join(format!("bn-walk-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let (mut h, _root) = start(&dir);
+    h.set_size(egui::vec2(1920.0, 1080.0));
+    rest(&mut h);
+    click(&mut h, "Editor");
+    click(&mut h, "Vehicle editor");
+    key(&mut h, egui::Key::Escape);
+    click(&mut h, "Yes");
+    wait_kind(&mut h, "vehicle_editor");
+    rest(&mut h);
+    double_click(&mut h, "Offroad Car");
+    wait_kind(&mut h, "vehicle_editor");
+    rest(&mut h);
+    click_input(&mut h, "Parts");
+    type_text(&mut h, "wheel");
+    let broken = broken_words_at_both_sizes(&mut h, "lists-vehicle-editor");
+    assert!(broken.is_empty(), "{broken:?}");
+}
+
+/// The map editor's catalog, legend and placements keep their words whole at both sizes.
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn the_map_editors_lists_keep_their_words_whole_at_both_sizes() {
+    let dir = std::env::temp_dir().join(format!("bn-walk-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let (mut h, _root) = start(&dir);
+    h.set_size(egui::vec2(1920.0, 1080.0));
+    rest(&mut h);
+    open_map_editor(&mut h);
+    create_mapgen(&mut h, "zz_lists");
+    click_tab(&mut h, "Terrain");
+    pick_first(&mut h, "brick wall");
+    click_tab(&mut h, "Furniture");
+    click_input(&mut h, "Catalog");
+    replace_text(&mut h, "chair");
+    let broken = broken_words_at_both_sizes(&mut h, "lists-map-editor");
+    assert!(broken.is_empty(), "{broken:?}");
+}
+
+/// The Select tool marks the squares a drag spans, from the square pressed to the one released, as two clicks on
+/// them do.
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn the_map_editor_select_tool_marks_the_squares_a_drag_spans() {
+    let dir = std::env::temp_dir().join(format!("bn-walk-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let (mut h, _root) = start(&dir);
+    h.set_size(egui::vec2(1920.0, 1080.0));
+    rest(&mut h);
+    open_map_editor(&mut h);
+    create_mapgen(&mut h, "zz_select_drag");
+    type_text(&mut h, "s");
+    drag_squares(
+        &mut h,
+        "select-drag-held",
+        (4, 3),
+        &[(5, 4), (7, 5)],
+        egui::Vec2::ZERO,
+    );
+    shot_at(&mut h, "select-drag-released", &[(1920.0, 1080.0)]);
+    assert_eq!(
+        (
+            field(&h, "editor:place", "x"),
+            field(&h, "editor:place", "y")
+        ),
+        ("4-7".to_string(), "3-5".to_string())
+    );
+}
+
+/// The catalog's rows, as (label, held): a held row is the brush.
+fn catalog_rows(h: &H) -> Vec<(String, bool)> {
+    let top = h.state().model.screens().last().unwrap();
+    let Some(Component::List(catalog)) = top.root.as_ref().unwrap().find("editor:catalog") else {
+        panic!("no catalog");
+    };
+    (catalog.rows.iter())
+        .map(|r| (r.label.shown(), r.selected))
+        .collect()
+}
+
+/// A catalog row double-clicked after Enter in the catalog's search box takes the brush, though the engine was still
+/// filtering when Enter put the focus on the row.
+#[test]
+#[ignore = "requires BN_ENGINE pointing at an engine binary"]
+fn the_map_editor_catalog_takes_the_row_double_clicked_after_its_search() {
+    let dir = std::env::temp_dir().join(format!("bn-walk-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let (mut h, _root) = start(&dir);
+    h.set_size(egui::vec2(1920.0, 1080.0));
+    rest(&mut h);
+    open_map_editor(&mut h);
+    create_mapgen(&mut h, "zz_catalog_take");
+    click_tab(&mut h, "Terrain");
+    let mut missed = vec![];
+    for name in [
+        "brick wall",
+        "dirt",
+        "grass",
+        "sand",
+        "wooden floor",
+        "concrete wall",
+    ] {
+        click_input(&mut h, "Catalog");
+        let (head, last) = name.split_at(name.len() - 1);
+        replace_text(&mut h, head);
+        // The last letter's filter is still running when Enter puts the focus on the first row shown.
+        h.event(egui::Event::Text(last.into()));
+        h.run_steps(1);
+        h.key_press(egui::Key::Enter);
+        h.run_steps(2);
+        rest(&mut h);
+        let first = catalog_rows(&h)[0].0.clone();
+        double_click(&mut h, &first);
+        let held = catalog_rows(&h).into_iter().find(|(_, held)| *held);
+        if held.map(|(label, _)| label) != Some(first.clone()) {
+            missed.push(first);
+        }
+    }
+    shot_at(&mut h, "catalog-taken", &[(1920.0, 1080.0)]);
+    assert!(missed.is_empty(), "the brush did not become {missed:?}");
 }

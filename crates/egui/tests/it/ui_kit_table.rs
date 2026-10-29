@@ -432,3 +432,95 @@ fn a_tables_label_and_value_columns_stand_a_column_gap_apart() {
         "label to value {after_label}, value to value {after_value}, column gap {COLUMN_GAP}"
     );
 }
+
+/// The window sizes the editors are checked at.
+const EDITOR_SIZES: [egui::Vec2; 2] = [egui::vec2(1280.0, 800.0), egui::vec2(1920.0, 1080.0)];
+
+/// The map and vehicle editors as the engine's examples have them, every part open.
+fn editors() -> [(&'static str, Value); 2] {
+    [
+        (
+            "vehicle editor",
+            crate::common::unfolded(example(
+                "vehicle_editor",
+                "vehicle editor with a prototype open on a mount",
+            )),
+        ),
+        (
+            "map editor",
+            crate::common::unfolded(example("editor", "map editor with a placement picked")),
+        ),
+    ]
+}
+
+#[test]
+fn an_editors_lists_break_no_word_and_keep_the_tools_states_whole() {
+    for (name, screen) in editors() {
+        for size in EDITOR_SIZES {
+            let h = open(screen.clone(), size);
+            let broken = crate::common::legible::broken_words(&h.output().shapes);
+            assert!(broken.is_empty(), "{name} at {size:?}: {broken:?}");
+            let states = painted_labels(&h, &["Off".to_string()]);
+            assert!(
+                states.iter().all(|t| !t.galley.elided),
+                "{name} at {size:?}: a tool's state is cut short"
+            );
+        }
+    }
+}
+
+/// The vehicle editor with the game's wheels in its part palette: names of a few words beside ids of up to 32
+/// letters, the longest of which makes the id column wider than most names.
+fn wheels() -> Value {
+    let mut screen = crate::common::unfolded(example(
+        "vehicle_editor",
+        "vehicle editor with a prototype open on a mount",
+    ));
+    let list = list_mut(&mut screen["root"], "vehicle:parts").unwrap();
+    let rows = [
+        ("wheel_small_steerable", "small wheel (steerable)"),
+        ("tread2", "steel treads"),
+        ("tread3", "tank treads"),
+        ("wheel_tricycle", "tricycle wheels"),
+        ("wheel_unicycle", "unicycle wheel"),
+        ("wheel", "wheel"),
+        ("wheel_steerable", "wheel (steerable)"),
+        ("wheel_mount_medium", "wheel hub assembly"),
+        (
+            "wheel_mount_light_steerable_wood",
+            "light wheel mount (steerable)",
+        ),
+    ]
+    .map(|(id, name)| {
+        json!({"id": format!("vpart:{id}"), "label": name, "description": "", "denial": "", "enabled": true,
+            "selectable": true, "selected": false, "columns": [{"key": "id", "label": "ID", "value": id}]})
+    });
+    list["total"] = json!(rows.len());
+    list["rows"] = json!(rows);
+    list.as_object_mut().unwrap().remove("filter");
+    screen
+}
+
+#[test]
+fn a_palettes_short_names_stay_on_one_line_beside_an_id_column_wider_than_them() {
+    let short = [
+        "small wheel (steerable)",
+        "tricycle wheels",
+        "unicycle wheel",
+        "wheel (steerable)",
+        "wheel hub assembly",
+    ]
+    .map(String::from);
+    for size in EDITOR_SIZES {
+        let h = open(wheels(), size);
+        // The first rows, which a short palette shows.
+        let painted = painted_labels(&h, &short);
+        assert!(
+            painted.iter().any(|t| t.galley.text() == short[0]),
+            "at {size:?} no {:?}",
+            short[0]
+        );
+        let wrapped = crate::common::legible::wrapped_labels(&h.output().shapes, &short);
+        assert!(wrapped.is_empty(), "at {size:?}: {wrapped:?}");
+    }
+}

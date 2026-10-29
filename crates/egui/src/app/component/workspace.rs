@@ -358,8 +358,11 @@ impl<M: GameModel> App<M> {
             false => (tools, TOOLS_WIDTH, log),
         };
         if !left.is_empty() {
+            // Never narrower than its parts need, so no word of theirs breaks and their values stay whole.
+            let least = self.column_least(ui, screen, &left);
             egui::Panel::left(egui::Id::new(&tools_id))
-                .default_size(left_width)
+                .default_size(left_width.max(least))
+                .min_size(least)
                 .show(ui, |ui| match left_is_log {
                     true => self.log_column(ui, screen, &left, out),
                     false => {
@@ -525,6 +528,21 @@ impl<M: GameModel> App<M> {
             .for_each(|c| self.component(ui, screen, c, out));
         // A log's list takes the room the log has, however little: the log does not scroll it out of view.
         self.column(ui, screen, (&rest, 1.0), out);
+    }
+
+    /// The least width of a side column of `parts`: what its widest part needs, past the indent of its heading and
+    /// beside the column's scroll bar, in the panel's margins.
+    fn column_least(&self, ui: &egui::Ui, screen: &Screen, parts: &[&Component]) -> f32 {
+        let room = ui.ctx().content_rect().width();
+        let part = |c: &&Component| {
+            let indent = c.head().label.as_ref().map_or(0.0, |_| ui.spacing().indent);
+            indent + self.extent(ui, screen, c, room).min
+        };
+        let margin = egui::Frame::side_top_panel(ui.style())
+            .total_margin()
+            .sum()
+            .x;
+        parts.iter().map(part).fold(0.0, f32::max) + ui.spacing().scroll.allocated_width() + margin
     }
 
     /// `parts` one above the other in a column that scrolls, whole lines in view, each list at least `fit_rows`
