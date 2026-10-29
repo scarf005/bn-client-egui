@@ -287,3 +287,37 @@ fn the_start_page_puts_the_new_form_and_its_new_mod_folder_on_the_canvas() {
         assert_eq!(sent, [json!("editor:new_folder")], "{size:?}");
     }
 }
+
+/// A question for an action's number says what the number is: the action's description stands under its name, as a
+/// form's field has its description, so the preview's seed is explained where it is typed.
+#[test]
+fn a_question_for_a_number_shows_the_actions_description_under_its_name() {
+    let mut screen = example("editor", "map editor with a drawn room and a new mapping");
+    let preview = screen["affordances"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|a| a["id"] == "editor:preview")
+        .unwrap();
+    preview["enabled"] = json!(true);
+    preview.as_object_mut().unwrap().remove("denial");
+    let description = preview["description"].as_str().unwrap().to_string();
+    for size in SIZES {
+        let (mut h, _) = shown(&screen, size);
+        h.get_by_role_and_label(egui::accesskit::Role::Button, "View")
+            .click();
+        h.run_steps(4);
+        h.get_by_role_and_label(egui::accesskit::Role::Button, "Preview")
+            .click();
+        h.run_steps(6);
+        pointer_away(&mut h);
+        assert!(
+            h.query_by_label("OK").is_some(),
+            "{size:?}: the question is open"
+        );
+        assert!(
+            says(&h, &description),
+            "{size:?}: the question says what its number is"
+        );
+    }
+}
