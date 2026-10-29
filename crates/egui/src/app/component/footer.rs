@@ -42,9 +42,17 @@ fn footer_buttons<'a>(affordances: &[&'a Affordance], title_bar: bool) -> Footer
 }
 
 impl FooterButtons<'_> {
+    /// Whether the row holds no button.
+    fn is_empty(&self) -> bool {
+        self.back.is_empty()
+            && self.rest.is_empty()
+            && self.confirm.is_empty()
+            && self.help.is_none()
+    }
+
     /// The width of the row with the first `n` of the other actions and the menu button when some are left.
     fn width(&self, ui: &egui::Ui, n: usize) -> f32 {
-        let glyph = |text: &str| glyph_width(ui, text);
+        let glyph = |text: &str| captioned_width(ui, text, egui::TextStyle::Button, None);
         let widths = self
             .back
             .iter()
@@ -64,19 +72,10 @@ impl FooterButtons<'_> {
     }
 }
 
-/// The width of a button holding only `text`.
-fn glyph_width(ui: &egui::Ui, text: &str) -> f32 {
-    let font = egui::TextStyle::Button.resolve(ui.style());
-    text_width(ui, text, &font) + 2.0 * ui.spacing().button_padding.x
-}
-
 /// The width of `a`'s button as `keyed` lays it out.
 pub(super) fn button_width(ui: &egui::Ui, a: &Affordance) -> f32 {
-    let caption = egui::TextStyle::Small.resolve(ui.style());
-    let key = a.keys.first().map_or(0.0, |k| {
-        ui.spacing().icon_spacing + text_width(ui, k, &caption)
-    });
-    glyph_width(ui, &markup::plain(&a.label.shown())) + key
+    let label = markup::plain(&a.label.shown());
+    captioned_width(ui, &label, egui::TextStyle::Button, a.keys.first())
 }
 
 /// An affordance's button text: the engine's label, then the first key the player has bound to it as a dim
@@ -189,11 +188,7 @@ impl<M: GameModel> App<M> {
     /// The width `footer` takes for all of `affordances` on one row; 0 when it draws no button.
     pub(super) fn footer_width(ui: &egui::Ui, affordances: &[&Affordance], title_bar: bool) -> f32 {
         let row = footer_buttons(affordances, title_bar);
-        match row.back.is_empty()
-            && row.rest.is_empty()
-            && row.confirm.is_empty()
-            && row.help.is_none()
-        {
+        match row.is_empty() {
             true => 0.0,
             false => row.width(ui, row.rest.len()),
         }
@@ -209,11 +204,7 @@ impl<M: GameModel> App<M> {
         out: &mut Vec<Intent>,
     ) {
         let row = footer_buttons(affordances, title_bar);
-        if row.back.is_empty()
-            && row.rest.is_empty()
-            && row.confirm.is_empty()
-            && row.help.is_none()
-        {
+        if row.is_empty() {
             return;
         }
         let room = ui.available_width();
@@ -268,37 +259,4 @@ impl<M: GameModel> App<M> {
     ) {
         self.affordance_buttons(ui, &own_buttons(screen, component), row, out);
     }
-}
-
-/// The buttons a component draws for the affordances it names that its own widgets do not run.
-pub(super) fn own_buttons<'a>(screen: &'a Screen, component: &Component) -> Vec<&'a Affordance> {
-    component
-        .head()
-        .affordances
-        .iter()
-        .filter_map(|id| find(screen, id))
-        // A list's rows run its `activate`, also where a panel around the list names it.
-        .filter(|a| {
-            !driven(component, a)
-                && !gesture(screen, a)
-                && !run_by_rows(screen, a)
-                && !matches!(component, Component::List(list) if searched(screen, list, a))
-                && drawn_button(a)
-        })
-        .collect()
-}
-
-/// Whether `a` is drawn as a button: picking, moving, digits and text edits run from their rows and keys instead, and what
-/// only rearranges the native window changes nothing here. A grouped one is also an item of the workspace's menu bar.
-pub(super) fn drawn_button(a: &Affordance) -> bool {
-    !matches!(
-        a.role,
-        Some(
-            AffordanceRole::Select
-                | AffordanceRole::Navigate
-                | AffordanceRole::Digit
-                | AffordanceRole::Layout
-                | AffordanceRole::Edit
-        )
-    )
 }

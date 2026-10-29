@@ -12,6 +12,25 @@ const FIELD_MIN: f32 = 100.0;
 /// The width a list's search box keeps, however narrow its rows are.
 const SEARCH_WIDTH: f32 = 220.0;
 
+/// The height of a line of controls, a button or a field, and the gap under it.
+pub(in crate::app) fn control_line(ui: &egui::Ui) -> f32 {
+    ui.spacing().interact_size.y + ui.spacing().item_spacing.y
+}
+
+/// The width of a button holding `label` in `style` and, after it, `key` as a dim caption.
+pub(super) fn captioned_width(
+    ui: &egui::Ui,
+    label: &str,
+    style: egui::TextStyle,
+    key: Option<&String>,
+) -> f32 {
+    let caption = egui::TextStyle::Small.resolve(ui.style());
+    let key = key.map_or(0.0, |k| {
+        ui.spacing().icon_spacing + text_width(ui, k, &caption)
+    });
+    text_width(ui, label, &style.resolve(ui.style())) + 2.0 * ui.spacing().button_padding.x + key
+}
+
 /// The width of `text` on one line.
 pub(in crate::app) fn text_width(ui: &egui::Ui, text: &str, font: &egui::FontId) -> f32 {
     ui.painter()
@@ -44,19 +63,6 @@ pub(super) fn with_margin(extent: Extent) -> Extent {
         natural: extent.natural + margin,
         ..extent
     }
-}
-
-/// A stat's value with its maximum and unit, as the panel shows it.
-pub(super) fn stat_text(stat: &PanelStat) -> String {
-    let max = stat
-        .max
-        .as_ref()
-        .map_or(String::new(), |m| format!("/{}", m.shown()));
-    let unit = stat
-        .unit
-        .as_ref()
-        .map_or(String::new(), |u| format!(" {}", u.shown()));
-    format!("{}{max}{unit}", markup::plain(&stat.value.shown()))
 }
 
 impl<M: GameModel> App<M> {

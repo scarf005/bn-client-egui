@@ -47,8 +47,7 @@ impl<M: GameModel> App<M> {
     /// refusal and the buttons), and no more than `list_rows` rows of `step` when the list is drawn so, nor more
     /// than the `held` height of the rows of a list that has all its rows, past `MIN_ROWS`.
     fn list_height(&self, ui: &egui::Ui, step: f32, below: usize, held: Option<f32>) -> f32 {
-        let spacing = ui.spacing();
-        let line = spacing.interact_size.y + spacing.item_spacing.y;
+        let line = control_line(ui);
         let room = match self.screens.in_column.get() {
             true => f32::INFINITY,
             false => (ui.available_height() - below as f32 * line).max(MIN_ROWS * line),
@@ -466,11 +465,7 @@ impl<M: GameModel> App<M> {
     fn wrapped_height(&self, ui: &egui::Ui, row: &Row, label: f32) -> f32 {
         let font = egui::TextStyle::Body.resolve(ui.style());
         let indent = f32::from(u8::from(row.parent_id.is_some())) * tokens::INDENT;
-        let mut job = text::job(
-            &self.model.styled(&Self::row_label(row)),
-            &font,
-            egui::Color32::WHITE,
-        );
+        let mut job = self.styled_job(&Self::row_label(row), &font, egui::Color32::WHITE);
         job.wrap.max_width = label - indent - 2.0 * ui.spacing().button_padding.x;
         ui.fonts_mut(|f| f.layout_job(job)).size().y
     }

@@ -34,8 +34,7 @@ impl<M: GameModel> App<M> {
         let room = ui.available_width();
         if room < BESIDE {
             // The list keeps to its share of the window's height, so the description under it has the rest.
-            let spacing = ui.spacing();
-            let step = spacing.interact_size.y + spacing.item_spacing.y;
+            let step = control_line(ui);
             let share = (LIST_SHARE * ui.available_height() / step).floor() as usize;
             let rows = self.screens.list_rows.get().unwrap_or(ROWS_OVER);
             self.with_list_rows(Some(rows.min(ROWS_OVER).min(share.max(LEAST_ROWS))), || {

@@ -28,36 +28,38 @@ fn tab_rows(widths: &[f32], room: f32) -> Vec<Vec<usize>> {
 }
 
 impl<M: GameModel> App<M> {
-    /// The strip of `tabs` in rows as wide as the room left to it.
-    pub(super) fn tab_strip(
+    /// The strip of `tabs` over the page of the chosen tab.
+    pub(super) fn tabs(
         &self,
         ui: &mut egui::Ui,
         screen: &Screen,
         tabs: &Tabs,
         out: &mut Vec<Intent>,
     ) {
+        self.tab_strip(ui, screen, tabs, out);
+        if let Some(child) = &tabs.child {
+            self.component(ui, screen, child, out);
+        }
+    }
+
+    /// The strip of `tabs` in rows as wide as the room left to it.
+    fn tab_strip(&self, ui: &mut egui::Ui, screen: &Screen, tabs: &Tabs, out: &mut Vec<Intent>) {
         let select = tabs.select.as_deref().and_then(|id| find(screen, id));
         let labels = tabs
             .tabs
             .iter()
             .map(|t| format!("{}{}", t.label.shown(), if t.unread { " •" } else { "" }))
             .collect::<Vec<_>>();
-        let padding = 2.0 * ui.spacing().button_padding.x;
-        let width = |text: &str, style: egui::TextStyle| {
-            text_width(ui, text, &style.resolve(ui.style())) + padding
-        };
         // A tab's key stands after its name as a dim caption.
-        let key = |tab: &Tab| {
-            tab.hotkey.as_ref().map_or(0.0, |k| {
-                ui.spacing().icon_spacing
-                    + text_width(ui, k, &egui::TextStyle::Small.resolve(ui.style()))
-            })
+        let width = |(l, tab): (&String, &Tab)| {
+            captioned_width(
+                ui,
+                &markup::plain(l),
+                egui::TextStyle::Body,
+                tab.hotkey.as_ref(),
+            )
         };
-        let widths = labels
-            .iter()
-            .zip(&tabs.tabs)
-            .map(|(l, tab)| width(&markup::plain(l), egui::TextStyle::Body) + key(tab))
-            .collect::<Vec<_>>();
+        let widths = labels.iter().zip(&tabs.tabs).map(width).collect::<Vec<_>>();
         let rows = tab_rows(&widths, ui.available_width());
         // The strip is one stop of the keyboard's walk: its chosen tab when it is on, else its first on one; Left
         // and Right switch. A strip with no tab on is not a stop, as a disabled button is not.

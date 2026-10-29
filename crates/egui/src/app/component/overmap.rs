@@ -110,11 +110,7 @@ fn overmap_a11y(
     om: &OvermapWire,
     status: &str,
 ) {
-    let title = screen
-        .title
-        .as_ref()
-        .map(|t| markup::plain(&t.shown()))
-        .unwrap_or_default();
+    let title = title(screen);
     response.widget_info(|| WidgetInfo::labeled(WidgetType::Other, true, &title));
     ui.ctx().accesskit_node_builder(response.id, |b| {
         b.set_role(egui::accesskit::Role::Canvas);
@@ -540,22 +536,14 @@ impl<M: GameModel> App<M> {
         let lines = map.cursor_lines();
         if !lines.is_empty() {
             let font = egui::TextStyle::Body.resolve(ui.style());
-            let job = text::job(
-                &self.model.styled(&lines.join("\n")),
-                &font,
-                tokens::ground(ui),
-            );
+            let job = self.styled_job(&lines.join("\n"), &font, tokens::ground(ui));
             ui.add(egui::Label::new(job).wrap_mode(egui::TextWrapMode::Wrap));
             return;
         }
         let name = match (&map.head.label, map.mode) {
             (Some(label), _) => markup::plain(&label.shown()),
             (None, MapMode::World) => tr("Map"),
-            (None, MapMode::Overmap) => screen
-                .title
-                .as_ref()
-                .map(|t| markup::plain(&t.shown()))
-                .unwrap_or_default(),
+            (None, MapMode::Overmap) => title(screen),
         };
         let size = egui::vec2(ui.available_width().min(480.0), 120.0);
         let (rect, response) = ui.allocate_exact_size(size, egui::Sense::hover());
