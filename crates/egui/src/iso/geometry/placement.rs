@@ -51,19 +51,8 @@ impl Placement<'_> {
 /// The sprite corners `[top left, top right, bottom right, bottom left]` as they are drawn: each is the corner of
 /// the sprite in its page that lands there under `turn`.
 fn corners(turn: Turn, s: &SpriteSource) -> [Vec2; 4] {
-    let [tl, tr, br, bl] = [
-        s.at,
-        s.at + Vec2::new(s.src.x, 0.0),
-        s.at + s.src,
-        s.at + Vec2::new(0.0, s.src.y),
-    ];
-    match turn {
-        Turn::None => [tl, tr, br, bl],
-        Turn::Left => [tr, br, bl, tl],
-        Turn::Right => [bl, tl, tr, br],
-        Turn::Half => [br, bl, tl, tr],
-        Turn::Mirror => [tr, tl, bl, br],
-    }
+    let (across, down) = (Vec2::new(s.src.x, 0.0), Vec2::new(0.0, s.src.y));
+    turn.corners([s.at, s.at + across, s.at + s.src, s.at + down])
 }
 
 /// Where a sprite drawn from above from `lo` to `hi` in its tile, in tile pixels from the tile's top left corner,

@@ -324,30 +324,18 @@ fn draw_sprite(
         uv.height() / sheet.sprite.1 as f32,
     );
     let uv = uv.shrink2(texel / 2.0);
-    // Source corners for the destination's top left, top right, bottom right and bottom left.
-    let [tl, tr, br, bl] = [
-        uv.left_top(),
-        uv.right_top(),
-        uv.right_bottom(),
-        uv.left_bottom(),
-    ];
-    let corners = match placed.turn {
-        Turn::None => [tl, tr, br, bl],
-        Turn::Left => [tr, br, bl, tl],
-        Turn::Right => [bl, tl, tr, br],
-        Turn::Half => [br, bl, tl, tr],
-        Turn::Mirror => [tr, tl, bl, br],
+    let clockwise = |r: Rect| {
+        [
+            r.left_top(),
+            r.right_top(),
+            r.right_bottom(),
+            r.left_bottom(),
+        ]
     };
+    // Source corners for the destination's top left, top right, bottom right and bottom left.
+    let corners = placed.turn.corners(clockwise(uv));
     let mut mesh = Mesh::with_texture(texture);
-    for (pos, uv) in [
-        dest.left_top(),
-        dest.right_top(),
-        dest.right_bottom(),
-        dest.left_bottom(),
-    ]
-    .into_iter()
-    .zip(corners)
-    {
+    for (pos, uv) in clockwise(dest).into_iter().zip(corners) {
         mesh.vertices.push(egui::epaint::Vertex {
             pos,
             uv,

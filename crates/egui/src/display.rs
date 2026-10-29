@@ -10,7 +10,7 @@ pub use draw::*;
 use painted::*;
 pub use settings::*;
 
-use crate::tileset::{self, PaintQuery, Paints, Placed, Query, Tileset, TilesetInfo, Turn};
+use crate::tileset::{self, PaintQuery, Paints, Placed, Query, Tileset, TilesetInfo};
 use crate::tint::{Paint, tint_pixel};
 use crate::windows::WindowState;
 use bn_client_core::localise::{Value as Arg, tr, tr_format};
