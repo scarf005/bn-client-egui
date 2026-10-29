@@ -261,3 +261,28 @@ fn the_level_keys_run_the_level_affordances_and_a_disabled_one_shows_its_denial(
     );
     h.get_by_label_contains("No level below in this file.");
 }
+
+/// The editor whose squares at `(2, 1)` and `(2, 2)` are refused, the second holding a part drawn with a look.
+fn refused_editor() -> Value {
+    let mut screen = editor(None, &[]);
+    let canvas = find(&mut screen["root"], "editor:canvas").unwrap();
+    for cell in canvas["cells"].as_array_mut().unwrap() {
+        let at = (cell["x"].as_u64().unwrap(), cell["y"].as_u64().unwrap());
+        if at == (2, 1) || at == (2, 2) {
+            cell["refused"] = json!("Goes on a frame");
+        }
+        if at == (2, 2) {
+            cell["looks"] = json!([0]);
+        }
+    }
+    screen
+}
+
+#[test]
+fn a_refused_square_is_faded_unless_it_holds_a_part() {
+    let (h, _) = open(refused_editor());
+    let full = opacity(&h, 3, 1);
+    let empty = opacity(&h, 2, 1) / full;
+    assert!((0.3..0.6).contains(&empty), "refused and empty at {empty}");
+    assert_eq!(opacity(&h, 2, 2), full, "a refused square holding a part");
+}

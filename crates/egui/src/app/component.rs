@@ -1505,9 +1505,12 @@ impl<M: GameModel> App<M> {
                             continue;
                         };
                         // Another level seen through open air is drawn faded, as its sprites and its glyph.
-                        // A square that is off or refused is drawn faded too; a disabled button does that itself.
-                        let off = !(cell.enabled || cell.id.is_some() && cell.affordance.is_some())
-                            || cell.refused.is_some();
+                        // A square that is off or refused is drawn faded too, unless it holds a part, which keeps
+                        // its look to be read; a disabled button does that itself.
+                        let off = (!(cell.enabled
+                            || cell.id.is_some() && cell.affordance.is_some())
+                            || cell.refused.is_some())
+                            && cell.looks.is_empty();
                         // The square the cursor or a selection marks keeps its full look, to be seen.
                         let at_cursor = grid
                             .cursor
