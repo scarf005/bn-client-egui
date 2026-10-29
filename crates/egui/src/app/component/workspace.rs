@@ -184,7 +184,7 @@ impl<M: GameModel> App<M> {
         else {
             return false;
         };
-        let title = markup::plain(&screen.title.as_ref().map(Text::shown).unwrap_or_default());
+        let title = title(&screen);
         // Under another screen its menus and ends are drawn off: what they run, and the keys an open menu holds,
         // would go to the screen on top.
         let top = screens.last().map(|s| &s.screen_id) == Some(&screen.screen_id);

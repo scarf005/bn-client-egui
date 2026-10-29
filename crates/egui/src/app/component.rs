@@ -135,6 +135,11 @@ fn tone_color(tone: Tone) -> egui::Color32 {
     if tone == Tone::Good { GOOD } else { BAD }
 }
 
+/// The screen's title without its colour tags; empty without one.
+fn title(screen: &Screen) -> String {
+    markup::plain(&screen.title.as_ref().map(Text::shown).unwrap_or_default())
+}
+
 fn find<'a>(screen: &'a Screen, id: &str) -> Option<&'a Affordance> {
     screen.affordances.iter().find(|a| a.id == id)
 }
@@ -167,7 +172,17 @@ impl<M: GameModel> App<M> {
     /// `line` drawn on `ground`.
     fn line_on(&self, ui: &egui::Ui, markup: &str, ground: egui::Color32) -> egui::WidgetText {
         let font = egui::TextStyle::Body.resolve(ui.style());
-        crate::text::job(&self.model.styled(markup), &font, ground).into()
+        self.styled_job(markup, &font, ground).into()
+    }
+
+    /// The engine's `markup` in `font`, its colour tags drawn in colours that read on `ground`.
+    fn styled_job(
+        &self,
+        markup: &str,
+        font: &egui::FontId,
+        ground: egui::Color32,
+    ) -> egui::text::LayoutJob {
+        crate::text::job(&self.model.styled(markup), font, ground)
     }
 
     /// The game colour as a colour of the screen.

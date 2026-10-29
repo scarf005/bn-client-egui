@@ -5,13 +5,9 @@ use super::*;
 
 /// Whether the rows of one of the screen's lists run the affordance, on a double click or Enter.
 fn run_by_rows(screen: &Screen, affordance: &Affordance) -> bool {
-    let lists = screen.root.iter().flat_map(Component::nested);
-    lists
-        .filter_map(|c| match c {
-            Component::List(l) => l.activate.as_deref(),
-            _ => None,
-        })
-        .any(|id| id == affordance.id)
+    let id = Some(affordance.id.as_str());
+    let runs = |c: &&Component| matches!(c, Component::List(l) if l.activate.as_deref() == id);
+    screen.components().iter().any(runs)
 }
 
 /// The ids of the affordances some component names.
@@ -65,6 +61,22 @@ pub(super) fn row_actions<'a>(
                 .and_then(|args| args.row.as_ref())
                 .is_some_and(|row| row.component_id == id)
     })
+}
+
+/// The affordances of `screen` that its footer offers: those no part names nor that take a row of one of its lists,
+/// which the list offers under its rows, or a square of one of its grids, which runs from the squares whose cells
+/// name it.
+pub(super) fn footer_affordances(screen: &Screen) -> Vec<&Affordance> {
+    let named = screen.root.as_ref().map_or_else(HashSet::new, claimed);
+    let rowed = |c: &&Component| matches!(c, Component::List(_) | Component::Grid(_));
+    let rows = screen.components().into_iter().filter(rowed);
+    let rows = rows.map(Component::id).collect::<HashSet<_>>();
+    let on_row = |a: &Affordance| {
+        let row = a.args.as_ref().and_then(|args| args.row.as_ref());
+        row.is_some_and(|row| rows.contains(row.component_id.as_str()))
+    };
+    let shown = |a: &&Affordance| !named.contains(a.id.as_str()) && !on_row(a);
+    screen.affordances.iter().filter(shown).collect()
 }
 
 /// The engine's affordance that opens the prompt of a list's filter.

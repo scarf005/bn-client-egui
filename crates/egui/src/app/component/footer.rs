@@ -42,6 +42,14 @@ fn footer_buttons<'a>(affordances: &[&'a Affordance], title_bar: bool) -> Footer
 }
 
 impl FooterButtons<'_> {
+    /// Whether the row holds no button.
+    fn is_empty(&self) -> bool {
+        self.back.is_empty()
+            && self.rest.is_empty()
+            && self.confirm.is_empty()
+            && self.help.is_none()
+    }
+
     /// The width of the row with the first `n` of the other actions and the menu button when some are left.
     fn width(&self, ui: &egui::Ui, n: usize) -> f32 {
         let glyph = |text: &str| glyph_width(ui, text);
@@ -189,11 +197,7 @@ impl<M: GameModel> App<M> {
     /// The width `footer` takes for all of `affordances` on one row; 0 when it draws no button.
     pub(super) fn footer_width(ui: &egui::Ui, affordances: &[&Affordance], title_bar: bool) -> f32 {
         let row = footer_buttons(affordances, title_bar);
-        match row.back.is_empty()
-            && row.rest.is_empty()
-            && row.confirm.is_empty()
-            && row.help.is_none()
-        {
+        match row.is_empty() {
             true => 0.0,
             false => row.width(ui, row.rest.len()),
         }
@@ -209,11 +213,7 @@ impl<M: GameModel> App<M> {
         out: &mut Vec<Intent>,
     ) {
         let row = footer_buttons(affordances, title_bar);
-        if row.back.is_empty()
-            && row.rest.is_empty()
-            && row.confirm.is_empty()
-            && row.help.is_none()
-        {
+        if row.is_empty() {
             return;
         }
         let room = ui.available_width();

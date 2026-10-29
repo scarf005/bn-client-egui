@@ -16,7 +16,7 @@ impl<M: GameModel> App<M> {
             ),
         };
         let ground = tokens::ground(ui);
-        let job = crate::text::job(&self.model.styled(&block.markup.shown()), &font, ground);
+        let job = self.styled_job(&block.markup.shown(), &font, ground);
         let show = |ui: &mut egui::Ui| {
             ui.scope(|ui| {
                 if let Some(tone) = block.tone {

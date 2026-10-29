@@ -61,7 +61,7 @@ impl<M: GameModel> App<M> {
         std::mem::swap(&mut self.screens.interaction, &mut focus);
         self.screens.passive = true;
         let kind = KeyWindow::Panel(panel).kind();
-        let title = markup::plain(&screen.title.as_ref().map(Text::shown).unwrap_or_default());
+        let title = title(screen);
         let region = self.region.unwrap_or_else(|| ctx.content_rect());
         let place = side(region, panel == PanelKind::Character, 1.0);
         let placement = Placement {

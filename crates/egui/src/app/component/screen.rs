@@ -91,7 +91,7 @@ impl<M: GameModel> App<M> {
         screen: &Screen,
         out: &mut Vec<Intent>,
     ) -> Shown<()> {
-        let title = markup::plain(&screen.title.as_ref().map(Text::shown).unwrap_or_default());
+        let title = title(screen);
         // A workspace fills the view edge to edge; its panels keep their own margins.
         let frame = match workspace::laid_out(screen) {
             Some(_) => egui::Frame::NONE.fill(tokens::DIALOG),
@@ -129,44 +129,7 @@ impl<M: GameModel> App<M> {
         // A workspace is the whole view, with no title bar: its title, help and leave end its menu bar.
         let workspace = workspace::laid_out(screen).is_some();
         let title_bar = base.title_bar || workspace;
-        let named = screen.root.as_ref().map_or_else(HashSet::new, claimed);
-        let lists = screen.root.as_ref().map_or(vec![], |root| {
-            root.nested()
-                .into_iter()
-                .filter_map(|c| match c {
-                    Component::List(l) => Some(l.head.id.as_str()),
-                    _ => None,
-                })
-                .collect()
-        });
-        let listed = lists
-            .iter()
-            .flat_map(|id| row_actions(screen, id))
-            .map(|a| a.id.as_str())
-            .collect::<HashSet<_>>();
-        // An action on a grid's square runs from the squares whose cells name it, never from a button.
-        let grids = screen.root.as_ref().map_or(vec![], |root| {
-            root.nested()
-                .into_iter()
-                .filter_map(|c| match c {
-                    Component::Grid(g) => Some(g.head.id.as_str()),
-                    _ => None,
-                })
-                .collect()
-        });
-        let on_square = |a: &Affordance| {
-            a.args
-                .as_ref()
-                .and_then(|args| args.row.as_ref())
-                .is_some_and(|row| grids.contains(&row.component_id.as_str()))
-        };
-        let rest = screen
-            .affordances
-            .iter()
-            .filter(|a| {
-                !named.contains(a.id.as_str()) && !listed.contains(a.id.as_str()) && !on_square(a)
-            })
-            .collect::<Vec<_>>();
+        let rest = footer_affordances(screen);
         // The help sits in the title bar, or last in the footer of a window that has none.
         let titled = interaction::with_role(screen, AffordanceRole::Help)
             .filter(|a| a.enabled && base.title_bar && !workspace);
@@ -174,8 +137,8 @@ impl<M: GameModel> App<M> {
         let under = self.screens.under.get();
         let shared = under
             && self.model.screens().last().is_some_and(|top| {
-                let title = markup::plain(&top.title.as_ref().map(Text::shown).unwrap_or_default());
-                a11y::dialog_id(self.window_kind(top).as_deref().unwrap_or(&title)) == base.id
+                let kind = self.window_kind(top);
+                a11y::dialog_id(kind.as_deref().unwrap_or(&super::title(top))) == base.id
             });
         let spec = WindowSpec {
             id: match shared {
