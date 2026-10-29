@@ -98,6 +98,12 @@ fn palette(h: &crate::live_editor::H) -> (Vec<Tab>, Vec<Tab>) {
 /// Picks the part whose label contains `part` from the palette group whose label contains `group`, as a player does
 /// with the tabs, and installs it on `at`.
 fn install(h: &mut crate::live_editor::H, group: &str, part: &str, at: &str) {
+    pick(h, group, part);
+    invoke(h, "vehicle:mount", row(&format!("mount:{at}")));
+}
+
+/// Picks the part whose label contains `part` from the palette group whose label contains `group`.
+pub(crate) fn pick(h: &mut crate::live_editor::H, group: &str, part: &str) {
     let (tabs, _) = palette(h);
     let tab = tabs
         .iter()
@@ -112,7 +118,6 @@ fn install(h: &mut crate::live_editor::H, group: &str, part: &str, at: &str) {
         .or_else(|| rows.iter().find(|r| r.1.contains(part)))
         .unwrap_or_else(|| panic!("no part {part} in {group}: {rows:?}"));
     invoke(h, "vehicle:choose", row(&found.0));
-    invoke(h, "vehicle:mount", row(&format!("mount:{at}")));
 }
 
 #[test]

@@ -35,6 +35,7 @@ mod live_sound;
 mod live_target;
 mod live_travel;
 mod live_ui;
+mod live_vehicle_drawing;
 mod live_vehicle_editor;
 mod live_vehicle_ux;
 mod live_wish;
