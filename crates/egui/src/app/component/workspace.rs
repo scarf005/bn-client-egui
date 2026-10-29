@@ -531,7 +531,7 @@ impl<M: GameModel> App<M> {
     }
 
     /// The least width of a side column of `parts`: what its widest part needs, past the indent of its heading and
-    /// beside the column's scroll bar, in the panel's margins.
+    /// beside the column's scroll bar, in the panel's margins, but no more than half the window.
     fn column_least(&self, ui: &egui::Ui, screen: &Screen, parts: &[&Component]) -> f32 {
         let room = ui.ctx().content_rect().width();
         let part = |c: &&Component| {
@@ -542,7 +542,11 @@ impl<M: GameModel> App<M> {
             .total_margin()
             .sum()
             .x;
-        parts.iter().map(part).fold(0.0, f32::max) + ui.spacing().scroll.allocated_width() + margin
+        let least = parts.iter().map(part).fold(0.0, f32::max)
+            + ui.spacing().scroll.allocated_width()
+            + margin;
+        // Never more than half the window, so the canvas keeps room.
+        least.min(room / 2.0)
     }
 
     /// `parts` one above the other in a column that scrolls, whole lines in view, each list at least `fit_rows`
