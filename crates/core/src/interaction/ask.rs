@@ -25,7 +25,7 @@ pub struct Select {
 
 /// What the player is being asked for: the arguments of one affordance being collected. A renderer only
 /// shows it; every change goes through `Interaction`.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Ask {
     pub affordance_id: String,
     /// What the count would be sent as: the typed one, else the shape's default, held to its bounds.
@@ -67,22 +67,10 @@ impl Ask {
         let default = bounds.as_ref().and_then(|bounds| bounds.default);
         let mut ask = Self {
             affordance_id: affordance.id.clone(),
-            count: None,
-            text: None,
-            panes: vec![],
-            pane_at: 0,
-            select: None,
-            capture: false,
-            pos: None,
-            pane: None,
-            asking: None,
             digits: default.map(|n| n.to_string()),
             fresh: default.is_some(),
-            suggested: false,
             bounds,
-            todo: vec![],
-            filter: Filter::Any,
-            max_len: None,
+            ..Self::default()
         };
         ask.recount();
         ask
@@ -267,15 +255,7 @@ impl Interaction {
                 &unasked
             }
         };
-        let mut missing = vec![];
-        let mut args = InvokeArgs::default();
-        if let Some(of) = &shape.row {
-            args.row = self.focused_in(&of.component_id).map(String::from);
-            if args.row.is_none() {
-                missing.push(ArgKind::Row);
-            }
-        }
-        if let Some(of) = &shape.rows {
+        let rows = shape.rows.as_ref().and_then(|of| {
             let counted = of.counts == Some(true);
             let picks = self.picks(&of.component_id);
             let rows = match (picks.is_empty(), self.focused_in(&of.component_id)) {
@@ -292,35 +272,22 @@ impl Interaction {
                 }],
                 (true, None) => vec![],
             };
-            match rows.is_empty() {
-                true => missing.push(ArgKind::Rows),
-                false => args.rows = Some(rows),
-            }
-        }
-        if shape.count.is_some() {
-            args.count = ask.count;
-            if args.count.is_none() {
-                missing.push(ArgKind::Count);
-            }
-        }
-        if shape.text.is_some() {
-            args.text = ask.text.clone();
-            if args.text.is_none() {
-                missing.push(ArgKind::Text);
-            }
-        }
-        if shape.pos.is_some() {
-            args.pos = ask.pos.clone();
-            if args.pos.is_none() {
-                missing.push(ArgKind::Pos);
-            }
-        }
-        if shape.pane.is_some() {
-            args.pane = ask.pane.clone();
-            if args.pane.is_none() {
-                missing.push(ArgKind::Pane);
-            }
-        }
+            Some(rows).filter(|rows| !rows.is_empty())
+        });
+        let row = shape.row.as_ref();
+        let args = InvokeArgs {
+            row: row.and_then(|of| self.focused_in(&of.component_id).map(String::from)),
+            rows,
+            count: ask.count.filter(|_| shape.count.is_some()),
+            text: ask.text.clone().filter(|_| shape.text.is_some()),
+            pos: ask.pos.clone().filter(|_| shape.pos.is_some()),
+            pane: ask.pane.clone().filter(|_| shape.pane.is_some()),
+        };
+        let missing = members(shape, &args)
+            .into_iter()
+            .filter(|&(_, named, given)| named && !given)
+            .map(|(kind, ..)| kind)
+            .collect();
         (args, missing)
     }
 

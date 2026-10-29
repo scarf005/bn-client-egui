@@ -177,32 +177,31 @@ fn available_on(
     component_id: &str,
     row_id: &str,
 ) -> Availability {
-    match screen
+    // A cell or a tab is off by itself: whether it is on, and the engine's reason when not.
+    let off = match screen
         .root
         .as_ref()
         .and_then(|root| root.find(component_id))
     {
         Some(Component::List(list)) => {
-            row_availability(affordance, list.rows.iter().find(|row| row.id == row_id))
+            return row_availability(affordance, list.rows.iter().find(|row| row.id == row_id));
         }
         Some(Component::Grid(grid)) => grid
             .cells
             .iter()
             .find(|cell| cell.id.as_deref() == Some(row_id))
-            .filter(|cell| !cell.enabled)
-            .map_or(Availability::ON, |cell| {
-                Availability::off(Reason::RowDisabled, cell.denial.clone())
-            }),
+            .map(|cell| (cell.enabled, &cell.denial)),
         Some(Component::Tabs(tabs)) => tabs
             .tabs
             .iter()
             .find(|tab| tab.id == row_id)
-            .filter(|tab| !tab.enabled)
-            .map_or(Availability::ON, |tab| {
-                Availability::off(Reason::RowDisabled, tab.denial.clone())
-            }),
-        _ => Availability::ON,
-    }
+            .map(|tab| (tab.enabled, &tab.denial)),
+        _ => None,
+    };
+    off.filter(|(enabled, _)| !enabled)
+        .map_or(Availability::ON, |(_, denial)| {
+            Availability::off(Reason::RowDisabled, denial.clone())
+        })
 }
 
 /// Whether `affordance` may be invoked with `args` on `screen`: it is on, and so is every row it acts on.
@@ -240,17 +239,21 @@ pub fn gate(
         })
 }
 
-/// Whether `args` are what `shape` asks for: every member it names, no other, within its bounds.
-pub fn check_args(shape: &ArgShape, args: &InvokeArgs) -> Result<(), ArgError> {
-    let members = [
+/// Each member of an invoke's arguments: whether `shape` names it and whether `args` carry it.
+pub(super) fn members(shape: &ArgShape, args: &InvokeArgs) -> [(ArgKind, bool, bool); 6] {
+    [
         (ArgKind::Row, shape.row.is_some(), args.row.is_some()),
         (ArgKind::Rows, shape.rows.is_some(), args.rows.is_some()),
         (ArgKind::Count, shape.count.is_some(), args.count.is_some()),
         (ArgKind::Text, shape.text.is_some(), args.text.is_some()),
         (ArgKind::Pos, shape.pos.is_some(), args.pos.is_some()),
         (ArgKind::Pane, shape.pane.is_some(), args.pane.is_some()),
-    ];
-    members
+    ]
+}
+
+/// Whether `args` are what `shape` asks for: every member it names, no other, within its bounds.
+pub fn check_args(shape: &ArgShape, args: &InvokeArgs) -> Result<(), ArgError> {
+    members(shape, args)
         .iter()
         .try_for_each(|&(kind, wanted, given)| match (wanted, given) {
             (true, false) => Err(ArgError::Missing(kind)),
