@@ -17,6 +17,20 @@ pub(in crate::app) fn control_line(ui: &egui::Ui) -> f32 {
     ui.spacing().interact_size.y + ui.spacing().item_spacing.y
 }
 
+/// The width of a button holding `label` in `style` and, after it, `key` as a dim caption.
+pub(super) fn captioned_width(
+    ui: &egui::Ui,
+    label: &str,
+    style: egui::TextStyle,
+    key: Option<&String>,
+) -> f32 {
+    let caption = egui::TextStyle::Small.resolve(ui.style());
+    let key = key.map_or(0.0, |k| {
+        ui.spacing().icon_spacing + text_width(ui, k, &caption)
+    });
+    text_width(ui, label, &style.resolve(ui.style())) + 2.0 * ui.spacing().button_padding.x + key
+}
+
 /// The width of `text` on one line.
 pub(in crate::app) fn text_width(ui: &egui::Ui, text: &str, font: &egui::FontId) -> f32 {
     ui.painter()

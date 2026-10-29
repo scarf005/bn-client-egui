@@ -52,7 +52,7 @@ impl FooterButtons<'_> {
 
     /// The width of the row with the first `n` of the other actions and the menu button when some are left.
     fn width(&self, ui: &egui::Ui, n: usize) -> f32 {
-        let glyph = |text: &str| glyph_width(ui, text);
+        let glyph = |text: &str| captioned_width(ui, text, egui::TextStyle::Button, None);
         let widths = self
             .back
             .iter()
@@ -72,19 +72,10 @@ impl FooterButtons<'_> {
     }
 }
 
-/// The width of a button holding only `text`.
-fn glyph_width(ui: &egui::Ui, text: &str) -> f32 {
-    let font = egui::TextStyle::Button.resolve(ui.style());
-    text_width(ui, text, &font) + 2.0 * ui.spacing().button_padding.x
-}
-
 /// The width of `a`'s button as `keyed` lays it out.
 pub(super) fn button_width(ui: &egui::Ui, a: &Affordance) -> f32 {
-    let caption = egui::TextStyle::Small.resolve(ui.style());
-    let key = a.keys.first().map_or(0.0, |k| {
-        ui.spacing().icon_spacing + text_width(ui, k, &caption)
-    });
-    glyph_width(ui, &markup::plain(&a.label.shown())) + key
+    let label = markup::plain(&a.label.shown());
+    captioned_width(ui, &label, egui::TextStyle::Button, a.keys.first())
 }
 
 /// An affordance's button text: the engine's label, then the first key the player has bound to it as a dim
