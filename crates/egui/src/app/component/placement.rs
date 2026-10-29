@@ -186,12 +186,17 @@ impl Placement {
 
 /// A screen that holds a map or a canvas of its own, which take whatever room they get.
 fn draws_world(screen: &Screen) -> bool {
-    screen.components().into_iter().any(takes_room)
+    screen.root.as_ref().is_some_and(holds_world)
+}
+
+/// Whether `c` is or holds a map or a canvas.
+pub(super) fn holds_world(c: &Component) -> bool {
+    c.nested().into_iter().any(takes_room)
 }
 
 /// A map or a canvas, which take whatever room they get: the engine's canvas, or a grid it marks as one (the map
 /// editor's); a grid that only shows or picks squares (a vehicle's, the direction compass) is not.
-pub(super) fn takes_room(c: &Component) -> bool {
+fn takes_room(c: &Component) -> bool {
     match c {
         Component::Map(_) | Component::Canvas(_) => true,
         Component::Grid(grid) => grid.role == Some(GridRole::Canvas),

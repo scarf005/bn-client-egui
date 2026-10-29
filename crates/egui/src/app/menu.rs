@@ -93,7 +93,7 @@ impl<M: GameModel> App<M> {
                 egui::ScrollArea::vertical()
             };
             // What sits under the list takes room from it, so the window never outgrows the screen.
-            let row = ui.spacing().interact_size.y + ui.spacing().item_spacing.y;
+            let row = super::component::control_line(ui);
             let paged = menu.total > menu.choices.len();
             let info = menu.choices.iter().any(|c| !c.description.is_empty());
             let footer =

@@ -47,8 +47,7 @@ impl<M: GameModel> App<M> {
     /// refusal and the buttons), and no more than `list_rows` rows of `step` when the list is drawn so, nor more
     /// than the `held` height of the rows of a list that has all its rows, past `MIN_ROWS`.
     fn list_height(&self, ui: &egui::Ui, step: f32, below: usize, held: Option<f32>) -> f32 {
-        let spacing = ui.spacing();
-        let line = spacing.interact_size.y + spacing.item_spacing.y;
+        let line = control_line(ui);
         let room = match self.screens.in_column.get() {
             true => f32::INFINITY,
             false => (ui.available_height() - below as f32 * line).max(MIN_ROWS * line),

@@ -61,7 +61,7 @@ impl<M: GameModel> App<M> {
             (Relation::Peers, [at]) => Some(*at),
             _ => None,
         };
-        let fills = parts.iter().flat_map(|c| c.nested()).any(takes_room);
+        let fills = parts.iter().copied().any(holds_world);
         // Beside a map or a canvas, which take the room left, the other panes keep their natural width.
         let measure = |ui: &egui::Ui, panes: &[&Component], room: f32| {
             panes
@@ -69,7 +69,7 @@ impl<M: GameModel> App<M> {
                 .map(|c| {
                     let extent = with_margin(self.extent(ui, screen, c, room));
                     Extent {
-                        grows: extent.grows && (!fills || c.nested().into_iter().any(takes_room)),
+                        grows: extent.grows && (!fills || holds_world(c)),
                         ..extent
                     }
                 })
@@ -113,15 +113,11 @@ impl<M: GameModel> App<M> {
                 };
                 // Peers as tall as they hold have no bottom; sharing the height, each line gets its share of
                 // what is left, past a few rows.
-                let spacing = ui.spacing();
-                let floor = 4.0 * (spacing.interact_size.y + spacing.item_spacing.y);
+                let floor = 4.0 * control_line(ui);
                 // A line holding a map or a canvas takes all the room; the lines under it are as tall as what they
                 // hold, a list up to `PEER_ROWS` rows, and scroll below.
                 let takes = |line: &std::ops::Range<usize>| {
-                    parts[line.clone()]
-                        .iter()
-                        .flat_map(|c| c.nested())
-                        .any(takes_room)
+                    parts[line.clone()].iter().copied().any(holds_world)
                 };
                 let below = lines[..n].iter().any(takes);
                 let height = match (natural || below, takes(line)) {

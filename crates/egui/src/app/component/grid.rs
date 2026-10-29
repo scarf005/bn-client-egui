@@ -53,10 +53,7 @@ impl<M: GameModel> App<M> {
         out: &mut Vec<Intent>,
     ) {
         let (xs, ys) = drawn_span(grid);
-        let below = match buttons {
-            true => ui.spacing().interact_size.y + ui.spacing().item_spacing.y,
-            false => 0.0,
-        };
+        let below = if buttons { control_line(ui) } else { 0.0 };
         let available = (ui.available_size() - egui::vec2(0.0, below)).max(egui::Vec2::ZERO);
         // The cells grow with the room the grid has, up to twice their size, their glyphs with them; a canvas's
         // the same, and the zoom gesture over it scales them from there.

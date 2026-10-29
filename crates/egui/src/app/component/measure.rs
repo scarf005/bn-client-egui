@@ -12,6 +12,11 @@ const FIELD_MIN: f32 = 100.0;
 /// The width a list's search box keeps, however narrow its rows are.
 const SEARCH_WIDTH: f32 = 220.0;
 
+/// The height of a line of controls, a button or a field, and the gap under it.
+pub(in crate::app) fn control_line(ui: &egui::Ui) -> f32 {
+    ui.spacing().interact_size.y + ui.spacing().item_spacing.y
+}
+
 /// The width of `text` on one line.
 pub(in crate::app) fn text_width(ui: &egui::Ui, text: &str, font: &egui::FontId) -> f32 {
     ui.painter()
