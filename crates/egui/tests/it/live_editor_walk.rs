@@ -529,9 +529,10 @@ fn glyph(h: &H, x: usize, y: usize) -> Option<char> {
     canvas_glyphs(h)[y].chars().nth(x)
 }
 
-/// A new mapgen file in the profile's mods directory, made from the editor's form, and its canvas.
+/// A new mapgen file in a mod folder `name` of the profile's mods directory, made from the editor's form, and its
+/// canvas: the editor refuses a path outside a mod folder.
 fn create_mapgen(h: &mut H, name: &str) -> std::path::PathBuf {
-    let path = crate::common::live::profile_dir().join(format!("mods/{name}.json"));
+    let path = crate::common::live::profile_dir().join(format!("mods/{name}/{name}.json"));
     // The start page heads the form so; an open document, shorter.
     let heading = match find(h, "New mapgen file") {
         Some(_) => "New mapgen file/Path",
