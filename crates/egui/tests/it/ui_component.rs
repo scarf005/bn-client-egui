@@ -929,6 +929,44 @@ fn a_double_click_on_a_recipe_crafts_it() {
     );
 }
 
+/// A double click on a row of a list whose `activate` is its `select`, as a catalog's, while the engine still runs
+/// another command, moves the engine's cursor there once that command is done.
+#[test]
+fn a_double_click_on_a_row_while_the_engine_is_busy_selects_it_once_the_engine_is_done() {
+    let mut screen = recipe_screen("crafting:tabs", "crafting:recipes", "craft:select");
+    screen["root"]["child"]["children"][0]["activate"] = json!("craft:select");
+    screen["affordances"][0]["keys"] = json!(["g"]);
+    let (mut h, script) = harness(screen);
+    h.event(egui::Event::Text("g".into()));
+    h.run_steps(3);
+    assert_eq!(
+        submits(&script),
+        [boundary_invoke("go", json!({"row": "a"}))]
+    );
+    let at = h.get_by_label("Row b").rect().center();
+    crate::common::double_click(&mut h, at);
+    h.run_steps(3);
+    let go = script
+        .sent()
+        .into_iter()
+        .find(|m| m["method"] == "bn.command.submit")
+        .unwrap();
+    let mut received = fixture("submit_result");
+    received["id"] = go["id"].clone();
+    script.push(received);
+    script.push(fixture("command_completed"));
+    h.run_steps(3);
+    let sent = submits(&script);
+    assert_eq!(
+        (h.state().model.busy(), sent.last()),
+        (
+            false,
+            Some(&boundary_invoke("craft:select", json!({"row": "b"})))
+        ),
+        "{sent:?}"
+    );
+}
+
 #[test]
 fn the_editmap_screen_draws_the_engines_cursor_parts_and_a_click_runs_its_edit_affordance() {
     let map = json!({"id": "editmap:map", "kind": "map", "affordances": ["target:move"],
