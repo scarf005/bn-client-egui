@@ -225,3 +225,23 @@ fn a_target_map_names_the_square_its_line_of_fire_leaves() {
     assert_eq!((source.x, source.z), (2, 1));
     assert!(map(json!({"current": at(5)})).source().is_none());
 }
+
+#[test]
+fn a_grid_sent_as_runs_of_styles_has_a_whole_named_cell_per_square() {
+    let grid: protocol::Grid = serde_json::from_value(json!({
+        "id": "vehicle:grid", "kind": "grid", "cols": 60, "rows": 2, "blank": 0,
+        "styles": [{"glyph": " ", "affordance": "vehicle:mount", "enabled": true, "refused": 1},
+            {"glyph": "#", "label": "frame", "affordance": "vehicle:mount", "enabled": true, "refused": 0}],
+        "cells": [{"x": 2, "y": 1, "style": 1, "n": 58}],
+        "refusals": ["This mount already has frame.", "Install a frame here first."]}))
+    .unwrap();
+    assert_eq!(grid.cells.len(), 120, "every square, listed or blank");
+    let at = |x: u32, y: u32| grid.cells.iter().find(|c| (c.x, c.y) == (x, y)).unwrap();
+    assert_eq!(at(1, 1).glyph.as_deref(), Some(" "));
+    assert_eq!(at(2, 1).glyph.as_deref(), Some("#"));
+    assert_eq!(at(59, 1).glyph.as_deref(), Some("#"));
+    assert_eq!(at(59, 1).id.as_deref(), Some("square:59,1"));
+    let why = |c: &protocol::GridCell| grid.refusals[c.refused.unwrap()].clone();
+    assert_eq!(why(at(0, 0)), "Install a frame here first.");
+    assert_eq!(why(at(30, 1)), "This mount already has frame.");
+}

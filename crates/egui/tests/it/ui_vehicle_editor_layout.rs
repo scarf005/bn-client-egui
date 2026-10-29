@@ -96,33 +96,28 @@ fn mount(h: &H, label: &str) -> egui::Rect {
         .rect()
 }
 
+/// The vehicle grid's size and its first mount holding more than one part: its parts and its place.
+fn named_mount(screen: &Value) -> (egui::Vec2, String, egui::Vec2) {
+    let grid: bn_client_core::protocol::Grid =
+        serde_json::from_value(find(&screen["root"], "vehicle:grid").unwrap().clone()).unwrap();
+    let cell = grid
+        .cells
+        .iter()
+        .find(|c| c.label.as_ref().is_some_and(|l| l.shown().contains(", ")))
+        .unwrap();
+    (
+        egui::vec2(grid.cols as f32, grid.rows as f32),
+        cell.label.as_ref().unwrap().shown(),
+        egui::vec2(cell.x as f32, cell.y as f32),
+    )
+}
+
 #[test]
 fn the_mounts_are_tile_sized_in_the_middle_of_the_canvas_and_the_stack_reads_whole() {
     let screen = editor();
-    let cells = find(&screen["root"], "vehicle:grid").unwrap();
-    let (cols, rows) = (
-        cells["cols"].as_f64().unwrap() as f32,
-        cells["rows"].as_f64().unwrap() as f32,
-    );
-    let named = cells["cells"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find_map(|c| c["label"].as_str().filter(|l| l.contains(", ")))
-        .unwrap()
-        .to_owned();
-    let at = cells["cells"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|c| c["label"].as_str() == Some(named.as_str()))
-        .map(|c| {
-            (
-                c["x"].as_f64().unwrap() as f32,
-                c["y"].as_f64().unwrap() as f32,
-            )
-        })
-        .unwrap();
+    let (cols_rows, named, at) = named_mount(&screen);
+    let (cols, rows) = (cols_rows.x, cols_rows.y);
+    let at = (at.x, at.y);
     let stack = labels(&screen, "vehicle:stack");
     assert!(!stack.is_empty());
     for size in [egui::vec2(1280.0, 800.0), egui::vec2(1920.0, 1080.0)] {
@@ -167,33 +162,33 @@ fn the_mounts_are_tile_sized_in_the_middle_of_the_canvas_and_the_stack_reads_who
     }
 }
 
-#[test]
-fn a_small_grid_sits_whole_and_centred_in_its_canvas_pane_at_a_readable_square_size() {
-    let screen = editor();
-    let cells = find(&screen["root"], "vehicle:grid").unwrap();
-    let (cols, rows) = (
-        cells["cols"].as_f64().unwrap() as f32,
-        cells["rows"].as_f64().unwrap() as f32,
-    );
-    let named = cells["cells"]
-        .as_array()
-        .unwrap()
+/// The squares holding a part, from the first to the last, in squares.
+fn vehicle_span(screen: &Value) -> egui::Rect {
+    let grid: bn_client_core::protocol::Grid =
+        serde_json::from_value(find(&screen["root"], "vehicle:grid").unwrap().clone()).unwrap();
+    grid.cells
         .iter()
-        .find(|c| c["label"].as_str().is_some_and(|l| l.contains(", ")))
-        .unwrap();
-    let (label, at) = (
-        named["label"].as_str().unwrap().to_owned(),
-        egui::vec2(
-            named["x"].as_f64().unwrap() as f32,
-            named["y"].as_f64().unwrap() as f32,
-        ),
-    );
+        .filter(|c| !c.looks.is_empty())
+        .map(|c| {
+            egui::Rect::from_min_size(egui::pos2(c.x as f32, c.y as f32), egui::Vec2::splat(1.0))
+        })
+        .reduce(|a, b| a.union(b))
+        .unwrap()
+}
+
+#[test]
+fn a_vehicle_on_a_larger_canvas_first_shows_whole_and_centred_in_its_pane_at_a_readable_square_size()
+ {
+    let screen = editor();
+    let (_, label, at) = named_mount(&screen);
+    let span = vehicle_span(&screen);
     for size in [egui::vec2(1290.0, 830.0), egui::vec2(1920.0, 1080.0)] {
         let h = open(screen.clone(), size);
         let square = mount(&h, &label);
-        let grid = egui::Rect::from_min_size(
-            square.min - at * square.width(),
-            egui::vec2(cols, rows) * square.width(),
+        let corner = square.min - at * square.width();
+        let vehicle = egui::Rect::from_min_max(
+            corner + span.min.to_vec2() * square.width(),
+            corner + span.max.to_vec2() * square.width(),
         );
         let room = legible::room(&h);
         let tools = h
@@ -204,8 +199,8 @@ fn a_small_grid_sits_whole_and_centred_in_its_canvas_pane_at_a_readable_square_s
         let pane =
             egui::Rect::from_x_y_ranges(tools.min(side).max(room.left())..=side, room.y_range());
         assert!(
-            pane.expand(1.0).contains_rect(grid),
-            "at {size:?} the grid {grid:?} runs out of its pane {pane:?}"
+            pane.expand(1.0).contains_rect(vehicle),
+            "at {size:?} the vehicle {vehicle:?} runs out of its pane {pane:?}"
         );
         assert!(
             (26.0..=40.5).contains(&square.width()),
@@ -213,8 +208,8 @@ fn a_small_grid_sits_whole_and_centred_in_its_canvas_pane_at_a_readable_square_s
             square.width()
         );
         assert!(
-            (grid.center() - pane.center()).abs().max_elem() < 0.2 * pane.width(),
-            "at {size:?} the grid {grid:?} is not centred in its pane {pane:?}"
+            (vehicle.center() - pane.center()).abs().max_elem() < 0.2 * pane.width(),
+            "at {size:?} the vehicle {vehicle:?} is not centred in its pane {pane:?}"
         );
     }
 }
@@ -222,13 +217,7 @@ fn a_small_grid_sits_whole_and_centred_in_its_canvas_pane_at_a_readable_square_s
 #[test]
 fn the_zoom_gesture_scales_the_canvas_and_a_mount_names_its_parts() {
     let screen = editor();
-    let named = find(&screen["root"], "vehicle:grid").unwrap()["cells"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find_map(|c| c["label"].as_str().filter(|l| l.contains(", ")))
-        .unwrap()
-        .to_owned();
+    let (_, named, _) = named_mount(&screen);
     let mut h = open(screen, egui::vec2(1920.0, 1080.0));
     let before = mount(&h, &named);
     h.hover_at(before.center());

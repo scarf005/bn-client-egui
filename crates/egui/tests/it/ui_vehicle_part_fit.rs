@@ -57,6 +57,10 @@ fn editor() -> Value {
         .collect();
     list["total"] = json!(60);
     let grid = find(&mut screen["root"], "vehicle:grid").unwrap();
+    // Whole cells, each with its own id, as a grid without `blank` sends them.
+    for key in ["blank", "styles", "refusals"] {
+        grid.as_object_mut().unwrap().remove(key);
+    }
     grid["cols"] = json!(10);
     grid["rows"] = json!(6);
     grid["cells"] = (0..6)

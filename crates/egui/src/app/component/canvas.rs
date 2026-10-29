@@ -98,6 +98,29 @@ pub(super) fn zoomed(ui: &egui::Ui, view: View, limits: (f32, f32)) -> Option<An
     })
 }
 
+/// Room kept around what a canvas holds when it is first shown, in squares on each side.
+const FRAME_MARGIN: f32 = 2.0;
+
+/// The zoom that first shows `content`, a rectangle of squares, with a margin in the middle of `room`, when the
+/// whole grid fitted at `base` per square would show it smaller than that; `None` when it already shows whole.
+pub(super) fn framed(
+    content: egui::Rect,
+    room: egui::Vec2,
+    base: f32,
+    limits: (f32, f32),
+) -> Option<Anchor> {
+    let span = content.size() + egui::Vec2::splat(2.0 * FRAME_MARGIN);
+    let cell = (room.x / span.x)
+        .min(room.y / span.y)
+        .min(super::CANVAS_MAX_CELL);
+    let zoom = (cell / base).clamp(limits.0, limits.1);
+    (zoom > limits.0 + 1e-3).then(|| Anchor {
+        zoom,
+        under: content.center().to_vec2(),
+        pointer: room / 2.0,
+    })
+}
+
 /// Whether the primary button drags the canvas about instead of painting: Space is held.
 pub(super) fn panning(ui: &egui::Ui) -> bool {
     ui.input(|i| i.key_down(egui::Key::Space))

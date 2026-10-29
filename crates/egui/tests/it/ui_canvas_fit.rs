@@ -150,9 +150,10 @@ fn a_refused_square_says_why_on_hover_and_still_takes_its_click() {
         if node["id"] == "editor:canvas" {
             for cell in node["cells"].as_array_mut().unwrap() {
                 if (cell["x"].as_u64(), cell["y"].as_u64()) == (Some(3), Some(3)) {
-                    cell["refused"] = json!("Install a frame here first");
+                    cell["refused"] = json!(0);
                 }
             }
+            node["refusals"] = json!(["Install a frame here first"]);
             break;
         }
         match node {
@@ -200,3 +201,4 @@ fn the_canvas_keeps_its_place_when_the_news_in_the_status_strip_comes_and_goes()
         assert_eq!(tops[0], tops[1], "at {size:?}");
     }
 }
+
