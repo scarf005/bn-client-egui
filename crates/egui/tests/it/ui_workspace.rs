@@ -1049,7 +1049,7 @@ fn widening_the_right_column_shows_a_cut_id_whole() {
         .map(|n| n.rect().center())
         .max_by(|a, b| a.x.total_cmp(&b.x))
         .unwrap();
-    let to = edge - egui::vec2(150.0, 0.0);
+    let to = edge - egui::vec2(320.0, 0.0);
     let press = |h: &mut H, pos: egui::Pos2, pressed: bool| {
         h.event(egui::Event::PointerButton {
             pos,
