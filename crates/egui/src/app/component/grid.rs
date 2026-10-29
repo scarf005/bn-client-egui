@@ -541,11 +541,7 @@ impl<M: GameModel> App<M> {
         out: &mut Vec<Intent>,
     ) {
         let key = egui::Id::new(("region-drag", &grid.head.id));
-        let pass = ui.ctx().cumulative_pass_nr();
-        let mut held = ui
-            .data(|d| d.get_temp::<(Option<region::Grab>, u64)>(key))
-            .filter(|(_, last)| last + 1 >= pass)
-            .and_then(|(held, _)| held);
+        let mut held = recent::<Option<region::Grab>>(ui.ctx(), key).flatten();
         let pointer = grid_pointer(ui, squares, egui::PointerButton::Primary);
         if let Some(moved) = region::advance(&grid.regions, &mut held, pointer) {
             out.push(Intent::Paint(Paint {
@@ -562,7 +558,7 @@ impl<M: GameModel> App<M> {
                 outline_shapes(layout.rect(grab.preview()), color),
             ));
         }
-        ui.data_mut(|d| d.insert_temp(key, (held, pass)));
+        keep_recent(ui.ctx(), key, held);
     }
 
     /// Runs the affordance of the squares a primary drag over `squares` crosses.
@@ -602,22 +598,11 @@ impl<M: GameModel> App<M> {
         };
         let key = egui::Id::new((name, &grid.head.id));
         // A drag not kept in the last pass belongs to an earlier showing of the grid: it ends unsent.
-        let pass = ui.ctx().cumulative_pass_nr();
-        let (mut held, mut began) = ui
-            .data(|d| d.get_temp::<(Option<drag::Drag>, Option<String>, u64)>(key))
-            .filter(|(_, _, last)| last + 1 >= pass)
-            .map(|(held, began, _)| (held, began))
-            .unwrap_or_default();
+        let (mut held, mut began) = recent::<Stroke>(ui.ctx(), key).unwrap_or_default();
         let was_held = held.is_some();
         // One button drags at a time: the other's stroke is one step of the engine's.
-        let busy = ui
-            .data(|d| {
-                d.get_temp::<(Option<drag::Drag>, Option<String>, u64)>(egui::Id::new((
-                    other,
-                    &grid.head.id,
-                )))
-            })
-            .is_some_and(|(held, _, last)| held.is_some() && last + 1 >= pass);
+        let busy = recent::<Stroke>(ui.ctx(), egui::Id::new((other, &grid.head.id)))
+            .is_some_and(|(held, _)| held.is_some());
         let mut pointer = grid_pointer(ui, squares, button);
         pointer.pressed &= !busy;
         let run = drag::advance(mode, &mut held, pointer);
@@ -659,7 +644,7 @@ impl<M: GameModel> App<M> {
         }
         out.extend(marker(&grid.drag_end).filter(|_| was_held && held.is_none()));
         let began = began.filter(|_| held.is_some());
-        ui.data_mut(|d| d.insert_temp(key, (held, began, pass)));
+        keep_recent(ui.ctx(), key, (held, began));
     }
 }
 
@@ -680,6 +665,9 @@ impl GridLayout {
         egui::Rect::from_min_max(a, b)
     }
 }
+
+/// A button's drag over a grid's squares, and the affordance of the square it was pressed on.
+type Stroke = (Option<drag::Drag>, Option<String>);
 
 /// Which button drags over a grid's squares, and what it runs there.
 #[derive(Clone, Copy)]

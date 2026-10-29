@@ -155,6 +155,20 @@ fn takes_keyboard(ctx: &egui::Context, held: Option<&Keyed>, now: &str) -> bool 
     })
 }
 
+/// What was kept under `key` in the last pass or this one: what was kept before belongs to an earlier showing.
+fn recent<T: Clone + Send + Sync + 'static>(ctx: &egui::Context, key: egui::Id) -> Option<T> {
+    let pass = ctx.cumulative_pass_nr();
+    let kept = ctx.data(|d| d.get_temp::<(T, u64)>(key));
+    kept.filter(|(_, at)| at + 1 >= pass)
+        .map(|(value, _)| value)
+}
+
+/// Keeps `value` under `key` for `recent` to read this pass and the next.
+fn keep_recent<T: Clone + Send + Sync + 'static>(ctx: &egui::Context, key: egui::Id, value: T) {
+    let pass = ctx.cumulative_pass_nr();
+    ctx.data_mut(|d| d.insert_temp(key, (value, pass)));
+}
+
 /// `text` in the game colour, as the native markup writes it.
 pub(super) fn tagged(color: Option<&str>, text: &str) -> String {
     match color {

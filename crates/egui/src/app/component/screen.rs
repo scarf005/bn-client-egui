@@ -3,13 +3,6 @@
 
 use super::*;
 
-/// What a window kept off the cursor holds while its screen is open: its side, and the pass it was last shown in.
-#[derive(Clone, Copy)]
-struct Anchor {
-    left: bool,
-    pass: u64,
-}
-
 impl<M: GameModel> App<M> {
     /// What the window of `screen` is remembered as: a list filter's prompt is the window of the screen it filters,
     /// so typing in it neither moves nor resizes that window.
@@ -112,16 +105,13 @@ impl<M: GameModel> App<M> {
         let anchored = keeps_off_cursor(screen);
         let anchor_key = egui::Id::new(("anchored", &screen.screen_id));
         // One not shown in the last pass belongs to an earlier opening of the screen.
-        let pass = ctx.cumulative_pass_nr();
-        let anchor = ctx
-            .data(|d| d.get_temp::<Anchor>(anchor_key))
-            .filter(|a| anchored && a.pass + 1 >= pass);
+        let kept_left = recent::<bool>(ctx, anchor_key).filter(|_| anchored);
         let room = Room {
             region,
             sidebar: self.sidebar,
             avoid: &avoid,
             map: !interaction::game_hidden(self.model.screens()),
-            kept_left: anchor.map(|a| a.left),
+            kept_left,
         };
         let placement = placement(screen, &room);
         let place = placement.place;
@@ -223,7 +213,7 @@ impl<M: GameModel> App<M> {
             }
         });
         if let (true, Some(left)) = (anchored, at_left(place)) {
-            ctx.data_mut(|d| d.insert_temp(anchor_key, Anchor { left, pass }));
+            keep_recent(ctx, anchor_key, left);
         }
         if let Some(a) = titled.filter(|_| shown.help) {
             out.push(Intent::Run(a.id.clone()));
