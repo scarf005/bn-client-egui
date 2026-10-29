@@ -155,14 +155,10 @@ impl<M: GameModel> App<M> {
                     out.invoke
                 }
             };
-            if let Some((id, args)) = invoke {
-                match self.model.invoke_affordance(&id, args) {
-                    Err(InvokeError::Busy) => return ctx.request_repaint(),
-                    Err(InvokeError::Disabled(denial)) => {
-                        self.screens.denial = denial.as_ref().map(Text::shown);
-                    }
-                    _ => {}
-                }
+            if let Some((id, args)) = invoke
+                && !self.invoke(&id, args)
+            {
+                return ctx.request_repaint();
             }
             self.screens.paints.pop_front();
         }
@@ -255,10 +251,21 @@ impl<M: GameModel> App<M> {
     fn settle(&mut self, out: interaction::Outcome) {
         self.keys_consumed |= out.consumed;
         self.screens.denial = out.note();
-        if let Some((id, args)) = out.invoke
-            && let Err(InvokeError::Disabled(denial)) = self.model.invoke_affordance(&id, args)
-        {
-            self.screens.denial = denial.as_ref().map(Text::shown);
+        if let Some((id, args)) = out.invoke {
+            self.invoke(&id, args);
+        }
+    }
+
+    /// Sends the affordance `id` with `args`, showing the engine's reason when it is off; false while the engine is
+    /// too busy to take it.
+    fn invoke(&mut self, id: &str, args: InvokeArgs) -> bool {
+        match self.model.invoke_affordance(id, args) {
+            Err(InvokeError::Busy) => false,
+            Err(InvokeError::Disabled(denial)) => {
+                self.screens.denial = denial.as_ref().map(Text::shown);
+                true
+            }
+            _ => true,
         }
     }
 
@@ -305,11 +312,7 @@ impl<M: GameModel> App<M> {
                     text: Some(text),
                     ..InvokeArgs::default()
                 };
-                if let Err(InvokeError::Disabled(denial)) =
-                    self.model.invoke_affordance(&affordance, args)
-                {
-                    self.screens.denial = denial.as_ref().map(Text::shown);
-                }
+                self.invoke(&affordance, args);
                 return;
             }
             Intent::Run(id) => interaction.activate(top, &id),
@@ -319,11 +322,7 @@ impl<M: GameModel> App<M> {
                     pos: Some(at),
                     ..InvokeArgs::default()
                 };
-                if let Err(InvokeError::Disabled(denial)) =
-                    self.model.invoke_affordance(&affordance, args)
-                {
-                    self.screens.denial = denial.as_ref().map(Text::shown);
-                }
+                self.invoke(&affordance, args);
                 return;
             }
             Intent::Fill {
