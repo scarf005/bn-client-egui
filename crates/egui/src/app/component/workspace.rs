@@ -359,7 +359,7 @@ impl<M: GameModel> App<M> {
                 .show(ui, |ui| match left_is_log {
                     true => self.log_column(ui, screen, &left, out),
                     false => {
-                        self.column(ui, screen, &left, out);
+                        self.column(ui, screen, (&left, FIT_ROWS), out);
                     }
                 });
             crate::app::label_resize_handle(ui.ctx(), &tools_id, &tr("Resize workspace column"));
@@ -529,16 +529,18 @@ impl<M: GameModel> App<M> {
         words
             .iter()
             .for_each(|c| self.component(ui, screen, c, out));
-        self.column(ui, screen, &rest, out);
+        // A log's list takes the room the log has, however little: the log does not scroll it out of view.
+        self.column(ui, screen, (&rest, 1.0), out);
     }
 
-    /// `parts` one above the other in a column that scrolls, whole lines in view. The column is as wide as the
-    /// player left it: what is wider is cut at its edge rather than widen the column a little more each frame.
+    /// `parts` one above the other in a column that scrolls, whole lines in view, each list at least `fit_rows`
+    /// rows tall. The column is as wide as the player left it: what is wider is cut at its edge rather than widen
+    /// the column a little more each frame.
     fn column(
         &self,
         ui: &mut egui::Ui,
         screen: &Screen,
-        parts: &[&Component],
+        (parts, fit_rows): (&[&Component], f32),
         out: &mut Vec<Intent>,
     ) -> ColumnHeight {
         let rect = ui.available_rect_before_wrap();
@@ -549,14 +551,14 @@ impl<M: GameModel> App<M> {
             .auto_shrink([false, false]);
         let room = rect.height();
         // The lists share what the other parts leave of the column, as they took it the frame before, each at
-        // least `FIT_ROWS` rows; until then a list is at most `PEER_ROWS` rows tall, so the parts under a long one
+        // least `fit_rows` rows; until then a list is at most `PEER_ROWS` rows tall, so the parts under a long one
         // stay in reach.
         let key = ui.id().with("lists");
         let (content, fits, _) = ui
             .data(|d| d.get_temp::<(f32, Vec<ListFit>, First)>(key))
             .unwrap_or_default();
         let left = room - (content - fits.iter().map(|f| f.taken).sum::<f32>());
-        let least = FIT_ROWS * (tokens::ROW + ui.spacing().item_spacing.y);
+        let least = fit_rows * (tokens::ROW + ui.spacing().item_spacing.y);
         let wanted = fits.iter().map(|f| f.wanted).collect::<Vec<_>>();
         let ids = fits.iter().map(|f| f.id.clone());
         let caps = self
@@ -669,7 +671,7 @@ impl<M: GameModel> App<M> {
                     .id_salt(("section", i))
                     .max_rect(slice),
             );
-            drawn.push(self.column(&mut section, screen, group, out));
+            drawn.push(self.column(&mut section, screen, (group, FIT_ROWS), out));
             top += height + gap;
         }
         ui.data_mut(|d| d.insert_temp(key, drawn));
