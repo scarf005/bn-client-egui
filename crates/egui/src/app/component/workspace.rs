@@ -6,7 +6,7 @@ use super::*;
 use bn_client_core::localise::tr;
 
 /// The width the tools' column, the log's column and the right column first have, which the player can change.
-const TOOLS_WIDTH: f32 = 180.0;
+const TOOLS_WIDTH: f32 = 200.0;
 const LOG_WIDTH: f32 = 240.0;
 /// The right column's width beside a canvas without a grid: this share of the window, within these bounds; beside
 /// a grid, the room its whole grid leaves, from the least of these bounds to half the room.
