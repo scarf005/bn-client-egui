@@ -502,54 +502,53 @@ pub enum ItemListId {
 impl MapComponent {
     /// The square the screen's cursor is on.
     pub fn cursor(&self) -> Option<WorldPos> {
-        serde_json::from_value(self.target.as_ref()?["current"].clone()).ok()
+        self.target_member("current")
     }
 
     /// The square the cursor's line of fire leaves: the avatar's.
     pub fn source(&self) -> Option<WorldPos> {
-        serde_json::from_value(self.target.as_ref()?["source"].clone()).ok()
+        self.target_member("source")
     }
 
     /// The squares the screen highlights besides its cursor; a mark of a role this client does not know is left
     /// out.
     pub fn marks(&self) -> Vec<ScreenMark> {
-        let marks = self.target.as_ref().map(|t| &t["marks"]);
-        let marks = marks.and_then(Value::as_array).into_iter().flatten();
-        marks
-            .filter_map(|m| serde_json::from_value(m.clone()).ok())
-            .collect()
+        self.target_list("marks")
     }
 
     /// The squares and creatures the cursor can jump to, in the engine's order; the first is where it is.
     pub fn candidates(&self) -> Vec<TargetCandidate> {
-        let list = self.target.as_ref().map(|t| &t["candidates"]);
-        let list = list.and_then(Value::as_array).into_iter().flatten();
-        list.filter_map(|c| serde_json::from_value(c.clone()).ok())
-            .collect()
+        self.target_list("candidates")
     }
 
     /// The squares the line of fire crosses from the avatar to the cursor, as the engine draws it.
     pub fn trajectory(&self) -> Vec<WorldPos> {
-        let line = self.target.as_ref().map(|t| &t["trajectory"]);
-        let line = line.and_then(Value::as_array).into_iter().flatten();
-        line.filter_map(|p| serde_json::from_value(p.clone()).ok())
-            .collect()
+        self.target_list("trajectory")
     }
 
     /// What the engine says of the cursor's square: the screen's status in words, then each fact it prints of
     /// the square with what more it says of it, as markup lines.
     pub fn cursor_lines(&self) -> Vec<String> {
-        let Some(target) = &self.target else {
-            return vec![];
-        };
-        let status = target["status_text"].as_str().map(String::from);
-        let parts = target["parts"]
-            .as_array()
+        let status = self.target.as_ref().and_then(|t| t["status_text"].as_str());
+        let parts = self.target_list::<TilePart>("parts");
+        let parts = parts
             .into_iter()
-            .flatten()
-            .filter_map(|p| serde_json::from_value::<TilePart>(p.clone()).ok())
             .flat_map(|p| std::iter::once(p.text).chain(p.detail));
-        status.into_iter().chain(parts).collect()
+        status.map(String::from).into_iter().chain(parts).collect()
+    }
+
+    /// The member `key` of the screen's `target`.
+    fn target_member<T: serde::de::DeserializeOwned>(&self, key: &str) -> Option<T> {
+        serde_json::from_value(self.target.as_ref()?[key].clone()).ok()
+    }
+
+    /// The items of the member `key` of the screen's `target`; an item this client cannot read is left out.
+    fn target_list<T: serde::de::DeserializeOwned>(&self, key: &str) -> Vec<T> {
+        let items = self.target.as_ref().map(|t| &t[key]);
+        let items = items.and_then(Value::as_array).into_iter().flatten();
+        items
+            .filter_map(|item| serde_json::from_value(item.clone()).ok())
+            .collect()
     }
 }
 

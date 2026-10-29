@@ -375,58 +375,44 @@ impl AvatarChange {
     /// The whole avatar after the event, taking the kept members from `previous`.
     pub fn apply(self, previous: Option<&Avatar>) -> Avatar {
         let kept = |member: &str| self.keep.iter().any(|k| k == member);
-        let before = previous.filter(|_| !self.keep.is_empty());
         Avatar {
-            look: if kept("look") {
-                before.and_then(|a| a.look.clone())
-            } else {
-                self.look.clone()
-            },
-            overlays: if kept("overlays") {
-                before.map(|a| a.overlays.clone()).unwrap_or_default()
-            } else {
-                self.overlays.clone()
-            },
-            traits: if kept("traits") {
-                before.map(|a| a.traits.clone()).unwrap_or_default()
-            } else {
-                self.traits.clone()
-            },
-            stats: if kept("stats") {
-                before.map(|a| a.stats.clone()).unwrap_or_default()
-            } else {
-                self.stats.clone().unwrap_or_default()
-            },
-            inventory: if kept("inventory") {
-                before.and_then(|a| a.inventory.clone())
-            } else {
-                self.inventory.clone()
-            },
-            sidebar: if kept("sidebar") {
-                before.and_then(|a| a.sidebar.clone())
-            } else {
-                self.sidebar.clone()
-            },
-            modes: if kept("modes") {
-                before.map(|a| a.modes.clone()).unwrap_or_default()
-            } else {
-                self.modes.clone()
-            },
-            compass: if kept("compass") {
-                before.and_then(|a| a.compass.clone())
-            } else {
-                self.compass.clone()
-            },
-            ground: if kept("ground") {
-                before.and_then(|a| a.ground.clone())
-            } else {
-                self.ground.clone()
-            },
+            look: carried(kept("look"), previous, |a| &a.look, self.look),
+            overlays: carried(kept("overlays"), previous, |a| &a.overlays, self.overlays),
+            traits: carried(kept("traits"), previous, |a| &a.traits, self.traits),
+            stats: carried(
+                kept("stats"),
+                previous,
+                |a| &a.stats,
+                self.stats.unwrap_or_default(),
+            ),
+            inventory: carried(
+                kept("inventory"),
+                previous,
+                |a| &a.inventory,
+                self.inventory,
+            ),
+            sidebar: carried(kept("sidebar"), previous, |a| &a.sidebar, self.sidebar),
+            modes: carried(kept("modes"), previous, |a| &a.modes, self.modes),
+            compass: carried(kept("compass"), previous, |a| &a.compass, self.compass),
+            ground: carried(kept("ground"), previous, |a| &a.ground, self.ground),
             activity: self.activity,
             id: self.id,
             at: self.at,
             name: self.name,
         }
+    }
+}
+
+/// A member of the avatar after an event: `previous`'s, empty without one, when the event `kept` it, else `own`.
+fn carried<T: Clone + Default>(
+    kept: bool,
+    previous: Option<&Avatar>,
+    of: fn(&Avatar) -> &T,
+    own: T,
+) -> T {
+    match kept {
+        true => previous.map(of).cloned().unwrap_or_default(),
+        false => own,
     }
 }
 
