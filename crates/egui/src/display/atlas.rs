@@ -26,6 +26,15 @@ impl Fx {
         self as usize
     }
 
+    /// The filter the game draws `cell` under: memory over what is remembered, shadow over what is poorly lit.
+    pub(crate) fn of(cell: &Cell) -> Self {
+        match (cell.remembered, cell.light) {
+            (true, _) => Fx::Memory,
+            (false, Some(light)) if light <= 1 => Fx::Shadow,
+            _ => Fx::Plain,
+        }
+    }
+
     /// The colour a plain sprite is multiplied by until the filtered sheets have arrived.
     pub(crate) fn stand_in(self) -> Color32 {
         match self {

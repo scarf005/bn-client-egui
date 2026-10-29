@@ -5,7 +5,7 @@ use super::geometry::{
     ceiling_face, ceiling_lid, place, shape, void_face, void_lid, wall_bands,
 };
 use super::pages::Pages;
-use crate::display::{Fx, STRIP, light, query, resolve_layer};
+use crate::display::{Fx, STRIP, glow_on, haze_at, query, resolve_layer};
 use crate::tileset::{Query, Tileset, Turn};
 use bn_client_core::protocol::LookForm;
 use bn_client_core::{GameModel, Health, Layer, Pos};
@@ -232,24 +232,14 @@ pub fn build(
             squares += 1;
             tops[(y * width + x) as usize] = Some(-f32::from(cell.depth) * m.level);
             // The same filters the flat map puts on what is remembered or poorly lit.
-            let fx = match (cell.remembered, cell.light) {
-                (true, _) => Fx::Memory,
-                (false, Some(light)) if light <= 1 => Fx::Shadow,
-                _ => Fx::Plain,
-            };
+            let fx = Fx::of(&cell);
             let filter = fx as u32;
             // Coloured light falls on what is plainly or dimly in sight, as on the flat map.
-            let light = match (fx, cell.glow) {
-                (Fx::Plain | Fx::Shadow, Some(glow)) => {
-                    let [r, g, b, _] = light(glow).to_array();
-                    [r, g, b]
-                }
-                _ => [0; 3],
-            };
-            let haze = match cell.depth {
-                0 => 0,
-                depth => (24 * (u32::from(depth) + 1)).min(192) as u8,
-            };
+            let light = glow_on(&cell, fx).map_or([0; 3], |glow| {
+                let [r, g, b, _] = glow.to_array();
+                [r, g, b]
+            });
+            let haze = haze_at(cell.depth);
             let floor = -f32::from(cell.depth) * m.level;
             hurt.extend(cell.health.map(|health| Hurt {
                 square: (x, y),

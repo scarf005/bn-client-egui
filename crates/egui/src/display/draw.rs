@@ -81,11 +81,7 @@ impl Display {
         let Some(atlas) = &mut self.atlas else {
             return false;
         };
-        let fx = match (cell.remembered, cell.light) {
-            (true, _) => Fx::Memory,
-            (false, Some(light)) if light <= 1 => Fx::Shadow,
-            _ => Fx::Plain,
-        };
+        let fx = Fx::of(cell);
         atlas.request(fx);
         let lighting = |id| Query {
             id,
@@ -118,11 +114,7 @@ impl Display {
             self.dimmed += 1;
             return true;
         }
-        // Coloured light falls on what is plainly or dimly in sight.
-        let glow = cell
-            .glow
-            .filter(|_| fx == Fx::Plain || fx == Fx::Shadow)
-            .map(light);
+        let glow = glow_on(cell, fx);
         let scale = atlas.scale(rect);
         let mut drawn = 0;
         for layer in &cell.layers {
@@ -151,8 +143,7 @@ impl Display {
                     draw_sprite(painter, atlas, rect, scale, (placed, paint), (fx, tone));
                 }
                 if cell.depth > 0 {
-                    // A level seen through open air is hazed more the deeper it is.
-                    let haze = (24 * (u32::from(cell.depth) + 1)).min(192) as u8;
+                    let haze = haze_at(cell.depth);
                     atlas.request(Fx::ZOverlay);
                     let sprite = (placed, None);
                     let tone = Tone::Alpha(haze);
@@ -273,6 +264,21 @@ pub fn light(glow: Glow) -> Color32 {
     let Rgb(r, g, b) = glow.color;
     let add = |c: u8| (f32::from(c) * alpha).round() as u8;
     Color32::from_rgba_premultiplied(add(r), add(g), add(b), 0)
+}
+
+/// The coloured light that falls on `cell` drawn under `fx`: only on what is plainly or dimly in sight.
+pub(crate) fn glow_on(cell: &Cell, fx: Fx) -> Option<Color32> {
+    cell.glow
+        .filter(|_| fx == Fx::Plain || fx == Fx::Shadow)
+        .map(light)
+}
+
+/// The haze over a level seen through open air `depth` levels down, more the deeper it is; none on the shown one.
+pub(crate) fn haze_at(depth: u8) -> u8 {
+    match depth {
+        0 => 0,
+        depth => (24 * (u32::from(depth) + 1)).min(192) as u8,
+    }
 }
 
 /// One sprite at its place in the cell, turned as the tileset asks; false when its sheet is not loaded.
