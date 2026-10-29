@@ -219,7 +219,7 @@ fn a_required_field_is_marked_beside_its_label_and_read_as_required() {
             ("Path", true),
             ("Overmap terrain", true),
             ("Terrain", true),
-            ("Chunk size", false),
+            ("Path", false),
         ] {
             // The file form has a Path of its own, which it does not need.
             let fields = h

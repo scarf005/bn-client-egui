@@ -450,7 +450,7 @@ fn a_forms_text_boxes_are_named_by_their_fields() {
         find(&mut screen["root"], part).unwrap()["collapsed"] = json!(false);
     }
     let h = open(screen, egui::vec2(1920.0, 1080.0));
-    for label in ["Path", "Terrain", "Chunk size"] {
+    for label in ["Path", "Overmap terrain", "Terrain"] {
         assert!(
             h.query_all_by_label(label)
                 .any(|n| n.accesskit_node().role() == egui::accesskit::Role::TextInput),
