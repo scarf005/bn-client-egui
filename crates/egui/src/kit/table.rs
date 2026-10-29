@@ -15,7 +15,7 @@ use egui_extras::{Column, TableBuilder, TableRow};
 pub const CHECK: f32 = 3.0 * tokens::U;
 
 /// What each of a list's columns needs, measured from its rows; a column 0 wide is left out.
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct Widths {
     /// The checkbox, the engine's mark and the favourite.
     pub pick: f32,
@@ -29,6 +29,9 @@ pub struct Widths {
     pub label: f32,
     /// Each value column: the widest of its caption and its values.
     pub values: Vec<f32>,
+    /// Each value column's widest value alone, which a column keeps before another column's caption is made whole;
+    /// a column it names none of is as wide as `values` says.
+    pub cells: Vec<f32>,
     /// The count editor of a list that picks amounts.
     pub count: f32,
 }
@@ -64,9 +67,9 @@ impl Widths {
             .max(0.0)
     }
 
-    /// These widths in `room` beside a label `label` wide: each value column in order takes the room it wants; a
-    /// value column past the room's edge is cut at it, and one wholly past it is left out, so the scroll bar stays
-    /// at the room's edge.
+    /// These widths in `room` beside a label `label` wide: each value column in order takes the room its values
+    /// want, then in order the room its caption wants; a value column past the room's edge is cut at it, and one
+    /// wholly past it is left out, so the scroll bar stays at the room's edge.
     pub fn fitted(mut self, room: f32, gap: f32, label: f32) -> Self {
         let lead = [self.pick, self.item, self.key]
             .into_iter()
@@ -74,14 +77,24 @@ impl Widths {
         // The spare last column stands a gap after the others.
         let mut left = room - gap - label - lead.map(|w| w + gap).sum::<f32>();
         let apart = gap + tokens::COLUMN_GAP - tokens::ITEM_GAP;
-        for w in self
-            .values
-            .iter_mut()
-            .chain([&mut self.count])
-            .filter(|w| **w > 0.0)
-        {
-            *w = w.min(left - apart).max(0.0);
-            left -= *w + apart;
+        let cells = (self.values.iter().enumerate())
+            .map(|(at, w)| self.cells.get(at).map_or(*w, |c| c.min(*w)))
+            .chain([self.count])
+            .collect::<Vec<_>>();
+        let mut columns = (self.values.iter_mut().chain([&mut self.count]))
+            .zip(cells)
+            .filter(|(w, _)| **w > 0.0)
+            .map(|(w, cell)| {
+                let wanted = *w;
+                *w = cell.min(left - apart).max(0.0);
+                left -= *w + apart;
+                (w, wanted)
+            })
+            .collect::<Vec<_>>();
+        for (w, wanted) in &mut columns {
+            let more = (*wanted - **w).min(left).max(0.0);
+            **w += more;
+            left -= more;
         }
         self
     }
@@ -300,5 +313,25 @@ mod tests {
             (label, w().fitted(300.0, 8.0, label).values[0] < 300.0),
             (60.0, true)
         );
+    }
+
+    #[test]
+    fn a_column_keeps_its_values_before_another_columns_caption_is_made_whole() {
+        let w = Widths {
+            label: 20.0,
+            values: vec![100.0, 60.0],
+            cells: vec![100.0, 20.0],
+            ..Widths::default()
+        };
+        let room = |n: f32| 20.0 + 8.0 + n + 2.0 * (8.0 + tokens::COLUMN_GAP - tokens::ITEM_GAP);
+        assert_eq!(
+            w.clone().fitted(room(160.0), 8.0, 20.0).values,
+            vec![100.0, 60.0]
+        );
+        assert_eq!(
+            w.clone().fitted(room(130.0), 8.0, 20.0).values,
+            vec![100.0, 30.0]
+        );
+        assert_eq!(w.fitted(room(120.0), 8.0, 20.0).values, vec![100.0, 20.0]);
     }
 }

@@ -328,11 +328,10 @@ impl<M: GameModel> App<M> {
             indent(row) + word_width(ui, &markup::plain(&Self::row_label(row)), &font) + pad
         }));
         let caption = egui::FontId::proportional(tokens::CAPTION);
-        let values = list
+        let cells = list
             .columns
             .iter()
             .map(|column| {
-                let caption = text_width(ui, &markup::plain(&column.label.shown()), &caption);
                 let values = rows.iter().map(|row| {
                     let value = row
                         .columns
@@ -340,7 +339,16 @@ impl<M: GameModel> App<M> {
                         .find(|c| c.key.as_deref() == Some(column.key.as_str()));
                     value.map_or(0.0, |c| plain(&c.value.shown()))
                 });
-                caption.max(widest(&mut { values }))
+                widest(&mut { values })
+            })
+            .collect::<Vec<_>>();
+        let values = (list.columns.iter().zip(&cells))
+            .map(|(column, cell)| {
+                cell.max(text_width(
+                    ui,
+                    &markup::plain(&column.label.shown()),
+                    &caption,
+                ))
             })
             .collect();
         let count = match list.selection {
@@ -354,6 +362,7 @@ impl<M: GameModel> App<M> {
             label_min,
             label,
             values,
+            cells,
             count,
         }
     }

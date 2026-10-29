@@ -613,18 +613,20 @@ fn house_legend() -> Value {
     screen
 }
 
-/// A legend's names are read whole when the room beside its symbols holds the longest of them.
+/// A legend's names are read whole when the room beside its symbols holds the values, a column's caption yielding.
 #[test]
-fn a_legends_longest_name_is_whole_at_1280_by_800_and_1920_by_1080() {
+fn a_legends_names_are_whole_at_1280_by_800_and_1920_by_1080() {
     for size in [egui::vec2(1280.0, 800.0), egui::vec2(1920.0, 1080.0)] {
         let mut h =
             crate::common::themed_harness(size, crate::common::staged(json!([house_legend()])).0);
         h.run_steps(12);
-        let names = painted_elided(&h, "window with curtains");
-        assert!(
-            !names.is_empty() && names.iter().all(|(_, cut)| !cut),
-            "at {size:?} the legend's name is cut: {names:?}"
-        );
+        for name in ["window with curtains", "bed", "pillow", "zombie"] {
+            let shown = painted_elided(&h, name);
+            assert!(
+                !shown.is_empty() && shown.iter().all(|(_, cut)| !cut),
+                "at {size:?} the legend's {name} is cut: {shown:?}"
+            );
+        }
     }
 }
 
