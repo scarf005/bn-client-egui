@@ -7,7 +7,7 @@ const WHEEL_ZOOM: f32 = 1.0 / 200.0;
 
 /// A canvas as it was drawn last frame.
 #[derive(Clone, Copy)]
-pub(super) struct View {
+pub(in crate::app::component) struct View {
     /// Columns and rows drawn: a grid of another size is another document, shown fitted anew.
     pub span: (usize, usize),
     /// The cells' scale from the size that fills the room.
@@ -143,7 +143,7 @@ pub(super) fn note_hover(ui: &egui::Ui) {
 
 /// Takes the Space of this frame's events, pressed, repeated or typed, when a canvas was under the pointer last
 /// pass or Space pans it: the engine's keys and a focused button do not see it.
-pub(super) fn keep_space(ctx: &egui::Context) {
+pub(in crate::app::component) fn keep_space(ctx: &egui::Context) {
     let pass = ctx.cumulative_pass_nr();
     let hover = ctx.data(|d| d.get_temp::<u64>(egui::Id::new("canvas hover")));
     let over = hover.is_some_and(|at| at + 1 >= pass);
@@ -165,7 +165,7 @@ pub(super) fn keep_space(ctx: &egui::Context) {
 }
 
 /// The clips of the canvases drawn in this pass: their text scrolls on its own, so it is no line of the body.
-pub(super) fn clips(ctx: &egui::Context) -> Vec<egui::Rect> {
+pub(in crate::app::component) fn clips(ctx: &egui::Context) -> Vec<egui::Rect> {
     let pass = ctx.cumulative_pass_nr();
     let key = egui::Id::new("canvas clips");
     let (at, clips) = ctx
