@@ -376,6 +376,20 @@ pub enum Turn {
     Mirror,
 }
 
+impl Turn {
+    /// The corners `[top left, top right, bottom right, bottom left]` of a picture drawn turned: each is the corner
+    /// of the picture that lands there.
+    pub fn corners<T>(self, [tl, tr, br, bl]: [T; 4]) -> [T; 4] {
+        match self {
+            Turn::None => [tl, tr, br, bl],
+            Turn::Left => [tr, br, bl, tl],
+            Turn::Right => [bl, tl, tr, br],
+            Turn::Half => [br, bl, tl, tr],
+            Turn::Mirror => [tr, tl, bl, br],
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Placed {
     pub sprite: u32,

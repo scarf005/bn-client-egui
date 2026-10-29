@@ -259,12 +259,7 @@ impl<M: GameModel> App<M> {
 
     /// The clicked map square in view coordinates while its command is in flight.
     pub fn marker(&self) -> Option<Pos> {
-        let origin = self.model.origin();
-        let m = self.marker.filter(|_| self.model.busy())?;
-        Some(Pos {
-            x: m.x - origin.x,
-            y: m.y - origin.y,
-        })
+        Some(self.marker.filter(|_| self.model.busy())? - self.model.origin())
     }
 
     /// The pass format the 3D map is drawn into; the window's renderer tells it, so only a test sets it.
