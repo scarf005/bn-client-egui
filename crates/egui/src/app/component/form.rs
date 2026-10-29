@@ -191,6 +191,10 @@ impl<M: GameModel> App<M> {
         };
         ui.group(|ui| {
             ui.label(egui::RichText::new(markup::plain(&aff.label.shown())).strong());
+            // What is asked for, such as what the number means, as a form's field says it.
+            if let Some(description) = &aff.description {
+                ui.weak(markup::plain(&description.shown()));
+            }
             if let (Some(count), Some(ArgKind::Count)) = (ask.count, ask.asking) {
                 ui.label(egui::RichText::new(count.to_string()).monospace());
             }
