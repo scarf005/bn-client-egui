@@ -246,3 +246,44 @@ fn a_required_field_is_marked_beside_its_label_and_read_as_required() {
         }
     }
 }
+
+/// The start page heads the canvas with the new mapgen form, its `New mod folder` button in reach beside the form's
+/// fields, and a click on it runs the engine's affordance.
+#[test]
+fn the_start_page_puts_the_new_form_and_its_new_mod_folder_on_the_canvas() {
+    let screen = example("editor", NOTHING_OPEN);
+    for size in SIZES {
+        let (mut h, script) = shown(&screen, size);
+        // The right column, past the last handle, holds the inspector; the canvas is left of it.
+        let column = h
+            .get_all_by_label("Resize workspace column")
+            .map(|n| n.rect().center().x)
+            .fold(0.0, f32::max);
+        let folder = h
+            .get_by_role_and_label(egui::accesskit::Role::Button, "New mod folder")
+            .rect();
+        let path = h
+            .query_all_by_label("Path")
+            .find(|n| n.accesskit_node().role() == egui::accesskit::Role::TextInput)
+            .expect("the path box")
+            .rect();
+        assert!(
+            folder.right() < column && path.right() < column,
+            "{size:?}: the folder button {folder:?} and the path {path:?} left of the column at {column}"
+        );
+        assert!(
+            h.ctx.content_rect().contains_rect(folder),
+            "{size:?}: {folder:?}"
+        );
+        h.get_by_role_and_label(egui::accesskit::Role::Button, "New mod folder")
+            .click();
+        h.run_steps(6);
+        let sent = script
+            .sent()
+            .into_iter()
+            .filter(|m| m["method"] == "bn.command.submit")
+            .map(|m| m["params"]["operation"]["affordance_id"].clone())
+            .collect::<Vec<_>>();
+        assert_eq!(sent, [json!("editor:new_folder")], "{size:?}");
+    }
+}
