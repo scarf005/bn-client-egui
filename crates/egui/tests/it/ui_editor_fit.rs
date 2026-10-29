@@ -568,3 +568,122 @@ fn a_canvas_in_a_low_room_keeps_its_squares_square_and_whole() {
         assert!(unclipped(&h, r), "square {x},{y} at {r:?} is cut");
     }
 }
+
+/// Painted texts that start with `start`, each with whether it is cut short with an ellipsis.
+fn painted_elided(h: &H, start: &str) -> Vec<(String, bool)> {
+    fn walk(shape: &egui::Shape, start: &str, out: &mut Vec<(String, bool)>) {
+        match shape {
+            egui::Shape::Text(t) if t.galley.text().starts_with(start) => {
+                out.push((t.galley.text().to_string(), t.galley.elided))
+            }
+            egui::Shape::Vec(shapes) => shapes.iter().for_each(|s| walk(s, start, out)),
+            _ => {}
+        }
+    }
+    let mut out = vec![];
+    (h.output().shapes.iter()).for_each(|c| walk(&c.shape, start, &mut out));
+    out
+}
+
+/// `editor` with the legend the map editor shows for a house: one name in the column of the layer it paints.
+fn house_legend() -> Value {
+    let mut screen = editor();
+    let legend = find(&mut screen["root"], "editor:legend").unwrap();
+    legend["columns"] = json!([
+        { "key": "terrain", "label": "Terrain" },
+        { "key": "furniture", "label": "Furniture" },
+        { "key": "items", "label": "Items" },
+        { "key": "monsters", "label": "Monsters" }
+    ]);
+    let row = |symbol: &str, key: &str, name: &str| {
+        let columns = ["terrain", "furniture", "items", "monsters"]
+            .map(|k| json!({ "key": k, "label": k, "value": if k == key { name } else { "" } }));
+        json!({ "id": format!("symbol:{symbol}"), "label": symbol, "description": "", "denial": "", "enabled": true,
+            "selectable": true, "selected": symbol == "\"", "columns": columns })
+    };
+    legend["rows"] = json!([
+        row("\"", "terrain", "window with curtains"),
+        row("#", "furniture", "bed"),
+        row("+", "terrain", "closed wooden door"),
+        row(",", "items", "pillow"),
+        row(".", "terrain", "wooden floor"),
+        row("Z", "monsters", "zombie")
+    ]);
+    legend["total"] = json!(6);
+    screen
+}
+
+/// A legend's names are read whole when the room beside its symbols holds the longest of them.
+#[test]
+fn a_legends_longest_name_is_whole_at_1280_by_800_and_1920_by_1080() {
+    for size in [egui::vec2(1280.0, 800.0), egui::vec2(1920.0, 1080.0)] {
+        let mut h =
+            crate::common::themed_harness(size, crate::common::staged(json!([house_legend()])).0);
+        h.run_steps(12);
+        let names = painted_elided(&h, "window with curtains");
+        assert!(
+            !names.is_empty() && names.iter().all(|(_, cut)| !cut),
+            "at {size:?} the legend's name is cut: {names:?}"
+        );
+    }
+}
+
+/// A catalog's id, which names the entry as the game does, is read whole when its label leaves the room.
+#[test]
+fn a_catalogs_ids_are_whole_while_their_labels_leave_room_at_1920_by_1080() {
+    let mut h = crate::common::themed_harness(
+        egui::vec2(1920.0, 1080.0),
+        crate::common::staged(json!([editor()])).0,
+    );
+    h.run_steps(12);
+    let ids = painted_elided(&h, "t_adobe_brick_floor");
+    let labels = painted_elided(&h, "adobe floor (t_adobe_brick_floor)");
+    assert!(
+        ids.iter().any(|(id, _)| id == "t_adobe_brick_floor") && labels.iter().all(|(_, cut)| !cut),
+        "ids {ids:?} labels {labels:?}"
+    );
+    assert!(
+        ids.iter().all(|(_, cut)| !cut),
+        "an id is cut short: {ids:?}"
+    );
+}
+
+/// The question a count affordance asks, open over the editor.
+fn asking<'a>(size: egui::Vec2) -> H<'a> {
+    let mut screen = house_legend();
+    let preview = (screen["affordances"].as_array_mut().unwrap().iter_mut())
+        .find(|a| a["id"] == "editor:preview")
+        .unwrap();
+    preview["enabled"] = json!(true);
+    preview.as_object_mut().unwrap().remove("denial");
+    let (app, _) = crate::common::staged(crate::common::over_map(screen));
+    let mut h = crate::common::themed_harness(size, app);
+    h.run_steps(7);
+    crate::common::settle_windows(&mut h);
+    let view = egui::accesskit::Role::Button;
+    h.get_by_role_and_label(view, "View").click();
+    h.run_steps(4);
+    h.get_by_role_and_label(view, "Preview").click();
+    h.run_steps(8);
+    h
+}
+
+/// The right column is not split in two by a question under the canvas, which shortens the canvas and so widens
+/// the column: the legend and the catalog keep the width of the whole column.
+#[test]
+fn a_question_under_the_canvas_does_not_split_the_right_column_in_two_at_1920_by_1080() {
+    let size = egui::vec2(1920.0, 1080.0);
+    let h = asking(size);
+    assert!(h.query_by_label("OK").is_some(), "no question is open");
+    let legend = h.get_by_label("Legend").rect();
+    let placement = h.get_by_label("New placement").rect();
+    assert!(
+        (placement.left() - legend.left()).abs() < 4.0 || placement.top() > legend.bottom(),
+        "the legend at {legend:?} has the new placement beside it at {placement:?}"
+    );
+    let names = painted_elided(&h, "window with curtains");
+    assert!(
+        names.iter().all(|(_, cut)| !cut),
+        "the legend's name is cut: {names:?}"
+    );
+}
