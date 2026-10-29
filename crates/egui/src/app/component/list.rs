@@ -466,7 +466,7 @@ impl<M: GameModel> App<M> {
     fn wrapped_height(&self, ui: &egui::Ui, row: &Row, label: f32) -> f32 {
         let font = egui::TextStyle::Body.resolve(ui.style());
         let indent = f32::from(u8::from(row.parent_id.is_some())) * tokens::INDENT;
-        let mut job = text::job(
+        let mut job = crate::text::job(
             &self.model.styled(&Self::row_label(row)),
             &font,
             egui::Color32::WHITE,

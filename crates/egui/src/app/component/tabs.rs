@@ -28,14 +28,22 @@ fn tab_rows(widths: &[f32], room: f32) -> Vec<Vec<usize>> {
 }
 
 impl<M: GameModel> App<M> {
-    /// The strip of `tabs` in rows as wide as the room left to it.
-    pub(super) fn tab_strip(
+    /// The strip of `tabs` over the page of the chosen tab.
+    pub(super) fn tabs(
         &self,
         ui: &mut egui::Ui,
         screen: &Screen,
         tabs: &Tabs,
         out: &mut Vec<Intent>,
     ) {
+        self.tab_strip(ui, screen, tabs, out);
+        if let Some(child) = &tabs.child {
+            self.component(ui, screen, child, out);
+        }
+    }
+
+    /// The strip of `tabs` in rows as wide as the room left to it.
+    fn tab_strip(&self, ui: &mut egui::Ui, screen: &Screen, tabs: &Tabs, out: &mut Vec<Intent>) {
         let select = tabs.select.as_deref().and_then(|id| find(screen, id));
         let labels = tabs
             .tabs

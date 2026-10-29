@@ -46,19 +46,6 @@ pub(super) fn with_margin(extent: Extent) -> Extent {
     }
 }
 
-/// A stat's value with its maximum and unit, as the panel shows it.
-pub(super) fn stat_text(stat: &PanelStat) -> String {
-    let max = stat
-        .max
-        .as_ref()
-        .map_or(String::new(), |m| format!("/{}", m.shown()));
-    let unit = stat
-        .unit
-        .as_ref()
-        .map_or(String::new(), |u| format!(" {}", u.shown()));
-    format!("{}{max}{unit}", markup::plain(&stat.value.shown()))
-}
-
 impl<M: GameModel> App<M> {
     /// What `c` needs in width, measured without laying it out: `room` is what its surroundings offer.
     pub(super) fn extent(

@@ -269,36 +269,3 @@ impl<M: GameModel> App<M> {
         self.affordance_buttons(ui, &own_buttons(screen, component), row, out);
     }
 }
-
-/// The buttons a component draws for the affordances it names that its own widgets do not run.
-pub(super) fn own_buttons<'a>(screen: &'a Screen, component: &Component) -> Vec<&'a Affordance> {
-    component
-        .head()
-        .affordances
-        .iter()
-        .filter_map(|id| find(screen, id))
-        // A list's rows run its `activate`, also where a panel around the list names it.
-        .filter(|a| {
-            !driven(component, a)
-                && !gesture(screen, a)
-                && !run_by_rows(screen, a)
-                && !matches!(component, Component::List(list) if searched(screen, list, a))
-                && drawn_button(a)
-        })
-        .collect()
-}
-
-/// Whether `a` is drawn as a button: picking, moving, digits and text edits run from their rows and keys instead, and what
-/// only rearranges the native window changes nothing here. A grouped one is also an item of the workspace's menu bar.
-pub(super) fn drawn_button(a: &Affordance) -> bool {
-    !matches!(
-        a.role,
-        Some(
-            AffordanceRole::Select
-                | AffordanceRole::Navigate
-                | AffordanceRole::Digit
-                | AffordanceRole::Layout
-                | AffordanceRole::Edit
-        )
-    )
-}

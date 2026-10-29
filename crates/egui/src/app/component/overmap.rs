@@ -540,7 +540,7 @@ impl<M: GameModel> App<M> {
         let lines = map.cursor_lines();
         if !lines.is_empty() {
             let font = egui::TextStyle::Body.resolve(ui.style());
-            let job = text::job(
+            let job = crate::text::job(
                 &self.model.styled(&lines.join("\n")),
                 &font,
                 tokens::ground(ui),
