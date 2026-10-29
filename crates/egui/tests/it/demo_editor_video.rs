@@ -29,6 +29,8 @@ struct Rec {
     at: egui::Pos2,
     captions: String,
     timing: String,
+    /// The canvas square the `square_at` squares count from.
+    origin: (i32, i32),
 }
 
 impl Rec {
@@ -51,6 +53,7 @@ impl Rec {
             at: egui::pos2(960.0, 540.0),
             captions: String::new(),
             timing: String::new(),
+            origin: (0, 0),
         };
         rec.rest();
         rec.grab(HOLD_MS);
@@ -204,10 +207,8 @@ impl Rec {
     }
 
     /// Clicks the square (`x`, `y`) of the canvas.
-    fn paint(&mut self, x: usize, y: usize) {
-        let at = self
-            .stable("a canvas square", |h| Some(square(h, x, y)))
-            .center();
+    fn paint(&mut self, x: i32, y: i32) {
+        let at = self.square_at(x, y);
         self.click_at(at);
     }
 
@@ -332,52 +333,6 @@ fn canvas_glyphs(h: &H) -> Vec<String> {
     crate::live_editor::glyphs(h, "editor:canvas")
 }
 
-/// The screen rectangle of canvas square (`x`, `y`): the buttons that spell the canvas row by row, in the order the
-/// grid draws them.
-fn square(h: &H, x: usize, y: usize) -> egui::Rect {
-    let glyphs = canvas_glyphs(h);
-    let cols = glyphs[0].chars().count();
-    let buttons = h
-        .root()
-        .children_recursive()
-        .filter(|n| {
-            let a = n.accesskit_node();
-            a.role() == egui::accesskit::Role::Button
-                && a.label()
-                    .is_some_and(|l| l.chars().count() <= 1 && l != "⋯")
-        })
-        .collect::<Vec<_>>();
-    let spelled = glyphs.concat().chars().collect::<Vec<_>>();
-    let names = buttons
-        .iter()
-        .map(|b| {
-            b.accesskit_node()
-                .label()
-                .unwrap_or_default()
-                .chars()
-                .next()
-                .unwrap_or(' ')
-        })
-        .collect::<Vec<_>>();
-    let start = (0..=names.len().saturating_sub(spelled.len()))
-        .find(|&i| names[i..i + spelled.len()] == spelled[..])
-        .unwrap_or_else(|| panic!("no run of buttons spells the canvas"));
-    buttons[start + y * cols + x].rect()
-}
-
-/// The symbol of the legend's selected row.
-fn selected_symbol(h: &H) -> String {
-    let top = h.state().model.screens().last().unwrap();
-    let legend = serde_json::to_value(top.root.as_ref().unwrap().find("editor:legend")).unwrap();
-    legend["rows"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|r| r["selected"] == true)
-        .and_then(|r| r["label"].as_str().map(str::to_string))
-        .expect("a selected legend row")
-}
-
 /// The text of the component `id` of the screen on top, as the engine sent it.
 fn engine_text(h: &H, id: &str) -> String {
     let top = h.state().model.screens().last().unwrap();
@@ -396,12 +351,6 @@ fn rows_of(h: &H, id: &str) -> Vec<String> {
 }
 
 impl Rec {
-    /// Clicks the last button labelled `label`, such as a list's row over a heading of the same name.
-    fn click_button(&mut self, label: &str) {
-        let at = self.stable(label, |h| last_button(h, label)).center();
-        self.click_at(at);
-    }
-
     /// Clicks the tab labelled `label`.
     fn tab(&mut self, label: &str) {
         let at = self
@@ -430,16 +379,16 @@ fn map_editor_demo() {
     r.say("A new mapgen file: fields marked * are required");
     r.grab(HOLD_MS * 2);
     r.say("A path outside a mod folder is refused with the reason");
-    r.click_field("New mapgen file/Path");
+    r.click_field("Path");
     r.key_mod(egui::Modifiers::COMMAND, egui::Key::A);
     r.paste(&mods.join("demo_hut.json").to_string_lossy());
-    r.click_field("New mapgen file/Overmap terrain");
+    r.click_field("Overmap terrain");
     r.key_mod(egui::Modifiers::COMMAND, egui::Key::A);
-    r.type_slowly("field");
+    r.type_slowly("demo_hut");
     r.click("Create");
     r.grab(HOLD_MS * 2);
     r.say("A path inside a mod folder makes the mod and the file");
-    r.click_field("New mapgen file/Path");
+    r.click_field("Path");
     r.key_mod(egui::Modifiers::COMMAND, egui::Key::A);
     let path = mods.join("my_mod/demo_hut.json");
     r.paste(&path.to_string_lossy());
@@ -453,17 +402,26 @@ fn map_editor_demo() {
     r.say("With a document open, the start page's parts fold");
     r.grab(HOLD_MS * 2);
 
-    r.say("Catalog: pick a terrain, give it a symbol, Set mapping adds it to the legend");
+    r.say("Catalog: search a terrain and double-click it to take it as the brush; the legend gets its symbol");
     r.click_field("Catalog");
     r.type_slowly("brick wall");
     r.key(egui::Key::Enter);
-    r.double_click("brick wall");
-    r.click_field("Mapping/Symbol");
-    r.key_mod(egui::Modifiers::COMMAND, egui::Key::A);
-    r.type_slowly("#");
-    r.key(egui::Key::Enter);
-    r.click("Set mapping");
-    r.say("Furniture the same way, on its own layer");
+    r.take("brick wall");
+    println!("LEGEND {:?}", rows_of(&r.h, "editor:legend"));
+    r.say("Room draws walls between two clicked corners");
+    r.tab("Room");
+    r.paint(3, 3);
+    r.paint(14, 10);
+    assert_eq!(
+        canvas_glyphs(&r.h)[3]
+            .chars()
+            .nth(3)
+            .map(String::from)
+            .as_deref(),
+        Some("b"),
+        "the room did not draw"
+    );
+    r.say("Furniture the same way, from its own tab");
     r.tab("Furniture");
     r.click_field("Catalog");
     r.key_mod(egui::Modifiers::COMMAND, egui::Key::A);
@@ -473,38 +431,29 @@ fn map_editor_demo() {
         .into_iter()
         .next()
         .expect("a chair in the furniture catalog");
-    r.double_click(&chair);
-    r.click_field("Mapping/Symbol");
-    r.key_mod(egui::Modifiers::COMMAND, egui::Key::A);
-    r.type_slowly("c");
-    r.key(egui::Key::Enter);
-    println!("MAPPING {}", engine_text(&r.h, "editor:mapping"));
-    r.click("Set mapping");
+    r.take(&chair);
     println!("LEGEND {:?}", rows_of(&r.h, "editor:legend"));
-    r.grab(HOLD_MS * 2);
-
-    r.say("Pick the wall symbol in the legend, then draw a room with two clicks");
-    let wall = legend_row("symbol:#", &r.h);
-    r.double_click(&wall);
-    println!("SELECTED {}", selected_symbol(&r.h));
-    r.tab("Room");
-    r.paint(3, 3);
-    r.paint(14, 10);
-    assert_eq!(
-        canvas_glyphs(&r.h)[3].chars().nth(3).map(String::from),
-        Some("#".into()),
-        "the room did not draw"
-    );
-    r.say("Pick the furniture symbol and place it with the pencil");
-    let furniture = legend_row("symbol:c", &r.h);
-    r.double_click(&furniture);
+    r.say("Line draws a row of them along a drag");
+    r.tab("Line");
+    r.drag((5, 5), (9, 5), egui::PointerButton::Primary);
+    r.say("Pencil places one square at a time");
     r.tab("Pencil");
-    r.paint(5, 5);
-    r.paint(6, 5);
-    r.paint(7, 5);
+    r.paint(5, 8);
     r.say("Ctrl+Z undoes the last stroke and the status line says so");
     r.key_mod(egui::Modifiers::CTRL, egui::Key::Z);
     assert!(engine_text(&r.h, "editor:status").contains("Undid"));
+    r.say("Select marks the squares a placement is for");
+    r.tab("Select");
+    r.paint(6, 7);
+    r.paint(8, 7);
+    r.say("New placement adds an item group on the marked squares");
+    r.click("New placement");
+    r.click_input("Value");
+    r.paste(r#"{"item": "kitchen", "chance": 100}"#);
+    r.click("Add placement");
+    r.say("Placed by this entry lists what the entry puts on the map");
+    r.click("Placed by this entry");
+    r.grab(HOLD_MS * 2);
     r.say("Ctrl+S saves into the mod folder");
     r.key_mod(egui::Modifiers::CTRL, egui::Key::S);
     println!("SAVED {}", std::fs::read_to_string(&path).unwrap());
@@ -540,45 +489,30 @@ fn map_editor_demo() {
     r.finish();
 }
 
-/// What the legend row `id` shows to click on: its terrain, else its furniture.
-fn legend_row(id: &str, h: &H) -> String {
-    let top = h.state().model.screens().last().unwrap();
-    let legend = serde_json::to_value(top.root.as_ref().unwrap().find("editor:legend")).unwrap();
-    let row = legend["rows"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|r| r["id"] == id)
-        .unwrap_or_else(|| panic!("no {id} in the legend: {legend}"));
-    ["terrain", "furniture"]
-        .into_iter()
-        .filter_map(|key| {
-            row["columns"]
-                .as_array()?
-                .iter()
-                .find(|c| c["key"] == key)?["value"]
-                .as_str()
-                .filter(|v| !v.is_empty())
-                .map(str::to_string)
-        })
-        .next()
-        .unwrap_or_else(|| panic!("nothing to click on in {row}"))
-}
-
 impl Rec {
-    /// Clicks the select labelled `label`.
-    fn click_combo(&mut self, label: &str) {
+    /// Double-clicks the catalog row `row` until the engine says the brush is that.
+    fn take(&mut self, row: &str) {
+        for _ in 0..3 {
+            self.double_click(row);
+            if engine_text(&self.h, "editor:status").contains(&format!("Painting {row}")) {
+                return;
+            }
+        }
+        panic!("the brush did not become {row}");
+    }
+
+    /// Clicks the first text box `label` as it is drawn, without scrolling to it.
+    fn click_input(&mut self, label: &str) {
         let rect_of = |h: &H| {
             h.root()
                 .children_recursive()
                 .find(|n| {
                     let a = n.accesskit_node();
-                    a.role() == egui::accesskit::Role::ComboBox
+                    a.role() == egui::accesskit::Role::TextInput
                         && a.label().as_deref() == Some(label)
                 })
                 .map(|n| n.rect())
         };
-        crate::live_editor_walk::reveal_rect(&mut self.h, label, rect_of);
         let at = self.stable(label, rect_of).center();
         self.click_at(at);
     }
@@ -628,6 +562,7 @@ impl Rec {
 #[ignore = "requires BN_ENGINE pointing at an engine binary"]
 fn vehicle_editor_demo() {
     let mut r = Rec::new("vehicle-editor");
+    r.origin = VEHICLE_ORIGIN;
     let mods = crate::common::live::profile_dir().join("mods");
     r.open_editor("Vehicle editor", "vehicle_editor");
 
@@ -645,151 +580,229 @@ fn vehicle_editor_demo() {
     });
     r.done();
 
-    r.say("The parts palette has category tabs; Frames: pick a frame, click the squares beside the first one");
+    r.say("The parts palette has a tab for every category");
+    for tab in [
+        "Wheels & hubs",
+        "Engines & motors",
+        "Seats & controls",
+        "Frames",
+    ] {
+        r.tab(tab);
+    }
+    r.say("The search box finds a part across the categories");
+    r.click_field("Parts");
+    r.type_slowly("door");
+    r.grab(HOLD_MS * 2);
+    r.key_mod(egui::Modifiers::COMMAND, egui::Key::A);
+    r.key(egui::Key::Backspace);
+
+    r.say("Rectangle drags a ring of frames around the first frame");
     r.pick("Frames", "frame");
-    r.install(&["mount:1,0", "mount:-1,0"]);
-    r.say("A wheel needs a hub on its mount, so this install is refused");
-    r.pick("Wheels & hubs", "wheel");
-    r.install(&["mount:-1,0"]);
-    r.say("Install the wheel hub assembly first, then the wheel");
-    r.pick("Wheels & hubs", "wheel hub assembly");
-    r.install(&["mount:-1,0"]);
-    r.pick("Wheels & hubs", "wheel");
-    r.install(&["mount:-1,0"]);
-    r.say("Seats & controls: a seat and controls on the middle square");
-    r.pick("Seats & controls", "seat");
-    r.install(&["mount:0,0"]);
-    r.pick("Seats & controls", "controls");
-    r.install(&["mount:0,0"]);
-    r.say("Engines & motors: an engine on a frame below");
-    r.pick("Frames", "frame");
-    r.install(&["mount:0,1"]);
-    r.pick("Engines & motors", "1-cylinder engine");
-    r.install(&["mount:0,1"]);
-    r.say("Fuel & batteries: a tank on a frame above");
-    r.pick("Frames", "frame");
-    r.install(&["mount:0,-1"]);
-    r.pick("Fuel & batteries", "vehicle tank (60L)");
-    r.install(&["mount:0,-1"]);
+    r.click("Rectangle");
+    r.drag((-1, -1), (1, 1), egui::PointerButton::Primary);
+    assert_eq!(r.parts_at(1, 1), 1);
+    assert_eq!(r.parts_at(0, 0), 1, "the vehicle's first frame");
+    r.say("Filled rectangle covers a 12 by 6 area with frames in one drag");
+    r.click("Filled rectangle");
+    r.drag((-6, -3), (5, 2), egui::PointerButton::Primary);
+    assert_eq!(r.parts_at(-6, -3), 1);
+    assert_eq!(r.parts_at(5, 2), 1);
     println!("HISTORY {:?}", rows_of(&r.h, "vehicle:history"));
 
-    r.say("Select tool, then the tank's square and its part there; the part has a Fuel select");
+    r.say("Mirror left and right on: the wheels are drawn on both sides at once");
+    r.click("Mirror left and right");
+    r.click("Pencil");
+    r.pick("Wheels & hubs", "wheel hub assembly");
+    r.click_square(-6, 2);
+    r.pick("Wheels & hubs", "wheel");
+    r.click_square(-6, 2);
+    assert_eq!(
+        rows_of(&r.h, "vehicle:history").last().map(String::as_str),
+        Some("Install wheel ×2"),
+        "the mirrored side got its wheel too"
+    );
+    r.click("Mirror left and right");
+
+    r.say("Line draws a row of seats along a drag");
+    r.pick("Seats & controls", "seat");
+    r.click("Line");
+    r.drag((-4, 0), (1, 0), egui::PointerButton::Primary);
+    r.say("Pencil puts the controls down one square at a time");
+    r.pick("Seats & controls", "controls");
+    r.click("Pencil");
+    r.click_square(2, 0);
+    r.say("Fill covers every connected square of frames with the part in hand, here a headlight on each");
+    r.pick("Lights", "headlight");
+    r.click("Fill");
+    r.click_square(5, -3);
+    println!("HISTORY {:?}", rows_of(&r.h, "vehicle:history"));
+
+    r.say("Eraser drags across squares and takes their top parts off");
+    r.click("Eraser");
+    r.drag((-3, 0), (-2, 0), egui::PointerButton::Primary);
+    assert_eq!(r.parts_at(-3, 0), 1, "the seats are gone, the frames stay");
+
+    r.say("Select a block of squares, then Edit > Copy");
     r.click("Select");
-    r.mount("mount:0,-1");
-    r.click_button("vehicle tank (60L)");
-    r.click_combo("Fuel");
-    r.grab(HOLD_MS);
-    r.say("The select has a filter: type to narrow the fuels, Enter picks the first");
-    r.type_slowly("gaso");
-    r.key(egui::Key::Enter);
+    r.drag((-1, 0), (1, 0), egui::PointerButton::Primary);
+    r.menu("Edit", "Copy");
+    r.say("The Paste tool outlines where the copy lands from the square under the pointer");
+    r.click("Paste");
+    r.move_to_square(-4, -2);
+    r.grab(HOLD_MS * 2);
+    r.click_square(-4, -2);
+    r.say("Select the pasted squares and Edit > Cut takes them away");
+    r.click("Select");
+    r.drag((-4, -2), (-2, -2), egui::PointerButton::Primary);
+    r.menu("Edit", "Cut");
+    println!("HISTORY {:?}", rows_of(&r.h, "vehicle:history"));
+
+    r.say("View > Turn view clockwise turns the canvas a quarter");
+    r.menu("View", "Turn view clockwise");
     r.grab(HOLD_MS * 2);
 
-    r.say("A right click on a square removes its top part");
-    r.right_click_square("mount:-1,0");
-    println!("HISTORY {:?}", rows_of(&r.h, "vehicle:history"));
+    r.say("Edit > Undo steps back through the history; each stroke is one labelled step");
+    r.menu("Edit", "Undo");
+    r.menu("Edit", "Undo");
+    r.grab(HOLD_MS * 2);
+    r.say("Edit > Redo brings it back");
+    r.menu("Edit", "Redo");
+    r.grab(HOLD_MS * 2);
 
     r.say("Ctrl+S saves into the mod folder");
     r.key_mod(egui::Modifiers::CTRL, egui::Key::S);
     let saved = mods.join("my_mod/walk_van.json");
     let text =
         std::fs::read_to_string(&saved).unwrap_or_else(|e| panic!("{}: {e}", saved.display()));
-    println!("SAVED {text}");
-    assert!(text.contains("gasoline"), "{text}");
-
-    r.say("World > Spawn puts the vehicle on the game map; the editor stays open");
-    r.menu("World", "Spawn");
-    r.grab(HOLD_MS * 3);
-    assert_eq!(
-        r.h.state()
-            .model
-            .screens()
-            .last()
-            .and_then(|s| s.kind.clone())
-            .as_deref(),
-        Some("vehicle_editor")
-    );
-    println!("NOTICE {}", engine_text(&r.h, "vehicle:notice"));
+    println!("SAVED {} bytes", text.len());
+    assert!(text.contains("wheel"), "{text}");
 
     r.say("Esc leaves the editor");
     r.leave();
     r.finish();
 }
 
-/// The square of the vehicle editor's grid for the mount `id`: the run of buttons named as the grid's cells are,
-/// in the order the grid draws them.
-fn mount_square(h: &H, id: &str) -> Option<egui::Rect> {
-    let top = h.state().model.screens().last()?;
-    let Some(bn_client_egui::protocol::Component::Grid(grid)) =
-        top.root.as_ref()?.find("vehicle:grid")
-    else {
-        return None;
-    };
-    let names = grid
-        .cells
-        .iter()
-        .map(|c| match c.label.as_ref().map(|l| l.shown()) {
-            Some(l) if !l.is_empty() => l,
-            _ => c.glyph.clone().unwrap_or_default(),
-        })
-        .map(|n| n.trim().to_string())
-        .collect::<Vec<_>>();
-    let at = grid
-        .cells
-        .iter()
-        .position(|c| c.id.as_deref() == Some(id))?;
-    let buttons = h
-        .root()
-        .children_recursive()
-        .filter(|n| n.accesskit_node().role() == egui::accesskit::Role::Button)
-        .map(|n| {
-            (
-                n.accesskit_node()
-                    .label()
-                    .unwrap_or_default()
-                    .trim()
-                    .to_string(),
-                n.rect(),
-            )
-        })
-        .collect::<Vec<_>>();
-    (0..=buttons.len().checked_sub(names.len())?)
-        .find(|&i| {
-            buttons[i..i + names.len()]
-                .iter()
-                .map(|b| &b.0)
-                .eq(names.iter())
-        })
-        .map(|i| buttons[i + at].1)
-}
+/// The canvas square the vehicle's first frame is on: the middle of its grid.
+const VEHICLE_ORIGIN: (i32, i32) = (20, 15);
 
 impl Rec {
-    /// Clicks the grid square of the mount `id`.
-    fn mount(&mut self, id: &str) {
-        let at = self.stable(id, |h| mount_square(h, id)).center();
+    /// The middle of the canvas square `dx`, `dy` squares from the vehicle's first frame: the squares are the lattice
+    /// of equal square buttons, whose top left one is the grid's first.
+    fn cell_at(&mut self, x: i32, y: i32) -> egui::Pos2 {
+        let lattice = |h: &H| {
+            let squares = h
+                .root()
+                .children_recursive()
+                .filter(|n| n.accesskit_node().role() == egui::accesskit::Role::Button)
+                .map(|n| n.rect())
+                .filter(|r| (r.width() - r.height()).abs() < 1.0 && r.width() >= 14.0)
+                .collect::<Vec<_>>();
+            // The squares of the canvas are the most of its width: a tool's button may be square too.
+            let side = squares.iter().map(|r| r.width()).max_by_key(|w| {
+                squares
+                    .iter()
+                    .filter(|r| (r.width() - w).abs() < 1.0)
+                    .count()
+            })?;
+            let lattice = squares.iter().filter(|r| (r.width() - side).abs() < 1.0);
+            Some(egui::Rect::from_min_size(
+                egui::pos2(
+                    lattice.clone().map(|r| r.min.x).fold(f32::MAX, f32::min),
+                    lattice.map(|r| r.min.y).fold(f32::MAX, f32::min),
+                ),
+                egui::vec2(side, side),
+            ))
+        };
+        let first = self.stable("the canvas", lattice);
+        first.center() + egui::vec2(x as f32 * first.width(), y as f32 * first.height())
+    }
+
+    fn square_at(&mut self, dx: i32, dy: i32) -> egui::Pos2 {
+        self.cell_at(self.origin.0 + dx, self.origin.1 + dy)
+    }
+
+    fn click_square(&mut self, dx: i32, dy: i32) {
+        let at = self.square_at(dx, dy);
         self.click_at(at);
     }
 
-    /// Opens the palette tab `tab` and picks the part row `part`.
+    fn move_to_square(&mut self, dx: i32, dy: i32) {
+        let at = self.square_at(dx, dy);
+        self.move_to(at);
+        self.rest();
+    }
+
+    /// How many parts the canvas shows on the square `dx`, `dy` from the first frame.
+    fn parts_at(&self, dx: i32, dy: i32) -> usize {
+        let id = format!("square:{},{}", VEHICLE_ORIGIN.0 + dx, VEHICLE_ORIGIN.1 + dy);
+        let top = self.h.state().model.screens().last().unwrap();
+        let Some(bn_client_egui::protocol::Component::Grid(grid)) =
+            top.root.as_ref().unwrap().find("vehicle:grid")
+        else {
+            panic!("no vehicle:grid");
+        };
+        grid.cells
+            .iter()
+            .find(|c| c.id.as_deref() == Some(&id))
+            .map_or(0, |c| c.looks.len())
+    }
+
+    /// One drag of `by` from the square `from` to the square `to`, a frame at each step of the way.
+    fn drag(&mut self, from: (i32, i32), to: (i32, i32), by: egui::PointerButton) {
+        let (a, b) = (self.square_at(from.0, from.1), self.square_at(to.0, to.1));
+        self.move_to(a);
+        let button = |r: &mut Self, pressed| {
+            r.h.event(egui::Event::PointerButton {
+                pos: r.at,
+                button: by,
+                pressed,
+                modifiers: egui::Modifiers::NONE,
+            });
+            r.h.run_steps(3);
+        };
+        button(self, true);
+        self.grab(PRESS_MS);
+        // One pointer sample per square crossed: a stroke that lingers on a square may act on it more than once.
+        let steps = (from.0 - to.0).abs().max((from.1 - to.1).abs()).max(1);
+        for step in 1..=steps {
+            self.at = a + (b - a) * (step as f32 / steps as f32);
+            self.h.hover_at(self.at);
+            self.h.run_steps(2);
+            self.grab(PRESS_MS);
+        }
+        button(self, false);
+        self.done();
+    }
+
+    /// Opens the palette tab `tab`, scrolls its list until the part row `part` is whole, and picks it.
     fn pick(&mut self, tab: &str, part: &str) {
         self.tab(tab);
-        // The palette's rows lie under its tab strip, over the heads of the sections under it, right of the
-        // canvas, whose squares and whose mount's stack may bear the part's name.
+        // The list lies under the tab strip and over the page button, right of the canvas, whose squares and
+        // whose mount's stack may bear the part's name.
+        let named = |h: &H, role, label: &str| {
+            h.root()
+                .children_recursive()
+                .filter(move |n| {
+                    let a = n.accesskit_node();
+                    a.role() == role && a.label().as_deref() == Some(label)
+                })
+                .map(|n| n.rect())
+                .next()
+        };
+        let list = |h: &H| {
+            Some(egui::Rect::from_min_max(
+                egui::pos2(
+                    named(h, egui::accesskit::Role::Tab, "Frames")?.left() - 10.0,
+                    named(h, egui::accesskit::Role::Tab, "Other")?.bottom(),
+                ),
+                egui::pos2(
+                    h.ctx.content_rect().right(),
+                    named(h, egui::accesskit::Role::Button, "Parts page")?.top(),
+                ),
+            ))
+        };
         let row = |h: &H| {
-            let named = |role, label: &str| {
-                h.root()
-                    .children_recursive()
-                    .filter(move |n| {
-                        let a = n.accesskit_node();
-                        a.role() == role && a.label().as_deref() == Some(label)
-                    })
-                    .map(|n| n.rect())
-                    .next()
-            };
-            let (top, bottom, left) = (
-                named(egui::accesskit::Role::Tab, "Other")?.bottom(),
-                named(egui::accesskit::Role::Button, "Vehicles")?.top(),
-                named(egui::accesskit::Role::Tab, "Frames")?.left() - 10.0,
-            );
+            let list = list(h)?;
             h.root()
                 .children_recursive()
                 .filter(|n| {
@@ -797,37 +810,21 @@ impl Rec {
                     a.role() == egui::accesskit::Role::Button && a.label().as_deref() == Some(part)
                 })
                 .map(|n| n.rect())
-                .find(|r| r.left() >= left && r.top() > top && r.bottom() < bottom + 1.0)
+                .find(|r| list.contains_rect(*r))
         };
-        crate::live_editor_walk::reveal_rect(&mut self.h, part, row);
+        // The wheel over the list takes it down, then up again, until the row is whole in it.
+        for turn in 0..120 {
+            self.h.run_steps(3);
+            if row(&self.h).is_some() {
+                break;
+            }
+            let Some(list) = list(&self.h) else {
+                continue;
+            };
+            let dy = if turn / 30 % 2 == 0 { -60.0 } else { 60.0 };
+            crate::live_editor_walk::wheel_at(&mut self.h, list.center(), dy);
+        }
         let at = self.stable(part, row).center();
         self.click_at(at);
-    }
-
-    /// Clicks each of `mounts` to install the picked part there.
-    fn install(&mut self, mounts: &[&str]) {
-        for id in mounts {
-            self.mount(id);
-        }
-        println!("INSTALLED: {}", engine_text(&self.h, "vehicle:notice"));
-    }
-
-    /// A right click on the grid square of the mount `id`.
-    fn right_click_square(&mut self, id: &str) {
-        let at = self.stable(id, |h| mount_square(h, id)).center();
-        self.move_to(at);
-        for pressed in [true, false] {
-            self.h.event(egui::Event::PointerButton {
-                pos: self.at,
-                button: egui::PointerButton::Secondary,
-                pressed,
-                modifiers: egui::Modifiers::NONE,
-            });
-            self.h.run_steps(2);
-            if pressed {
-                self.grab(PRESS_MS);
-            }
-        }
-        self.done();
     }
 }
