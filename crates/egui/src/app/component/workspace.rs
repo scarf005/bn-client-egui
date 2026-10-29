@@ -409,8 +409,9 @@ impl<M: GameModel> App<M> {
         }
         if let Some(room) = side {
             let ui = &mut filled(room, &side_id);
-            // Room for two columns puts the inspector beside the palette and the outline, both in view.
-            match ui.available_width() >= 2.0 * SIDE_WIDTH.0 && lists && !inspector.is_empty() {
+            // Room for two columns, each as wide as the right column least is beside a grid, puts the inspector
+            // beside the palette and the outline, both in view.
+            match ui.available_width() >= 2.0 * GRID_SIDE_MIN && lists && !inspector.is_empty() {
                 true => ui.columns(2, |halves| {
                     // The halves are told apart by name: a column's own id is its parent's.
                     halves[0].push_id("lists", |ui| {

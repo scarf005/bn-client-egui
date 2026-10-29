@@ -625,7 +625,12 @@ fn a_click_on_the_last_row_of_a_palette_that_holds_all_its_rows_moves_nothing() 
 
 #[test]
 fn a_right_column_wide_enough_for_two_puts_the_inspector_beside_the_palette() {
-    for (size, beside) in [(SIZES[0], false), (SIZES[1], true)] {
+    // Each half is as wide as the least the column beside a grid is: a column of 1920 by 1080, 810 wide, stays one.
+    for (size, beside) in [
+        (SIZES[0], false),
+        (SIZES[1], false),
+        (egui::vec2(2560.0, 1440.0), true),
+    ] {
         let (h, _) = shown(size);
         let (palette, inspector) = (rect(&h, "Wall"), rect(&h, "Properties"));
         assert_eq!(
