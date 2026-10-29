@@ -1449,6 +1449,9 @@ impl<M: GameModel> App<M> {
         if let Some(mode) = grid.drag {
             self.drag_squares(ui, grid, mode, &squares, out);
         }
+        if let (Some(_), Some(secondary)) = (grid.secondary_drag, &grid.secondary) {
+            self.drag_squares_by(ui, grid, DragBy::Secondary(secondary), &squares, out);
+        }
         if let (Some(affordance), Some(layout)) = (&grid.region_drag, layout) {
             self.drag_region(ui, grid, affordance, (&squares, &layout), out);
         }
@@ -1588,12 +1591,14 @@ impl<M: GameModel> App<M> {
                                 egui::StrokeKind::Inside,
                             );
                         }
-                        if let (true, Some(id), Some(a)) =
-                            (cell.enabled, &cell.id, &cell.affordance)
+                        if let (true, Some(id)) = (cell.enabled, &cell.id)
+                            && (cell.affordance.is_some() || grid.secondary_drag.is_some())
                         {
-                            // Only the part of the square in view takes a drag.
+                            // Only the part of the square in view takes a drag; a square with no primary
+                            // affordance is the secondary drag's alone, and names none.
                             let seen = button.rect.intersect(ui.clip_rect());
-                            squares.insert((x, y), (seen, id.clone(), a.clone()));
+                            let a = cell.affordance.clone().unwrap_or_default();
+                            squares.insert((x, y), (seen, id.clone(), a));
                         }
                         button.widget_info(|| {
                             WidgetInfo::labeled(
@@ -1608,8 +1613,11 @@ impl<M: GameModel> App<M> {
                             (true, false) => button.on_hover_text(tip),
                             (false, false) => button.on_disabled_hover_text(tip),
                         };
+                        // A secondary drag, which a click is the shortest of, runs the secondary itself.
                         if let (true, Some(id), Some(a)) = (
-                            button.secondary_clicked() && !canvas::panning(ui),
+                            button.secondary_clicked()
+                                && grid.secondary_drag.is_none()
+                                && !canvas::panning(ui),
                             &cell.id,
                             &grid.secondary,
                         ) {
@@ -1745,7 +1753,7 @@ impl<M: GameModel> App<M> {
             .data(|d| d.get_temp::<(Option<region::Grab>, u64)>(key))
             .filter(|(_, last)| last + 1 >= pass)
             .and_then(|(held, _)| held);
-        let pointer = grid_pointer(ui, squares);
+        let pointer = grid_pointer(ui, squares, egui::PointerButton::Primary);
         if let Some(moved) = region::advance(&grid.regions, &mut held, pointer) {
             out.push(Intent::Paint(Paint {
                 component: self.row_component(affordance, &grid.head.id),
@@ -1764,7 +1772,7 @@ impl<M: GameModel> App<M> {
         ui.data_mut(|d| d.insert_temp(key, (held, pass)));
     }
 
-    /// Runs the affordance of the squares a pointer drag over `squares` crosses.
+    /// Runs the affordance of the squares a primary drag over `squares` crosses.
     fn drag_squares(
         &self,
         ui: &egui::Ui,
@@ -1773,7 +1781,33 @@ impl<M: GameModel> App<M> {
         squares: &HashMap<drag::Square, (egui::Rect, String, String)>,
         out: &mut Vec<Intent>,
     ) {
-        let key = egui::Id::new(("grid-drag", &grid.head.id));
+        self.drag_squares_by(ui, grid, DragBy::Primary(mode), squares, out);
+    }
+
+    /// Runs the affordance of the squares a drag of `by` over `squares` crosses.
+    fn drag_squares_by(
+        &self,
+        ui: &egui::Ui,
+        grid: &Grid,
+        by: DragBy,
+        squares: &HashMap<drag::Square, (egui::Rect, String, String)>,
+        out: &mut Vec<Intent>,
+    ) {
+        let (mode, button, name, other) = match by {
+            DragBy::Primary(mode) => (
+                mode,
+                egui::PointerButton::Primary,
+                "grid-drag",
+                "grid-drag-secondary",
+            ),
+            DragBy::Secondary(_) => (
+                GridDrag::Trail,
+                egui::PointerButton::Secondary,
+                "grid-drag-secondary",
+                "grid-drag",
+            ),
+        };
+        let key = egui::Id::new((name, &grid.head.id));
         // A drag not kept in the last pass belongs to an earlier showing of the grid: it ends unsent.
         let pass = ui.ctx().cumulative_pass_nr();
         let (mut held, mut began) = ui
@@ -1782,7 +1816,18 @@ impl<M: GameModel> App<M> {
             .map(|(held, began, _)| (held, began))
             .unwrap_or_default();
         let was_held = held.is_some();
-        let run = drag::advance(mode, &mut held, grid_pointer(ui, squares));
+        // One button drags at a time: the other's stroke is one step of the engine's.
+        let busy = ui
+            .data(|d| {
+                d.get_temp::<(Option<drag::Drag>, Option<String>, u64)>(egui::Id::new((
+                    other,
+                    &grid.head.id,
+                )))
+            })
+            .is_some_and(|(held, _, last)| held.is_some() && last + 1 >= pass);
+        let mut pointer = grid_pointer(ui, squares, button);
+        pointer.pressed &= !busy;
+        let run = drag::advance(mode, &mut held, pointer);
         let marker = |affordance: &Option<String>| {
             affordance.clone().map(|affordance| {
                 Intent::Paint(Paint {
@@ -1804,10 +1849,13 @@ impl<M: GameModel> App<M> {
                 .map(|s| s.2.clone());
         }
         for at in run {
-            let Some((_, row, affordance)) =
-                squares.get(&at).filter(|s| began.as_ref() == Some(&s.2))
-            else {
+            let Some((_, row, own)) = squares.get(&at) else {
                 continue;
+            };
+            let affordance = match by {
+                DragBy::Primary(_) if began.as_ref() == Some(own) && !own.is_empty() => own,
+                DragBy::Secondary(secondary) => secondary,
+                DragBy::Primary(_) => continue,
             };
             out.push(Intent::Paint(Paint {
                 component: self.row_component(affordance, &grid.head.id),
@@ -1840,16 +1888,30 @@ impl GridLayout {
     }
 }
 
+/// Which button drags over a grid's squares, and what it runs there.
+#[derive(Clone, Copy)]
+enum DragBy<'a> {
+    /// The primary button, as the grid's drag mode says, each square running its own affordance.
+    Primary(GridDrag),
+    /// The secondary button, a trail running this affordance on every square it crosses.
+    Secondary(&'a String),
+}
+
 /// The pointer over the drawn squares of a grid this frame; a press counts only on the grid's own layer.
 fn grid_pointer(
     ui: &egui::Ui,
     squares: &HashMap<drag::Square, (egui::Rect, String, String)>,
+    button: egui::PointerButton,
 ) -> drag::Pointer {
     let at = ui.input(|i| i.pointer.interact_pos());
     let on = at.and_then(|at| {
         squares
             .iter()
-            .find(|(_, s)| s.0.contains(at) && ui.clip_rect().contains(at))
+            .find(|(_, s)| {
+                s.0.contains(at)
+                    && ui.clip_rect().contains(at)
+                    && (button == egui::PointerButton::Secondary || !s.2.is_empty())
+            })
             .map(|(&square, s)| (square, (at - s.0.min) / s.0.size()))
     });
     let on_top = ui.ctx().layer_id_at(at.unwrap_or_default()) == Some(ui.layer_id());
@@ -1857,9 +1919,9 @@ fn grid_pointer(
     ui.input(|i| drag::Pointer {
         over: on.map(|(square, _)| square),
         spot: on.map(|(_, spot)| (spot.x, spot.y)),
-        pressed: i.pointer.button_pressed(egui::PointerButton::Primary) && on_top && !panning,
-        down: i.pointer.primary_down() && !panning,
-        released: i.pointer.button_released(egui::PointerButton::Primary) && !panning,
+        pressed: i.pointer.button_pressed(button) && on_top && !panning,
+        down: i.pointer.button_down(button) && !panning,
+        released: i.pointer.button_released(button) && !panning,
     })
 }
 
