@@ -31,6 +31,9 @@ struct RowLayout<'a> {
     /// The engine chose a row of the list and the focus does not move its choice: the chosen row is shown
     /// selected, and the focus only outlined.
     chosen: bool,
+    /// The list's `activate` is a `select`-role affordance, which the click that moved the focus already ran: a
+    /// double click does not run it again.
+    selects: bool,
     /// The row that is the list's one stop of the keyboard's walk: the arrows move among the rows from there.
     stop: Option<&'a str>,
     /// The row of the list that had the keyboard the frame before: the stop takes it when the arrows moved it.
@@ -318,6 +321,11 @@ impl<M: GameModel> App<M> {
                 answers: !self.screens.passive && Self::asks(screen),
                 filter: form::filter_submit(screen).is_some(),
                 chosen: rows.iter().any(|r| r.selected) && !follows_focus(screen, id),
+                selects: list
+                    .activate
+                    .as_deref()
+                    .and_then(|a| find(screen, a))
+                    .is_some_and(|a| selects(a, id)),
                 stop,
                 keyed,
                 focused: std::cell::Cell::new(None),
@@ -652,7 +660,9 @@ impl<M: GameModel> App<M> {
                     component: id.clone(),
                     row: row.id.clone(),
                 }),
-                (_, Some(activate), true) => out.push(Intent::Run(activate.clone())),
+                (_, Some(activate), true) if !layout.selects => {
+                    out.push(Intent::Run(activate.clone()))
+                }
                 (_, None, true) => out.push(Intent::Open),
                 _ => {}
             }
@@ -718,14 +728,16 @@ fn follows_focus(screen: &Screen, id: &str) -> bool {
         .focus
         .as_ref()
         .and_then(|f| f.component_id.as_deref());
-    cursor == Some(id)
-        || screen.affordances.iter().any(|a| {
-            a.role == Some(AffordanceRole::Select)
-                && a.args
-                    .as_ref()
-                    .and_then(|args| args.row.as_ref())
-                    .is_some_and(|row| row.component_id == id)
-        })
+    cursor == Some(id) || screen.affordances.iter().any(|a| selects(a, id))
+}
+
+/// Whether `a` is a `select`-role affordance on a row of the list `id`, which the focus moving in it runs.
+fn selects(a: &Affordance, id: &str) -> bool {
+    a.role == Some(AffordanceRole::Select)
+        && a.args
+            .as_ref()
+            .and_then(|args| args.row.as_ref())
+            .is_some_and(|row| row.component_id == id)
 }
 
 #[cfg(test)]
