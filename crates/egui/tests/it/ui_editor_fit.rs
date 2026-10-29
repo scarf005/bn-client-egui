@@ -524,3 +524,21 @@ fn the_kind_of_the_open_entry_shows_under_the_entries_while_no_row_of_them_has_t
         );
     }
 }
+
+/// A 24 by 24 canvas in a laptop window is whole, its corner squares in view, however big the window was before:
+/// its squares shrink below their usual size to fit, as they do when the player zooms out.
+#[test]
+fn a_whole_overmap_square_canvas_fits_a_laptop_window_from_the_start_and_after_a_resize() {
+    for first in [egui::vec2(1280.0, 800.0), egui::vec2(1920.0, 1080.0)] {
+        let mut h = open(named_squares(), first);
+        h.set_size(egui::vec2(1280.0, 800.0));
+        h.run_steps(12);
+        for (x, y) in [(0, 0), (23, 0), (0, 23), (23, 23)] {
+            let r = square(&h, x, y);
+            assert!(
+                unclipped(&h, r),
+                "from {first:?}: square {x},{y} at {r:?} is cut"
+            );
+        }
+    }
+}
