@@ -96,13 +96,16 @@ impl<M: GameModel> App<M> {
         {
             self.screens.sent_form = None;
         }
-        if let Some(select) = self.screens.interaction.take_select() {
-            self.screens.select = Some(select);
+        let top = screens.last().map(|s| s.screen_id.clone());
+        if let Some((id, args)) = self.screens.interaction.take_select() {
+            self.screens.select = top.clone().map(|at| (at, id, args));
         }
-        if let Some((id, args)) = self.screens.select.take()
+        // A select waiting for the engine belongs to the screen it was made on, not one opened since.
+        if let Some((at, id, args)) = self.screens.select.take()
+            && Some(&at) == top.as_ref()
             && let Err(InvokeError::Busy) = self.model.invoke_affordance(&id, args.clone())
         {
-            self.screens.select = Some((id, args));
+            self.screens.select = Some((at, id, args));
         }
         self.reach_row();
     }
