@@ -82,6 +82,7 @@ mod ui_layout;
 mod ui_list_headers;
 mod ui_list_search;
 mod ui_loading;
+mod ui_log_strip;
 mod ui_map_marks;
 mod ui_menu_input;
 mod ui_mouse;
