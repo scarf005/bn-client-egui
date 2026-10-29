@@ -212,7 +212,7 @@ impl<M: GameModel> App<M> {
                 ui.label(tr("Press the new key"));
             } else if let (Some(typed), Some(ArgKind::Text)) = (&ask.text, ask.asking) {
                 let mut shown = typed.clone();
-                let edit = ui.text_edit_singleline(&mut shown);
+                let edit = crate::kit::field::add(ui, egui::TextEdit::singleline(&mut shown));
                 // The box a question opens with has the typing, as in a game's own prompt, once its window is shown.
                 let opened = egui::Id::new(&ask.affordance_id);
                 if ui.is_enabled() && ui.data(|d| d.get_temp::<egui::Id>(focused)) != Some(opened) {

@@ -60,7 +60,8 @@ impl<M: GameModel> App<M> {
         };
         let window_id = spec.id;
         let shown = windows::show(ctx, spec, |ui| {
-            let search = ui.add(
+            let search = crate::kit::field::add(
+                ui,
                 egui::TextEdit::singleline(&mut query)
                     .hint_text(tr("Search"))
                     .desired_width(f32::INFINITY),

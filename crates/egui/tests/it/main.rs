@@ -123,6 +123,7 @@ mod ui_sidebar_width;
 mod ui_sounds;
 mod ui_split_panes;
 mod ui_split_sections;
+mod ui_text_field;
 mod ui_thick_shots;
 mod ui_tile_seams;
 mod ui_tiles;

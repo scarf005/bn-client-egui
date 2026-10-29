@@ -377,7 +377,7 @@ impl<M: GameModel> App<M> {
         let text = &mut self.prompt.1;
         let label = markup::plain(&field.label);
         let edit = egui::TextEdit::singleline(text).desired_width(f32::INFINITY);
-        let response = ui.add(edit.hint_text(label.as_str()));
+        let response = crate::kit::field::add(ui, edit.hint_text(label.as_str()));
         let name = label.clone();
         ui.ctx()
             .accesskit_node_builder(response.id, move |b| b.set_label(name));
