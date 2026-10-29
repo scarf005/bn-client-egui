@@ -202,3 +202,55 @@ fn the_canvas_keeps_its_place_when_the_news_in_the_status_strip_comes_and_goes()
     }
 }
 
+/// The colours of the filled rectangles painted exactly over `rect`.
+fn fills_over(h: &H, rect: egui::Rect) -> Vec<egui::Color32> {
+    fn flat(shape: &egui::Shape, out: &mut Vec<egui::Shape>) {
+        match shape {
+            egui::Shape::Vec(all) => all.iter().for_each(|s| flat(s, out)),
+            shape => out.push(shape.clone()),
+        }
+    }
+    let mut shapes = vec![];
+    h.output()
+        .shapes
+        .iter()
+        .for_each(|c| flat(&c.shape, &mut shapes));
+    shapes
+        .iter()
+        .filter_map(|s| match s {
+            egui::Shape::Rect(r) if r.rect == rect && r.fill.a() > 0 => Some(r.fill),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn the_stamp_in_hand_marks_where_it_lands_from_the_square_under_the_pointer() {
+    let hovered = |stamp: Value| {
+        let mut with = screen(6);
+        let mut stack = vec![&mut with["root"]];
+        while let Some(node) = stack.pop() {
+            if node["id"] == "editor:canvas" {
+                node["stamp"] = stamp.clone();
+                break;
+            }
+            match node {
+                Value::Array(items) => stack.extend(items.iter_mut()),
+                Value::Object(members) => stack.extend(members.values_mut()),
+                _ => {}
+            }
+        }
+        let (mut h, _) = open_sized(with, LARGE);
+        h.hover_at(square(&h, 2, 2).center());
+        h.run_steps(4);
+        let fills = |x, y| fills_over(&h, square(&h, x, y));
+        (fills(3, 2), fills(2, 3))
+    };
+    let (beside, below) = hovered(json!([{"x": 0, "y": 0}, {"x": 1, "y": 0}]));
+    let (plain_beside, plain_below) = hovered(json!([]));
+    assert!(
+        beside.len() > plain_beside.len(),
+        "{beside:?} over {plain_beside:?}"
+    );
+    assert_eq!(below, plain_below, "a square the stamp misses");
+}

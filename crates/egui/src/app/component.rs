@@ -1479,6 +1479,45 @@ impl<M: GameModel> App<M> {
         if let (Some(affordance), Some(layout)) = (&grid.region_drag, layout) {
             self.drag_region(ui, grid, affordance, (&squares, &layout), out);
         }
+        self.stamp_outline(ui, grid, &squares);
+    }
+
+    /// Where the tool in hand would put its squares down from the square under the pointer, outlined.
+    fn stamp_outline(
+        &self,
+        ui: &egui::Ui,
+        grid: &Grid,
+        squares: &HashMap<drag::Square, (egui::Rect, String, String)>,
+    ) {
+        let pointer = ui.ctx().pointer_hover_pos();
+        let Some((x, y)) = pointer.and_then(|at| {
+            squares
+                .iter()
+                .find(|(_, s)| s.0.contains(at))
+                .map(|(square, _)| *square)
+        }) else {
+            return;
+        };
+        let shapes = grid
+            .stamp
+            .iter()
+            .filter_map(|d| {
+                let to = (x.checked_add_signed(d.x)?, y.checked_add_signed(d.y)?);
+                squares.get(&to).map(|s| s.0)
+            })
+            .flat_map(|rect| {
+                std::iter::once(egui::Shape::rect_filled(
+                    rect,
+                    0.0,
+                    tokens::REGION_PICKED.gamma_multiply(0.35),
+                ))
+                .chain(outline_shapes(rect, tokens::REGION_PICKED))
+            })
+            .collect::<Vec<_>>();
+        if !shapes.is_empty() {
+            let painter = ui.painter().with_clip_rect(ui.clip_rect());
+            self.screens.rules.borrow_mut().push((painter, shapes));
+        }
     }
 
     /// The square under the pointer, outlined over the sprites.
