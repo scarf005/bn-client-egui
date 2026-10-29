@@ -32,6 +32,15 @@ pub struct Settings {
     pub windows: BTreeMap<String, WindowState>,
 }
 
+impl Settings {
+    /// The choice kept in the file at `path`; the defaults when there is none or it cannot be read.
+    pub(super) fn read(path: Option<&Path>) -> Self {
+        let text = path.and_then(|p| std::fs::read(p).ok());
+        text.and_then(|b| serde_json::from_slice(&b).ok())
+            .unwrap_or_default()
+    }
+}
+
 /// The interface sizes the player can choose, in percent.
 pub(super) const SCALES: [u16; 6] = [75, 100, 125, 150, 175, 200];
 
@@ -50,10 +59,7 @@ pub fn settings_path() -> Option<PathBuf> {
 /// Whether the game at `root` would be shown with sprites: sprites are chosen in the saved settings
 /// at `path` (on by default) and the game has a tileset.
 pub fn tiles_wanted(root: Option<&Path>, path: Option<&Path>) -> bool {
-    let settings = path
-        .and_then(|p| std::fs::read(p).ok())
-        .and_then(|b| serde_json::from_slice::<Settings>(&b).ok())
-        .unwrap_or_default();
+    let settings = Settings::read(path);
     settings.tiles.unwrap_or(true) && root.is_some_and(|r| !tileset::available(r).is_empty())
 }
 

@@ -171,6 +171,12 @@ impl Atlas {
         more
     }
 
+    /// How many points of `rect` a pixel of the tileset's tile covers, across and down.
+    pub(super) fn scale(&self, rect: Rect) -> (f32, f32) {
+        let (w, h) = self.tileset.tile;
+        (rect.width() / w as f32, rect.height() / h as f32)
+    }
+
     /// The sprite under a filter; the plain one when the filtered sheet has not arrived.
     pub(super) fn source(&self, sprite: u32, fx: Fx) -> Option<Source> {
         let (n, local) = self.tileset.locate(sprite)?;

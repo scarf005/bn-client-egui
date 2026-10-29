@@ -67,13 +67,8 @@ pub struct Display {
 impl Display {
     /// The display for the game at `root`, with its choice read from and kept in `path`.
     pub fn new(root: Option<&Path>, path: Option<PathBuf>) -> Self {
-        let settings = path
-            .as_deref()
-            .and_then(|p| std::fs::read(p).ok())
-            .and_then(|b| serde_json::from_slice(&b).ok())
-            .unwrap_or_default();
         let mut display = Self {
-            settings,
+            settings: Settings::read(path.as_deref()),
             unsaved: false,
             path,
             rooted: root.is_some(),

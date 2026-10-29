@@ -16,10 +16,6 @@ impl Display {
             return false;
         };
         atlas.request(Fx::Plain);
-        let scale = (
-            rect.width() / atlas.tileset.tile.0 as f32,
-            rect.height() / atlas.tileset.tile.1 as f32,
-        );
         let query = Query {
             id: tile.id,
             fallbacks: tile.fallbacks,
@@ -31,19 +27,7 @@ impl Display {
             season: None,
             frame: self.frame,
         };
-        let chosen = atlas.tileset.choose(&query);
-        animate(painter, chosen.as_ref());
-        let mut drawn = false;
-        for placed in chosen.iter().flat_map(|c| [c.bg, c.fg]).flatten() {
-            drawn |= draw_sprite(
-                painter,
-                atlas,
-                rect,
-                scale,
-                (placed, None),
-                (Fx::Plain, Tone::Alpha(255)),
-            );
-        }
+        let drawn = draw_plain(painter, atlas, rect, &query);
         self.drawn += usize::from(drawn);
         drawn
     }
@@ -61,28 +45,11 @@ impl Display {
             return false;
         };
         atlas.request(Fx::Plain);
-        let scale = (
-            rect.width() / atlas.tileset.tile.0 as f32,
-            rect.height() / atlas.tileset.tile.1 as f32,
-        );
-        let chosen = atlas.tileset.choose(&Query {
+        let wanted = Query {
             frame: self.frame,
             ..query(layer, None)
-        });
-        animate(painter, chosen.as_ref());
-        let sprites = chosen.iter().flat_map(|c| [c.bg, c.fg]).flatten();
-        let mut any = false;
-        for placed in sprites {
-            any |= draw_sprite(
-                painter,
-                atlas,
-                rect,
-                scale,
-                (placed, None),
-                (Fx::Plain, Tone::Alpha(255)),
-            );
-        }
-        any
+        };
+        draw_plain(painter, atlas, rect, &wanted)
     }
 
     /// Draws a list row's item into `rect` as `paint` draws a map square, without counting it in what the map
@@ -120,37 +87,20 @@ impl Display {
             _ => Fx::Plain,
         };
         atlas.request(fx);
-        let (sx, sy) = (
-            rect.width() / atlas.tileset.tile.0 as f32,
-            rect.height() / atlas.tileset.tile.1 as f32,
-        );
+        let lighting = |id| Query {
+            id,
+            fallbacks: &[],
+            subtile: None,
+            rotation: 0,
+            mirrored: false,
+            creature: false,
+            seed: cell.square,
+            season,
+            frame: self.frame,
+        };
         // What the game does not show plainly lies on its "hidden" lighting sprite.
-        let mut backdrop = false;
-        if cell.layers.is_empty() || cell.remembered {
-            let hidden = Query {
-                id: "lighting_hidden",
-                fallbacks: &[],
-                subtile: None,
-                rotation: 0,
-                mirrored: false,
-                creature: false,
-                seed: cell.square,
-                season,
-                frame: self.frame,
-            };
-            let sprites = atlas.tileset.choose(&hidden);
-            animate(painter, sprites.as_ref());
-            for placed in sprites.iter().flat_map(|c| [c.bg, c.fg]).flatten() {
-                backdrop |= draw_sprite(
-                    painter,
-                    atlas,
-                    rect,
-                    (sx, sy),
-                    (placed, None),
-                    (Fx::Plain, Tone::Alpha(255)),
-                );
-            }
-        }
+        let backdrop = (cell.layers.is_empty() || cell.remembered)
+            && draw_plain(painter, atlas, rect, &lighting("lighting_hidden"));
         self.hidden += usize::from(backdrop);
         if cell.layers.is_empty() {
             return backdrop;
@@ -162,41 +112,18 @@ impl Display {
             (false, Some(2)) => Some("lighting_lowlight_light"),
             _ => None,
         };
-        if let Some(id) = overlay {
-            let query = Query {
-                id,
-                fallbacks: &[],
-                subtile: None,
-                rotation: 0,
-                mirrored: false,
-                creature: false,
-                seed: cell.square,
-                season,
-                frame: self.frame,
-            };
-            let sprites = atlas.tileset.choose(&query);
-            animate(painter, sprites.as_ref());
-            let mut any = false;
-            for placed in sprites.iter().flat_map(|c| [c.bg, c.fg]).flatten() {
-                any |= draw_sprite(
-                    painter,
-                    atlas,
-                    rect,
-                    (sx, sy),
-                    (placed, None),
-                    (Fx::Plain, Tone::Alpha(255)),
-                );
-            }
-            if any {
-                self.dimmed += 1;
-                return true;
-            }
+        if let Some(id) = overlay
+            && draw_plain(painter, atlas, rect, &lighting(id))
+        {
+            self.dimmed += 1;
+            return true;
         }
         // Coloured light falls on what is plainly or dimly in sight.
         let glow = cell
             .glow
             .filter(|_| fx == Fx::Plain || fx == Fx::Shadow)
             .map(light);
+        let scale = atlas.scale(rect);
         let mut drawn = 0;
         for layer in &cell.layers {
             let (layer, paints) = resolve_layer(&atlas.tileset, layer);
@@ -217,25 +144,19 @@ impl Display {
             let mut any = false;
             for (placed, paint) in sprites {
                 let tone = Tone::Alpha(255);
-                any |= draw_sprite(painter, atlas, rect, (sx, sy), (placed, paint), (fx, tone));
+                any |= draw_sprite(painter, atlas, rect, scale, (placed, paint), (fx, tone));
                 if let Some(light) = glow {
                     // The game adds the light's colour over the sprite it falls on.
                     let tone = Tone::Light(light);
-                    draw_sprite(painter, atlas, rect, (sx, sy), (placed, paint), (fx, tone));
+                    draw_sprite(painter, atlas, rect, scale, (placed, paint), (fx, tone));
                 }
                 if cell.depth > 0 {
                     // A level seen through open air is hazed more the deeper it is.
                     let haze = (24 * (u32::from(cell.depth) + 1)).min(192) as u8;
                     atlas.request(Fx::ZOverlay);
                     let sprite = (placed, None);
-                    draw_sprite(
-                        painter,
-                        atlas,
-                        rect,
-                        (sx, sy),
-                        sprite,
-                        (Fx::ZOverlay, Tone::Alpha(haze)),
-                    );
+                    let tone = Tone::Alpha(haze);
+                    draw_sprite(painter, atlas, rect, scale, sprite, (Fx::ZOverlay, tone));
                 }
             }
             drawn += usize::from(any);
@@ -287,6 +208,18 @@ pub fn query<'a>(layer: &'a Layer, season: Option<&'a str>) -> Query<'a> {
         season,
         frame: None,
     }
+}
+
+/// Draws the sprites `query` chooses into `rect` unfiltered, background first; false when none is drawn.
+fn draw_plain(painter: &egui::Painter, atlas: &Atlas, rect: Rect, query: &Query) -> bool {
+    let chosen = atlas.tileset.choose(query);
+    animate(painter, chosen.as_ref());
+    let (scale, plain) = (atlas.scale(rect), (Fx::Plain, Tone::Alpha(255)));
+    let mut any = false;
+    for placed in chosen.iter().flat_map(|c| [c.bg, c.fg]).flatten() {
+        any |= draw_sprite(painter, atlas, rect, scale, (placed, None), plain);
+    }
+    any
 }
 
 /// Asks for a paint of the next animation frame when `chosen` changes with it.

@@ -123,13 +123,9 @@ fn paint_sprite(
     let image = decoded_sheet(decoded, n, sheet)?;
     let mask = mask.as_ref().and_then(|&(n, ref sheet, local)| {
         let image = decoded_sheet(decoded, n, sheet)?;
-        let (w, h) = sheet.sprite;
-        let (col, row) = (local % sheet.columns, local / sheet.columns);
-        Some(image::imageops::crop_imm(&*image, col * w, row * h, w, h).to_image())
+        Some(cut(&image, sheet, local))
     });
-    let (w, h) = sheet.sprite;
-    let (col, row) = (local % sheet.columns, local / sheet.columns);
-    let mut sprite = image::imageops::crop_imm(&*image, col * w, row * h, w, h).to_image();
+    let mut sprite = cut(&image, sheet, local);
     for (x, y, px) in sprite
         .enumerate_pixels_mut()
         .filter(|(_, _, px)| px.0[3] > 0)
@@ -142,10 +138,18 @@ fn paint_sprite(
         let tinted = tint_pixel(pixel(px), paint, mask);
         px.0[..3].copy_from_slice(&fx.pixel(tinted));
     }
+    let (w, h) = sheet.sprite;
     Some(egui::ColorImage::from_rgba_unmultiplied(
         [w as usize, h as usize],
         sprite.as_raw(),
     ))
+}
+
+/// Sprite `local` of `sheet`, cut from the sheet's decoded pixels.
+fn cut(image: &image::RgbaImage, sheet: &tileset::Sheet, local: u32) -> image::RgbaImage {
+    let (w, h) = sheet.sprite;
+    let (col, row) = (local % sheet.columns, local / sheet.columns);
+    image::imageops::crop_imm(image, col * w, row * h, w, h).to_image()
 }
 
 #[cfg(test)]
