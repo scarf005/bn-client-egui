@@ -5,6 +5,11 @@ use super::*;
 /// The engine's id of an item row and how many items it stands for.
 pub(super) type ItemRow = (String, u64);
 
+/// The engine's ids of `rows`.
+pub(super) fn ids(rows: &[ItemRow]) -> Vec<String> {
+    rows.iter().map(|(id, _)| id.clone()).collect()
+}
+
 /// The row the engine names `item_id`; none for an empty id or a row that is gone.
 pub(super) fn row_of(rows: &[ItemRow], item_id: &str) -> Option<ItemRow> {
     rows.iter()
@@ -16,17 +21,15 @@ impl EngineModel {
     pub(super) fn refresh_items(&mut self) {
         let avatar = self.replica.avatar();
         let row = |look: &Look, line: String, item: ItemRow| (line, item, self.item_cell(look));
+        let stack = |i: &protocol::InventoryItem| {
+            row(
+                &i.look,
+                i.label.clone(),
+                (i.id.clone(), i.count.unwrap_or(1)),
+            )
+        };
         let ground = match avatar.and_then(|a| a.ground.as_ref()) {
-            Some(stacks) => stacks
-                .iter()
-                .map(|i| {
-                    row(
-                        &i.look,
-                        i.label.clone(),
-                        (i.id.clone(), i.count.unwrap_or(1)),
-                    )
-                })
-                .collect(),
+            Some(stacks) => stacks.iter().map(stack).collect(),
             None => self
                 .avatar_pos()
                 .and_then(|p| self.replica.cell(&p.dim, p.x, p.y, p.z))
@@ -38,17 +41,7 @@ impl EngineModel {
                 }),
         };
         let carried = avatar.map_or(vec![], |a| {
-            a.inventory
-                .iter()
-                .flatten()
-                .map(|i| {
-                    row(
-                        &i.look,
-                        i.label.clone(),
-                        (i.id.clone(), i.count.unwrap_or(1)),
-                    )
-                })
-                .collect()
+            a.inventory.iter().flatten().map(stack).collect()
         });
         (self.ground, self.ground_items, self.ground_cells) = unzip3(ground);
         (self.inventory, self.inventory_items, self.inventory_cells) = unzip3(carried);

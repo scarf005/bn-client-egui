@@ -5,8 +5,9 @@ use crate::interaction::{self, InvokeError};
 use crate::keys;
 use crate::localise::tr;
 use crate::markup;
+use crate::model::Pos;
 use crate::model::{ActionEntry, CommandStatus, MenuChoice, MenuModel};
-use crate::protocol::{self, Operation};
+use crate::protocol::{self, Operation, WorldPos};
 
 impl EngineModel {
     /// Sends the kept command once the engine has published a newer boundary of a timed screen; a screen
@@ -149,6 +150,17 @@ impl EngineModel {
             finished: false,
             history: vec![],
         }
+    }
+
+    /// Whether the engine waits for a command: no interaction (a menu, a prompt) holds the boundary.
+    pub(super) fn free(&self) -> bool {
+        let boundary = self.replica.boundary();
+        boundary.is_some_and(|b| b.interaction.is_none())
+    }
+
+    /// The world square of view square `at` while a command on it can be sent: none runs and the engine is free.
+    pub(super) fn open_square(&self, at: Pos) -> Option<WorldPos> {
+        self.abs(at).filter(|_| !self.busy && self.free())
     }
 
     /// Submits a registered action whose id is one of `ids`; false when the engine offers none.

@@ -30,7 +30,7 @@ use crate::protocol::{
 use crate::replica::Replica;
 use crate::transport::Transport;
 use effects::Volley;
-use items::{ItemRow, row_of};
+use items::{ItemRow, ids, row_of};
 use map::{look_name, square_seed};
 use serde_json::{Value, json};
 use std::collections::{HashMap, HashSet};
@@ -408,13 +408,8 @@ impl GameModel for EngineModel {
     }
 
     fn player(&self) -> Pos {
-        let (Some((ox, oy)), Some(a)) = (self.origin, self.avatar_pos()) else {
-            return Pos { x: 0, y: 0 };
-        };
-        Pos {
-            x: a.x - ox,
-            y: a.y - oy,
-        }
+        let at = self.avatar_pos().and_then(|a| self.local(a));
+        at.unwrap_or(Pos { x: 0, y: 0 })
     }
 
     fn ground(&self) -> &[String] {
@@ -442,14 +437,11 @@ impl GameModel for EngineModel {
     }
 
     fn ground_ids(&self) -> Vec<String> {
-        self.ground_items.iter().map(|(id, _)| id.clone()).collect()
+        ids(&self.ground_items)
     }
 
     fn inventory_ids(&self) -> Vec<String> {
-        self.inventory_items
-            .iter()
-            .map(|(id, _)| id.clone())
-            .collect()
+        ids(&self.inventory_items)
     }
 
     fn pick_up(&mut self, item_id: &str) {
@@ -484,12 +476,8 @@ impl GameModel for EngineModel {
     }
 
     fn set_mode(&mut self, mode: &str, value: &str) -> bool {
-        let free = self
-            .replica
-            .boundary()
-            .is_some_and(|b| b.interaction.is_none());
         !self.busy
-            && free
+            && self.free()
             && self.submit(Operation::SetMode {
                 mode: mode.into(),
                 value: value.into(),
@@ -589,27 +577,14 @@ impl GameModel for EngineModel {
     }
 
     fn travel(&mut self, at: Pos) {
-        let free = self
-            .replica
-            .boundary()
-            .is_some_and(|b| b.interaction.is_none());
-        if let (false, true, Some(pos)) = (self.busy, free, self.abs(at)) {
+        if let Some(pos) = self.open_square(at) {
             self.submit(Operation::Travel { pos });
         }
     }
 
     fn route(&self) -> Vec<Pos> {
-        let Some((ox, oy)) = self.origin else {
-            return vec![];
-        };
-        self.replica
-            .route()
-            .iter()
-            .map(|p| Pos {
-                x: p.x - ox,
-                y: p.y - oy,
-            })
-            .collect()
+        let route = self.replica.route().iter();
+        route.filter_map(|p| self.local(p)).collect()
     }
 
     fn route_text(&self) -> Option<String> {
@@ -743,15 +718,11 @@ impl GameModel for EngineModel {
             }
         };
         let at = serde_json::from_value::<WorldPos>(target["current"].clone()).ok()?;
-        let (ox, oy) = self.origin?;
-        Some(Pos {
-            x: at.x - ox,
-            y: at.y - oy,
-        })
+        self.local(&at)
     }
 
     fn marks(&self) -> Vec<MapMark> {
-        let (Some((ox, oy)), Some(z)) = (self.origin, self.shown_z()) else {
+        let Some(z) = self.shown_z() else {
             return vec![];
         };
         // A list over the map editor (the mapgen previews) leaves the editor's marks on the map.
@@ -759,14 +730,12 @@ impl GameModel for EngineModel {
         let Some(map) = stack.filter_map(|s| s.root.as_ref()?.cursor_map()).next() else {
             return vec![];
         };
-        let view = |p: &WorldPos| Pos {
-            x: p.x - ox,
-            y: p.y - oy,
-        };
-        let mark = |role, min, max| MapMark {
-            role,
-            min: view(min),
-            max: view(max),
+        let mark = |role, min, max| {
+            Some(MapMark {
+                role,
+                min: self.local(min)?,
+                max: self.local(max)?,
+            })
         };
         map.marks()
             .iter()
@@ -778,6 +747,7 @@ impl GameModel for EngineModel {
                     .chain(rect.map(|r| mark(m.role, &r.min, &r.max)))
                     .collect::<Vec<_>>()
             })
+            .flatten()
             .collect()
     }
 
@@ -837,28 +807,19 @@ impl GameModel for EngineModel {
     }
 
     fn context_click(&mut self, at: Pos) -> bool {
-        let free = self
-            .replica
-            .boundary()
-            .is_some_and(|b| b.interaction.is_none());
-        if let (false, true, Some(pos)) = (self.busy, free, self.abs(at)) {
+        if let Some(pos) = self.open_square(at) {
             self.submit(Operation::Context { pos });
         }
         true
     }
 
     fn tile_action(&mut self, at: Pos, action_id: &str) -> bool {
-        let free = self
-            .replica
-            .boundary()
-            .is_some_and(|b| b.interaction.is_none());
-        match (self.busy, free, self.abs(at)) {
-            (false, true, Some(pos)) => self.submit(Operation::TileAction {
+        self.open_square(at).is_some_and(|pos| {
+            self.submit(Operation::TileAction {
                 action_id: action_id.into(),
                 pos,
-            }),
-            _ => false,
-        }
+            })
+        })
     }
 
     fn aim(&mut self, at: Pos, click: bool) -> bool {

@@ -130,10 +130,7 @@ impl EngineModel {
     /// Asks again for the hovered square once its answer is older than the world, such as after the
     /// engine's window changed size, so a pointer that stays still keeps its description.
     pub(super) fn refresh_hover(&mut self) {
-        let free = self
-            .replica
-            .boundary()
-            .is_some_and(|b| b.interaction.is_none());
+        let free = self.free();
         let settled = self
             .replica
             .boundary()

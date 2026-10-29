@@ -40,6 +40,15 @@ impl EngineModel {
         })
     }
 
+    /// Where the world square `p` lies in the view; none before the view is placed.
+    pub(super) fn local(&self, p: &WorldPos) -> Option<Pos> {
+        let (ox, oy) = self.origin?;
+        Some(Pos {
+            x: p.x - ox,
+            y: p.y - oy,
+        })
+    }
+
     /// The part of the engine's clickable view that is shown: as large as the UI asked for, never larger
     /// than the engine's own window.
     pub(super) fn shown(&self) -> Pos {
@@ -75,13 +84,18 @@ impl EngineModel {
         if settled && self.wanted != self.declared && self.replica.at().is_some() {
             self.declared = self.wanted;
             self.resized = None;
-            let (cols, rows) = (self.wanted.x as u32, self.wanted.y as u32);
-            self.call(
-                "bn.viewport",
-                json!({"cols": cols, "rows": rows}),
-                Pending::Viewport,
-            );
+            self.call_viewport();
         }
+    }
+
+    /// Tells the engine the map size it was last told of.
+    fn call_viewport(&mut self) {
+        let (cols, rows) = (self.declared.x as u32, self.declared.y as u32);
+        self.call(
+            "bn.viewport",
+            json!({"cols": cols, "rows": rows}),
+            Pending::Viewport,
+        );
     }
 
     /// Tells the engine whether tile ids are wanted once it is idle: a hello says so, and a viewport
@@ -105,12 +119,7 @@ impl EngineModel {
             json!(self.with_session(params)),
             Pending::Retile,
         );
-        let (cols, rows) = (self.declared.x as u32, self.declared.y as u32);
-        self.call(
-            "bn.viewport",
-            json!({"cols": cols, "rows": rows}),
-            Pending::Viewport,
-        );
+        self.call_viewport();
         self.subscribe();
     }
 }
