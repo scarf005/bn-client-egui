@@ -562,3 +562,41 @@ fn the_outline_of_a_dragged_region_follows_the_pointer() {
     });
     assert!(found);
 }
+
+#[test]
+fn a_span_drag_shows_the_squares_its_release_draws_until_it_ends() {
+    let mut screen = editor(Some("span"));
+    find(&mut screen["root"], "editor:canvas").unwrap()["span"] = json!({
+        "shape": "rect", "size": 1, "from": {"x": 0, "y": 0}, "to": {"x": 11, "y": 11}, "looks": []
+    });
+    let (mut h, _script) = open(screen);
+    // A spot off the square's glyph, a quarter in from its corner.
+    let spot = |h: &mut H, x: u32, y: u32| {
+        let at = square(h, x, y) - egui::vec2(5.0, 5.0);
+        let image = h.render().unwrap();
+        *image.get_pixel(at.x as u32, at.y as u32)
+    };
+    let edge = spot(&mut h, 4, 2);
+    let inside = spot(&mut h, 4, 3);
+    let (press, pointer) = (square(&h, 2, 2), square(&h, 6, 5));
+    h.hover_at(press);
+    h.run_steps(2);
+    button(&mut h, press, true);
+    h.hover_at(pointer);
+    h.run_steps(2);
+    // The outline of the rectangle from the press to the pointer is shaded, its inside is not.
+    assert_ne!(
+        spot(&mut h, 4, 2),
+        edge,
+        "the rectangle's top edge is shaded"
+    );
+    assert_ne!(spot(&mut h, 6, 4), edge, "its east edge is shaded");
+    assert_eq!(
+        spot(&mut h, 4, 3),
+        inside,
+        "the inside of an outline stays as it was"
+    );
+    button(&mut h, pointer, false);
+    h.run_steps(4);
+    assert_eq!(spot(&mut h, 4, 2), edge, "the shading ends with the drag");
+}

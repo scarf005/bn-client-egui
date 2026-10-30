@@ -17,6 +17,8 @@ pub(super) const GRID_MAX_CELL: f32 = 2.0 * GRID_CELL;
 const CANVAS_MAX_CELL: f32 = 40.0;
 /// The opacity of the squares a grid marks faded.
 const GRID_FADED: f32 = 0.45;
+/// The opacity of what a span drag would draw, over the squares it covers.
+const SPAN_GHOST: f32 = 0.35;
 /// The most the zoom gesture scales a canvas grid's cells from the size that fills its room.
 const GRID_ZOOM_MAX: f32 = 4.0;
 
@@ -183,6 +185,7 @@ impl<M: GameModel> App<M> {
         }
         if let Some(mode) = grid.drag {
             self.drag_squares(ui, grid, DragBy::Primary(mode), &squares, out);
+            self.span_ghost(ui, grid, &squares);
         }
         if let (Some(_), Some(secondary)) = (grid.secondary_drag, &grid.secondary) {
             self.drag_squares(ui, grid, DragBy::Secondary(secondary), &squares, out);
@@ -191,6 +194,82 @@ impl<M: GameModel> App<M> {
             self.drag_region(ui, grid, affordance, (&squares, &layout), out);
         }
         self.stamp_outline(ui, grid, &squares);
+    }
+
+    /// While a span drag lasts, what its release would draw, faded over the squares, and its size by the pointer.
+    fn span_ghost(&self, ui: &egui::Ui, grid: &Grid, squares: &Squares) {
+        let Some(span) = grid
+            .span
+            .as_ref()
+            .filter(|_| grid.drag == Some(GridDrag::Span))
+        else {
+            return;
+        };
+        let key = egui::Id::new(("grid-drag", &grid.head.id));
+        let Some((Some(held), _)) = recent::<Stroke>(ui.ctx(), key) else {
+            return;
+        };
+        let (from, to) = held.ends();
+        let at = |(x, y): Square| (x as i32, y as i32);
+        let shown = span.squares(at(from), at(to));
+        let mut shapes = vec![];
+        for (drawn, looks) in [(&shown.fill, &span.fill), (&shown.drawn, &span.looks)] {
+            let looks = looks
+                .iter()
+                .filter_map(|&i| grid.looks.get(i).cloned())
+                .collect::<Vec<_>>();
+            for &(x, y) in drawn {
+                let Some((rect, ..)) = u32::try_from(x)
+                    .ok()
+                    .zip(u32::try_from(y).ok())
+                    .and_then(|square| squares.get(&square))
+                else {
+                    continue;
+                };
+                let sprite = (self.display.tiles() && !looks.is_empty())
+                    .then(|| self.model.looks_cell(&looks, x as u32 | (y as u32) << 16))
+                    .flatten();
+                if let Some(cell) = sprite {
+                    let mut painter = ui.painter_at(*rect);
+                    painter.set_opacity(SPAN_GHOST);
+                    self.screens.icons.borrow_mut().push(RowIcon {
+                        painter,
+                        rect: *rect,
+                        cell,
+                    });
+                }
+                shapes.push(egui::Shape::rect_filled(
+                    *rect,
+                    0.0,
+                    tokens::REGION_PICKED.gamma_multiply(SPAN_GHOST),
+                ));
+            }
+        }
+        // How many squares across and down the drag spans, beside the pointer.
+        if let Some(pointer) = ui.ctx().pointer_hover_pos() {
+            let size = format!(
+                "{} x {}",
+                from.0.abs_diff(to.0) + 1,
+                from.1.abs_diff(to.1) + 1
+            );
+            let galley = ui.fonts_mut(|f| {
+                f.layout_no_wrap(
+                    size,
+                    egui::FontId::proportional(tokens::CAPTION),
+                    tokens::TEXT,
+                )
+            });
+            let corner = pointer + egui::vec2(16.0, 16.0);
+            let back = egui::Rect::from_min_size(corner, galley.size()).expand(3.0);
+            shapes.push(egui::Shape::rect_filled(
+                back,
+                0.0,
+                egui::Color32::from_black_alpha(200),
+            ));
+            shapes.push(egui::Shape::galley(corner, galley, tokens::TEXT));
+        }
+        let painter = ui.painter().with_clip_rect(ui.clip_rect());
+        self.screens.rules.borrow_mut().push((painter, shapes));
     }
 
     /// Where the tool in hand would put its squares down from the square under the pointer, outlined.

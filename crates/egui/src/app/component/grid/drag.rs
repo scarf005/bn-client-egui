@@ -22,6 +22,13 @@ pub(super) struct Drag {
     last: Square,
 }
 
+impl Drag {
+    /// The square it began on and the last one it reached.
+    pub(super) fn ends(&self) -> (Square, Square) {
+        (self.from, self.last)
+    }
+}
+
 /// Advances `drag` by one frame of `pointer`; the squares to run, in order.
 pub(super) fn advance(mode: GridDrag, drag: &mut Option<Drag>, pointer: Pointer) -> Vec<Square> {
     if let (true, Some(over)) = (pointer.pressed, pointer.over) {
