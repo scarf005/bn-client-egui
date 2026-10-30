@@ -38,6 +38,8 @@ pub struct Grid {
     pub blank: Option<GridCell>,
     /// Where the squares the tool in hand puts down land, from the square under the pointer.
     pub stamp: Vec<GridSquare>,
+    /// What a span drag draws from its press square to the square under the pointer.
+    pub span: Option<GridSpan>,
 }
 
 /// A grid as it travels: with `blank`, its looks once in `styles` and its other squares as runs east.
@@ -78,6 +80,8 @@ struct GridWire {
     secondary_drag: Option<GridDrag>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     stamp: Vec<GridSquare>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    span: Option<GridSpan>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -216,6 +220,7 @@ impl From<GridWire> for Grid {
             refusals: wire.refusals,
             blank: blank.map(|style| style.at(0, 0, None)),
             stamp: wire.stamp,
+            span: wire.span,
         }
     }
 }
@@ -292,6 +297,7 @@ impl From<Grid> for GridWire {
             secondary: grid.secondary,
             secondary_drag: grid.secondary_drag,
             stamp: grid.stamp,
+            span: grid.span,
         }
     }
 }
@@ -301,6 +307,159 @@ impl From<Grid> for GridWire {
 pub struct GridSquare {
     pub x: i32,
     pub y: i32,
+}
+
+/// What a span drag draws, as the engine's map editor draws it on release.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GridSpan {
+    pub shape: SpanShape,
+    /// The side of the square of squares each square of the shape stands for.
+    pub size: u32,
+    /// Whether it is also drawn mirrored across the middle column, or row, of the squares `from` to `to`.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub mirror_x: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub mirror_y: bool,
+    /// The squares it may draw on, both included.
+    pub from: GridSquare,
+    pub to: GridSquare,
+    /// What it draws, bottom up, as indexes into the grid's looks; `fill` inside a room.
+    pub looks: Vec<usize>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fill: Vec<usize>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SpanShape {
+    /// The squares joining the two.
+    Line,
+    /// The outline of the rectangle they span.
+    Rect,
+    RectFilled,
+    /// The ellipse inscribed in that rectangle.
+    Ellipse,
+    /// The outline in `looks` around its inside in `fill`.
+    Room,
+}
+
+/// The squares a span covers: its outline or whole shape, and the inside of a room.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct SpanSquares {
+    pub drawn: Vec<(i32, i32)>,
+    pub fill: Vec<(i32, i32)>,
+}
+
+impl GridSpan {
+    /// The squares it covers from `from` to `to`, each once, in reading order, as the engine's stroke draws them.
+    pub fn squares(&self, from: (i32, i32), to: (i32, i32)) -> SpanSquares {
+        let (low, high) = (
+            (from.0.min(to.0), from.1.min(to.1)),
+            (from.0.max(to.0), from.1.max(to.1)),
+        );
+        let boxed = |keep: &dyn Fn(i32, i32) -> bool| {
+            (low.1..=high.1)
+                .flat_map(|y| (low.0..=high.0).map(move |x| (x, y)))
+                .filter(|&(x, y)| keep(x, y))
+                .collect::<Vec<_>>()
+        };
+        let shape = match self.shape {
+            SpanShape::Line => [vec![from], line_to(from, to)].concat(),
+            SpanShape::Rect | SpanShape::Room => {
+                boxed(&|x, y| x == low.0 || x == high.0 || y == low.1 || y == high.1)
+            }
+            SpanShape::RectFilled => boxed(&|_, _| true),
+            SpanShape::Ellipse => {
+                // Twice the centre and the radii, so that an even span has its centre between squares.
+                let centre = (low.0 + high.0, low.1 + high.1);
+                let radii = ((high.0 - low.0 + 1) as f64, (high.1 - low.1 + 1) as f64);
+                boxed(&|x, y| {
+                    let dx = (2 * x - centre.0) as f64 / radii.0;
+                    let dy = (2 * y - centre.1) as f64 / radii.1;
+                    dx * dx + dy * dy <= 1.0
+                })
+            }
+        };
+        // The inside of a room, filled before its outline.
+        let inside = match self.shape {
+            SpanShape::Room => (low.1 + 1..high.1)
+                .flat_map(|y| (low.0 + 1..high.0).map(move |x| (x, y)))
+                .collect(),
+            _ => vec![],
+        };
+        SpanSquares {
+            drawn: self.widened(&shape),
+            fill: self.widened(&inside),
+        }
+    }
+
+    /// `squares` each widened to the size, mirrored, kept inside `from` to `to`, once each in reading order.
+    fn widened(&self, squares: &[(i32, i32)]) -> Vec<(i32, i32)> {
+        let (west, north, east, south) = (self.from.x, self.from.y, self.to.x, self.to.y);
+        let reach = self.size.max(1) as i32;
+        let mut out = std::collections::BTreeSet::new();
+        for &(x, y) in squares {
+            for dy in 0..reach {
+                for dx in 0..reach {
+                    let q = (x + dx - (reach - 1) / 2, y + dy - (reach - 1) / 2);
+                    let mirrored = (west + east - q.0, north + south - q.1);
+                    out.insert((q.1, q.0));
+                    if self.mirror_x {
+                        out.insert((q.1, mirrored.0));
+                    }
+                    if self.mirror_y {
+                        out.insert((mirrored.1, q.0));
+                    }
+                    if self.mirror_x && self.mirror_y {
+                        out.insert((mirrored.1, mirrored.0));
+                    }
+                }
+            }
+        }
+        out.into_iter()
+            .map(|(y, x)| (x, y))
+            .filter(|&(x, y)| west <= x && x <= east && north <= y && y <= south)
+            .collect()
+    }
+}
+
+/// The engine's `line_to`: the squares after `from` up to `to`, by its Bresenham walk; `from` alone when they meet.
+fn line_to(from: (i32, i32), to: (i32, i32)) -> Vec<(i32, i32)> {
+    if from == to {
+        return vec![from];
+    }
+    let d = (to.0 - from.0, to.1 - from.1);
+    let s = (d.0.signum(), d.1.signum());
+    let a = (d.0.abs() * 2, d.1.abs() * 2);
+    let (mut cur, mut t) = (from, 0);
+    let mut line = vec![];
+    if a.0 == a.1 {
+        while cur.0 != to.0 {
+            cur = (cur.0 + s.0, cur.1 + s.1);
+            line.push(cur);
+        }
+    } else if a.0 > a.1 {
+        while cur.0 != to.0 {
+            if t > 0 {
+                cur.1 += s.1;
+                t -= a.0;
+            }
+            cur.0 += s.0;
+            t += a.1;
+            line.push(cur);
+        }
+    } else {
+        while cur.1 != to.1 {
+            if t > 0 {
+                cur.0 += s.0;
+                t -= a.1;
+            }
+            cur.1 += s.1;
+            t += a.0;
+            line.push(cur);
+        }
+    }
+    line
 }
 
 /// A rectangle of squares from `from` to `to`, both included.

@@ -27,5 +27,6 @@ mod panel;
 mod protocol;
 mod replica;
 mod sidebar;
+mod span_shapes;
 mod stdio;
 mod wire_02;
