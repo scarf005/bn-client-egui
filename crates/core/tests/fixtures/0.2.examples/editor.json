@@ -723,6 +723,15 @@
             "group": "File"
           },
           {
+            "id": "editor:advanced",
+            "label": "Hide advanced settings",
+            "keys": [],
+            "enabled": true,
+            "description": "Shows ids, JSON and the settings that need them, in both editors.",
+            "expect": "screen",
+            "group": "View"
+          },
+          {
             "id": "editor:open_oter",
             "label": "Open overmap terrain",
             "keys": [],
@@ -4414,6 +4423,15 @@
             "denial": "Copy or cut squares first.",
             "expect": "screen",
             "group": "Edit"
+          },
+          {
+            "id": "editor:advanced",
+            "label": "Hide advanced settings",
+            "keys": [],
+            "enabled": true,
+            "description": "Shows ids, JSON and the settings that need them, in both editors.",
+            "expect": "screen",
+            "group": "View"
           },
           {
             "id": "editor:level_up",
@@ -8566,6 +8584,15 @@
             "group": "Edit"
           },
           {
+            "id": "editor:advanced",
+            "label": "Hide advanced settings",
+            "keys": [],
+            "enabled": true,
+            "description": "Shows ids, JSON and the settings that need them, in both editors.",
+            "expect": "screen",
+            "group": "View"
+          },
+          {
             "id": "editor:level_up",
             "label": "Level up",
             "keys": [
@@ -12552,6 +12579,15 @@
             "denial": "Copy or cut squares first.",
             "expect": "screen",
             "group": "Edit"
+          },
+          {
+            "id": "editor:advanced",
+            "label": "Hide advanced settings",
+            "keys": [],
+            "enabled": true,
+            "description": "Shows ids, JSON and the settings that need them, in both editors.",
+            "expect": "screen",
+            "group": "View"
           },
           {
             "id": "editor:level_up",
@@ -30838,6 +30874,15 @@
             "denial": "Copy or cut squares first.",
             "expect": "screen",
             "group": "Edit"
+          },
+          {
+            "id": "editor:advanced",
+            "label": "Hide advanced settings",
+            "keys": [],
+            "enabled": true,
+            "description": "Shows ids, JSON and the settings that need them, in both editors.",
+            "expect": "screen",
+            "group": "View"
           },
           {
             "id": "editor:level_up",
