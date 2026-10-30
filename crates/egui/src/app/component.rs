@@ -132,6 +132,8 @@ struct ListFit {
 struct ListScroll {
     top: f32,
     shown: Option<String>,
+    /// The filter text the list held when last drawn.
+    filter: Option<String>,
 }
 
 fn tone_color(tone: Tone) -> egui::Color32 {

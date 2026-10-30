@@ -225,7 +225,13 @@ impl<M: GameModel> App<M> {
         let selected = rows.iter().position(|r| r.selected);
         let shown = at.or(selected.filter(|_| cursor.is_none()));
         let focus = shown.map(|i| rows[i].id.clone());
-        let mut offset = None;
+        // A new filter text shows its results from the first, as a search does.
+        let refiltered = {
+            let mut scrolls = self.screens.list_scroll.borrow_mut();
+            let scroll = scrolls.entry(slot.clone()).or_default();
+            std::mem::replace(&mut scroll.filter, list.filter.clone()) != list.filter
+        };
+        let mut offset = refiltered.then_some(0.0);
         let (mut pending, mut moved) = (false, false);
         if let Some(i) = shown {
             let mut scrolls = self.screens.list_scroll.borrow_mut();
